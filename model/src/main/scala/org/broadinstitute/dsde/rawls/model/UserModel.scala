@@ -1,14 +1,38 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
 import spray.json._
 
 sealed trait UserAuthRef
 case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
 case class RawlsGroupRef(groupName: RawlsGroupName) extends UserAuthRef
 
-case class RawlsRealmRef(realmName: RawlsGroupName) extends UserAuthRef {
-  def toUserGroupRef: RawlsGroupRef = RawlsGroupRef(realmName)
+object ManagedRoles {
+  sealed trait ManagedRole extends RawlsEnumeration[ManagedRole] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+
+    override def withName(name: String): ManagedRole = ManagedRoles.withName(name)
+  }
+
+  def withName(name: String): ManagedRole = name.toLowerCase match {
+    case "owner" => Owner
+    case "user" => User
+    case _ => throw new RawlsException(s"invalid role [${name}]")
+  }
+
+  case object Owner extends ManagedRole
+  case object User extends ManagedRole
+
+  val all: Set[ManagedRole] = Set(Owner, User)
 }
+
+case class ManagedGroupRef(usersGroupName: RawlsGroupName) extends UserAuthRef {
+  def toUsersGroupRef: RawlsGroupRef = RawlsGroupRef(usersGroupName)
+}
+case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
+case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, accessLevel: ManagedRole)
+case class ManagedGroupWithMembers(usersGroup: RawlsGroupShort, ownersGroup: RawlsGroupShort, usersEmails: Seq[String], ownersEmails: Seq[String])
 
 sealed trait UserAuthType { val value: String }
 case class RawlsUserEmail(value: String) extends UserAuthType
@@ -30,6 +54,15 @@ class UserModelJsonSupport extends JsonSupport {
     def write(obj: T): JsValue = JsString(obj.value)
   }
 
+  implicit object ManagedRoleFormat extends RootJsonFormat[ManagedRole] {
+    override def write(obj: ManagedRole): JsValue = JsString(obj.toString)
+
+    override def read(json: JsValue): ManagedRole = json match {
+      case JsString(name) => ManagedRoles.withName(name)
+      case _ => throw new DeserializationException("could not deserialize managed role")
+    }
+  }
+
   implicit val RawlsUserEmailFormat = UserModelJsonFormatter(RawlsUserEmail)
   implicit val RawlsUserSubjectIdFormat = UserModelJsonFormatter(RawlsUserSubjectId)
 
@@ -40,7 +73,10 @@ class UserModelJsonSupport extends JsonSupport {
 
   implicit val RawlsUserRefFormat = jsonFormat1(RawlsUserRef)
   implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef)
-  implicit val RawlsRealmRefFormat = jsonFormat1(RawlsRealmRef)
+  implicit val RawlsGroupShortFormat = jsonFormat2(RawlsGroupShort)
+  implicit val ManagedGroupRefFormat = jsonFormat1(ManagedGroupRef)
+  implicit val ManagedGroupAccessFormat = jsonFormat2(ManagedGroupAccess)
+  implicit val ManagedGroupWithMembersFormat = jsonFormat4(ManagedGroupWithMembers)
 }
 
 object UserModelJsonSupport extends UserModelJsonSupport

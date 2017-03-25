@@ -14,6 +14,7 @@ trait DataAccess
   with MethodConfigurationComponent
   with SubmissionComponent
   with WorkflowComponent
+  with ManagedGroupComponent
   with SlickExpressionParser {
 
   this: DriverComponent =>
@@ -49,7 +50,7 @@ trait DataAccess
       TableQuery[WorkspaceUserCatalogTable].delete andThen        // FK to workspace, user
       TableQuery[WorkspaceGroupCatalogTable].delete andThen       // FK to workspace, group
       TableQuery[WorkspaceTable].delete andThen                   // FK to realm
-      TableQuery[RealmTable].delete andThen                       // FK to group
+      TableQuery[ManagedGroupTable].delete andThen                       // FK to group
       TableQuery[RawlsBillingProjectTable].delete andThen
       TableQuery[RawlsGroupTable].delete andThen
       TableQuery[RawlsUserTable].delete andThen

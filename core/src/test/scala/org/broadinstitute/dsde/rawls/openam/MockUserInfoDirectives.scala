@@ -9,8 +9,9 @@ import spray.routing.Directives._
 import scala.concurrent.ExecutionContext
 
 trait MockUserInfoDirectives extends UserInfoDirectives {
+  protected def userInfo = UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345")
+
   def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
-    // just return the cookie text as the common name
-    provide(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    provide(userInfo)
   }
 }

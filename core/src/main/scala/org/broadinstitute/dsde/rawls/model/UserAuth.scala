@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import spray.json._
 
@@ -27,7 +28,16 @@ object RawlsGroup {
   implicit def toRef(g: RawlsGroup): RawlsGroupRef = RawlsGroupRef(g.groupName)
 }
 
-case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
+trait Managed {
+  val usersGroup: RawlsGroup
+  val ownersGroup: RawlsGroup
+}
+
+object ManagedGroup {
+  implicit def toRef(mg: ManagedGroup): ManagedGroupRef = ManagedGroupRef(mg.usersGroup.groupName)
+}
+
+case class ManagedGroup(usersGroup: RawlsGroup, ownersGroup: RawlsGroup) extends Managed
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
 case class RawlsBillingProject(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String])
@@ -108,8 +118,6 @@ class UserAuthJsonSupport extends JsonSupport {
   }
 
   implicit val RawlsGroupFormat = jsonFormat4[RawlsGroupName, RawlsGroupEmail, Set[RawlsUserRef], Set[RawlsGroupRef], RawlsGroup](RawlsGroup.apply)
-
-  implicit val RawlsGroupShortFormat = jsonFormat2(RawlsGroupShort)
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
 

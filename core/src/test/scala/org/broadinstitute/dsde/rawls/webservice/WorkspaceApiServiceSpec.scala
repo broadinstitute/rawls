@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsRealmRefFormat
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
@@ -95,7 +95,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     val workspace3Name = WorkspaceName(billingProject.projectName.value, "testworkspace3")
 
-    val defaultRealmGroup = makeRawlsGroup(s"Default Realm", Set.empty)
+    val defaultRealmGroup = makeManagedGroup(s"Default Realm", Set.empty)
 
     val workspace1Id = UUID.randomUUID().toString
     val makeWorkspace1 = makeWorkspaceWithUsers(Map(
@@ -119,7 +119,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       WorkspaceAccessLevels.Read -> Set.empty
     ))_
     val workspace3Id = UUID.randomUUID().toString
-    val (workspace3, workspace3Groups) = makeWorkspace3(billingProject, workspace3Name.name, Some(RawlsRealmRef(defaultRealmGroup.groupName)), workspace3Id, "bucket3", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("c") -> AttributeString("z")), false)
+    val (workspace3, workspace3Groups) = makeWorkspace3(billingProject, workspace3Name.name, Some(defaultRealmGroup), workspace3Id, "bucket3", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("c") -> AttributeString("z")), false)
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
@@ -170,8 +170,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace3Groups.map(rawlsGroupQuery.save).toSeq),
-        rawlsGroupQuery.save(defaultRealmGroup),
-        rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(defaultRealmGroup.groupName)),
+        rawlsGroupQuery.save(defaultRealmGroup.usersGroup),
+        rawlsGroupQuery.save(defaultRealmGroup.ownersGroup),
+        managedGroupQuery.createManagedGroup(defaultRealmGroup),
 
         workspaceQuery.save(workspace),
         workspaceQuery.save(workspace2),
@@ -264,16 +265,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "create a workspace with a Realm" in withTestDataApiServices { services =>
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner))
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(RawlsRealmRef(realmGroup.groupName)),
+      realm = Option(realmGroup),
       Map.empty
     )
-
-    runAndWait(rawlsGroupQuery.save(realmGroup))
-    runAndWait(rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realmGroup.groupName)))
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -292,6 +290,27 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceWithRealm.path))))) {
           header("Location")
+        }
+      }
+  }
+
+  it should "return 403 creating a workspace with a Realm for owner and not user" in withTestDataApiServices { services =>
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty, Set(testData.userOwner))
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      realm = Option(realmGroup),
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(workspaceQuery.findByName(workspaceWithRealm.toWorkspaceName))
         }
       }
   }
@@ -873,15 +892,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "clone a workspace's Realm if it exists" in withTestDataApiServices { services =>
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
-
-    runAndWait(rawlsGroupQuery.save(realmGroup))
-    runAndWait(rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realmGroup.groupName)))
+    val realmGroup: ManagedGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(RawlsRealmRef(realmGroup.groupName)),
+      realm = Option(realmGroup),
       Map.empty
     )
 
@@ -906,19 +922,21 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  def createAndSaveManagedGroup(name: String, users: Set[RawlsUserRef], owners: Set[RawlsUserRef] = Set.empty): ManagedGroup = {
+    val realmGroup = makeManagedGroup(name, users, owners = owners)
+    runAndWait(rawlsGroupQuery.save(realmGroup.usersGroup) andThen rawlsGroupQuery.save(realmGroup.ownersGroup) andThen managedGroupQuery.createManagedGroup(realmGroup))
+  }
+
   it should "not allow changing a workspace's Realm if it exists" in withTestDataApiServices { services =>
     val name1 = "Guilder"
     val name2 = "Florin"
-    val realmGroup1 = RawlsGroup(RawlsGroupName(name1), RawlsGroupEmail("king@guilder.eu"), Set(testData.userOwner), Set.empty)
-    val realmGroup2 = RawlsGroup(RawlsGroupName(name2), RawlsGroupEmail("king@florin.eu"), Set(testData.userOwner), Set.empty)
-
-    runAndWait(rawlsGroupQuery.save(realmGroup1))
-    runAndWait(rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realmGroup1.groupName)))
+    val realmGroup1 = createAndSaveManagedGroup(name1, Set(testData.userOwner))
+    val realmGroup2 = createAndSaveManagedGroup(name2, Set(testData.userOwner))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(RawlsRealmRef(realmGroup1.groupName)),
+      realm = Option(realmGroup1),
       Map.empty
     )
 
@@ -930,7 +948,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", Option(RawlsRealmRef(realmGroup2.groupName)), Map.empty)
+    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", Option(realmGroup2), Map.empty)
     Post(s"${workspaceWithRealm.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -958,39 +976,23 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
-    val realmGroupRef: RawlsRealmRef = RawlsRealmRef(realmGroup.groupName)
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner))
 
-    runAndWait(rawlsGroupQuery.save(realmGroup))
-    runAndWait(rawlsGroupQuery.setGroupAsRealm(realmGroupRef))
-
-    val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", Option(realmGroupRef), Map.empty)
+    val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", Option(realmGroup), Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopyRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        assertResult(Some(realmGroupRef)) {
+        assertResult(Some(ManagedGroup.toRef(realmGroup))) {
           responseAs[Workspace].realm
         }
       }
   }
 
   it should "return 403 when creating a workspace in a realm that you don't have access to" in withTestDataApiServices { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-
-    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
-
-    services.gcsDAO.adminList += testData.userOwner.userEmail.value
-
-    Post(s"/admin/realms", realmGroup) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -1033,7 +1035,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(RawlsRealmRef(realmGroup.groupName)),
+      realm = Option(ManagedGroupRef(realmGroup.groupName)),
       Map.empty
     )
 
@@ -1048,21 +1050,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when group membership changes" in withTestDataApiServices { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsRealmRefFormat
-    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
-    Post(s"/admin/realms", realmGroup) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
-          status
-        }
-      }
-
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.realmName.value}/members", httpJson(ownerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(ownerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1101,7 +1094,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //add userWriter to realm
     val groupAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.realmName.value}/members", httpJson(groupAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(groupAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1121,7 +1114,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //remove userWriter from realm
     val groupRemove = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Delete(s"/admin/groups/${realmGroup.realmName.value}/members", httpJson(groupRemove)) ~>
+    Delete(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(groupRemove)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1138,26 +1131,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when updating subgroup membership" in withTestDataApiServices { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsRealmRefFormat
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 
-    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
     val groupA = RawlsGroup(RawlsGroupName("GroupA"), RawlsGroupEmail("groupA@firecloud.org"), Set.empty, Set.empty)
     val groupB = RawlsGroup(RawlsGroupName("GroupB"), RawlsGroupEmail("groupB@firecloud.org"), Set.empty, Set(groupA))
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
-    //create the realm group
-    Post(s"/admin/realms", realmGroup) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-
     //add the owner to the realm
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.realmName.value}/members", httpJson(ownerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(ownerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1220,7 +1204,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     val writerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.realmName.value}/members", httpJson(writerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(writerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1247,7 +1231,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //remove userWriter from group A
     val removeWriterFromA = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Delete(s"/admin/groups/${realmGroup.realmName.value}/members", httpJson(removeWriterFromA)) ~>
+    Delete(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(removeWriterFromA)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1264,26 +1248,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when updating realm subgroup membership" in withTestDataApiServices { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsRealmRefFormat
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 
-    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
     val groupC = RawlsGroup(RawlsGroupName("GroupC"), RawlsGroupEmail("groupC@firecloud.org"), Set.empty, Set.empty)
     val groupD = RawlsGroup(RawlsGroupName("GroupD"), RawlsGroupEmail("groupD@firecloud.org"), Set.empty, Set(groupC))
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
-    //create the realm group
-    Post(s"/admin/realms", realmGroup) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-
     //add the owner to the realm
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.realmName.value}/members", httpJson(ownerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(ownerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1347,7 +1322,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //add group D to realm
     val addDtoRealm= RawlsGroupMemberList(None, None, None, Some(Seq(groupD.groupName.value)))
-    Post(s"/admin/groups/${realmGroup.realmName.value}/members", httpJson(addDtoRealm)) ~>
+    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(addDtoRealm)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -2080,12 +2055,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "create realmACLs when creating a workspace if there is a realm" in withTestDataApiServices { services =>
     val realmName = "testRealm"
-    val realm = makeRawlsGroup(realmName, Set(testData.userOwner))
+    val realm = createAndSaveManagedGroup(realmName, Set(testData.userOwner))
 
     val request = WorkspaceRequest(
       namespace = testData.billingProject.projectName.value,
       name = "newWorkspace",
-      Option(RawlsRealmRef(realm.groupName)),
+      Option(realm),
       Map.empty
     )
 
@@ -2102,9 +2077,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"fc-$realmName-$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"fc-$realmName-$workspaceId-READER"))
     )
-
-    runAndWait(rawlsGroupQuery.save(realm))
-    runAndWait(rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realm.groupName)))
 
     Post(s"/workspaces", httpJson(request)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -2129,12 +2101,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     import WorkspaceACLJsonSupport._
 
     val realmName = "testRealm"
-    val realm = makeRawlsGroup(realmName, Set(testData.userOwner))
 
     val request = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      Option(RawlsRealmRef(realm.groupName)),
+      Option(ManagedGroupRef(RawlsGroupName(realmName))),
       Map.empty
     )
     val newSample = Entity("sampleNew", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
@@ -2166,8 +2137,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource) { services =>
-        runAndWait(rawlsGroupQuery.save(realm))
-        runAndWait(rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realm.groupName)))
+        createAndSaveManagedGroup(realmName, Set(testData.userOwner))
+
         Post(s"/workspaces", httpJson(request)) ~>
           sealRoute(services.workspaceRoutes) ~>
           check {
