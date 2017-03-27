@@ -113,7 +113,7 @@ trait EntityComponent {
         concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
       }
 
-      def actionForEntityIdLevel(entityIds: EntityLevelIds): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def actionForEntityIdLevel(entityIds: EntityLevelIds): ReadAction[(EntityAndAttributesResult, Seq[EntityAndAttributesResult])] = {
         val baseSelect = sql"""#$baseEntityAndAttributeSql where e.id in ("""
         val entityIdSql = reduceSqlActionsWithDelim(Seq(entityIds.parentId).map { id => sql"$id" }.toSeq)
         val x = concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
@@ -123,12 +123,13 @@ trait EntityComponent {
         val entityIdSql2 = reduceSqlActionsWithDelim(entityIds.childrenIds.map { id => sql"$id" }.toSeq)
         val y = concatSqlActions(baseSelect2, entityIdSql2, sql")").as[EntityAndAttributesResult]
 
-        x flatMap { foo =>
+        val result = x flatMap { foo =>
           y map { bar =>
-            (foo ++ bar).toSeq
+            (foo.head -> bar)
           }
-
         }
+
+        result
       }
 
       def activeActionForWorkspace(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[EntityAndAttributesResult]] = {
@@ -219,6 +220,10 @@ trait EntityComponent {
 
     // includes "deleted" hidden entities when using their hidden names
     def findEntityByName(workspaceId: UUID, entityType: String, entityName: String): EntityQuery = {
+      filter(entRec => entRec.name === entityName && entRec.entityType === entityType && entRec.workspaceId === workspaceId)
+    }
+
+    def findEntitiesByName(workspaceId: UUID, entityType: String, entityName: String): EntityQuery = {
       filter(entRec => entRec.name === entityName && entRec.entityType === entityType && entRec.workspaceId === workspaceId)
     }
 
@@ -576,18 +581,29 @@ trait EntityComponent {
     /**
      * used in copyEntities load all the entities to copy
      */
-    def getEntitySubtrees(workspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String]): ReadAction[TraversableOnce[Entity]] = {
+    def getEntitySubtrees(workspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String]): ReadAction[Seq[EntityNode]] = {
       val startingEntityIdsAction = filter(rec => rec.workspaceId === workspaceContext.workspaceId && rec.entityType === entityType && rec.name.inSetBind(entityNames)).map(_.id)
 
       startingEntityIdsAction.result.flatMap { startingEntityIds =>
         val idSet = startingEntityIds.toSet
         recursiveGetEntityReferenceIds(Down, idSet, Set.empty)
       } flatMap { ids =>
-        println(ids)
 
-        val foo = ids.flatMap(_.childrenIds) ++ ids.map(_.parentId)
+        val entitiesFromIds = DBIO.sequence(ids.map { myIds =>
+          EntityAndAttributesRawSqlQuery.actionForEntityIdLevel(myIds)
+        }.toSeq)
 
-        unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForIds(foo))
+        val subtrees = entitiesFromIds.map { baz =>
+          baz.map { case (parentEntity, childEntities) =>
+            unmarshalEntities(DBIO.successful(Seq(parentEntity) ++ childEntities)).map { entities =>
+              EntityNode(entities.head, entities.tail.toSeq)
+            }
+          }
+        }
+
+        subtrees.flatMap { p =>
+          DBIO.sequence(p)
+        }
       }
     }
 
@@ -596,30 +612,35 @@ trait EntityComponent {
       def getCopyConflictTrees() = {
         DBIO.sequence(entityNames.map { entityName =>
           getEntitySubtrees(sourceWorkspaceContext, entityType, Seq(entityName)) flatMap { entitiesBelow =>
-            getCopyConflicts(destWorkspaceContext, entitiesBelow).map { allConflictsViaEntity =>
-              val hardConflicts = (allConflictsViaEntity.toSeq.filter(e => e.entityType.equalsIgnoreCase(entityType))).toSeq
-              val softConflicts = (allConflictsViaEntity.toSeq diff hardConflicts).toSeq
+            getCopyConflicts(destWorkspaceContext, entitiesBelow).map { case (hardConflictz, softConflictz) =>
+              softConflictz.map { x =>
+                println(x)
+                println("")
+              }
+              val hardConflicts = hardConflictz//.map(x => EntityConflict(x.parent.entityType, x.parent.name, Seq.empty))
+              val softConflicts = softConflictz//.map(x => EntityConflict(x.parent.entityType, x.parent.name, Seq.empty))
 
-              val hardConflictReports = EntityConflict(entityType, entityName, hardConflicts.map(x => EntityConflict(x.entityType, x.name, Seq.empty)))
-              val softConflictReports = EntityConflict(entityType, entityName, softConflicts.map(x => EntityConflict(x.entityType, x.name, Seq.empty)))
+              //val hardConflictReports = EntityConflict(entityType, entityName, hardConflicts.map(c => EntityConflict(c.entityType, x.name, y.map(z => EntityConflict(z.entityType, z.name, Seq.empty)))})
+              //val softConflictReports = EntityConflict(entityType, entityName, softConflicts.map{case (x, y) => EntityConflict(x.entityType, x.name, y.map(z => EntityConflict(z.entityType, z.name, Seq.empty)))})
 
-              (hardConflictReports, softConflictReports, hardConflicts, softConflicts, entitiesBelow.toSeq)
+              (hardConflicts, softConflicts, entitiesBelow)
             }
           }
         })
       }
 
       getCopyConflictTrees().flatMap { x =>
-        val hardConflictReports = x.map(_._1).filterNot(_.isEmpty)
-        val softConflictReports = x.map(_._2).filterNot(_.isEmpty)
-        val allHardConflicts = x.flatMap(_._3)
-        val allSoftConflicts = x.flatMap(_._4)
-        val allEntitiesToCopy = x.flatMap(_._5)
+        val allHardConflicts = x.flatMap(_._1.map(_.parent))
+        val allSoftConflicts = x.flatMap(_._2.flatMap(_.children))//.filterNot(_.isEmpty)
+        val allEntitiesToCopy = x.flatMap(_._3).flatMap(_.children)
+
+        val hardConflictReports = x.flatMap(_._1).map(x => EntityConflict(x.parent.entityType, x.parent.name, Seq.empty))
+        val softConflictReports = x.flatMap(_._2).map(x => EntityConflict(x.parent.entityType, x.parent.name, x.children.map(y => EntityConflict(y.entityType, y.name, Seq.empty))))
 
         (allHardConflicts.isEmpty, allSoftConflicts.isEmpty) match {
           case (true, subtreeConflictsIsEmpty) => {
             if (linkExistingEntities || subtreeConflictsIsEmpty) {
-              cloneEntities(destWorkspaceContext, (allEntitiesToCopy diff allSoftConflicts), allSoftConflicts).map(_ => Seq.empty[Entity]) map { clonedEntities =>
+              cloneEntities(destWorkspaceContext, Seq.empty, allSoftConflicts).map(_ => Seq.empty[Entity]) map { clonedEntities =>
                 EntityCopyResponse(clonedEntities, Seq.empty, Seq.empty)
               }
             } else DBIO.successful(EntityCopyResponse(Seq.empty, hardConflictReports, softConflictReports))
@@ -629,18 +650,39 @@ trait EntityComponent {
       }
     }
 
-    def getCopyConflicts(destWorkspaceContext: SlickWorkspaceContext, entitiesToCopy: TraversableOnce[Entity]): ReadAction[TraversableOnce[Entity]] = {
-      val entityQueries = entitiesToCopy.map { entity =>
-        findEntityByName(destWorkspaceContext.workspaceId, entity.entityType, entity.name).result.map {
+    case class EntityNode(parent: Entity, children: Seq[Entity])
+
+    //todo: this dbio.sequence within a dbio.sequence is probably doing some awful things
+    def getCopyConflicts(destWorkspaceContext: SlickWorkspaceContext, entityTreesToCopy: Seq[EntityNode]): ReadAction[(Seq[EntityNode], Seq[EntityNode])] = {
+
+      val parentEntities = entityTreesToCopy.map(_.parent)
+
+      val foo = DBIO.sequence(entityTreesToCopy.map { nodes =>
+        val entitiesBelow = DBIO.sequence(nodes.children.map { child =>
+          findEntityByName(destWorkspaceContext.workspaceId, child.entityType, child.name).result.map {
+            case Seq() => None
+            case _ => Option(child)
+          }
+        }).map(x => EntityNode(nodes.parent, x.collect{ case Some(e) => e }))
+
+        entitiesBelow
+      })
+
+      val bar = DBIO.sequence(parentEntities.map { parent =>
+        findEntityByName(destWorkspaceContext.workspaceId, parent.entityType, parent.name).result.map {
           case Seq() => None
-          case _ => Option(entity)
+          case _ => Option(EntityNode(parent, Seq.empty))
+        }
+      })
+
+      foo.flatMap { x =>
+        bar.map { y =>
+          (y.collect { case Some(e) => e }, x)
         }
       }
-      DBIO.sequence(entityQueries).map(_.toStream.collect { case Some(e) => e })
     }
 
     // the opposite of getEntitySubtrees: traverse the graph to retrieve all entities which ultimately refer to these
-
     def getAllReferringEntities(context: SlickWorkspaceContext, entities: Set[AttributeEntityReference]): ReadAction[Set[AttributeEntityReference]] = {
       lookupEntitiesByNames(context.workspaceId, entities) flatMap { entityRecs =>
         val idSet = entityRecs.map(_.id).toSet
