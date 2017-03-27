@@ -727,18 +727,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val entityNames = entityCopyDef.entityNames
             val entityType = entityCopyDef.entityType
             val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
-            copyResults.flatMap(results => (results.hardConflicts.size, results.softConflicts.size) match {
-              case (0, 0) => {
+            copyResults.flatMap { results =>
+              if(results.hardConflicts.isEmpty && results.softConflicts.isEmpty) {
                 // get the entities that were copied into the destination workspace
                 dataAccess.entityQuery.list(destWorkspaceContext, entityType).map { allEntities =>
                   val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toSeq
                   RequestComplete(StatusCodes.Created, results.copy(entitiesCopied = entityCopies))
                 }
               }
-              case (_, _) => {
-                DBIO.successful(RequestComplete(StatusCodes.Conflict, results))
-              }
-            })
+              else DBIO.successful(RequestComplete(StatusCodes.Conflict, results))
+            }
           }
         }
       }

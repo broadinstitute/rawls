@@ -628,15 +628,13 @@ trait EntityComponent {
 
         val hardConflictReports = x.flatMap(_._1).map(x => EntityConflict(x.parent.entityType, x.parent.name, Seq.empty))
 
-        //def recursiveConflictReport() = {
-          val softConflicts = x.flatMap(_._2).map(x => EntityConflict(x.parent.entityType, x.parent.name, x.children.map(y => EntityConflict(y.name, y.entityType, Seq.empty))))
+        val softConflicts = x.flatMap(_._2).map(x => EntityConflict(x.parent.entityType, x.parent.name, x.children.map(y => EntityConflict(y.name, y.entityType, Seq.empty))))
 
-          val (topLevelSoftConflicts, subSoftConflicts) = softConflicts.partition(x => x.entityType.equalsIgnoreCase(entityType) && entityNames.contains(x.name))
+        val (topLevelSoftConflicts, subSoftConflicts) = softConflicts.partition(x => x.entityType.equalsIgnoreCase(entityType) && entityNames.contains(x.name))
 
-          val subSoftConflictsByName = subSoftConflicts.map(x => (x.entityType, x.name))
+        val subSoftConflictsByName = subSoftConflicts.map(x => (x.entityType, x.name))
 
-          val finalResults = topLevelSoftConflicts.map(x => EntityConflict(x.entityType, x.name, subSoftConflicts.filter(z => subSoftConflictsByName.contains((z.entityType, z.name)))))
-        //}
+        val finalResults = topLevelSoftConflicts.map(x => EntityConflict(x.entityType, x.name, subSoftConflicts.filter(z => subSoftConflictsByName.contains((z.entityType, z.name)))))
 
         (allHardConflicts.isEmpty, allSoftConflicts.isEmpty) match {
           case (true, subtreeConflictsIsEmpty) => {
