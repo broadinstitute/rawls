@@ -174,11 +174,16 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
-case class EntityConflict(entityType: String, name: String, conflicts: Seq[EntityConflict]) {
+case class EntitySoftConflict(entityType: String, name: String, conflicts: Seq[EntitySoftConflict]) {
   def isEmpty: Boolean = conflicts.isEmpty
+  def entityName = (entityType, name)
 }
 
-case class EntityCopyResponse(entitiesCopied: Seq[Entity], hardConflicts: Seq[EntityConflict], softConflicts: Seq[EntityConflict])
+case class EntityHardConflict(entityType: String, name: String) {
+  def entityName = (entityType, name)
+}
+
+case class EntityCopyResponse(entitiesCopied: Seq[Entity], hardConflicts: Seq[EntityHardConflict], softConflicts: Seq[EntitySoftConflict])
 
 case class MethodRepoMethod(
                    methodNamespace: String,
@@ -240,8 +245,6 @@ case class MethodRepoConfigurationExport(
                                          methodRepoName: String,
                                          source: MethodConfigurationName
                                          )
-
-case class ConflictingEntities(conflicts: Seq[String])
 
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspace: Workspace,
@@ -397,7 +400,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityCopyDefinitionFormat = jsonFormat4(EntityCopyDefinition)
 
-  implicit val EntityConflictFormat: JsonFormat[EntityConflict] = lazyFormat(jsonFormat3(EntityConflict.apply))
+  implicit val EntitySoftConflictFormat: JsonFormat[EntitySoftConflict] = lazyFormat(jsonFormat3(EntitySoftConflict.apply))
+
+  implicit val EntityHardConflictFormat = jsonFormat2(EntityHardConflict)
 
   implicit val EntityCopyResponseFormat = jsonFormat3(EntityCopyResponse)
 
@@ -412,8 +417,6 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val MethodRepoConfigurationImportFormat = jsonFormat4(MethodRepoConfigurationImport)
 
   implicit val MethodRepoConfigurationExportFormat = jsonFormat3(MethodRepoConfigurationExport)
-
-  implicit val ConflictingEntitiesFormat = jsonFormat1(ConflictingEntities)
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 
