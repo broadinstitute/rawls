@@ -340,7 +340,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def adminUpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = asFCAdmin {
+  def adminUpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
     getWorkspaceContext(workspaceName) flatMap { ctx =>
       updateWorkspace(workspaceName, operations, ctx)
     }

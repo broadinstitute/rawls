@@ -134,7 +134,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String) = Future.successful(None)
 
-  val adminList = scala.collection.mutable.Set("owner-access")
+  val adminList = scala.collection.mutable.Set("owner-access", "admin")
   val curatorList = scala.collection.mutable.Set("owner-access")
 
   val googleGroups = TrieMap(

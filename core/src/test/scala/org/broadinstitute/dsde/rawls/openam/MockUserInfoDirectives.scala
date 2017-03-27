@@ -15,3 +15,10 @@ trait MockUserInfoDirectives extends UserInfoDirectives {
     provide(userInfo)
   }
 }
+
+trait MockAdminUserInfoDirectives extends UserInfoDirectives {
+  def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
+    // just return the cookie text as the common name
+    provide(UserInfo("admin", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+  }
+}

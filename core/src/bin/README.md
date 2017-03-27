@@ -2,7 +2,7 @@ Running the `publishRelease.sh` script publishes a release of rawls-model, workb
 
 Jenkins runs `publishSnapshot.sh` on every dev build, but that makes "unofficial" `-SNAP` versions.
 
-Note that you need `ARTIFACTORY_USERNAME` and `ARTIFACTORY_PASSWORD` in your env for either of these to work (you can get this info from jenkins config for rawls).
+Note that you need `ARTIFACTORY_USERNAME` and `ARTIFACTORY_PASSWORD` in your env for either of these to work.
 
 cmd$ ARTIFACTORY_USERNAME=<name> ARTIFACTORY_PASSWORD=<pw> core/src/bin/publishRelease.sh
 

@@ -674,7 +674,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 403 on update (remove) with workspace library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+  it should "return OK on update (remove) with workspace library-namespace attributes as non-curator" in withTestDataApiServices { services =>
     val name = AttributeName(AttributeName.libraryNamespace, "whatever")
     val attr: Attribute = AttributeString("something")
 

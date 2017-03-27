@@ -4,9 +4,10 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.openam._
 import org.broadinstitute.dsde.rawls.user.UserService
 
 import scala.concurrent.duration.Duration
@@ -27,6 +28,7 @@ import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsBillingPro
 class AdminApiServiceSpec extends ApiServiceSpec {
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiServiceAsAdmin(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockAdminUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService =>  T): T = {
     val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
@@ -34,6 +36,17 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       testCode(apiService)
     } finally {
       apiService.cleanupSupervisor
+    }
+  }
+
+  def withTestDataApiAsAdminServices[T](testCode: TestApiServiceAsAdmin =>  T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      val apiAdminService = new TestApiServiceAsAdmin(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+      try {
+        testCode(apiAdminService)
+      } finally {
+        apiAdminService.cleanupSupervisor
+      }
     }
   }
 
@@ -1087,6 +1100,16 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
 
   }
+
+  it should "allow admin to update a workspace" in withTestDataApiAsAdminServices { services =>
+    Patch(s"/admin/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"),AttributeString("hoo")): AttributeUpdateOperation))) ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+        }
+    }
 
   it should "return 200 when reading a Google Genomics operation" in withTestDataApiServices { services => {
     Get("/admin/genomics/operations/dummy-job-id") ~>
