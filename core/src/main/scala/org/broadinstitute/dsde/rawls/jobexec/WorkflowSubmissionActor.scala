@@ -27,15 +27,17 @@ object WorkflowSubmissionActor {
             executionServiceCluster: ExecutionServiceCluster,
             batchSize: Int,
             credential: Credential,
+            processInterval: FiniteDuration,
             pollInterval: FiniteDuration,
             maxActiveWorkflowsTotal: Int,
             maxActiveWorkflowsPerUser: Int,
             runtimeOptions: Option[JsValue]): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceCluster, batchSize, credential, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions))
   }
 
   sealed trait WorkflowSubmissionMessage
-  case object ScheduleNextWorkflowQuery extends WorkflowSubmissionMessage
+  case object ScheduleNextWorkflow extends WorkflowSubmissionMessage
+  case object ProcessNextWorkflow extends WorkflowSubmissionMessage
   case object LookForWorkflows extends WorkflowSubmissionMessage
   case class SubmitWorkflowBatch(workflowIds: Seq[Long]) extends WorkflowSubmissionMessage
 
@@ -47,6 +49,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val executionServiceCluster: ExecutionServiceCluster,
                               val batchSize: Int,
                               val credential: Credential,
+                              val processInterval: FiniteDuration,
                               val pollInterval: FiniteDuration,
                               val maxActiveWorkflowsTotal: Int,
                               val maxActiveWorkflowsPerUser: Int,
@@ -54,11 +57,14 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
 
   import context._
 
-  self ! ScheduleNextWorkflowQuery
+  self ! ScheduleNextWorkflow
 
   override def receive = {
-    case ScheduleNextWorkflowQuery =>
-      scheduleNextWorkflowQuery
+    case ScheduleNextWorkflow =>
+      scheduleNextWorkflowQuery(pollInterval + (scala.util.Random.nextInt(1000) milliseconds))
+
+    case ProcessNextWorkflow =>
+      scheduleNextWorkflowQuery(processInterval)
 
     case LookForWorkflows =>
       getUnlaunchedWorkflowBatch() pipeTo self
@@ -68,11 +74,11 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
 
     case Status.Failure(t) =>
       logger.error(t.getMessage)
-      scheduleNextWorkflowQuery
+      self ! ScheduleNextWorkflow
   }
 
-  def scheduleNextWorkflowQuery: Cancellable = {
-    system.scheduler.scheduleOnce(pollInterval + (scala.util.Random.nextInt(1000) milliseconds), self, LookForWorkflows)
+  def scheduleNextWorkflowQuery(delay: FiniteDuration): Cancellable = {
+    system.scheduler.scheduleOnce(delay, self, LookForWorkflows)
   }
 }
 
@@ -83,7 +89,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val executionServiceCluster: ExecutionServiceCluster
   val batchSize: Int
   val credential: Credential
-  val pollInterval: FiniteDuration
   val maxActiveWorkflowsTotal: Int
   val maxActiveWorkflowsPerUser: Int
   val runtimeOptions: Option[JsValue]
@@ -108,12 +113,12 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         if( wfRecs.nonEmpty ) {
           SubmitWorkflowBatch(wfRecs.map(_.id))
         } else {
-          ScheduleNextWorkflowQuery
+          ScheduleNextWorkflow
         }
       }
     } recover {
       // if we found some but another actor reserved the first look again immediately
-      case t: RawlsConcurrentModificationException => LookForWorkflows
+      case t: RawlsConcurrentModificationException => ProcessNextWorkflow
     }
   }
 
@@ -258,7 +263,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey)
 
         DBIO.seq((successUpdates ++ failureMessages :+ failureStatusUpd):_*)
-      } map { _ => ScheduleNextWorkflowQuery }
+      } map { _ => ProcessNextWorkflow }
     } recoverWith {
       //If any of this fails, set all workflows to failed with whatever message we have.
       case t: Throwable =>
