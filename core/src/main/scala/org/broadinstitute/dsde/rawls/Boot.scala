@@ -152,6 +152,7 @@ object Boot extends App with LazyLogging {
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO.getBucketServiceAccountCredential,
+        util.toScalaDuration(conf.getDuration("executionservice.processInterval")),
         util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
