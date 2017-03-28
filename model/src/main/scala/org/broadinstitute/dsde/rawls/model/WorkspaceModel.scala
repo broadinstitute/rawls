@@ -183,7 +183,7 @@ case class EntityHardConflict(entityType: String, name: String) {
   def entityName = (entityType, name)
 }
 
-case class EntityCopyResponse(entitiesCopied: Seq[Entity], hardConflicts: Seq[EntityHardConflict], softConflicts: Seq[EntitySoftConflict])
+case class EntityCopyResponse(entitiesCopied: Set[Entity], hardConflicts: Set[EntityHardConflict], softConflicts: Set[EntitySoftConflict])
 
 case class MethodRepoMethod(
                    methodNamespace: String,

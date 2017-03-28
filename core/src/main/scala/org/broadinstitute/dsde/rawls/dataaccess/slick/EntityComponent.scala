@@ -18,6 +18,9 @@ case class EntityRecord(id: Long, name: String, entityType: String, workspaceId:
   def toReference = AttributeEntityReference(entityType, name)
 }
 
+case class EntityIdNode(parentId: Long, childrenIds: Set[Long])
+case class EntityNode(parent: Entity, children: Seq[Entity])
+
 trait EntityComponent {
   this: DriverComponent
     with WorkspaceComponent
@@ -114,22 +117,10 @@ trait EntityComponent {
       }
 
       def actionForEntityIdLevel(entityIds: EntityIdNode): ReadAction[(EntityAndAttributesResult, Seq[EntityAndAttributesResult])] = {
-        val baseSelect = sql"""#$baseEntityAndAttributeSql where e.id in ("""
-        val entityIdSql = reduceSqlActionsWithDelim(Seq(entityIds.parentId).map { id => sql"$id" }.toSeq)
-        val x = concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
-
-
-        val baseSelect2 = sql"""#$baseEntityAndAttributeSql where e.id in ("""
-        val entityIdSql2 = reduceSqlActionsWithDelim(entityIds.childrenIds.map { id => sql"$id" }.toSeq)
-        val y = concatSqlActions(baseSelect2, entityIdSql2, sql")").as[EntityAndAttributesResult]
-
-        val result = x flatMap { foo =>
-          y map { bar =>
-            (foo.head -> bar)
-          }
-        }
-
-        result
+        for {
+          parentEntity <- actionForIds(Seq(entityIds.parentId))
+          childEntities <- if(entityIds.childrenIds.nonEmpty) actionForIds(entityIds.childrenIds) else DBIO.successful(Seq.empty)
+        } yield (parentEntity.head -> childEntities)
       }
 
       def activeActionForWorkspace(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[EntityAndAttributesResult]] = {
@@ -531,8 +522,6 @@ trait EntityComponent {
     case object Up extends RecursionDirection
     case object Down extends RecursionDirection
 
-    case class EntityIdNode(parentId: Long, childrenIds: Set[Long])
-
     /**
      * Starting with entities specified by entityIds, recursively walk references accumulating all the ids
      * @param direction whether to walk Down (my object references others) or Up (my object is referenced by others) the graph
@@ -582,23 +571,18 @@ trait EntityComponent {
 
       startingEntityIdsAction.result.flatMap { startingEntityIds =>
         val idSet = startingEntityIds.toSet
-        recursiveGetEntityReferenceIds(Down, idSet, Set.empty)
+        recursiveGetEntityReferenceIds(Down, idSet, idSet.map(x => EntityIdNode(x, Set.empty)))
       } flatMap { ids =>
-
         val entitiesFromIds = DBIO.sequence(ids.map { myIds =>
           EntityAndAttributesRawSqlQuery.actionForEntityIdLevel(myIds)
         }.toSeq)
 
-        val subtrees = entitiesFromIds.map { baz =>
-          baz.map { case (parentEntity, childEntities) =>
+        entitiesFromIds.flatMap { entityAttrRecs =>
+          DBIO.sequence(entityAttrRecs.map { case (parentEntity, childEntities) =>
             unmarshalEntities(DBIO.successful(Seq(parentEntity) ++ childEntities)).map { entities =>
               EntityNode(entities.head, entities.tail.toSeq)
             }
-          }
-        }
-
-        subtrees.flatMap { p =>
-          DBIO.sequence(p)
+          })
         }
       }
     }
@@ -609,8 +593,7 @@ trait EntityComponent {
         DBIO.sequence(entityNames.map { entityName =>
           getEntitySubtrees(sourceWorkspaceContext, entityType, Seq(entityName)) flatMap { subtree =>
             getCopyConflicts(destWorkspaceContext, subtree).map { case (hardConflicts, softConflicts) =>
-              val hardConflictsReal = hardConflicts.filter(x => x.parent.entityType.equalsIgnoreCase(entityType) && x.parent.name.equalsIgnoreCase(entityName))
-
+              val hardConflictsReal = hardConflicts.filter(node => node.parent.entityType.equalsIgnoreCase(entityType) && node.parent.name.equalsIgnoreCase(entityName))
               (hardConflictsReal, softConflicts, subtree)
             }
           }
@@ -622,30 +605,25 @@ trait EntityComponent {
         val allSoftConflicts = conflictTrees.flatMap(_._2.flatMap(_.children)).toSet
         val allEntitiesToCopy = conflictTrees.flatMap(_._3).flatMap(_.children).toSet
 
-        val hardConflictReports = conflictTrees.flatMap(_._1).map(x => EntityHardConflict(x.parent.entityType, x.parent.name))
+        val softConflicts = conflictTrees.flatMap(_._2).map(node => EntitySoftConflict(node.parent.entityType, node.parent.name, node.children.map(child => EntitySoftConflict(child.name, child.entityType, Seq.empty))))
+        val (topLevelSoftConflicts, subSoftConflicts) = softConflicts.partition(conflict => conflict.entityType.equalsIgnoreCase(entityType) && entityNames.contains(conflict.name))
 
-        val softConflicts = conflictTrees.flatMap(_._2).map(x => EntitySoftConflict(x.parent.entityType, x.parent.name, x.children.map(y => EntitySoftConflict(y.name, y.entityType, Seq.empty))))
+        val subSoftConflictsByName = subSoftConflicts.map(conflict => (conflict.entityType, conflict.name))
+        val topLevelConflictsWithSubConflicts = topLevelSoftConflicts.map(conflict => EntitySoftConflict(conflict.entityType, conflict.name, subSoftConflicts.filter(subConflict => subSoftConflictsByName.contains((subConflict.entityType, subConflict.name)))))
 
-        val (topLevelSoftConflicts, subSoftConflicts) = softConflicts.partition(x => x.entityType.equalsIgnoreCase(entityType) && entityNames.contains(x.name))
+        val hardConflictReports = conflictTrees.flatMap(_._1).map(node => EntityHardConflict(node.parent.entityType, node.parent.name)).toSet
+        val softConflictReports = topLevelConflictsWithSubConflicts.filterNot(conflict => hardConflictReports.contains(EntityHardConflict(conflict.entityType, conflict.name))).toSet
 
-        val subSoftConflictsByName = subSoftConflicts.map(x => (x.entityType, x.name))
-
-        val finalResults = topLevelSoftConflicts.map(x => EntitySoftConflict(x.entityType, x.name, subSoftConflicts.filter(z => subSoftConflictsByName.contains((z.entityType, z.name)))))
-
-        (allHardConflicts.isEmpty, allSoftConflicts.isEmpty) match {
-          case (true, subtreeConflictsIsEmpty) => {
-            if (linkExistingEntities || subtreeConflictsIsEmpty) {
-              cloneEntities(destWorkspaceContext, (allEntitiesToCopy diff allSoftConflicts), allSoftConflicts.toSeq).map(_ => Seq.empty[Entity]) map { clonedEntities =>
-                EntityCopyResponse(clonedEntities, Seq.empty, Seq.empty)
-              }
-            } else DBIO.successful(EntityCopyResponse(Seq.empty, hardConflictReports, finalResults))
+        (allHardConflicts.isEmpty, (allSoftConflicts.isEmpty || linkExistingEntities)) match {
+          case (true, true) => {
+            cloneEntities(destWorkspaceContext, (allEntitiesToCopy diff allSoftConflicts), allSoftConflicts.toSeq).map(_ => Set.empty[Entity]) map { clonedEntities =>
+              EntityCopyResponse(clonedEntities, Set.empty, Set.empty)
+            }
           }
-          case (_, _) => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflictReports, finalResults))
+          case (_, _) => DBIO.successful(EntityCopyResponse(Set.empty, hardConflictReports, softConflictReports))
         }
       }
     }
-
-    case class EntityNode(parent: Entity, children: Seq[Entity])
 
     def getCopyConflicts(destWorkspaceContext: SlickWorkspaceContext, entityTreesToCopy: Seq[EntityNode]): ReadAction[(Seq[EntityNode], Seq[EntityNode])] = {
       for {
