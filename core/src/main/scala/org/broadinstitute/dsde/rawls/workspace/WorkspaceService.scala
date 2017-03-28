@@ -731,7 +731,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               if(results.hardConflicts.isEmpty && results.softConflicts.isEmpty) {
                 // get the entities that were copied into the destination workspace
                 dataAccess.entityQuery.list(destWorkspaceContext, entityType).map { allEntities =>
-                  val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toSeq
+                  val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toSet
                   RequestComplete(StatusCodes.Created, results.copy(entitiesCopied = entityCopies))
                 }
               }
