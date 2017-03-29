@@ -73,7 +73,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
       }
   }
 
-  trait ApiServices extends AdminApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with WorkspaceApiService with BillingApiService {
+  trait ApiServices extends AdminApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with WorkspaceApiService with BillingApiService with NotificationsApiService {
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
     val gpsDAO: MockGooglePubSubDAO
