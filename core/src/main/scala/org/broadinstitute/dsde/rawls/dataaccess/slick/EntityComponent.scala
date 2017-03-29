@@ -557,16 +557,56 @@ trait EntityComponent {
       }
     }
 
-    def copyEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String]): ReadWriteAction[TraversableOnce[Entity]] = {
-      getEntitySubtrees(sourceWorkspaceContext, entityType, entityNames).flatMap { entities =>
-        getCopyConflicts(destWorkspaceContext, entities).flatMap { conflicts =>
-          if (conflicts.isEmpty) {
-            cloneEntities(destWorkspaceContext, entities).map(_ => Seq.empty[Entity])
-          } else {
-            DBIO.successful(conflicts)
-          }
+    case class ConflictSubtree(entity: Entity, children: Seq[Entity]) {
+      def hasConflicts = children.nonEmpty
+    }
+
+    def copyEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String]): ReadWriteAction[EntityCopyResponse] = {
+
+      def getHardConflicts(entityType: String, entityNames: Seq[String]) = {
+        DBIO.sequence(entityNames.map(name => get(destWorkspaceContext, entityType, name))).map { entityOption =>
+          entityOption.collect { case Some(e) => e }
         }
       }
+
+      def getSoftConflicts(entityType: String, entityNames: Seq[String]) = {
+        DBIO.sequence(entityNames.map { entityName =>
+          getEntitySubtrees(sourceWorkspaceContext, entityType, Seq(entityName)).flatMap { entities =>
+            getCopyConflicts(destWorkspaceContext, entities).flatMap { entities =>
+              for {
+                rootEntity <- get(sourceWorkspaceContext, entityType, entityName)
+              } yield ConflictSubtree(rootEntity.get, entities.toSeq)
+            }
+          }
+        })
+      }
+
+      getHardConflicts(entityType, entityNames).flatMap {
+        case Seq() => getSoftConflicts(entityType, entityNames).map { softConflicts =>
+          val nonEmptySoftConflicts = softConflicts.filter(_.hasConflicts)
+
+          if(nonEmptySoftConflicts.isEmpty) {
+              //make sure to clone the entities and provide the ones to reference!
+            EntityCopyResponse(Seq.empty, Seq.empty, Seq.empty)
+          } else EntityCopyResponse(Seq.empty, Seq.empty, nonEmptySoftConflicts.map(_.entity))
+
+        }
+        case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts, Seq.empty))
+      }
+
+
+//      entityNames.map { name =>
+//        getConflictSubtrees(entityType, entityNames).flatMap { conflictSubtrees =>
+//          conflictSubtrees.filter(_.hasConflicts)
+//
+
+//          if (conflicts.isEmpty) {
+//            cloneEntities(destWorkspaceContext, entities).map(_ => Seq.empty[Entity])
+//          } else {
+//            DBIO.successful(conflicts)
+//          }
+//        }
+//      }
     }
 
     def getCopyConflicts(destWorkspaceContext: SlickWorkspaceContext, entitiesToCopy: TraversableOnce[Entity]): ReadAction[TraversableOnce[Entity]] = {
