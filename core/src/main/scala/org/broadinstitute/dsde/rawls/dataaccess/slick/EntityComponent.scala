@@ -11,6 +11,8 @@ import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
 import spray.http.StatusCodes
 
+import scala.annotation.tailrec
+
 /**
  * Created by dvoet on 2/4/16.
  */
@@ -581,17 +583,32 @@ trait EntityComponent {
         })
       }
 
+      def buildConflictSubtree(topLevelEntityRefs: Map[Entity, Seq[AttributeEntityReference]], subtree: ConflictSubtree, result: Seq[EntitySoftConflict]): Seq[EntitySoftConflict] = {
+        if(topLevelEntityRefs.isEmpty) result
+        else {
+          topLevelEntityRefs.map { case (entity, refs) =>
+            val refsToCareAbout = subtree.children.filter(x => refs.contains(AttributeEntityReference(x.entityType, x.name)))
+            val entitiesAndRefsToCareAbout = refsToCareAbout.map(x => x -> x.attributes.values.filter(_.isInstanceOf[AttributeEntityReference]).map(_.asInstanceOf[AttributeEntityReference]).toSeq).toMap
+
+            EntitySoftConflict(entity.entityType, entity.name, buildConflictSubtree(entitiesAndRefsToCareAbout, subtree, result))
+          }.toSeq
+        }
+      }
+
       getHardConflicts(entityType, entityNames).flatMap {
         case Seq() => getSoftConflicts(entityType, entityNames).map { softConflicts =>
           val nonEmptySoftConflicts = softConflicts.filter(_.hasConflicts)
 
           if(nonEmptySoftConflicts.isEmpty) {
               //make sure to clone the entities and provide the ones to reference!
+            cloneEntities()
             EntityCopyResponse(Seq.empty, Seq.empty, Seq.empty)
-          } else EntityCopyResponse(Seq.empty, Seq.empty, nonEmptySoftConflicts.map(_.entity))
+          } else {
+            EntityCopyResponse(Seq.empty, Seq.empty, softConflicts.flatMap(x => buildConflictSubtree(Map(x.entity -> x.entity.attributes.values.map(_.asInstanceOf[AttributeEntityReference]).toSeq), x, Seq.empty)))//recursiveBuildConflictTree(nonEmptySoftConflicts.filter(x => x.entity.entityType.equalsIgnoreCase(entityType) && entityNames.contains(x.entity.name)), Seq.empty, Seq.empty))
+          }
 
         }
-        case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts, Seq.empty))
+        case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.name)), Seq.empty))
       }
 
 
