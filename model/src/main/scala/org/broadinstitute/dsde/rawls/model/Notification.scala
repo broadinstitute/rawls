@@ -13,7 +13,7 @@ import WorkspaceJsonSupport.WorkspaceNameFormat
  * - create a val extending NotificationType being sure to call register
  */
 object Notifications {
-  private def baseKey[T <: Notification : TypeTag](n: T) = s"notifications/${typeOf[T].typeSymbol.asClass.name}"
+  private def baseKey(n: Notification) = s"notifications/${n.getClass.getSimpleName}"
   private def baseKey[T <: Notification : TypeTag] = s"notifications/${typeOf[T].typeSymbol.asClass.name}"
   private def workspaceNotification[T <: Notification : TypeTag] = typeOf[T] <:< typeOf[WorkspaceNotification]
 
