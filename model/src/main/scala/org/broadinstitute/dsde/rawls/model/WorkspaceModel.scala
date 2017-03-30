@@ -398,7 +398,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityCopyDefinitionFormat = jsonFormat4(EntityCopyDefinition)
 
-  implicit val EntitySoftConflictFormat: JsonFormat[EntitySoftConflict] = lazyFormat(jsonFormat3(EntitySoftConflict.apply))
+  implicit val EntitySoftConflictFormat: JsonFormat[EntitySoftConflict] = lazyFormat(jsonFormat3(EntitySoftConflict))
 
   implicit val EntityHardConflictFormat = jsonFormat2(EntityHardConflict)
 

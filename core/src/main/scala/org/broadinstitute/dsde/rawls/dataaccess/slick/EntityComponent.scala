@@ -572,7 +572,7 @@ trait EntityComponent {
     def copyEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean): ReadWriteAction[EntityCopyResponse] = {
 
       def getAllAttrRefs(attrs: AttributeMap): Seq[AttributeEntityReference] = {
-        attrs.value.filter(_.isInstanceOf[AttributeEntityReference]).map(_.asInstanceOf[AttributeEntityReference]).toSeq
+        attrs.values.filter(_.isInstanceOf[AttributeEntityReference]).map(_.asInstanceOf[AttributeEntityReference]).toSeq
       }
 
       def getHardConflicts(entityType: String, entityNames: Seq[String]) = {
@@ -597,8 +597,8 @@ trait EntityComponent {
         if(topLevelEntityRefs.isEmpty) result
         else {
           topLevelEntityRefs.map { case (entity, refs) =>
-            val refsToCareAbout = subtree.conflicts.filter(x => refs.contains(AttributeEntityReference(x.entityType, x.name)))
-            val entitiesAndRefsToCareAbout = refsToCareAbout.map(x => x -> x.attributes.values.filter(_.isInstanceOf[AttributeEntityReference]).map(_.asInstanceOf[AttributeEntityReference]).toSeq).toMap
+            val refsToCareAbout = subtree.conflicts.filter(c => refs.contains(AttributeEntityReference(c.entityType, c.name)))
+            val entitiesAndRefsToCareAbout = refsToCareAbout.map(e => e -> getAllAttrRefs(e.attributes)).toMap
 
             EntitySoftConflict(entity.entityType, entity.name, buildConflictSubtree(entitiesAndRefsToCareAbout, subtree, result))
           }.toSeq
@@ -607,17 +607,15 @@ trait EntityComponent {
 
       getHardConflicts(entityType, entityNames).flatMap {
         case Seq() => getSoftConflicts(entityType, entityNames).flatMap { softConflicts =>
-
           val allEntities = softConflicts.flatMap(_.allChildren)
           val allConflicts = softConflicts.flatMap(_.conflicts)
 
           if(allConflicts.isEmpty || linkExistingEntities) {
-              //make sure to clone the entities and provide the ones to reference!
             cloneEntities(destWorkspaceContext, allEntities diff allConflicts, allConflicts).map { _ =>
               EntityCopyResponse(Seq.empty, Seq.empty, Seq.empty)
             }
           } else {
-            DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, softConflicts.flatMap(c => buildConflictSubtree(Map(c.entity -> c.entity.attributes.values.filter(_.isInstanceOf[AttributeEntityReference]).map(_.asInstanceOf[AttributeEntityReference]).toSeq), c, Seq.empty))))
+            DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, softConflicts.flatMap(c => buildConflictSubtree(Map(c.entity -> getAllAttrRefs(c.entity.attributes)), c, Seq.empty))))
           }
         }
         case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.name)), Seq.empty))
