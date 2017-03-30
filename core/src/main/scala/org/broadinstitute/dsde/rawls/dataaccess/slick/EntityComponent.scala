@@ -465,39 +465,47 @@ trait EntityComponent {
     def cloneAllEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Int] = {
       val allEntitiesAction = listActiveEntitiesAllTypes(sourceWorkspaceContext)
 
-      allEntitiesAction.flatMap(cloneEntities(destWorkspaceContext, _))
+      allEntitiesAction.flatMap(cloneEntities(destWorkspaceContext, _, Seq.empty))
     }
 
     def batchInsertEntities(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadWriteAction[Seq[EntityRecord]] = {
       if(!entities.isEmpty) {
         workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-          insertInBatches(entityQuery, entities) andThen selectEntityIds(workspaceContext, entities)
+          insertInBatches(entityQuery, entities) andThen selectEntityIds(workspaceContext, entities.map(e => (e.entityType, e.name)))
       }
       else {
         DBIO.successful(Seq.empty[EntityRecord])
       }
     }
 
-    def selectEntityIds(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
+    def selectEntityIds(workspaceContext: SlickWorkspaceContext, entities: Seq[(String, String)]): ReadAction[Seq[EntityRecord]] = {
       val entitiesGrouped = entities.grouped(batchSize).toSeq
 
       DBIO.sequence(entitiesGrouped map { batch =>
-        EntityRecordRawSqlQuery.action(workspaceContext.workspaceId, batch.map(_.toReference))
+        EntityRecordRawSqlQuery.action(workspaceContext.workspaceId, batch.map{ case (entityType, name) => AttributeEntityReference(entityType, name) })
       }).map(_.flatten)
     }
 
-    def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Int] = {
-      batchInsertEntities(destWorkspaceContext, entities.toSeq.map(marshalNewEntity(_, destWorkspaceContext.workspaceId))) flatMap { ids =>
-        val entityIdByEntity = ids.map(record => record.id -> entities.filter(p => p.entityType == record.entityType && p.name == record.name).toSeq.head)
+    def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entitiesToClone: TraversableOnce[Entity], entitiesToReference: Seq[Entity]): ReadWriteAction[Int] = {
+      batchInsertEntities(destWorkspaceContext, entitiesToClone.toSeq.map(marshalNewEntity(_, destWorkspaceContext.workspaceId))) flatMap { ids =>
+        val entityIdByEntity = ids.map(record => record.id -> entitiesToClone.filter(p => p.entityType == record.entityType && p.name == record.name).toSeq.head)
         val entityIdsByRef = entityIdByEntity.map { case (entityId, entity) => entity.toReference -> entityId }.toMap
 
-        val attributeRecords = entityIdByEntity flatMap { case (entityId, entity) =>
-          entity.attributes.flatMap { case (attributeName, attr) =>
-            entityAttributeQuery.marshalAttribute(entityId, attributeName, attr, entityIdsByRef)
+        val entitiesToReferenceById = selectEntityIds(destWorkspaceContext, entitiesToReference.map(e => (e.entityType, e.name)))
+
+        val attributeRecords = entitiesToReferenceById map { entityRecsToReference =>
+          val entityIdsToReferenceById = entityRecsToReference.map(record => record.id -> entitiesToReference.filter(p => p.entityType == record.entityType && p.name == record.name).head)
+          val entityIdsToReferenceByRef = entityIdsToReferenceById.map { case (entityId, entity) => entity.toReference -> entityId }.toMap
+          entityIdByEntity flatMap { case (entityId, entity) =>
+            entity.attributes.flatMap { case (attributeName, attr) =>
+              entityAttributeQuery.marshalAttribute(entityId, attributeName, attr, (entityIdsByRef ++ entityIdsToReferenceByRef))
+            }
           }
         }
 
-        entityAttributeQuery.batchInsertAttributes(attributeRecords)
+        attributeRecords flatMap { attributes =>
+          entityAttributeQuery.batchInsertAttributes(attributes)
+        }
       }
     }
 
@@ -565,6 +573,10 @@ trait EntityComponent {
 
     def copyEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String]): ReadWriteAction[EntityCopyResponse] = {
 
+      def getAllAttrRefs(attrs: AttributeMap): Seq[AttributeEntityReference] = {
+        attrs.value.filter(_.isInstanceOf[AttributeEntityReference]).map(_.asInstanceOf[AttributeEntityReference]).toSeq
+      }
+
       def getHardConflicts(entityType: String, entityNames: Seq[String]) = {
         DBIO.sequence(entityNames.map(name => get(destWorkspaceContext, entityType, name))).map { entityOption =>
           entityOption.collect { case Some(e) => e }
@@ -588,7 +600,7 @@ trait EntityComponent {
         else {
           topLevelEntityRefs.map { case (entity, refs) =>
             val refsToCareAbout = subtree.children.filter(x => refs.contains(AttributeEntityReference(x.entityType, x.name)))
-            val entitiesAndRefsToCareAbout = refsToCareAbout.map(x => x -> x.attributes.values.filter(_.isInstanceOf[AttributeEntityReference]).map(_.asInstanceOf[AttributeEntityReference]).toSeq).toMap
+            val entitiesAndRefsToCareAbout = refsToCareAbout.map(x => x -> getAllAttrRefs(x.attributes)).toMap
 
             EntitySoftConflict(entity.entityType, entity.name, buildConflictSubtree(entitiesAndRefsToCareAbout, subtree, result))
           }.toSeq
@@ -596,14 +608,16 @@ trait EntityComponent {
       }
 
       getHardConflicts(entityType, entityNames).flatMap {
-        case Seq() => getSoftConflicts(entityType, entityNames).map { softConflicts =>
+        case Seq() => getSoftConflicts(entityType, entityNames).flatMap { softConflicts =>
           val nonEmptySoftConflicts = softConflicts.filter(_.hasConflicts)
 
           if(nonEmptySoftConflicts.isEmpty) {
               //make sure to clone the entities and provide the ones to reference!
-            EntityCopyResponse(Seq.empty, Seq.empty, Seq.empty)
+            cloneEntities(destWorkspaceContext, Seq.empty, Seq.empty).map { _ =>
+              EntityCopyResponse(Seq.empty, Seq.empty, Seq.empty)
+            }
           } else {
-            EntityCopyResponse(Seq.empty, Seq.empty, softConflicts.flatMap(c => buildConflictSubtree(Map(c.entity -> c.entity.attributes.values.filter(_.isInstanceOf[AttributeEntityReference]).map(_.asInstanceOf[AttributeEntityReference]).toSeq), c, Seq.empty)))
+            DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, softConflicts.flatMap(c => buildConflictSubtree(Map(c.entity -> getAllAttrRefs(c.entity.attributes)), c, Seq.empty))))
           }
 
         }
