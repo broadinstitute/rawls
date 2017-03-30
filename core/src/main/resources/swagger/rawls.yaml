@@ -2080,7 +2080,7 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
-          description: One or more entities with the destination name/type already exist
+          description: There are conflicts in your copy operation. Retry with the paramater linkExistingEntities=true to link all soft conflicts to the entities that already exist in your workspace.
           schema:
             $ref: '#/definitions/ErrorReport'
         '422':
@@ -2097,6 +2097,12 @@ paths:
       summary: copy entities from one workspace into another workspace
       operationId: copy_entities
       parameters:
+        - in: query
+          description: true to link new entities to existing entities, false to fail instead of link
+          name: linkExistingEntities
+          required: false
+          default: false
+          type: boolean
         - in: body
           description: Source and destination for entities
           name: entityCopyDefinition

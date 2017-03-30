@@ -791,7 +791,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           realmCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
             val entityNames = entityCopyDef.entityNames
             val entityType = entityCopyDef.entityType
-            val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames)
+            val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
             copyResults.flatMap(response => (response.hardConflicts.size, response.softConflicts.size) match {
               case (0, 0) => {
                 // get the entities that were copied into the destination workspace
