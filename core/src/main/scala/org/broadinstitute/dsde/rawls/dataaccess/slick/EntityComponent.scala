@@ -11,8 +11,6 @@ import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
 import spray.http.StatusCodes
 
-import scala.annotation.tailrec
-
 /**
  * Created by dvoet on 2/4/16.
  */
@@ -487,8 +485,6 @@ trait EntityComponent {
     }
 
     def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entitiesToClone: TraversableOnce[Entity], entitiesToReference: Seq[Entity]): ReadWriteAction[Int] = {
-      println(s"EntitiesToClone: ${entitiesToClone}")
-      println(s"entitiesToReference: ${entitiesToReference}")
       batchInsertEntities(destWorkspaceContext, entitiesToClone.toSeq.map(marshalNewEntity(_, destWorkspaceContext.workspaceId))) flatMap { ids =>
         val entityIdByEntity = ids.map(record => record.id -> entitiesToClone.filter(p => p.entityType == record.entityType && p.name == record.name).toSeq.head)
         val entityIdsByRef = entityIdByEntity.map { case (entityId, entity) => entity.toReference -> entityId }.toMap
