@@ -763,8 +763,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
               runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
             }
-            assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
-              runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
             }
           }
         }
@@ -800,7 +800,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
               runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
             }
             assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
-              runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
             }
           }
         }
@@ -851,8 +851,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
               runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
             }
-            assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
-              runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
             }
           }
         }
@@ -909,8 +909,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
               runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
             }
-            assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
-              runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
             }
           }
         }
