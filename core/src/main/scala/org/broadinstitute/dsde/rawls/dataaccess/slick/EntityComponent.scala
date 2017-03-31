@@ -614,8 +614,9 @@ trait EntityComponent {
           val allConflicts = softConflicts.flatMap(_.conflicts)
 
           if(allConflicts.isEmpty || linkExistingEntities) {
-            cloneEntities(destWorkspaceContext, allEntities diff allConflicts, allConflicts.map(_.toReference)).map { _ =>
-              EntityCopyResponse(Seq.empty, Seq.empty, Seq.empty)
+            val entitiesToClone = allEntities diff allConflicts
+            cloneEntities(destWorkspaceContext, entitiesToClone, allConflicts.map(_.toReference)).map { _ =>
+              EntityCopyResponse(entitiesToClone.map(_.toReference), Seq.empty, Seq.empty)
             }
           } else {
             DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, softConflicts.flatMap(c => buildConflictSubtree(Map(c.entity -> getAllAttrRefs(c.entity.attributes)), c, Seq.empty))))
