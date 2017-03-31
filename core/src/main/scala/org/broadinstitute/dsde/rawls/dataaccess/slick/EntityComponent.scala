@@ -577,7 +577,7 @@ trait EntityComponent {
 
       def getHardConflicts(workspaceId: UUID, entityRefs: Seq[AttributeEntityReference]) = {
         val batchActions = createBatches(entityRefs.toSet).map(batch => lookupEntitiesByNames(workspaceId, batch))
-        DBIO.sequence(batchActions).map(_.flatten.toSet).map { recs =>
+        DBIO.sequence(batchActions).map(_.flatten.toSeq).map { recs =>
             recs.map(rec => AttributeEntityReference(rec.entityType, rec.name))
         }
       }
