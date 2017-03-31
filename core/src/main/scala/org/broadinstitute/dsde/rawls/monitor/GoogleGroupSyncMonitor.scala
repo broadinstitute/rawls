@@ -1,15 +1,16 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.actor.SupervisorStrategy.{Escalate, Stop}
+import akka.actor.SupervisorStrategy.{Resume, Escalate, Stop}
 import akka.actor._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.{UserInfo, SyncReport, RawlsGroupRef}
 import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitor.StartMonitorPass
 import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitorSupervisor.{Init, Start}
 import org.broadinstitute.dsde.rawls.user.UserService
+import spray.http.StatusCodes
 
 import scala.concurrent.{Future, ExecutionContext}
 import scala.concurrent.duration.FiniteDuration
@@ -109,22 +110,31 @@ class GoogleGroupSyncMonitorActor(val pollInterval: FiniteDuration, pollInterval
 
     case report: SyncReport =>
       // sync done, log it and try again immediately
-      // sender should be the user service actor instantiated up above, name of which is the message ack id
-      val messageAckId = sender().path.name
-      stop(sender())
+      acknowledgeMessage(sender()).map(_ => StartMonitorPass) pipeTo self
       logger.info(s"synchronized google group ${report.groupEmail.value}: ${report.items.toJson.compactPrint}")
-      pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, Seq(messageAckId)).map(_ => StartMonitorPass) pipeTo self
 
     case Status.Failure(t) =>
-      // an error happened in some future, let the supervisor handle it
       throw t
 
     case ReceiveTimeout =>
       throw new RawlsException("GoogleGroupSyncMonitorActor has received no messages for too long")
   }
 
+  private def acknowledgeMessage(sender: ActorRef): Future[Unit] = {
+    val messageAckId = sender.path.name
+    // sender should be the user service actor instantiated up above, name of which is the message ack id
+    stop(sender)
+    pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, Seq(messageAckId))
+  }
+
   override val supervisorStrategy =
     OneForOneStrategy() {
+      case groupNotFound: RawlsExceptionWithErrorReport if groupNotFound.errorReport.statusCode == Some(StatusCodes.NotFound) =>
+        // this can happen if a group is created then removed before the sync message is handled
+        // acknowledge it so we don't have to handle it again
+        acknowledgeMessage(sender()).map(_ => StartMonitorPass) pipeTo self
+        logger.info(s"group to synchronize not found: ${groupNotFound.errorReport}")
+        Resume
       case e => {
         Escalate
       }

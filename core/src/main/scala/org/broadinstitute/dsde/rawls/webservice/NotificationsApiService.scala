@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Notifications}
-import org.broadinstitute.dsde.rawls.model.Notifications.{WorkspaceNotification, NotificationType}
+import org.broadinstitute.dsde.rawls.model.Notifications.{WorkspaceNotificationType, WorkspaceNotification, NotificationType}
 import spray.routing.HttpService
 import spray.httpx.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
@@ -16,12 +16,12 @@ trait NotificationsApiService extends HttpService {
         val workspaceName = WorkspaceName(namespace, name)
 
         val workspaceNotificationTypes = Notifications.allNotificationTypes.values.collect {
-          case nt: NotificationType[WorkspaceNotification]@unchecked if nt.workspaceNotification => nt
+          case nt: WorkspaceNotificationType[_] if nt.workspaceNotification => nt
         }
 
         complete {
           workspaceNotificationTypes.map(nt => Map(
-            "notificationKey" -> Notifications.workspaceKey(nt, workspaceName),
+            "notificationKey" -> nt.workspaceKey(workspaceName),
             "description" -> nt.description))
         }
       }

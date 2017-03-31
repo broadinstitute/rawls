@@ -690,7 +690,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig2","Sample",MethodRepoMethod("myNamespace","method-a",1),"dsde"),
       MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
     }
 
     //Check if access levels on workspace exist
@@ -718,7 +718,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //check if method configs have been deleted
     assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
     }
 
     //Check if access levels have been deleted
@@ -745,7 +745,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
     }
 
     //Check if access levels on workspace exist
@@ -773,7 +773,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //check if method configs have been deleted
     assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
     }
 
     //Check if access levels have been deleted
@@ -801,7 +801,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
     }
 
     //Check if access levels on workspace exist
@@ -829,7 +829,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //check if method configs have been deleted
     assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
     }
 
     //Check if access levels have been deleted
@@ -856,7 +856,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
-      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
     }
 
     //Check if access levels on workspace exist
@@ -884,7 +884,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //check if method configs have been deleted
     assertResult(Vector()) {
-      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
     }
 
     //Check if access levels have been deleted

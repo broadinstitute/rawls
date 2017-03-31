@@ -35,6 +35,7 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import _root_.slick.jdbc.TransactionIsolation
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -365,7 +366,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def listWorkspaces(): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
+    dataSource.inTransaction ({ dataAccess =>
 
       val query = for {
         permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
@@ -392,7 +393,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
 
       results.map { responses => RequestComplete(StatusCodes.OK, responses) }
-    }
+    }, TransactionIsolation.ReadCommitted)
 
   def listWorkspaces(user: RawlsUser, dataAccess: DataAccess): ReadAction[Seq[WorkspacePermissionsPair]] = {
     val rawPairs = for {
@@ -425,7 +426,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
               dataAccess.entityQuery.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-                dataAccess.methodConfigurationQuery.list(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                   val inserts = methodConfigShorts.map { methodConfigShort =>
                     dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
                       dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)

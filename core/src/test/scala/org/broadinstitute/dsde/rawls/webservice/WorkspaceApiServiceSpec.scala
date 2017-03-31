@@ -763,8 +763,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
               runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
             }
-            assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
-              runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
             }
           }
         }
@@ -772,6 +772,37 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
           header("Location")
+        }
+      }
+  }
+
+  it should "clone a workspace and not try to copy over deleted method configs from the source" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", None, Map.empty)
+
+    withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
+      runAndWait(methodConfigurationQuery.delete(sourceWorkspaceContext, testData.methodConfig.namespace, testData.methodConfig.name))
+    }
+
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+
+        withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
+          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+          assert(copiedWorkspace.attributes == testData.workspace.attributes)
+
+          withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
+            //Name, namespace, creation date, and owner might change, so this is all that remains.
+            assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            }
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
+            }
+          }
         }
       }
   }
@@ -820,8 +851,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
               runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
             }
-            assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
-              runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
             }
           }
         }
@@ -878,8 +909,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
               runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
             }
-            assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
-              runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
             }
           }
         }

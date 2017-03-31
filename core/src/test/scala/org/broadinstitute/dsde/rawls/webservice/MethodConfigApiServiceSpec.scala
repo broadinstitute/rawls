@@ -761,7 +761,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        val configs = runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspace))).toSet
+        val configs = runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspace))).toSet
         assertResult(configs) {
           responseAs[Array[MethodConfigurationShort]].toSet
         }

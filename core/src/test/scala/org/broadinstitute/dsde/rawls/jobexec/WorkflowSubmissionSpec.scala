@@ -8,7 +8,7 @@ import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
-import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
+import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflow, ProcessNextWorkflow, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
 import org.mockserver.model.{HttpRequest, StringBody}
@@ -37,6 +37,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   class TestWorkflowSubmission(
     val dataSource: SlickDataSource,
     val batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
+    val processInterval: FiniteDuration = 250 milliseconds,
     val pollInterval: FiniteDuration = 1 second,
     val maxActiveWorkflowsTotal: Int = 100,
     val maxActiveWorkflowsPerUser: Int = 100,
@@ -52,6 +53,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   class TestWorkflowSubmissionWithMockExecSvc(
      dataSource: SlickDataSource,
      batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
+     processInterval: FiniteDuration = 25 milliseconds,
      pollInterval: FiniteDuration = 1 second) extends TestWorkflowSubmission(dataSource, batchSize, pollInterval) {
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), dataSource)
   }
@@ -59,7 +61,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   class TestWorkflowSubmissionWithTimeoutyExecSvc(
                                                dataSource: SlickDataSource,
                                                batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
-                                               pollInterval: FiniteDuration = 1 second) extends TestWorkflowSubmission(dataSource, batchSize, pollInterval) {
+                                               processInterval: FiniteDuration = 25 milliseconds,
+                                               pollInterval: FiniteDuration = 1 second) extends TestWorkflowSubmission(dataSource, batchSize, processInterval, pollInterval) {
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), dataSource)
   }
 
@@ -107,7 +110,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
 
-    assertResult(ScheduleNextWorkflowQuery) {
+    assertResult(ScheduleNextWorkflow) {
       Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
     }
 
@@ -119,7 +122,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
 
-    assertResult(ScheduleNextWorkflowQuery) {
+    assertResult(ScheduleNextWorkflow) {
       Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
     }
 
@@ -145,7 +148,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   it should "schedule the next check when there are no workflows" in withDefaultTestDatabase {
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
-    assertResult(ScheduleNextWorkflowQuery) {
+    assertResult(ScheduleNextWorkflow) {
       Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
     }
   }
@@ -169,7 +172,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.id)
 
-      assertResult(ScheduleNextWorkflowQuery) {
+      assertResult(ProcessNextWorkflow) {
         Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
       }
 
@@ -286,7 +289,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       mockGoogleServicesDAO,
       MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource),
-      3, credential, 1 milliseconds, 100, 100, None)
+      3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None)
     )
 
     awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ != WorkflowStatuses.Queued.toString), 10 seconds)
@@ -307,7 +310,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       mockGoogleServicesDAO,
       MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
-      batchSize, credential, 1 milliseconds, 100, 100, None)
+      batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None)
     )
 
     awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)

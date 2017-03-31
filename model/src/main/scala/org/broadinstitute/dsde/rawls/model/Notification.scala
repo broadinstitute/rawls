@@ -10,22 +10,24 @@ import WorkspaceJsonSupport.WorkspaceNameFormat
  * - create a new case class with appropriate fields
  *   - extend WorkspaceNotification if it is a notification specific to a workspace
  *   - otherwise extend UserNotification if a user id is available
- * - create a val extending NotificationType being sure to call register
+ * - create a val extending NotificationType or WorkspaceNotificationType being sure to call register
  */
 object Notifications {
   private def baseKey(n: Notification) = s"notifications/${n.getClass.getSimpleName}"
   private def baseKey[T <: Notification : TypeTag] = s"notifications/${typeOf[T].typeSymbol.asClass.name}"
-  private def workspaceNotification[T <: Notification : TypeTag] = typeOf[T] <:< typeOf[WorkspaceNotification]
 
-  def workspaceKey[T <: WorkspaceNotification : TypeTag](nt: NotificationType[T], workspaceName: WorkspaceName): String = workspaceKey(baseKey[T], workspaceName)
   private def workspaceKey(baseKey: String, workspaceName: WorkspaceName) = s"$baseKey/${workspaceName.namespace}/${workspaceName.name}"
 
   sealed abstract class NotificationType[T <: Notification: TypeTag] {
     def baseKey = Notifications.baseKey[T]
-    def workspaceNotification = Notifications.workspaceNotification[T]
+    def workspaceNotification = typeOf[T] <:< typeOf[WorkspaceNotification]
     val format: RootJsonFormat[T]
     val notificationType = typeOf[T].typeSymbol.asClass.name.toString
     val description: String
+  }
+
+  sealed abstract class WorkspaceNotificationType[T <: WorkspaceNotification: TypeTag] extends NotificationType[T] {
+    def workspaceKey(workspaceName: WorkspaceName) = Notifications.workspaceKey(Notifications.baseKey[T], workspaceName)
   }
 
   sealed trait Notification {
@@ -40,7 +42,7 @@ object Notifications {
   }
 
   sealed trait WorkspaceNotification extends UserNotification {
-    override def key = workspaceKey(Notifications.baseKey(this), workspaceName)
+    override def key = Notifications.workspaceKey(Notifications.baseKey(this), workspaceName)
     val workspaceName: WorkspaceName
   }
   object WorkspaceNotification {
@@ -68,13 +70,13 @@ object Notifications {
   })
 
   case class WorkspaceAddedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerEmail: String) extends WorkspaceNotification
-  val WorkspaceAddedNotificationType = register(new NotificationType[WorkspaceAddedNotification] {
+  val WorkspaceAddedNotificationType = register(new WorkspaceNotificationType[WorkspaceAddedNotification] {
     override val format = jsonFormat4(WorkspaceAddedNotification.apply)
     override val description = "Workspace Access Added or Changed"
   })
 
   case class WorkspaceRemovedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerEmail: String) extends WorkspaceNotification
-  val WorkspaceRemovedNotificationType = register(new NotificationType[WorkspaceRemovedNotification] {
+  val WorkspaceRemovedNotificationType = register(new WorkspaceNotificationType[WorkspaceRemovedNotification] {
     override val format = jsonFormat4(WorkspaceRemovedNotification.apply)
     override val description = "Workspace Access Removed"
   })
