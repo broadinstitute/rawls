@@ -54,6 +54,7 @@ object Dependencies {
       exclude("com.typesafe.scala-logging", "scala-logging-slf4j_2.11")
       exclude("com.typesafe.scala-logging", "scala-logging-api_2.11")
       exclude("com.google.guava", "guava"),
+    "com.getsentry.raven" % "raven-logback" % "7.8.6",
     "com.typesafe.akka" %% "akka-actor" % akkaV,
     "com.typesafe.slick" %% "slick" % "3.1.1",
     "io.spray" %% "spray-can" % sprayV,
