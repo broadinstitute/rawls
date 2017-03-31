@@ -792,16 +792,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val entityNames = entityCopyDef.entityNames
             val entityType = entityCopyDef.entityType
             val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
-            copyResults.flatMap(response => (response.hardConflicts.isEmpty, response.softConflicts.isEmpty || linkExistingEntities) match {
-              case (true, true) => {
+            copyResults.flatMap {response =>
+              if(response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntities)) => {
                 // get the entities that were copied into the destination workspace
+                // TODO: get the list of entities that were copied from the actual clone operation, don't look it up here afterwards 
                 dataAccess.entityQuery.list(destWorkspaceContext, entityType).map { allEntities =>
                   val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toList
                   RequestComplete(StatusCodes.Created, response.copy(entitiesCopied = entityCopies.map(_.toReference).toSeq))
                 }
-              }
-              case (_, _) => DBIO.successful(RequestComplete(StatusCodes.Conflict, response))
-            })
+              } else DBIO.successful(RequestComplete(StatusCodes.Conflict, response))
+            }
           }
         }
       }
