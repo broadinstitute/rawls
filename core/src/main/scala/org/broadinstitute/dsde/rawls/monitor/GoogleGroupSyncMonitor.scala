@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model.{UserInfo, SyncReport, RawlsGroupRef}
 import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitor.StartMonitorPass
 import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitorSupervisor.{Init, Start}
 import org.broadinstitute.dsde.rawls.user.UserService
+import org.broadinstitute.dsde.rawls.util.addJitter
 import spray.http.StatusCodes
 
 import scala.concurrent.{Future, ExecutionContext}
@@ -105,7 +106,7 @@ class GoogleGroupSyncMonitorActor(val pollInterval: FiniteDuration, pollInterval
 
     case None =>
       // there was no message to wait and try again
-      val nextTime = pollInterval + pollIntervalJitter * Math.random()
+      val nextTime = addJitter(pollInterval, pollIntervalJitter)
       system.scheduler.scheduleOnce(nextTime.asInstanceOf[FiniteDuration], self, StartMonitorPass)
 
     case report: SyncReport =>
