@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, addJitter}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import spray.http.StatusCodes
 import spray.json.DefaultJsonProtocol._
@@ -61,7 +61,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
 
   override def receive = {
     case ScheduleNextWorkflow =>
-      scheduleNextWorkflowQuery(pollInterval + (scala.util.Random.nextInt(1000) milliseconds))
+      scheduleNextWorkflowQuery(addJitter(pollInterval))
 
     case ProcessNextWorkflow =>
       scheduleNextWorkflowQuery(processInterval)

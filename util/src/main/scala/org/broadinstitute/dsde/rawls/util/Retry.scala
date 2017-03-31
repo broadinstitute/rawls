@@ -65,7 +65,7 @@ trait Retry {
 
   private def exponentialBackOffIntervals: Seq[FiniteDuration] = {
     val plainIntervals = Seq(1000 milliseconds, 2000 milliseconds, 4000 milliseconds, 8000 milliseconds, 16000 milliseconds, 32000 milliseconds)
-    plainIntervals.map(i => i.+(scala.util.Random.nextInt(1000) milliseconds))
+    plainIntervals.map(i => addJitter(i, 1000 milliseconds))
   }
 
 }
