@@ -469,31 +469,31 @@ trait EntityComponent {
     def batchInsertEntities(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadWriteAction[Seq[EntityRecord]] = {
       if(!entities.isEmpty) {
         workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-          insertInBatches(entityQuery, entities) andThen selectEntityIds(workspaceContext, entities.map(e => (e.entityType, e.name)))
+          insertInBatches(entityQuery, entities) andThen selectEntityIds(workspaceContext, entities.map(_.toReference))
       }
       else {
         DBIO.successful(Seq.empty[EntityRecord])
       }
     }
 
-    def selectEntityIds(workspaceContext: SlickWorkspaceContext, entities: Seq[(String, String)]): ReadAction[Seq[EntityRecord]] = {
+    def selectEntityIds(workspaceContext: SlickWorkspaceContext, entities: Seq[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
       val entitiesGrouped = entities.grouped(batchSize).toSeq
 
       DBIO.sequence(entitiesGrouped map { batch =>
-        EntityRecordRawSqlQuery.action(workspaceContext.workspaceId, batch.map{ case (entityType, name) => AttributeEntityReference(entityType, name) })
+        EntityRecordRawSqlQuery.action(workspaceContext.workspaceId, batch)
       }).map(_.flatten)
     }
 
-    def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entitiesToClone: TraversableOnce[Entity], entitiesToReference: Seq[Entity]): ReadWriteAction[Int] = {
+    def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entitiesToClone: TraversableOnce[Entity], entitiesToReference: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
       batchInsertEntities(destWorkspaceContext, entitiesToClone.toSeq.map(marshalNewEntity(_, destWorkspaceContext.workspaceId))) flatMap { ids =>
         val entityIdByEntity = ids.map(record => record.id -> entitiesToClone.filter(p => p.entityType == record.entityType && p.name == record.name).toSeq.head)
         val entityIdsByRef = entityIdByEntity.map { case (entityId, entity) => entity.toReference -> entityId }.toMap
 
-        val entitiesToReferenceById = selectEntityIds(destWorkspaceContext, entitiesToReference.map(e => (e.entityType, e.name)))
+        val entitiesToReferenceById = selectEntityIds(destWorkspaceContext, entitiesToReference)
 
         val attributeRecords = entitiesToReferenceById map { entityRecsToReference =>
-          val entityIdsToReferenceById = entityRecsToReference.map(record => record.id -> entitiesToReference.filter(p => p.entityType == record.entityType && p.name == record.name).head)
-          val entityIdsToReferenceByRef = entityIdsToReferenceById.map { case (entityId, entity) => entity.toReference -> entityId }.toMap
+          val entityIdsToReferenceById = entityRecsToReference.map(record => record.id -> entitiesToReference.filter(p => p.entityType == record.entityType && p.entityName == record.name).head)
+          val entityIdsToReferenceByRef = entityIdsToReferenceById.map { case (entityId, entity) => entity -> entityId }.toMap
           entityIdByEntity flatMap { case (entityId, entity) =>
             entity.attributes.flatMap { case (attributeName, attr) =>
               entityAttributeQuery.marshalAttribute(entityId, attributeName, attr, (entityIdsByRef ++ entityIdsToReferenceByRef))
@@ -572,7 +572,7 @@ trait EntityComponent {
     def copyEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean): ReadWriteAction[EntityCopyResponse] = {
 
       def getAllAttrRefs(attrs: AttributeMap): Seq[AttributeEntityReference] = {
-        attrs.values.filter(_.isInstanceOf[AttributeEntityReference]).map(_.asInstanceOf[AttributeEntityReference]).toSeq
+        attrs.values.collect { case ref: AttributeEntityReference => ref }.toSeq
       }
 
       def getHardConflicts(entityType: String, entityNames: Seq[String]) = {
@@ -611,7 +611,7 @@ trait EntityComponent {
           val allConflicts = softConflicts.flatMap(_.conflicts)
 
           if(allConflicts.isEmpty || linkExistingEntities) {
-            cloneEntities(destWorkspaceContext, allEntities diff allConflicts, allConflicts).map { _ =>
+            cloneEntities(destWorkspaceContext, allEntities diff allConflicts, allConflicts.map(_.toReference)).map { _ =>
               EntityCopyResponse(Seq.empty, Seq.empty, Seq.empty)
             }
           } else {

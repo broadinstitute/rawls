@@ -160,13 +160,11 @@ case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, f
 
 case class EntityQueryResponse(parameters: EntityQuery, resultMetadata: EntityQueryResultMetadata, results: Seq[Entity])
 
-case class EntityCopyResponse(entitiesCopied: Seq[EntityShort], hardConflicts: Seq[EntityHardConflict], softConflicts: Seq[EntitySoftConflict])
+case class EntityCopyResponse(entitiesCopied: Seq[AttributeEntityReference], hardConflicts: Seq[EntityHardConflict], softConflicts: Seq[EntitySoftConflict])
 
-case class EntitySoftConflict(entityType: String, name: String, conflicts: Seq[EntitySoftConflict])
+case class EntitySoftConflict(entityType: String, entityName: String, conflicts: Seq[EntitySoftConflict])
 
-case class EntityHardConflict(entityType: String, name: String)
-
-case class EntityShort(entityType: String, name: String)
+case class EntityHardConflict(entityType: String, entityName: String)
 
 case class MethodConfigurationName(
                    name: String,
@@ -403,8 +401,6 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val EntitySoftConflictFormat: JsonFormat[EntitySoftConflict] = lazyFormat(jsonFormat3(EntitySoftConflict))
 
   implicit val EntityHardConflictFormat = jsonFormat2(EntityHardConflict)
-
-  implicit val EntityShortFormat = jsonFormat2(EntityShort)
 
   implicit val EntityCopyResponseFormat = jsonFormat3(EntityCopyResponse)
 
