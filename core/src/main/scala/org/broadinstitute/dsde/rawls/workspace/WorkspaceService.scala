@@ -57,6 +57,7 @@ object WorkspaceService {
   case class GetWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class DeleteWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
+  case class UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case object ListAllWorkspaces extends WorkspaceServiceMessage
   case class GetTags(query: Option[String]) extends WorkspaceServiceMessage
@@ -112,7 +113,6 @@ object WorkspaceService {
   case object AdminListAllActiveSubmissions extends WorkspaceServiceMessage
   case class AdminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class AdminDeleteWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class AdminUpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
 
   case class HasAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class GrantAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -126,7 +126,7 @@ object WorkspaceService {
     new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, notificationDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with LibraryPermissionSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
   import dataSource.dataAccess.driver.api._
 
   implicit val timeout = Timeout(5 minutes)
@@ -136,6 +136,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case GetWorkspace(workspaceName) => pipe(getWorkspace(workspaceName)) to sender
     case DeleteWorkspace(workspaceName) => pipe(deleteWorkspace(workspaceName)) to sender
     case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to sender
+    case UpdateLibraryAttributes(workspaceName, operations) => pipe(updateLibraryAttributes(workspaceName, operations)) to sender
     case ListWorkspaces => pipe(listWorkspaces()) to sender
     case ListAllWorkspaces => pipe(listAllWorkspaces()) to sender
     case GetTags(query) => pipe(getTags(query)) to sender
@@ -191,7 +192,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case AdminListAllActiveSubmissions => asFCAdmin { listAllActiveSubmissions() } pipeTo sender
     case AdminAbortSubmission(workspaceName,submissionId) => pipe(adminAbortSubmission(workspaceName,submissionId)) to sender
     case AdminDeleteWorkspace(workspaceName) => pipe(adminDeleteWorkspace(workspaceName)) to sender
-    case AdminUpdateWorkspace(workspaceName, operations) => asFCAdmin { adminUpdateWorkspace(workspaceName, operations) } pipeTo sender
 
     case HasAllUserReadAccess(workspaceName) => pipe(hasAllUserReadAccess(workspaceName)) to sender
     case GrantAllUserReadAccess(workspaceName) => pipe(grantAllUserReadAccess(workspaceName)) to sender
@@ -340,33 +340,37 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def adminUpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
-    getWorkspaceContext(workspaceName) flatMap { ctx =>
-      updateWorkspace(workspaceName, operations, ctx)
+  def updateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
+    withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
+      getWorkspaceContext(workspaceName) flatMap { ctx =>
+        withLibraryPermissions(ctx.workspace, operations, dataSource, userInfo, getMaximumAccessLevel _) {
+          updateWorkspace(workspaceName, operations, ctx)
+        }
+      }
     }
   }
 
-  def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =  {
+  def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
+    withAttributeNamespaceCheck(operations.map(_.name)) {
     getWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write) flatMap { ctx =>
-      updateWorkspace(workspaceName, operations, ctx)
+        updateWorkspace(workspaceName, operations, ctx)
+      }
     }
   }
 
   private def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation], workspaceContext: SlickWorkspaceContext): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(operations.map(_.name)) {
-      dataSource.inTransaction { dataAccess =>
-        val updateAction = Try {
-          val updatedWorkspace = applyOperationsToWorkspace(workspaceContext.workspace, operations)
-          dataAccess.workspaceQuery.save(updatedWorkspace)
-        } match {
-          case Success(result) => result
-          case Failure(e: AttributeUpdateOperationException) =>
-            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspaceName}", ErrorReport(e))))
-          case Failure(regrets) => DBIO.failed(regrets)
-        }
-        updateAction.map { savedWorkspace =>
-          RequestComplete(StatusCodes.OK, savedWorkspace)
-        }
+    dataSource.inTransaction { dataAccess =>
+      val updateAction = Try {
+        val updatedWorkspace = applyOperationsToWorkspace(workspaceContext.workspace, operations)
+        dataAccess.workspaceQuery.save(updatedWorkspace)
+      } match {
+        case Success(result) => result
+        case Failure(e: AttributeUpdateOperationException) =>
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspaceName}", ErrorReport(e))))
+        case Failure(regrets) => DBIO.failed(regrets)
+      }
+      updateAction.map { savedWorkspace =>
+        RequestComplete(StatusCodes.OK, savedWorkspace)
       }
     }
 

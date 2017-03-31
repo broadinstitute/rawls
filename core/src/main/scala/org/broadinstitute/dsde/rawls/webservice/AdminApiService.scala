@@ -237,15 +237,6 @@ import spray.json.DefaultJsonProtocol._
       }
     } ~
     path("admin" / "workspaces" / Segment / Segment ) { (workspaceNamespace, workspaceName) =>
-      patch {
-        entity(as[Array[AttributeUpdateOperation]]) { operations =>
-          requestContext =>
-            perRequest(requestContext,
-              WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.AdminUpdateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations)
-            )
-        }
-      } ~
       delete {
         requestContext => perRequest(requestContext,
           WorkspaceService.props(workspaceServiceConstructor, userInfo),

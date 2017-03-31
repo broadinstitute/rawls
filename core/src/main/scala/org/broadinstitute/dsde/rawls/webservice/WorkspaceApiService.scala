@@ -70,6 +70,17 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
         }
       }
     } ~
+    path("workspaces" / Segment / Segment / "library") { (workspaceNamespace, workspaceName) =>
+      patch {
+        entity(as[Array[AttributeUpdateOperation]]) { operations =>
+          requestContext =>
+            perRequest(requestContext,
+              WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.UpdateLibraryAttributes(WorkspaceName(workspaceNamespace, workspaceName), operations)
+            )
+        }
+      }
+    } ~
     path("workspaces" / Segment / Segment / "catalog" ) { (workspaceNamespace, workspaceName) =>
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
