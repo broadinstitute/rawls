@@ -64,7 +64,6 @@ object Dependencies {
     "org.broadinstitute" %% "wdl4s" % "0.10" exclude("org.scalaz", "scalaz-core_2.11") exclude("io.spray", "spray-json_2.11"),
     "org.scalaz" % "scalaz-core_2.11" % "7.1.3",
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
-    "com.getsentry.raven" % "raven-logback" % "7.8.6",
     "com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0"
       exclude("com.google.guava", "guava-jdk5"),
     "com.google.apis" % "google-api-services-genomics" % "v1-rev89-1.22.0"
