@@ -804,11 +804,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             }
           }
         }
-
-        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
-          header("Location")
-        }
       }
   }
 
