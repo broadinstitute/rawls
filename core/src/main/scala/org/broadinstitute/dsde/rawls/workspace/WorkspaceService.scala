@@ -426,7 +426,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
               dataAccess.entityQuery.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-                dataAccess.methodConfigurationQuery.list(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                   val inserts = methodConfigShorts.map { methodConfigShort =>
                     dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
                       dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)

@@ -34,6 +34,8 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
   it should "hide old method config and save new method config with incremented version" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
+    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.methodConfig.namespace, testData.methodConfig.name))).get
+
     val changed = testData.methodConfig.copy(rootEntityType = "goober",
       prerequisites = Map.empty,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
@@ -47,11 +49,9 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
-    val list = runAndWait(methodConfigurationQuery.list(workspaceContext))
+    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethod.id))).get.name
 
-    assertResult(1) {
-      list.filter(_.name.contains(testData.methodConfig.name + "_")).size
-    }
+    assert(oldConfigName.startsWith(oldMethod.name + "_"))
 
     val listActive = runAndWait(methodConfigurationQuery.listActive(workspaceContext))
 
@@ -62,7 +62,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
   it should "list method configs" in withConstantTestDatabase {
     val workspaceContext = SlickWorkspaceContext(constantData.workspace)
-    assertSameElements(constantData.allMCs.map(_.toShort), runAndWait(methodConfigurationQuery.list(workspaceContext)))
+    assertSameElements(constantData.allMCs.map(_.toShort), runAndWait(methodConfigurationQuery.listActive(workspaceContext)))
   }
 
   it should "rename method configs" in withDefaultTestDatabase {
@@ -80,6 +80,8 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigOldName))
 
+    val oldMethodId = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, methodConfigOldName.namespace, methodConfigOldName.name))).get.id
+
     val changed = methodConfigOldName.copy(name = "newName")
 
     runAndWait(methodConfigurationQuery.update(workspaceContext, methodConfigOldName.namespace, methodConfigOldName.name, changed))
@@ -88,11 +90,9 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
-    val list = runAndWait(methodConfigurationQuery.list(workspaceContext))
+    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethodId))).get.name
 
-    assertResult(1) {
-      list.count(_.name.startsWith(methodConfigOldName.name + "_"))
-    }
+    assert(oldConfigName.startsWith(methodConfigOldName.name + "_"))
   }
 
   it should "delete method configs by hiding them" in withDefaultTestDatabase {
