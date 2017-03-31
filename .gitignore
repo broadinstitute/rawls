@@ -15,4 +15,3 @@ test-output/
 *.log
 config/
 rawlsdb/
-*.pid

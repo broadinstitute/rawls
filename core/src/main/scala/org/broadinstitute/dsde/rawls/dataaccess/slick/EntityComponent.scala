@@ -575,9 +575,10 @@ trait EntityComponent {
         attrs.values.collect { case ref: AttributeEntityReference => ref }.toSeq
       }
 
-      def getHardConflicts(entityType: String, entityNames: Seq[String]) = {
-        DBIO.sequence(entityNames.map(name => get(destWorkspaceContext, entityType, name))).map { entityOption =>
-          entityOption.collect { case Some(e) => e }
+      def getHardConflicts(workspaceId: UUID, entityRefs: Seq[AttributeEntityReference]) = {
+        val batchActions = createBatches(entityRefs.toSet).map(batch => lookupEntitiesByNames(workspaceId, batch))
+        DBIO.sequence(batchActions).map(_.flatten.toSet).map { recs =>
+            recs.map(rec => AttributeEntityReference(rec.entityType, rec.name))
         }
       }
 
@@ -605,7 +606,9 @@ trait EntityComponent {
         }
       }
 
-      getHardConflicts(entityType, entityNames).flatMap {
+      val entitiesToCopyRefs = entityNames.map(name => AttributeEntityReference(entityType, name))
+
+      getHardConflicts(destWorkspaceContext.workspaceId, entitiesToCopyRefs).flatMap {
         case Seq() => getSoftConflicts(entityType, entityNames).flatMap { softConflicts =>
           val allEntities = softConflicts.flatMap(_.allChildren)
           val allConflicts = softConflicts.flatMap(_.conflicts)
@@ -618,7 +621,7 @@ trait EntityComponent {
             DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, softConflicts.flatMap(c => buildConflictSubtree(Map(c.entity -> getAllAttrRefs(c.entity.attributes)), c, Seq.empty))))
           }
         }
-        case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.name)), Seq.empty))
+        case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.entityName)), Seq.empty))
       }
     }
 
