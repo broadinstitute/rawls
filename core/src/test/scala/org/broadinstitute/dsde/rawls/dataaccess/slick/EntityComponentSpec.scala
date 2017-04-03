@@ -631,31 +631,31 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
     runAndWait(workspaceQuery.save(workspace2))
     runAndWait(workspaceQuery.save(workspace3))
-    withWorkspaceContext(workspace2) { context1 =>
-      withWorkspaceContext(workspace3) { context2 =>
+    withWorkspaceContext(workspace2) { context2 =>
+      withWorkspaceContext(workspace3) { context3 =>
         val participant1 = Entity("participant1", "participant", Map.empty)
         val sample1 = Entity("sample1", "sample", Map(AttributeName.withDefaultNS("participant") -> AttributeEntityReference("participant", "participant1")))
 
-        runAndWait(entityQuery.save(context1, participant1))
         runAndWait(entityQuery.save(context2, participant1))
-        runAndWait(entityQuery.save(context2, sample1))
+        runAndWait(entityQuery.save(context3, participant1))
+        runAndWait(entityQuery.save(context3, sample1))
 
         assertResult(List()){
-          runAndWait(entityQuery.list(context1, "sample")).toList
+          runAndWait(entityQuery.list(context2, "sample")).toList
         }
 
         assertResult(List(participant1)){
-          runAndWait(entityQuery.list(context1, "participant")).toList
+          runAndWait(entityQuery.list(context2, "participant")).toList
         }
 
-        runAndWait(entityQuery.copyEntities(context2, context1, "sample", Seq("sample1"), true))
+        runAndWait(entityQuery.copyEntities(context3, context2, "sample", Seq("sample1"), true))
 
         assertResult(List(sample1)){
-          runAndWait(entityQuery.list(context1, "sample")).toList
+          runAndWait(entityQuery.list(context2, "sample")).toList
         }
 
         assertResult(List(participant1)){
-          runAndWait(entityQuery.list(context1, "participant")).toList
+          runAndWait(entityQuery.list(context2, "participant")).toList
         }
 
       }

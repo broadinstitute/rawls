@@ -1615,12 +1615,17 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Conflict) {
           status
         }
+
+        assertResult(EntityCopyResponse(Seq.empty, Seq(EntityHardConflict("Sample", "sample1")), Seq.empty)) {
+          responseAs[EntityCopyResponse]
+        }
       }
   }
 
   it should "return 409 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withTestDataApiServices { services =>
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val entityCopyDefinition1 = EntityCopyDefinition(sourceWorkspace, testData.controlledWorkspace.toWorkspaceName, testData.sample1.entityType, Seq(testData.sample1.name))
+    //this will cause a soft conflict because it references sample1
     val entityCopyDefinition2 = EntityCopyDefinition(sourceWorkspace, testData.controlledWorkspace.toWorkspaceName, testData.sample3.entityType, Seq(testData.sample3.name))
 
     Post("/workspaces/entities/copy", httpJson(entityCopyDefinition1)) ~>
@@ -1628,6 +1633,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
+        }
+        assertResult(EntityCopyResponse(Seq(testData.aliquot1, testData.sample1).map(_.toReference), Seq.empty, Seq.empty)) {
+          responseAs[EntityCopyResponse]
         }
       }
 
@@ -1638,6 +1646,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Conflict, response.entity.asString) {
           status
         }
+        assertResult(EntityCopyResponse(Seq.empty, Seq.empty, Seq(EntitySoftConflict(testData.sample3.entityType, testData.sample3.name, Seq(EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq(EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty)))))))) {
+          responseAs[EntityCopyResponse]
+        }
       }
 
     Post("/workspaces/entities/copy?linkExistingEntities=false", httpJson(entityCopyDefinition2)) ~>
@@ -1646,6 +1657,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Conflict, response.entity.asString) {
           status
         }
+        assertResult(EntityCopyResponse(Seq.empty, Seq.empty, Seq(EntitySoftConflict(testData.sample3.entityType, testData.sample3.name, Seq(EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq(EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty)))))))) {
+          responseAs[EntityCopyResponse]
+        }
       }
 
     Post("/workspaces/entities/copy?linkExistingEntities=true", httpJson(entityCopyDefinition2)) ~>
@@ -1653,6 +1667,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
+        }
+        assertResult(EntityCopyResponse(Seq(testData.sample3).map(_.toReference), Seq.empty, Seq.empty)) {
+          responseAs[EntityCopyResponse]
         }
       }
   }
