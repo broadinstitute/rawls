@@ -14,7 +14,7 @@ import scala.concurrent.Future
 /**
   * Created by ahaessly on 3/31/17.
   */
-trait LibraryPermissionSupport extends RoleSupport {
+trait LibraryPermissionsSupport extends RoleSupport {
   final val publishedFlag = AttributeName("library","published")
   final val discoverableWSAttribute = AttributeName("library","discoverableByGroups")
 
@@ -32,8 +32,7 @@ trait LibraryPermissionSupport extends RoleSupport {
           canShare <- dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
           hasCatalogOnly <- dataAccess.workspaceQuery.getUserCatalogPermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
           userLevel <- gm(RawlsUser(userInfo), ctx, dataAccess)
-        } yield {//(canShare, hasCatalogOnly, userLevel)
-//          results map { case (canShare, hasCatalogOnly, userLevel) =>
+        } yield {
           val functionToInvoke = getPermissionFunction(names, isCurator, canShare, hasCatalogOnly, userLevel)
             functionToInvoke(op)
         }
@@ -41,7 +40,7 @@ trait LibraryPermissionSupport extends RoleSupport {
     }
   }
 
-  private def getPermissionFunction(names: Seq[AttributeName], isCurator: Boolean, canShare: Boolean, hasCatalogOnly: Boolean, userLevel:WorkspaceAccessLevel) = {
+  protected def getPermissionFunction(names: Seq[AttributeName], isCurator: Boolean, canShare: Boolean, hasCatalogOnly: Boolean, userLevel:WorkspaceAccessLevel) = {
     val hasCatalog = hasCatalogOnly && userLevel >= WorkspaceAccessLevels.Read
     if (names.size == 1) {
       if (names.head == publishedFlag)
@@ -78,7 +77,7 @@ trait LibraryPermissionSupport extends RoleSupport {
       Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must be a curator and either be an owner or have catalog with read+.")))
   }
 
-  protected def canModify(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean = {
+  private def canModify(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean = {
     maxLevel >= WorkspaceAccessLevels.Write || hasCatalog
   }
 
@@ -89,7 +88,7 @@ trait LibraryPermissionSupport extends RoleSupport {
       Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must have write+ or catalog with read permissions.")))
   }
 
-  protected def canModifyDiscoverability(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean = {
+  private def canModifyDiscoverability(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean = {
     maxLevel >= WorkspaceAccessLevels.Owner || canShare || hasCatalog
   }
 
