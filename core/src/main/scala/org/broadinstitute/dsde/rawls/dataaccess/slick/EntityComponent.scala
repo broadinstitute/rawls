@@ -491,14 +491,17 @@ trait EntityComponent {
 
         val entitiesToReferenceById = selectEntityIds(destWorkspaceContext, entitiesToReference)
 
+        def recsToRefById(entityRecsToReference: Seq[EntityRecord]) = {
+          val entityRefById = entityRecsToReference.map(record => record.id -> entitiesToReference.filter(p => p.entityType == record.entityType && p.entityName == record.name).head)
+          entityRefById.map { case (entityId, entity) => entity -> entityId }.toMap
+        }
+
         val attributeRecords = entitiesToReferenceById map { entityRecsToReference =>
-          val entityIdsToReferenceById = entityRecsToReference.map(record => record.id -> entitiesToReference.filter(p => p.entityType == record.entityType && p.entityName == record.name).head)
-          val entityIdsToReferenceByRef = entityIdsToReferenceById.map { case (entityId, entity) => entity -> entityId }.toMap
-          entityIdByEntity flatMap { case (entityId, entity) =>
-            entity.attributes.flatMap { case (attributeName, attr) =>
-              entityAttributeQuery.marshalAttribute(entityId, attributeName, attr, (entityIdsByRef ++ entityIdsToReferenceByRef))
-            }
-          }
+          for {
+            (entityId, entity) <- entityIdByEntity
+            (attributeName, attr) <- entity.attributes
+            rec <- entityAttributeQuery.marshalAttribute(entityId, attributeName, attr, (entityIdsByRef ++ recsToRefById(entityRecsToReference)))
+          } yield rec
         }
 
         attributeRecords flatMap { attributes =>
