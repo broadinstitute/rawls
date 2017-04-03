@@ -561,9 +561,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           runAndWait(entityQuery.getCopyConflicts(context1, Seq(x1, x2_updated)))
         }
 
-        assertResult(Seq.empty) {
-          runAndWait(entityQuery.copyEntities(context2, context1, "SampleSet", Seq("x2"), false)).entitiesCopied
-        }
+        Seq(AttributeEntityReference(x1.entityType, x1.name), AttributeEntityReference(x2.entityType, x2.name)) should contain theSameElementsAs runAndWait(entityQuery.copyEntities(context2, context1, "SampleSet", Seq("x2"), false)).entitiesCopied
 
         //verify it was actually copied into the workspace
         assert(runAndWait(entityQuery.list(context1, "SampleSet")).toList.contains(x1))
@@ -584,6 +582,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         val a3 = Entity("a3", "test", Map(AttributeName.withDefaultNS("next") -> AttributeEntityReference("test", "a4"), AttributeName.withDefaultNS("side") -> AttributeEntityReference("test", "a")))
         val a2 = Entity("a2", "test", Map(AttributeName.withDefaultNS("next") -> AttributeEntityReference("test", "a3")))
         val a1 = Entity("a1", "test", Map(AttributeName.withDefaultNS("next") -> AttributeEntityReference("test", "a2")))
+        val allEntities = Seq(a, a1, a2, a3, a4, a5, a6)
         runAndWait(entityQuery.save(context2, a))
 
         // save a6 first without attributes because a1 does not exist yet
@@ -599,17 +598,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
         // note: we're copying FROM workspace2 INTO workspace
         assertResult(Seq.empty) {
-          runAndWait(entityQuery.getCopyConflicts(context1, Seq(a1, a2, a3, a4, a5, a6, a)))
+          runAndWait(entityQuery.getCopyConflicts(context1, allEntities))
         }
 
-        assertResult(Seq.empty) {
-          runAndWait(entityQuery.copyEntities(context2, context1, "test", Seq("a1"), false)).entitiesCopied
-        }
+        allEntities.map(_.toReference) should contain theSameElementsAs runAndWait(entityQuery.copyEntities(context2, context1, "test", Seq("a1"), false)).entitiesCopied
 
         //verify it was actually copied into the workspace
-        assertResult(Set(a1, a2, a3, a4, a5, a6, a)) {
-          runAndWait(entityQuery.list(context1, "test")).toSet
-        }
+        allEntities should contain theSameElementsAs runAndWait(entityQuery.list(context1, "test")).toSet
       }
     }
 

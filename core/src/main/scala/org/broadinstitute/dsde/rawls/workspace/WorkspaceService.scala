@@ -792,9 +792,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val entityNames = entityCopyDef.entityNames
             val entityType = entityCopyDef.entityType
             val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
-            copyResults.flatMap {response =>
-              if(response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntities)) RequestComplete(StatusCodes.Created, response))
-              else DBIO.successful(RequestComplete(StatusCodes.Conflict, response))
+            copyResults.map { response =>
+              if(response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntities)) RequestComplete(StatusCodes.Created, response)
+              else RequestComplete(StatusCodes.Conflict, response)
             }
           }
         }
