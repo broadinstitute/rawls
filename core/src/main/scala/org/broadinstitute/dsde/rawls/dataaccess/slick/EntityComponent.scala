@@ -616,7 +616,7 @@ trait EntityComponent {
 
           if(allConflicts.isEmpty || linkExistingEntities) {
             val entitiesToClone = allEntities diff allConflicts
-            cloneEntities(destWorkspaceContext, entitiesToClone, allConflicts.map(_.toReference)).map { _ =>
+            cloneEntities(destWorkspaceContext, entitiesToClone.toSet, allConflicts.map(_.toReference)).map { _ =>
               EntityCopyResponse(entitiesToClone.map(_.toReference), Seq.empty, Seq.empty)
             }
           } else {
