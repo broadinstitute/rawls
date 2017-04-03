@@ -565,9 +565,7 @@ trait EntityComponent {
       }
     }
 
-    case class ConflictSubtree(entity: Entity, conflicts: Seq[Entity], allChildren: Seq[Entity]) {
-      def hasConflicts = conflicts.nonEmpty
-    }
+    case class ConflictSubtree(entity: Entity, conflicts: Seq[Entity], allChildren: Seq[Entity])
 
     def copyEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean): ReadWriteAction[EntityCopyResponse] = {
 
@@ -578,7 +576,7 @@ trait EntityComponent {
       def getHardConflicts(workspaceId: UUID, entityRefs: Seq[AttributeEntityReference]) = {
         val batchActions = createBatches(entityRefs.toSet).map(batch => lookupEntitiesByNames(workspaceId, batch))
         DBIO.sequence(batchActions).map(_.flatten.toSeq).map { recs =>
-            recs.map(rec => AttributeEntityReference(rec.entityType, rec.name))
+          recs.map(rec => AttributeEntityReference(rec.entityType, rec.name))
         }
       }
 
@@ -627,13 +625,7 @@ trait EntityComponent {
     }
 
     def getCopyConflicts(destWorkspaceContext: SlickWorkspaceContext, entitiesToCopy: TraversableOnce[Entity]): ReadAction[TraversableOnce[Entity]] = {
-      val entityQueries = entitiesToCopy.map { entity =>
-        findEntityByName(destWorkspaceContext.workspaceId, entity.entityType, entity.name).result.map {
-          case Seq() => None
-          case _ => Option(entity)
-        }
-      }
-      DBIO.sequence(entityQueries).map(_.toStream.collect { case Some(e) => e })
+      list(destWorkspaceContext, entitiesToCopy.map(_.toReference).toSeq)
     }
 
     // the opposite of getEntitySubtrees: traverse the graph to retrieve all entities which ultimately refer to these
