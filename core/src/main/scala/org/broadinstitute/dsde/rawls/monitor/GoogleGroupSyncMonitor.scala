@@ -6,7 +6,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
-import org.broadinstitute.dsde.rawls.model.{UserInfo, SyncReport, RawlsGroupRef}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitor.StartMonitorPass
 import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitorSupervisor.{Init, Start}
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -110,9 +110,17 @@ class GoogleGroupSyncMonitorActor(val pollInterval: FiniteDuration, pollInterval
       system.scheduler.scheduleOnce(nextTime.asInstanceOf[FiniteDuration], self, StartMonitorPass)
 
     case report: SyncReport =>
-      // sync done, log it and try again immediately
-      acknowledgeMessage(sender()).map(_ => StartMonitorPass) pipeTo self
-      logger.info(s"synchronized google group ${report.groupEmail.value}: ${report.items.toJson.compactPrint}")
+      val errorReports = report.items.collect {
+        case SyncReportItem(_, _, errorReports) if errorReports.nonEmpty => errorReports
+      }.flatten
+
+      if (errorReports.isEmpty) {
+        // sync done, log it and try again immediately
+        acknowledgeMessage(sender()).map(_ => StartMonitorPass) pipeTo self
+        logger.info(s"synchronized google group ${report.groupEmail.value}: ${report.items.toJson.compactPrint}")
+      } else {
+        throw new RawlsExceptionWithErrorReport(ErrorReport("error(s) syncing google group", errorReports))
+      }
 
     case Status.Failure(t) =>
       throw t
