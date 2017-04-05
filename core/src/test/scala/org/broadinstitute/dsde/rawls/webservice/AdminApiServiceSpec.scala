@@ -1101,16 +1101,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   }
 
-  it should "allow admin to update a workspace" in withTestDataApiAsAdminServices { services =>
-    Patch(s"/admin/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"),AttributeString("hoo")): AttributeUpdateOperation))) ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-        }
-    }
-
   it should "return 200 when reading a Google Genomics operation" in withTestDataApiServices { services => {
     Get("/admin/genomics/operations/dummy-job-id") ~>
       sealRoute(services.adminRoutes) ~>
