@@ -571,9 +571,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         assert(runAndWait(entityQuery.list(context2, "SampleSet")).toList.contains(x2_updated))
 
         // note: we're copying FROM workspace2 INTO workspace
-//        assertResult(Seq.empty) {
-//          runAndWait(entityQuery.getCopyConflicts(context1, Seq(x1, x2_updated)))
-//        }
+        assertResult(Seq.empty) {
+          runAndWait(entityQuery.getCopyConflicts(context1, Seq(x1, x2_updated).map(_.toReference)))
+        }
 
         Seq(AttributeEntityReference(x1.entityType, x1.name), AttributeEntityReference(x2.entityType, x2.name)) should contain theSameElementsAs runAndWait(entityQuery.copyEntities(context2, context1, "SampleSet", Seq("x2"), false)).entitiesCopied
 
@@ -611,9 +611,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         runAndWait(entityQuery.save(context2, a6))
 
         // note: we're copying FROM workspace2 INTO workspace
-//        assertResult(Seq.empty) {
-//          runAndWait(entityQuery.getCopyConflicts(context1, allEntities))
-//        }
+        assertResult(Seq.empty) {
+          runAndWait(entityQuery.getCopyConflicts(context1, allEntities.map(_.toReference)))
+        }
 
         allEntities.map(_.toReference) should contain theSameElementsAs runAndWait(entityQuery.copyEntities(context2, context1, "test", Seq("a1"), false)).entitiesCopied
 
@@ -627,9 +627,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   it should "copy entities with a conflict" in withDefaultTestDatabase {
 
       withWorkspaceContext(testData.workspace) { context =>
-//        assertResult(Set(testData.sample1)) {
-//          runAndWait(entityQuery.getCopyConflicts(context, Seq(testData.sample1))).toSet
-//        }
+        assertResult(Set(testData.sample1.toReference)) {
+          runAndWait(entityQuery.getCopyConflicts(context, Seq(testData.sample1).map(_.toReference))).map(_.toReference).toSet
+        }
 
         assertResult(Set(EntityHardConflict(testData.sample1.entityType, testData.sample1.name))) {
           runAndWait(entityQuery.copyEntities(context, context, "Sample", Seq("sample1"), false)).hardConflicts.toSet

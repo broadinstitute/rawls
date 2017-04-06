@@ -549,7 +549,6 @@ trait EntityComponent {
 
         val newAccumulatedPaths = refRecords.flatMap { rec =>
           val keysThatEndWithParent = accumulatedPaths.keys.filter(_.last.equals(accumulatedEntities(rec._1)))
-
           val pathsToExtend = accumulatedPaths.filter(p => keysThatEndWithParent.toSeq.contains(p._1))
           val extendedPaths = pathsToExtend.map(p => (p._1 :+ rec._2.toReference, rec._2.id))
 
@@ -576,8 +575,6 @@ trait EntityComponent {
         recursiveGetEntityReferenceIds(Down, startingEntityIds.map(_.id).toSet, startingEntityIds.map(rec => rec.id -> AttributeEntityReference(rec.entityType, rec.name)).toMap, idSet)
       }
     }
-
-    case class ConflictSubtree(entity: Entity, conflicts: Seq[Entity], allChildren: Seq[Entity])
 
     def copyEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean): ReadWriteAction[EntityCopyResponse] = {
       def getHardConflicts(workspaceId: UUID, entityRefs: Seq[AttributeEntityReference]) = {
