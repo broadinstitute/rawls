@@ -15,11 +15,3 @@ trait MockUserInfoDirectives extends UserInfoDirectives {
     provide(userInfo)
   }
 }
-
-trait MockAdminUserInfoDirectives extends UserInfoDirectives {
-  protected def userInfo = UserInfo("admin", OAuth2BearerToken("token"), 123, "123456789876543212345")
-
-  def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
-    provide(userInfo)
-  }
-}
