@@ -481,11 +481,25 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
    */
   it should "get entity subtrees from a list of entities" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      val expected = Set(testData.sset1, testData.sset2, testData.sset3, testData.sample1, testData.aliquot1, testData.sample6, testData.sample2, testData.sample3, testData.sample5)
+      val sampleSet1Paths = Seq(Seq(testData.sset1.toReference),
+                                Seq(testData.sset1.toReference, testData.sample1.toReference),
+                                Seq(testData.sset1.toReference, testData.sample1.toReference, testData.aliquot1.toReference),
+                                Seq(testData.sset1.toReference, testData.sample2.toReference),
+                                Seq(testData.sset1.toReference, testData.sample3.toReference),
+                                Seq(testData.sset1.toReference, testData.sample3.toReference, testData.sample1.toReference))
+      val sampleSet2Paths = Seq(Seq(testData.sset2.toReference),
+                                Seq(testData.sset2.toReference, testData.sample2.toReference))
+      val sampleSet3Paths = Seq(Seq(testData.sset3.toReference),
+                                Seq(testData.sset3.toReference, testData.sample5.toReference),
+                                Seq(testData.sset3.toReference, testData.sample6.toReference))
+
+      val expected = sampleSet1Paths ++ sampleSet2Paths ++ sampleSet3Paths
       assertSameElements(expected, runAndWait(entityQuery.getEntitySubtrees(context, "SampleSet", List("sset1", "sset2", "sset3", "sampleSetDOESNTEXIST"))))
 
-      val expected2 = Set(testData.indiv2, testData.sset2, testData.sample2)
-      assertSameElements(expected2, runAndWait(entityQuery.getEntitySubtrees(context, "Individual", List("indiv2"))))
+      val individual2Paths = Seq(Seq(testData.indiv2.toReference),
+                                 Seq(testData.indiv2.toReference, testData.sset2.toReference),
+                                 Seq(testData.indiv2.toReference, testData.sset2.toReference, testData.sample2.toReference))
+      assertSameElements(individual2Paths, runAndWait(entityQuery.getEntitySubtrees(context, "Individual", List("indiv2"))))
     }
   }
 
