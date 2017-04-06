@@ -208,9 +208,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     //query Cromwell again, and restart from the top of this function with the results.
     workflowsWithOutputsF flatMap { workflowsWithOutputs =>
       datasource.inTransaction { dataAccess =>
-        handleOutputs(workflowsWithOutputs, dataAccess) flatMap { _ =>
-          checkOverallStatus(dataAccess) map {
-            shouldStop => StatusCheckComplete(shouldStop)
+        //re-fetch the workflow records because their version number has been bumped by the batchUpdateStatus
+        DBIO.sequence(workflowsWithOutputs map { case (rec, outputs) =>
+          dataAccess.workflowQuery.findWorkflowById(rec.id).result map { recs => (recs.head, outputs) }
+        }) flatMap { updatedWorkflowsWithOutputs =>
+          handleOutputs(updatedWorkflowsWithOutputs, dataAccess) flatMap { _ =>
+            checkOverallStatus(dataAccess) map {
+              shouldStop => StatusCheckComplete(shouldStop)
+            }
           }
         }
       }

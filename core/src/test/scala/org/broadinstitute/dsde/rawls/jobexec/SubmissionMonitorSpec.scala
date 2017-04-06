@@ -391,16 +391,17 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
-  it should "not weirdly drop outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+  it should "fail workflows that are missing outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    import spray.json._
+    import java.util.UUID
+
+    //TODO: punt this setup to testData
     val methodConfigWeird = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(),
-      Map("genomestrip_preprocessing_workflow.genomestrip_preprocessing.genomestrip_metadata" ->
-        AttributeString("this.genomestrip_preprocessing_metadata")), MethodRepoMethod("ns-config", "meth1", 1))
-
+      Map("some.workflow.output" ->
+        AttributeString("this.might_not_be_here")), MethodRepoMethod("ns-config", "meth1", 1))
     val weirdResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
-
     val submissionUpdateWeird = createTestSubmission(testData.workspace, methodConfigWeird, testData.indiv1, testData.userOwner,
       Seq(testData.indiv1), Map(testData.indiv1 -> weirdResolutions), Seq(), Map())
-
     runAndWait {
       withWorkspaceContext(testData.workspace) { ctx =>
         DBIO.sequence( Seq(
@@ -410,35 +411,32 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       }
     }
 
+    def getWorkflowRec = {
+      runAndWait(
+        workflowQuery.findWorkflowByExternalIdAndSubmissionId(
+          submissionUpdateWeird.workflows.head.workflowId.get,
+          UUID.fromString(submissionUpdateWeird.submissionId)).result).head
+    }
+
+    val workflowRecBefore = getWorkflowRec
+
     val monitor = createSubmissionMonitor(dataSource, submissionUpdateWeird, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
-    import spray.json._
-    val outputsJson = """{
-      |  "outputs": {
-      |    "genomestrip_preprocessing_workflow.genomestrip_preprocessing.genomestrip_metadata": "gs://fc-21df8571-e26b-4e36-b044-cba26ba89880/457da986-dc3f-4967-9599-02fec1def224/genomestrip_preprocessing_workflow/42ced7d0-9c0a-420f-98d5-4167d011dbf6/call-genomestrip_preprocessing/GTEX-12WSI-0004-SM-6WSCD.tar.gz"
-      |  },
-      |  "id": "42ced7d0-9c0a-420f-98d5-4167d011dbf6"
-      |}""".stripMargin
+
+    val outputsJsonBad = s"""{
+                           |  "outputs": {
+                           |  },
+                           |  "id": "${workflowRecBefore.externalId.get}"
+                           |}""".stripMargin
 
     val jss = org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport
 
+    val badOutputs = jss.ExecutionServiceOutputsFormat.read(outputsJsonBad.parseJson)
+    val badESSResponse = ExecutionServiceStatusResponse(Seq(Try(Option(workflowRecBefore, Option(badOutputs)))))
 
-    import java.util.UUID
-    val wfRec = runAndWait(
-      workflowQuery.findWorkflowByExternalIdAndSubmissionId(
-        submissionUpdateWeird.workflows.head.workflowId.get,
-        UUID.fromString(submissionUpdateWeird.submissionId)).result).head
+    Await.result( monitor.handleStatusResponses(badESSResponse), Duration.Inf )
 
-    val eso:ExecutionServiceOutputs = jss.ExecutionServiceOutputsFormat.read(outputsJson.parseJson)
-    val essr = ExecutionServiceStatusResponse(Seq(Try(Option(wfRec, Option(eso)))))
-
-    Await.result( monitor.handleStatusResponses(essr), Duration.Inf )
-    val ents = runAndWait {
-      withWorkspaceContext(testData.workspace) { ctx =>
-        entityQuery.get(ctx, testData.indiv1.entityType, testData.indiv1.name)
-      }
-    }
-
-    println(ents)
+    val workflowRecAfterBad = getWorkflowRec
+    assert(workflowRecAfterBad.status == WorkflowStatuses.Failed.toString)
   }
 
   WorkflowStatuses.terminalStatuses.foreach { status =>
