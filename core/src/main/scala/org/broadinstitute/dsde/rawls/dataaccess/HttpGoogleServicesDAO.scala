@@ -466,14 +466,14 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]] = {
-    val proxyPattern = s"PROXY_(.+)@${appsDomain}".r
-    val groupPattern = s"GROUP_(.+)@${appsDomain}".r
+  val proxyPattern = s"PROXY_(.+)@${appsDomain}".toLowerCase.r
+  val groupPattern = s"GROUP_(.+)@${appsDomain}".toLowerCase.r
 
+  override def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]] = {
     listGroupMembersInternal(group.groupEmail.value) map { membersOption =>
       membersOption match {
         case None => None
-        case Some(emails) => Option(emails map {
+        case Some(emails) => Option(emails map(_.toLowerCase) map {
           case email@proxyPattern(subjectId) => email -> Option(Left(RawlsUserRef(RawlsUserSubjectId(subjectId))))
           case email@groupPattern(groupName) => email -> Option(Right(RawlsGroupRef(RawlsGroupName(groupName))))
           case email => email -> None
