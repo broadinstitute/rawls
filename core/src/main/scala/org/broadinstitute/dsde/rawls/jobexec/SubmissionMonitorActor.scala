@@ -291,6 +291,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressions: Map[String, String]): Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
+      logger.debug(s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs}")
+      logger.debug(s"output expressions for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputExpressions}")
 
       val attributes = outputExpressions.map { case (outputName, outputExpr) =>
         Try {
@@ -303,8 +305,11 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
       }
 
       if (attributes.forall(_.isSuccess)) {
-        Left(updateEntityAndWorkspace(entitiesById(workflowRecord.workflowEntityId), workspace, attributes.map(_.get).toMap))
-
+        val updates = updateEntityAndWorkspace(entitiesById(workflowRecord.workflowEntityId), workspace, attributes.map(_.get).toMap)
+        val (optEnt, optWs) = updates
+        logger.debug(s"updated entityattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optEnt.map(_.attributes)}")
+        logger.debug(s"updated wsattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optWs.map(_.attributes)}")
+        Left(updates)
       } else {
         Right((workflowRecord, attributes.collect { case Failure(t) => AttributeString(t.getMessage) }.toSeq))
       }
