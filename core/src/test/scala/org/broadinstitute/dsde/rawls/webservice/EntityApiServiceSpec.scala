@@ -1634,9 +1634,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        assertResult(EntityCopyResponse(Seq(testData.sample1, testData.aliquot1).map(_.toReference), Seq.empty, Seq.empty)) {
-          responseAs[EntityCopyResponse]
-        }
+
+        val copyResponse = responseAs[EntityCopyResponse]
+
+        assertSameElements(Seq(testData.sample1, testData.aliquot1).map(_.toReference), copyResponse.entitiesCopied)
+        assertSameElements(Seq.empty, copyResponse.hardConflicts)
+        assertSameElements(Seq.empty, copyResponse.softConflicts)
       }
 
     //test the default case of no parameter set
