@@ -1634,7 +1634,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        assertResult(EntityCopyResponse(Seq(testData.aliquot1, testData.sample1).map(_.toReference), Seq.empty, Seq.empty)) {
+        assertResult(EntityCopyResponse(Seq(testData.sample1, testData.aliquot1).map(_.toReference), Seq.empty, Seq.empty)) {
           responseAs[EntityCopyResponse]
         }
       }

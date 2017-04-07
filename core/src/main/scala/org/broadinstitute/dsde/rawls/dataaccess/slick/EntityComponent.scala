@@ -485,27 +485,18 @@ trait EntityComponent {
     }
 
     def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entitiesToClone: TraversableOnce[Entity], entitiesToReference: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
-      batchInsertEntities(destWorkspaceContext, entitiesToClone.toSeq.map(marshalNewEntity(_, destWorkspaceContext.workspaceId))) flatMap { ids =>
-        val entityIdByEntity = ids.map(record => record.id -> entitiesToClone.filter(p => p.entityType == record.entityType && p.name == record.name).toSeq.head)
-        val entityIdsByRef = entityIdByEntity.map { case (entityId, entity) => entity.toReference -> entityId }.toMap
+      batchInsertEntities(destWorkspaceContext, entitiesToClone.toSeq.map(marshalNewEntity(_, destWorkspaceContext.workspaceId))) flatMap { insertedRecs =>
+        selectEntityIds(destWorkspaceContext, entitiesToReference) flatMap { toReferenceRecs =>
+          val idsByRef = (insertedRecs ++ toReferenceRecs).map { rec => rec.toReference -> rec.id }.toMap
+          val entityIdAndEntity = entitiesToClone map { ent => idsByRef(ent.toReference) -> ent }
 
-        val entitiesToReferenceById = selectEntityIds(destWorkspaceContext, entitiesToReference)
-
-        def recsToRefById(entityRecsToReference: Seq[EntityRecord]) = {
-          val entityRefById = entityRecsToReference.map(record => record.id -> entitiesToReference.filter(p => p.entityType == record.entityType && p.entityName == record.name).head)
-          entityRefById.map { case (entityId, entity) => entity -> entityId }.toMap
-        }
-
-        val attributeRecords = entitiesToReferenceById map { entityRecsToReference =>
-          for {
-            (entityId, entity) <- entityIdByEntity
+          val attributes = for {
+            (entityId, entity) <- entityIdAndEntity
             (attributeName, attr) <- entity.attributes
-            rec <- entityAttributeQuery.marshalAttribute(entityId, attributeName, attr, (entityIdsByRef ++ recsToRefById(entityRecsToReference)))
+            rec <- entityAttributeQuery.marshalAttribute(entityId, attributeName, attr, idsByRef)
           } yield rec
-        }
 
-        attributeRecords flatMap { attributes =>
-          entityAttributeQuery.batchInsertAttributes(attributes)
+          entityAttributeQuery.batchInsertAttributes(attributes.toSeq)
         }
       }
     }
