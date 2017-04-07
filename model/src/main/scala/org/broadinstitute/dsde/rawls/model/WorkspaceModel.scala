@@ -166,6 +166,8 @@ case class EntitySoftConflict(entityType: String, entityName: String, conflicts:
 
 case class EntityHardConflict(entityType: String, entityName: String)
 
+case class EntityPath(path: Seq[AttributeEntityReference])
+
 case class MethodConfigurationName(
                    name: String,
                    namespace: String,
