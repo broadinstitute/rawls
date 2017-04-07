@@ -517,13 +517,13 @@ trait EntityComponent {
     private def recursiveGetEntityReferences(direction: RecursionDirection, entityIds: Set[Long], accumulatedEntities: Map[Long, AttributeEntityReference], accumulatedPaths: Map[Seq[AttributeEntityReference], Long]): ReadAction[Seq[Seq[AttributeEntityReference]]] = {
       def oneLevelDown(idBatch: Set[Long]): ReadAction[Set[(Long, EntityRecord)]] = {
         val query = entityAttributeQuery filter (_.ownerId inSetBind idBatch) join
-          this on { (attr, ent) => attr.valueEntityRef === ent.id && ! attr.deleted } map (rec => (rec._1.ownerId, rec._2))
+          this on { (attr, ent) => attr.valueEntityRef === ent.id && ! attr.deleted } map { case (attr, entity) => (attr.ownerId, entity)}
         query.result.map(_.toSet)
       }
 
       def oneLevelUp(idBatch: Set[Long]): ReadAction[Set[(Long, EntityRecord)]] = {
         val query = entityAttributeQuery filter (_.valueEntityRef inSetBind idBatch) join
-          this on { (attr, ent) => attr.ownerId === ent.id && ! ent.deleted } map (rec => (rec._1.valueEntityRef.get, rec._2))
+          this on { (attr, ent) => attr.ownerId === ent.id && ! ent.deleted } map { case (attr, entity) => (attr.valueEntityRef.get, entity)}
         query.result.map(_.toSet)
       }
 
