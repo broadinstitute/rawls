@@ -575,7 +575,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           runAndWait(entityQuery.getCopyConflicts(context1, Seq(x1, x2_updated).map(_.toReference)))
         }
 
-        Seq(AttributeEntityReference(x1.entityType, x1.name), AttributeEntityReference(x2.entityType, x2.name)) should contain theSameElementsAs runAndWait(entityQuery.copyEntities(context2, context1, "SampleSet", Seq("x2"), false)).entitiesCopied
+        assertSameElements(Seq(x1.toReference, x2.toReference), runAndWait(entityQuery.copyEntities(context2, context1, "SampleSet", Seq("x2"), false)).entitiesCopied)
 
         //verify it was actually copied into the workspace
         assert(runAndWait(entityQuery.list(context1, "SampleSet")).toList.contains(x1))
@@ -615,10 +615,10 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           runAndWait(entityQuery.getCopyConflicts(context1, allEntities.map(_.toReference)))
         }
 
-        allEntities.map(_.toReference) should contain theSameElementsAs runAndWait(entityQuery.copyEntities(context2, context1, "test", Seq("a1"), false)).entitiesCopied
+        assertSameElements(allEntities.map(_.toReference), runAndWait(entityQuery.copyEntities(context2, context1, "test", Seq("a1"), false)).entitiesCopied)
 
         //verify it was actually copied into the workspace
-        allEntities should contain theSameElementsAs runAndWait(entityQuery.list(context1, "test")).toSet
+        assertSameElements(allEntities, runAndWait(entityQuery.list(context1, "test")).toSet)
       }
     }
 

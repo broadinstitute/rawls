@@ -523,7 +523,7 @@ trait EntityComponent {
      *                       that if there is a cycle some of entityIds may be in the result anyway
      * @return the ids of all the entities referred to by entityIds
      */
-    private def recursiveGetEntityReferenceIds(direction: RecursionDirection, entityIds: Set[Long], accumulatedEntities: Map[Long, AttributeEntityReference], accumulatedPaths: Map[Seq[AttributeEntityReference], Long]): ReadAction[Seq[Seq[AttributeEntityReference]]] = {
+    private def recursiveGetEntityReferences(direction: RecursionDirection, entityIds: Set[Long], accumulatedEntities: Map[Long, AttributeEntityReference], accumulatedPaths: Map[Seq[AttributeEntityReference], Long]): ReadAction[Seq[Seq[AttributeEntityReference]]] = {
       def oneLevelDown(idBatch: Set[Long]): ReadAction[Set[(Long, EntityRecord)]] = {
         val query = entityAttributeQuery filter (_.ownerId inSetBind idBatch) join
           this on { (attr, ent) => attr.valueEntityRef === ent.id && ! attr.deleted } map (rec => (rec._1.ownerId, rec._2))
@@ -544,22 +544,22 @@ trait EntityComponent {
         case Up => batchedEntityIds map oneLevelUp
       }
 
-      DBIO.sequence(batchActions).map(_.flatten.toSet).flatMap { refRecords =>
-        val newAccumulatedEntities = accumulatedEntities ++ refRecords.map(rec => rec._2.id -> rec._2.toReference)
+      DBIO.sequence(batchActions).map(_.flatten.toSet).flatMap { idsWithRecord =>
+        val newAccumulatedEntities = accumulatedEntities ++ idsWithRecord.map { case (_, record) => record.id -> record.toReference}
 
-        val newAccumulatedPaths = refRecords.flatMap { rec =>
-          val keysThatEndWithParent = accumulatedPaths.keys.filter(_.last.equals(accumulatedEntities(rec._1)))
+        val newAccumulatedPaths = idsWithRecord.flatMap { case (id, rec) =>
+          val keysThatEndWithParent = accumulatedPaths.keys.filter(_.last.equals(accumulatedEntities(id)))
           val pathsToExtend = accumulatedPaths.filter(p => keysThatEndWithParent.toSeq.contains(p._1))
-          val extendedPaths = pathsToExtend.map(p => (p._1 :+ rec._2.toReference, rec._2.id))
+          val extendedPaths = pathsToExtend.map { case (path, _) => (path :+ rec.toReference, rec.id)}
 
           accumulatedPaths ++ extendedPaths
         }.toMap
 
-        val untraversedIds = refRecords.map(_._2.id) -- accumulatedEntities.keys
+        val untraversedIds = idsWithRecord.map(_._2.id) -- accumulatedEntities.keys
         if (untraversedIds.isEmpty) {
           DBIO.successful(accumulatedPaths.keys.toSeq)
         } else {
-          recursiveGetEntityReferenceIds(direction, untraversedIds, newAccumulatedEntities, newAccumulatedPaths)
+          recursiveGetEntityReferences(direction, untraversedIds, newAccumulatedEntities, newAccumulatedPaths)
         }
       }
     }
@@ -568,11 +568,12 @@ trait EntityComponent {
      * used in copyEntities load all the entities to copy
      */
     def getEntitySubtrees(workspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String]): ReadAction[Seq[Seq[AttributeEntityReference]]] = {
-      val startingEntityIdsAction = filter(rec => rec.workspaceId === workspaceContext.workspaceId && rec.entityType === entityType && rec.name.inSetBind(entityNames))
+      val startingEntityRecsAction = filter(rec => rec.workspaceId === workspaceContext.workspaceId && rec.entityType === entityType && rec.name.inSetBind(entityNames))
 
-      startingEntityIdsAction.result.flatMap { startingEntityIds =>
-        val idSet = startingEntityIds.map(rec => Seq(AttributeEntityReference(rec.entityType, rec.name)) -> rec.id).toMap
-        recursiveGetEntityReferenceIds(Down, startingEntityIds.map(_.id).toSet, startingEntityIds.map(rec => rec.id -> AttributeEntityReference(rec.entityType, rec.name)).toMap, idSet)
+      startingEntityRecsAction.result.flatMap { startingEntityRecs =>
+        val refsToId = startingEntityRecs.map(rec => Seq(rec.toReference) -> rec.id).toMap
+        val idsToRef = startingEntityRecs.map(rec => rec.id -> rec.toReference).toMap
+        recursiveGetEntityReferences(Down, startingEntityRecs.map(_.id).toSet, idsToRef, refsToId)
       }
     }
 
@@ -580,7 +581,7 @@ trait EntityComponent {
       def getHardConflicts(workspaceId: UUID, entityRefs: Seq[AttributeEntityReference]) = {
         val batchActions = createBatches(entityRefs.toSet).map(batch => lookupEntitiesByNames(workspaceId, batch))
         DBIO.sequence(batchActions).map(_.flatten.toSeq).map { recs =>
-          recs.map(rec => AttributeEntityReference(rec.entityType, rec.name))
+          recs.map(_.toReference)
         }
       }
 
@@ -634,8 +635,9 @@ trait EntityComponent {
 
     def getAllReferringEntities(context: SlickWorkspaceContext, entities: Set[AttributeEntityReference]): ReadAction[Set[AttributeEntityReference]] = {
       lookupEntitiesByNames(context.workspaceId, entities) flatMap { entityRecs =>
-        val idSet = entityRecs.map(rec => Seq(AttributeEntityReference(rec.entityType, rec.name)) -> rec.id).toMap
-        recursiveGetEntityReferenceIds(Up, entityRecs.map(_.id).toSet, entityRecs.map(rec => rec.id -> rec.toReference).toMap, idSet)
+        val refsToId = entityRecs.map(rec => Seq(rec.toReference) -> rec.id).toMap
+        val idsToRef = entityRecs.map(rec => rec.id -> rec.toReference).toMap
+        recursiveGetEntityReferences(Up, entityRecs.map(_.id).toSet, idsToRef, refsToId)
       } flatMap { refs =>
         val entityAction = unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForRefs(context, refs.flatten))
         entityAction map { _.toSet map { e: Entity => e.toReference } }
