@@ -391,43 +391,23 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
-  it should "fail workflows that are missing outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    import spray.json._
-    import java.util.UUID
-
-    //TODO: punt this setup to testData
-    val methodConfigWeird = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(),
-      Map("some.workflow.output" ->
-        AttributeString("this.might_not_be_here")), MethodRepoMethod("ns-config", "meth1", 1))
-    val weirdResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
-    val submissionUpdateWeird = createTestSubmission(testData.workspace, methodConfigWeird, testData.indiv1, testData.userOwner,
-      Seq(testData.indiv1), Map(testData.indiv1 -> weirdResolutions), Seq(), Map())
-    runAndWait {
-      withWorkspaceContext(testData.workspace) { ctx =>
-        DBIO.sequence( Seq(
-          methodConfigurationQuery.create(ctx, methodConfigWeird),
-          submissionQuery.create(ctx, submissionUpdateWeird)
-        ))
-      }
-    }
-
+  it should "handleStatusResponses and fail workflows that are missing outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     def getWorkflowRec = {
       runAndWait(
         workflowQuery.findWorkflowByExternalIdAndSubmissionId(
-          submissionUpdateWeird.workflows.head.workflowId.get,
-          UUID.fromString(submissionUpdateWeird.submissionId)).result).head
+          testData.submissionMissingOutputs.workflows.head.workflowId.get,
+          UUID.fromString(testData.submissionMissingOutputs.submissionId)).result).head
     }
 
     val workflowRecBefore = getWorkflowRec
+    val monitor = createSubmissionMonitor(dataSource, testData.submissionMissingOutputs, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
-    val monitor = createSubmissionMonitor(dataSource, submissionUpdateWeird, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
-
+    import spray.json._
     val outputsJsonBad = s"""{
                            |  "outputs": {
                            |  },
                            |  "id": "${workflowRecBefore.externalId.get}"
                            |}""".stripMargin
-
     val jss = org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport
 
     val badOutputs = jss.ExecutionServiceOutputsFormat.read(outputsJsonBad.parseJson)
