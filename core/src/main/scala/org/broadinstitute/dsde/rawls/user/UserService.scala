@@ -583,7 +583,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- updateGroupMembership(managedGroup.ownersGroup, addUsers = Set(RawlsUser(userInfo)))
       _ <- updateGroupMembership(managedGroup.usersGroup, addSubGroups = Set(managedGroup.ownersGroup))
     } yield {
-      RequestComplete(StatusCodes.Created)
+      RequestComplete(StatusCodes.Created, ManagedGroupWithMembers(managedGroup.usersGroup.toRawlsGroupShort, managedGroup.ownersGroup.toRawlsGroupShort, Seq(managedGroup.ownersGroup.groupEmail.value), Seq(userInfo.userEmail)))
     }
   }
 
