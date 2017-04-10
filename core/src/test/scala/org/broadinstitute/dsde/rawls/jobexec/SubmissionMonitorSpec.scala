@@ -392,6 +392,12 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "handleStatusResponses and fail workflows that are missing outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    runAndWait {
+      withWorkspaceContext(testData.workspace) { context =>
+        submissionQuery.create(context, testData.submissionMissingOutputs)
+      }
+    }
+
     def getWorkflowRec = {
       runAndWait(
         workflowQuery.findWorkflowByExternalIdAndSubmissionId(
