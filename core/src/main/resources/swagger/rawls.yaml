@@ -3939,17 +3939,17 @@ definitions:
     properties:
       entitiesCopied:
         type: array
-        description: the entities that were successfully copied into the workspace
+        description: 'the entities that were successfully copied into the workspace'
         items:
           $ref: '#/definitions/AttributeEntityReference'
       hardConflicts:
         type: array
-        description: ''
+        description: 'these entities already exist in your workspace'
         items:
           $ref: '#/definitions/EntityHardConflict'
       softConflicts:
         type: array
-        description: ''
+        description: 'the conflicts within your entity subtrees. note that this will be empty if there are hard conflicts'
         items:
           $ref: '#/definitions/EntitySoftConflict'
 

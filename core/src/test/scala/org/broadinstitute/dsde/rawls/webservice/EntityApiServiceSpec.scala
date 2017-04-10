@@ -1642,6 +1642,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertSameElements(Seq.empty, copyResponse.softConflicts)
       }
 
+    val expectedSoftConflictResponse = EntityCopyResponse(Seq.empty, Seq.empty, Seq(
+      EntitySoftConflict(testData.sample3.entityType, testData.sample3.name, Seq(
+        EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq.empty),
+        EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq(
+          EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty)))))))
+
     //test the default case of no parameter set
     Post("/workspaces/entities/copy", httpJson(entityCopyDefinition2)) ~>
       sealRoute(services.entityRoutes) ~>
@@ -1649,7 +1655,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Conflict, response.entity.asString) {
           status
         }
-        assertResult(EntityCopyResponse(Seq.empty, Seq.empty, Seq(EntitySoftConflict(testData.sample3.entityType, testData.sample3.name, Seq(EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq.empty), EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq(EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty)))))))) {
+        assertResult(expectedSoftConflictResponse) {
           responseAs[EntityCopyResponse]
         }
       }
@@ -1660,7 +1666,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Conflict, response.entity.asString) {
           status
         }
-        assertResult(EntityCopyResponse(Seq.empty, Seq.empty, Seq(EntitySoftConflict(testData.sample3.entityType, testData.sample3.name, Seq(EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq.empty), EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq(EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty)))))))) {
+        assertResult(expectedSoftConflictResponse) {
           responseAs[EntityCopyResponse]
         }
       }
