@@ -26,7 +26,7 @@ import scala.util.{Failure, Try}
  */
 class UserApiServiceSpec extends ApiServiceSpec {
   case class TestApiService(dataSource: SlickDataSource, user: RawlsUser, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
-    override protected def userInfo =  UserInfo(user.userEmail.value, OAuth2BearerToken("token"), 0, user.userSubjectId.value)
+    override def userInfo =  UserInfo(user.userEmail.value, OAuth2BearerToken("token"), 0, user.userSubjectId.value)
   }
 
   def withApiServices[T](dataSource: SlickDataSource, user: RawlsUser = RawlsUser(userInfo))(testCode: TestApiService => T): T = {
@@ -920,6 +920,14 @@ class UserApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(expectedStatusCode, response.entity.asString) {
           status
+        }
+        if (status.isSuccess) {
+          val usersGroupShort = RawlsGroupShort(RawlsGroupName(testGroupName), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(testGroupName))))
+          val ownersGroupShort = RawlsGroupShort(RawlsGroupName(testGroupName + "-owners"), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(testGroupName + "-owners"))))
+          import UserModelJsonSupport.ManagedGroupWithMembersFormat
+          assertResult(ManagedGroupWithMembers(usersGroupShort, ownersGroupShort, Seq(ownersGroupShort.groupEmail.value), Seq(services.userInfo.userEmail))) {
+            responseAs[ManagedGroupWithMembers]
+          }
         }
       }
   }
