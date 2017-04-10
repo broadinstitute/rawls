@@ -1622,6 +1622,58 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 409 for soft conflicts multiple levels down" in withTestDataApiServices { services =>
+    val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
+    val newWorkspace = WorkspaceName(testData.workspace.namespace, "my-brand-new-workspace")
+
+    val newWorkspaceCreate = WorkspaceRequest(newWorkspace.namespace, newWorkspace.name, None, Map.empty)
+
+    val copyAliquot1 = EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.aliquot1.entityType, Seq(testData.aliquot1.name))
+    val copySample3 = EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.sample3.entityType, Seq(testData.sample3.name))
+
+    Post("/workspaces", httpJson(newWorkspaceCreate)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+      }
+
+    Post("/workspaces/entities/copy", httpJson(copyAliquot1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+
+        val copyResponse = responseAs[EntityCopyResponse]
+
+        assertSameElements(Seq(testData.aliquot1).map(_.toReference), copyResponse.entitiesCopied)
+        assertSameElements(Seq.empty, copyResponse.hardConflicts)
+        assertSameElements(Seq.empty, copyResponse.softConflicts)
+      }
+
+    Post("/workspaces/entities/copy", httpJson(copySample3)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Conflict, response.entity.asString) {
+          status
+        }
+
+        val copyResponse = responseAs[EntityCopyResponse]
+
+        assertSameElements(Seq.empty, copyResponse.entitiesCopied)
+        assertSameElements(Seq.empty, copyResponse.hardConflicts)
+
+        val expectedSoftConflicts = Seq(
+          EntitySoftConflict(testData.sample3.entityType, testData.sample3.name, Seq(
+            EntitySoftConflict(testData.sample1.entityType, testData.sample1.name, Seq(
+              EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty))))))
+
+        assertSameElements(expectedSoftConflicts, copyResponse.softConflicts)
+      }
+  }
+
   it should "return 409 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withTestDataApiServices { services =>
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val entityCopyDefinition1 = EntityCopyDefinition(sourceWorkspace, testData.controlledWorkspace.toWorkspaceName, testData.sample1.entityType, Seq(testData.sample1.name))
