@@ -776,11 +776,29 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "clone a workspace and not try to copy over deleted method configs from the source" in withTestDataApiServices { services =>
+  it should "clone a workspace and not try to copy over deleted method configs or hidden entities from the source" in withTestDataApiServices { services =>
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", None, Map.empty)
 
+    // contains no references in/out, safe to hide
+    val entToDelete = testData.sample8
+    val mcToDelete = testData.methodConfig.toShort
     withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
-      runAndWait(methodConfigurationQuery.delete(sourceWorkspaceContext, testData.methodConfig.namespace, testData.methodConfig.name))
+      assert {
+        runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSeq.contains(entToDelete)
+      }
+      assert {
+          runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).contains(mcToDelete)
+      }
+
+      runAndWait(methodConfigurationQuery.delete(sourceWorkspaceContext, mcToDelete.namespace, mcToDelete.name))
+      runAndWait(entityQuery.hide(sourceWorkspaceContext, Seq(entToDelete.toReference)))
+
+      assert {
+        !runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSeq.contains(entToDelete)
+      }
+      assert {
+        !runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).contains(mcToDelete)
+      }
     }
 
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
@@ -795,12 +813,21 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           assert(copiedWorkspace.attributes == testData.workspace.attributes)
 
           withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
-            //Name, namespace, creation date, and owner might change, so this is all that remains.
-            assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
-              runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            // Name, namespace, creation date, and owner might change, so this is all that remains.
+
+            val srcEnts = runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext))
+            val copiedEnts = runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext))
+            assertSameElements(srcEnts, copiedEnts)
+
+            val srcMCs = runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext))
+            val copiedMCs = runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext))
+            assertSameElements(srcMCs, copiedMCs)
+
+            assert {
+              ! copiedEnts.toSeq.contains(entToDelete)
             }
-            assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
-              runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
+            assert {
+              ! copiedMCs.contains(mcToDelete)
             }
           }
         }
