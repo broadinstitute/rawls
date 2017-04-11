@@ -1,62 +1,50 @@
 package org.broadinstitute.dsde.rawls.util
 
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspaceAccessLevels, _}
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 import spray.http.StatusCodes
 
-import scala.concurrent.Future
+import scala.collection.Set
 
 /**
   * Created by ahaessly on 3/31/17.
   */
 trait LibraryPermissionsSupport extends RoleSupport {
-  final val publishedFlag = AttributeName("library","published")
-  final val discoverableWSAttribute = AttributeName("library","discoverableByGroups")
+  final val publishedFlag = AttributeName("library", "published")
+  final val discoverableWSAttribute = AttributeName("library", "discoverableByGroups")
 
-  def withLibraryPermissions(workspace: Workspace,
-                             operations: Seq[AttributeUpdateOperation],
-                             dataSource: SlickDataSource,
-                             userInfo: UserInfo,
-                             gm: (RawlsUser, SlickWorkspaceContext, DataAccess) => ReadAction[WorkspaceAccessLevel])
-                            (op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    val names = operations.map(op => op.name)
-    val ctx = SlickWorkspaceContext(workspace)
-    tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
-      dataSource.inTransaction { dataAccess =>
-        for {
-          canShare <- dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
-          hasCatalogOnly <- dataAccess.workspaceQuery.getUserCatalogPermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
-          userLevel <- gm(RawlsUser(userInfo), ctx, dataAccess)
-        } yield {
-          val functionToInvoke = getPermissionFunction(names, isCurator, canShare, hasCatalogOnly, userLevel)
-            functionToInvoke(op)
-        }
-      } flatMap(identity)
-    }
+  def withLibraryPermissions(ctx: SlickWorkspaceContext,
+                                   operations: Seq[AttributeUpdateOperation],
+                                   dataAccess: DataAccess,
+                                   userInfo: UserInfo,
+                                   isCurator: Boolean,
+                                   gm: (RawlsUser, SlickWorkspaceContext, DataAccess) => ReadAction[WorkspaceAccessLevel])
+                                  (op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
+    val names = operations.map(attribute => attribute.name)
+    for {
+      canShare <- dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
+      hasCatalogOnly <- dataAccess.workspaceQuery.getUserCatalogPermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
+      userLevel <- gm(RawlsUser(userInfo), ctx, dataAccess)
+      result <- getPermissionChecker(names, isCurator, canShare, hasCatalogOnly, userLevel).withPermissions(op)
+    } yield result
   }
 
-  protected def getPermissionFunction(names: Seq[AttributeName], isCurator: Boolean, canShare: Boolean, hasCatalogOnly: Boolean, userLevel:WorkspaceAccessLevel) = {
+  def getPermissionChecker(names: Seq[AttributeName], isCurator: Boolean, canShare: Boolean, hasCatalogOnly: Boolean, userLevel: WorkspaceAccessLevel) = {
     val hasCatalog = hasCatalogOnly && userLevel >= WorkspaceAccessLevels.Read
-    if (names.size == 1) {
-      if (names.head == publishedFlag)
-        withChangePublishedPermissions(isCurator, hasCatalog, userLevel) _
-      else if (names.head == discoverableWSAttribute)
-        withDiscoverabilityModifyPermissions(canShare, hasCatalog, userLevel) _
-      else
-        withModifyPermissions(hasCatalog, userLevel) _
-    } else {
-      assert(!names.contains(publishedFlag))
-      if (names.contains(discoverableWSAttribute))
-        withModifyAndDiscoverabilityModifyPermissions(canShare, hasCatalog, userLevel) _
-      else
-        withModifyPermissions(hasCatalog, WorkspaceAccessLevels.Write) _
+    // need to conver to seq to reduce del and add ops when changing discoverable attribute, and back to Seq to match in case
+    names.toSet.toSeq match {
+      case Seq(`publishedFlag`) => ChangePublishedChecker(isCurator, hasCatalog, userLevel)
+      case Seq(`discoverableWSAttribute`) => ChangeDiscoverabilityChecker(canShare, hasCatalog, userLevel)
+      case x if x.contains(publishedFlag) => throw new RawlsException("Unsupported parameter - can't modify published with other attribtes")
+      case x if x.contains(discoverableWSAttribute) => ChangeDiscoverabilityAndMetadataChecker(canShare, hasCatalog, userLevel)
+      case _ => ChangeMetadataChecker(hasCatalog, userLevel)
     }
   }
+
 
   def withLibraryAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
     val namespaces = attributeNames.map(_.namespace).toSet
@@ -69,41 +57,54 @@ trait LibraryPermissionsSupport extends RoleSupport {
       throw new RawlsExceptionWithErrorReport(errorReport = err)
     }
   }
+}
 
-  def withChangePublishedPermissions(isCurator: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+trait LibraryPermissionChecker {
+  def withPermissions(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace]
+}
+
+case class ChangeMetadataChecker(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel) extends LibraryPermissionChecker {
+  def canModify: Boolean = {
+    maxLevel >= WorkspaceAccessLevels.Write || hasCatalog
+  }
+  def withPermissions(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
+    if (canModify)
+      op
+    else
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must have write+ or catalog with read permissions."))
+  }
+}
+
+case class ChangeDiscoverabilityChecker(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel) extends LibraryPermissionChecker {
+  def canModify: Boolean = {
+    maxLevel >= WorkspaceAccessLevels.Owner || canShare || hasCatalog
+  }
+  def withPermissions(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
+    if (canModify)
+      op
+    else
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must be an owner or have catalog or share permissions."))
+  }
+}
+
+case class ChangePublishedChecker(isCurator: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel) extends LibraryPermissionChecker {
+  def withPermissions(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
     if (isCurator && (maxLevel >= WorkspaceAccessLevels.Owner || hasCatalog))
       op
     else
-      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must be a curator and either be an owner or have catalog with read+.")))
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must be a curator and either be an owner or have catalog with read+."))
   }
+}
 
-  private def canModify(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean = {
-    maxLevel >= WorkspaceAccessLevels.Write || hasCatalog
-  }
-
-  def withModifyPermissions(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    if (canModify(hasCatalog, maxLevel))
+case class ChangeDiscoverabilityAndMetadataChecker(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel) extends LibraryPermissionChecker {
+  def withPermissions(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
+    if (ChangeMetadataChecker(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel).canModify &&
+      ChangeDiscoverabilityChecker(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel).canModify)
       op
     else
-      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must have write+ or catalog with read permissions.")))
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must be an owner or have catalog with read permissions."))
   }
-
-  private def canModifyDiscoverability(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean = {
+  protected def canModify(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean = {
     maxLevel >= WorkspaceAccessLevels.Owner || canShare || hasCatalog
   }
-
-  def withDiscoverabilityModifyPermissions(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    if (canModifyDiscoverability(canShare, hasCatalog, maxLevel))
-      op
-    else
-      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must be an owner or have catalog or share permissions.")))
-  }
-
-  def withModifyAndDiscoverabilityModifyPermissions(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    if (canModify(hasCatalog, maxLevel) && canModifyDiscoverability(canShare, hasCatalog, maxLevel))
-      op
-    else
-      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must be an owner or have catalog with read permissions.")))
-  }
-
 }

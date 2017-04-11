@@ -102,7 +102,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow library attributes in outputs for create method configuration by curator" in withTestDataApiServices { services =>
+  it should "not allow library attributes in outputs for create method configuration by curator" in withTestDataApiServices { services =>
     val inputs = Map("lib_ent_in" -> AttributeString("this.library:foo"), "lib_ws_in" -> AttributeString("workspace.library:foo"))
     val outputs = Map("lib_ent_out" -> AttributeString("this.library:bar"),"lib_ws_out" -> AttributeString("workspace.library:bar"))
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
@@ -114,18 +114,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Forbidden) {
           status
-        }
-        assertResult(ValidatedMethodConfiguration(newMethodConfig, expectedSuccessInputs, Map(), expectedSuccessOutputs, Map())) {
-          responseAs[ValidatedMethodConfiguration]
-        }
-        // all inputs and outputs are saved, regardless of parsing errors
-        for ((key, value) <- inputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
-        }
-        for ((key, value) <- outputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
         }
       }
   }
@@ -160,7 +150,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow library attributes in outputs for create method configuration by non-curator" in withTestDataApiServices { services =>
+  it should "not allow library attributes in outputs for create method configuration by non-curator" in withTestDataApiServices { services =>
     val inputs = Map("lib_ent_in" -> AttributeString("this.library:foo"), "lib_ws_in" -> AttributeString("workspace.library:foo"))
     val outputs = Map("lib_ent_out" -> AttributeString("this.library:bar"),"lib_ws_out" -> AttributeString("workspace.library:bar"))
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
@@ -174,19 +164,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Forbidden) {
           status
-        }
-        assertResult(ValidatedMethodConfiguration(newMethodConfig, expectedSuccessInputs, Map(), expectedSuccessOutputs, Map())) {
-          responseAs[ValidatedMethodConfiguration]
-        }
-        val methodConfigs = runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name))
-        // all inputs and outputs are saved, regardless of parsing errors
-        for ((key, value) <- inputs) assertResult(Option(value)) {
-          methodConfigs.get.inputs.get(key)
-        }
-        for ((key, value) <- outputs) assertResult(Option(value)) {
-          methodConfigs.get.outputs.get(key)
         }
       }
   }
@@ -407,7 +386,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow library attributes in outputs for update method configuration by curator" in withTestDataApiServices { services =>
+  it should "not allow library attributes in outputs for update method configuration by curator" in withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"))
     val newOutputs = Map("good_out" -> AttributeString("this.library:bar"))
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = newInputs, outputs = newOutputs)
@@ -420,23 +399,13 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.Forbidden) {
           status
-        }
-        assertResult(ValidatedMethodConfiguration(modifiedMethodConfig, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {
-          responseAs[ValidatedMethodConfiguration]
-        }
-        // all inputs and outputs are saved, regardless of parsing errors
-        for ((key, value) <- newInputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.inputs.get(key)
-        }
-        for ((key, value) <- newOutputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.outputs.get(key)
         }
       }
   }
 
-  it should "allow library attributes in outputs for update method configuration by non-curator" in withTestDataApiServices { services =>
+  it should "not allow library attributes in outputs for update method configuration by non-curator" in withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"))
     val newOutputs = Map("good_out" -> AttributeString("this.library:bar"))
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = newInputs, outputs = newOutputs)
@@ -451,19 +420,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.Forbidden) {
           status
-        }
-        assertResult(ValidatedMethodConfiguration(modifiedMethodConfig, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {
-          responseAs[ValidatedMethodConfiguration]
-        }
-        // all inputs and outputs are saved, regardless of parsing errors
-        val methodConfigs = runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name))
-        for ((key, value) <- newInputs) assertResult(Option(value)) {
-          methodConfigs.get.inputs.get(key)
-        }
-        for ((key, value) <- newOutputs) assertResult(Option(value)) {
-          methodConfigs.get.outputs.get(key)
         }
       }
   }
@@ -551,15 +509,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow copy method configuration with library attributes in outputs by curator" in withTestDataApiServices { services =>
+  it should "not allow copy method configuration with library attributes in outputs by curator" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairFromLibrary)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Forbidden) {
           status
-        }
-        assertResult(testData.methodConfig2.name) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig2.namespace, testData.methodConfig2.name)).get.name
         }
       }
   }
@@ -570,11 +525,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairFromLibrary)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Forbidden) {
           status
-        }
-        assertResult(testData.methodConfig2.name) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig2.namespace, testData.methodConfig2.name)).get.name
         }
       }
   }
@@ -657,30 +609,24 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow copy method configuration from repo with library attributes in outputs by curator" in withTestDataApiServices { services =>
+  it should "not allow copy method configuration from repo with library attributes in outputs by curator" in withTestDataApiServices { services =>
     Post(copyFromMethodRepo, httpJson(testData.methodRepoLibrary)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Forbidden) {
           status
-        }
-        assertResult(testData.newMethodConfigName.name) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.newMethodConfigName.namespace, testData.newMethodConfigName.name)).get.name
         }
       }
   }
 
-  it should "allow copy method configuration from repo with library attributes in outputs by non-curator" in withTestDataApiServices { services =>
+  it should "not allow copy method configuration from repo with library attributes in outputs by non-curator" in withTestDataApiServices { services =>
     revokeCuratorRole(services)
 
     Post(copyFromMethodRepo, httpJson(testData.methodRepoLibrary)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Forbidden) {
           status
-        }
-        assertResult(testData.newMethodConfigName.name) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.newMethodConfigName.namespace, testData.newMethodConfigName.name)).get.name
         }
       }
   }
