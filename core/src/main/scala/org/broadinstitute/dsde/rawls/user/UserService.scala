@@ -799,7 +799,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         removeSubGroups = removeSubGroups.map(RawlsGroup.toRef)
       )
       
-    } yield RequestComplete(StatusCodes.OK)
+    } yield RequestComplete(StatusCodes.NoContent)
   }
 
   def synchronizeGroupMembersApi(groupRef: RawlsGroupRef): Future[PerRequestMessage] = {

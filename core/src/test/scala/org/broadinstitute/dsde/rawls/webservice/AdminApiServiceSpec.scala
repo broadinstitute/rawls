@@ -435,7 +435,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(subGroupEmails = Option(Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
     Get(s"/admin/groups/${group.groupName.value}/members") ~>
       sealRoute(services.adminRoutes) ~>
@@ -771,7 +771,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when removing a member from a group" in withTestDataApiServices { services =>
+  it should "return 204 when removing a member from a group" in withTestDataApiServices { services =>
     val group = RawlsGroupRef(RawlsGroupName("test_group"))
     val subGroup = RawlsGroupRef(RawlsGroupName("test_subGroup"))
 
@@ -791,7 +791,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(subGroupEmails = Option(Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
     //verify subgroup was put into main group
     Get(s"/admin/groups/${group.groupName.value}/members") ~>
@@ -805,7 +805,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Delete(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(subGroupEmails = Option(Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
     //verify that subgroup was removed from main group
     Get(s"/admin/groups/${group.groupName.value}/members") ~>
@@ -817,7 +817,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when overwriting group membership" in withTestDataApiServices { services =>
+  it should "return 204 when overwriting group membership" in withTestDataApiServices { services =>
     val user1 = RawlsUser(RawlsUserSubjectId(UUID.randomUUID().toString), RawlsUserEmail(s"${UUID.randomUUID().toString}@foo.com"))
     val user2 = RawlsUser(RawlsUserSubjectId(UUID.randomUUID().toString), RawlsUserEmail(s"${UUID.randomUUID().toString}@foo.com"))
     val user3 = RawlsUser(RawlsUserSubjectId(UUID.randomUUID().toString), RawlsUserEmail(s"${UUID.randomUUID().toString}@foo.com"))
@@ -873,7 +873,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Put(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) { status }
+        assertResult(StatusCodes.NoContent, response.entity.asString) { status }
       }
     Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -893,7 +893,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Delete(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.NoContent, response.entity.asString) { status }
       }
     Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
