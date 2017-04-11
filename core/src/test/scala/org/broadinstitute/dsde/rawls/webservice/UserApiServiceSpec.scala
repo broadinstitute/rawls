@@ -846,7 +846,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
       }
     }
+  }
 
+  Seq((Option(ManagedRoles.User), StatusCodes.Forbidden), (Option(ManagedRoles.Owner), StatusCodes.NoContent), (None, StatusCodes.NotFound)).foreach { case (roleOption, expectedStatus) =>
     ManagedRoles.all.foreach { roleToAddRemove =>
       it should s"${expectedStatus.toString} add ${roleToAddRemove} to group as ${roleOption.map(_.toString).getOrElse("nobody")}" in withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
         val testGroupName = "testGroup"
@@ -932,7 +934,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  def addUser(services: TestApiService, group: String, role: ManagedRole, email: String, expectedStatusCode: StatusCode = StatusCodes.OK): Unit = {
+  def addUser(services: TestApiService, group: String, role: ManagedRole, email: String, expectedStatusCode: StatusCode = StatusCodes.NoContent): Unit = {
     Put(s"/groups/$group/${role.toString}/$email") ~>
       sealRoute(services.userRoutes) ~>
       check {
@@ -942,7 +944,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  def removeUser(services: TestApiService, group: String, role: ManagedRole, email: String, expectedStatusCode: StatusCode = StatusCodes.OK): Unit = {
+  def removeUser(services: TestApiService, group: String, role: ManagedRole, email: String, expectedStatusCode: StatusCode = StatusCodes.NoContent): Unit = {
     Delete(s"/groups/$group/${role.toString}/$email") ~>
       sealRoute(services.userRoutes) ~>
       check {
