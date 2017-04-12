@@ -174,6 +174,21 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   }
 
   /**
+    * Helper function to re-fetch the WorkflowRecords in workflowsWithOutputs, in case they've had their versions bumped
+    */
+  private def refetchWorkflowsAndOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)(implicit executionContext: ExecutionContext) = {
+    //findWorkflowsByIds below uses inSetBind, which doesn't guarantee the same ordering of returned results.
+    //so keep track of which workflow records are associated with each output
+    val idsToOutputs = (workflowsWithOutputs map { case (rec, outputs) =>
+      (rec.id, outputs)
+    }) toMap
+
+    dataAccess.workflowQuery.findWorkflowByIds(idsToOutputs.keys).result map { updatedRecords =>
+      updatedRecords map (rec => (rec, idsToOutputs(rec.id)))
+    }
+  }
+
+  /**
    * once all the execution service queries have completed this function is called to handle the responses
     *
     * @param response
@@ -208,9 +223,13 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     //query Cromwell again, and restart from the top of this function with the results.
     workflowsWithOutputsF flatMap { workflowsWithOutputs =>
       datasource.inTransaction { dataAccess =>
-        handleOutputs(workflowsWithOutputs, dataAccess) flatMap { _ =>
-          checkOverallStatus(dataAccess) map {
-            shouldStop => StatusCheckComplete(shouldStop)
+        //we need to re-fetch the workflow records because their version number has been bumped by batchUpdateStatus above,
+        //and trying to reuse the old workflow records will give a concurrent modification exception in saveErrors if any fail
+        refetchWorkflowsAndOutputs(workflowsWithOutputs, dataAccess) flatMap { updatedWorkflowsWithOutputs =>
+          handleOutputs(updatedWorkflowsWithOutputs, dataAccess) flatMap { _ =>
+            checkOverallStatus(dataAccess) map {
+              shouldStop => StatusCheckComplete(shouldStop)
+            }
           }
         }
       }
@@ -291,6 +310,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressions: Map[String, String]): Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
+      logger.debug(s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs}")
+      logger.debug(s"output expressions for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputExpressions}")
 
       val attributes = outputExpressions.map { case (outputName, outputExpr) =>
         Try {
@@ -303,8 +324,11 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
       }
 
       if (attributes.forall(_.isSuccess)) {
-        Left(updateEntityAndWorkspace(entitiesById(workflowRecord.workflowEntityId), workspace, attributes.map(_.get).toMap))
-
+        val updates = updateEntityAndWorkspace(entitiesById(workflowRecord.workflowEntityId), workspace, attributes.map(_.get).toMap)
+        val (optEnt, optWs) = updates
+        logger.debug(s"updated entityattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optEnt.map(_.attributes)}")
+        logger.debug(s"updated wsattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optWs.map(_.attributes)}")
+        Left(updates)
       } else {
         Right((workflowRecord, attributes.collect { case Failure(t) => AttributeString(t.getMessage) }.toSeq))
       }

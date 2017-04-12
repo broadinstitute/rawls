@@ -368,6 +368,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(), Map("o1" -> AttributeString("this.foo")), MethodRepoMethod("ns-config", "meth1", 1))
     val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), MethodRepoMethod("ns-config", "meth1", 1))
     val methodConfigWorkspaceLibraryUpdate = MethodConfiguration("ns", "testConfigLib", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.library:foo")), MethodRepoMethod("ns-config", "meth1", 1))
+    val methodConfigMissingOutputs = MethodConfiguration("ns", "testConfigMissingOutputs", "Sample", Map(), Map(), Map("some.workflow.output" -> AttributeString("this.might_not_be_here")), MethodRepoMethod("ns-config", "meth1", 1))
 
     val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
     val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
@@ -417,6 +418,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
     val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2"))
+    val missingOutputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
 
     val submissionNoWorkflows = createTestSubmission(workspace, methodConfig, indiv1, userOwner,
       Seq.empty, Map.empty,
@@ -434,6 +436,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val submissionUpdateWorkspace = createTestSubmission(workspace, methodConfigWorkspaceUpdate, indiv1, userOwner,
       Seq(indiv1), Map(indiv1 -> inputResolutions),
       Seq(indiv2), Map(indiv2 -> inputResolutions2))
+
+    //NOTE: This is deliberately not saved in the list of active submissions!
+    val submissionMissingOutputs = createTestSubmission(workspace, methodConfigMissingOutputs, indiv1, userOwner,
+      Seq(indiv1), Map(indiv1 -> missingOutputResolutions), Seq(), Map())
 
     val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfig.namespace,methodConfig.name,indiv1.toReference,
       Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,sample1.toReference, inputResolutions),
@@ -564,6 +570,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
                 methodConfigurationQuery.create(context, methodConfigArrayType),
                 methodConfigurationQuery.create(context, methodConfigEntityUpdate),
                 methodConfigurationQuery.create(context, methodConfigWorkspaceLibraryUpdate),
+                methodConfigurationQuery.create(context, methodConfigMissingOutputs),
+                //HANDY HINT: if you're adding a new method configuration, don't reuse the name!
+                //If you do, methodConfigurationQuery.create() will archive the old query and update it to point to the new one!
 
                 submissionQuery.create(context, submissionTerminateTest),
                 submissionQuery.create(context, submissionNoWorkflows),

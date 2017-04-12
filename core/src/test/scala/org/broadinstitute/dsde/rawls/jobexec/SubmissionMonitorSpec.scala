@@ -7,13 +7,15 @@ import akka.testkit.{TestActorRef, TestKit}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{StatusCheckComplete, ExecutionServiceStatusResponse}
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{ExecutionServiceStatusResponse, StatusCheckComplete}
 import org.broadinstitute.dsde.rawls.model._
-import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpecLike}
-import scala.concurrent.{Future, Await}
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
-import scala.util.Success
+import scala.util.{Success, Try}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
+
 import scala.concurrent.ExecutionContext.Implicits.global
 
 /**
@@ -387,6 +389,40 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
       }
     }
+  }
+
+  it should "handleStatusResponses and fail workflows that are missing outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    runAndWait {
+      withWorkspaceContext(testData.workspace) { context =>
+        submissionQuery.create(context, testData.submissionMissingOutputs)
+      }
+    }
+
+    def getWorkflowRec = {
+      runAndWait(
+        workflowQuery.findWorkflowByExternalIdAndSubmissionId(
+          testData.submissionMissingOutputs.workflows.head.workflowId.get,
+          UUID.fromString(testData.submissionMissingOutputs.submissionId)).result).head
+    }
+
+    val workflowRecBefore = getWorkflowRec
+    val monitor = createSubmissionMonitor(dataSource, testData.submissionMissingOutputs, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+
+    import spray.json._
+    val outputsJsonBad = s"""{
+                           |  "outputs": {
+                           |  },
+                           |  "id": "${workflowRecBefore.externalId.get}"
+                           |}""".stripMargin
+    val jss = org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport
+
+    val badOutputs = jss.ExecutionServiceOutputsFormat.read(outputsJsonBad.parseJson)
+    val badESSResponse = ExecutionServiceStatusResponse(Seq(Try(Option(workflowRecBefore, Option(badOutputs)))))
+
+    Await.result( monitor.handleStatusResponses(badESSResponse), Duration.Inf )
+
+    val workflowRecAfterBad = getWorkflowRec
+    assert(workflowRecAfterBad.status == WorkflowStatuses.Failed.toString)
   }
 
   WorkflowStatuses.terminalStatuses.foreach { status =>
