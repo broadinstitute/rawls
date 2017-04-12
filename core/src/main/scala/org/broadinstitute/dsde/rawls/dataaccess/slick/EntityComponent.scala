@@ -50,7 +50,7 @@ trait EntityComponent {
       val driver: JdbcDriver = EntityComponent.this.driver
       implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<) }
 
-      def action(workspaceId: UUID, entities: Traversable[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
+      def action(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
         val baseSelect = sql"select id, name, entity_type, workspace_id, record_version, deleted from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
         concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
@@ -100,14 +100,14 @@ trait EntityComponent {
       }
 
       // includes "deleted" hidden entities when using their hidden names
-      def actionForRefs(workspaceContext: SlickWorkspaceContext, entityRefs: Traversable[AttributeEntityReference]): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def actionForRefs(workspaceContext: SlickWorkspaceContext, entityRefs: Set[AttributeEntityReference]): ReadAction[Seq[EntityAndAttributesResult]] = {
         val baseSelect = sql"""#$baseEntityAndAttributeSql where e.deleted = false and e.workspace_id = ${workspaceContext.workspaceId} and (e.entity_type, e.name) in ("""
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.toSeq)
         concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityAndAttributesResult]
       }
 
       // includes "deleted" hidden entities
-      def actionForIds(entityIds: Traversable[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
+      def actionForIds(entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
         val baseSelect = sql"""#$baseEntityAndAttributeSql where e.id in ("""
         val entityIdSql = reduceSqlActionsWithDelim(entityIds.map { id => sql"$id" }.toSeq)
         concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
@@ -222,7 +222,7 @@ trait EntityComponent {
     }
 
     // includes "deleted" hidden entities when using their hidden names
-    def lookupEntitiesByNames(workspaceId: UUID, entities: Traversable[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
+    def lookupEntitiesByNames(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
       if (entities.isEmpty) {
         DBIO.successful(Seq.empty)
       } else {
@@ -283,7 +283,7 @@ trait EntityComponent {
       entities.foreach(validateEntity)
 
       for {
-        preExistingEntityRecs <- lookupEntitiesByNames(workspaceContext.workspaceId, entities.map(_.toReference)).map(populateAllAttributeValues(_, entities))
+        preExistingEntityRecs <- lookupEntitiesByNames(workspaceContext.workspaceId, entities.map(_.toReference).toSet).map(populateAllAttributeValues(_, entities))
         savingEntityRecs <- insertNewEntities(workspaceContext, entities, preExistingEntityRecs).map(_ ++ preExistingEntityRecs)
         referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs).map(_ ++ savingEntityRecs)
         _ <- upsertAttributes(entities, savingEntityRecs.map(_.id), referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap)
@@ -355,7 +355,7 @@ trait EntityComponent {
     /** "deletes" entities by hiding and renaming */
     def hide(workspaceContext: SlickWorkspaceContext, entRefs: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-        lookupEntitiesByNames(workspaceContext.workspaceId, entRefs) flatMap { entRecs =>
+        lookupEntitiesByNames(workspaceContext.workspaceId, entRefs.toSet) flatMap { entRecs =>
           val hideAction = entRecs map { rec =>
             hideEntityAttributes(rec.id) andThen
               hideEntityAction(rec)
@@ -404,12 +404,12 @@ trait EntityComponent {
 
     // includes "deleted" hidden entities when using their hidden names
     def list(workspaceContext: SlickWorkspaceContext, entityRefs: Traversable[AttributeEntityReference]): ReadAction[TraversableOnce[Entity]] = {
-      unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForRefs(workspaceContext, entityRefs))
+      unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForRefs(workspaceContext, entityRefs.toSet))
     }
 
     // includes "deleted" hidden entities
     def listByIds(entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] = {
-      unmarshalEntitiesWithIds(EntityAndAttributesRawSqlQuery.actionForIds(entityIds))
+      unmarshalEntitiesWithIds(EntityAndAttributesRawSqlQuery.actionForIds(entityIds.toSet))
     }
 
     def rename(workspaceContext: SlickWorkspaceContext, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
@@ -480,7 +480,7 @@ trait EntityComponent {
       val entitiesGrouped = entities.grouped(batchSize).toSeq
 
       DBIO.sequence(entitiesGrouped map { batch =>
-        EntityRecordRawSqlQuery.action(workspaceContext.workspaceId, batch)
+        EntityRecordRawSqlQuery.action(workspaceContext.workspaceId, batch.toSet)
       }).map(_.flatten)
     }
 
@@ -553,7 +553,7 @@ trait EntityComponent {
     /**
      * used in copyEntities load all the entities to copy
      */
-    def getEntitySubtrees(workspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String]): ReadAction[Seq[EntityPath]] = {
+    def getEntitySubtrees(workspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Set[String]): ReadAction[Seq[EntityPath]] = {
       val startingEntityRecsAction = filter(rec => rec.workspaceId === workspaceContext.workspaceId && rec.entityType === entityType && rec.name.inSetBind(entityNames))
 
       startingEntityRecsAction.result.flatMap { startingEntityRecs =>
@@ -587,7 +587,7 @@ trait EntityComponent {
       getHardConflicts(destWorkspaceContext.workspaceId, entitiesToCopyRefs).flatMap {
         case Seq() => {
           val pathsAndConflicts = for {
-            entityPaths <- getEntitySubtrees(sourceWorkspaceContext, entityType, entityNames)
+            entityPaths <- getEntitySubtrees(sourceWorkspaceContext, entityType, entityNames.toSet)
             softConflicts <- getSoftConflicts(entityPaths)
           } yield (entityPaths, softConflicts)
 
@@ -613,7 +613,7 @@ trait EntityComponent {
     }
 
     def getCopyConflicts(destWorkspaceContext: SlickWorkspaceContext, entitiesToCopy: TraversableOnce[AttributeEntityReference]): ReadAction[TraversableOnce[EntityRecord]] = {
-      lookupEntitiesByNames(destWorkspaceContext.workspaceId, entitiesToCopy.toSeq)
+      lookupEntitiesByNames(destWorkspaceContext.workspaceId, entitiesToCopy.toSet)
     }
 
     // the opposite of getEntitySubtrees: traverse the graph to retrieve all entities which ultimately refer to these
@@ -623,7 +623,7 @@ trait EntityComponent {
         val refsToId = entityRecs.map(rec => EntityPath(Seq(rec.toReference)) -> rec.id).toMap
         recursiveGetEntityReferences(Up, entityRecs.map(_.id).toSet, refsToId)
       } flatMap { refs =>
-        val entityAction = unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForRefs(context, refs.flatMap(_.path)))
+        val entityAction = unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForRefs(context, refs.flatMap(_.path).toSet))
         entityAction map { _.toSet map { e: Entity => e.toReference } }
       }
     }

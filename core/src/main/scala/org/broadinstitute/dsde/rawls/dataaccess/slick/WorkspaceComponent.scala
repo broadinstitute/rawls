@@ -202,8 +202,8 @@ trait WorkspaceComponent {
       val workspaceId = UUID.fromString(workspace.workspaceId)
 
       val entityRefs = workspace.attributes.collect { case (_, ref: AttributeEntityReference) => ref }
-      val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list}.flatten
-      val entitiesToLookup = entityRefs ++ entityRefListMembers
+      val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list }.flatten
+      val entitiesToLookup = (entityRefs ++ entityRefListMembers).toSet
 
       def insertScratchAttributes(attributeRecs: Seq[WorkspaceAttributeRecord])(transactionId: String): WriteAction[Int] = {
         workspaceAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)

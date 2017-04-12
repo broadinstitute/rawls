@@ -494,12 +494,12 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
                                 EntityPath(Seq(testData.sset3.toReference, testData.sample6.toReference)))
 
       val expected = sampleSet1Paths ++ sampleSet2Paths ++ sampleSet3Paths
-      assertSameElements(expected, runAndWait(entityQuery.getEntitySubtrees(context, "SampleSet", List("sset1", "sset2", "sset3", "sampleSetDOESNTEXIST"))))
+      assertSameElements(expected, runAndWait(entityQuery.getEntitySubtrees(context, "SampleSet", Set("sset1", "sset2", "sset3", "sampleSetDOESNTEXIST"))))
 
       val individual2Paths = Seq(EntityPath(Seq(testData.indiv2.toReference)),
                                  EntityPath(Seq(testData.indiv2.toReference, testData.sset2.toReference)),
                                  EntityPath(Seq(testData.indiv2.toReference, testData.sset2.toReference, testData.sample2.toReference)))
-      assertSameElements(individual2Paths, runAndWait(entityQuery.getEntitySubtrees(context, "Individual", List("indiv2"))))
+      assertSameElements(individual2Paths, runAndWait(entityQuery.getEntitySubtrees(context, "Individual", Set("indiv2"))))
     }
   }
 
