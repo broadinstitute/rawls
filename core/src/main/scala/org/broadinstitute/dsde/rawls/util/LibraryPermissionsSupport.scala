@@ -14,37 +14,36 @@ import scala.collection.Set
   * Created by ahaessly on 3/31/17.
   */
 trait LibraryPermissionsSupport extends RoleSupport {
-  final val publishedFlag = AttributeName("library", "published")
-  final val discoverableWSAttribute = AttributeName("library", "discoverableByGroups")
+  final val publishedFlag = AttributeName.withLibraryNS("published")
+  final val discoverableWSAttribute = AttributeName.withLibraryNS("discoverableByGroups")
 
   def withLibraryPermissions(ctx: SlickWorkspaceContext,
-                                   operations: Seq[AttributeUpdateOperation],
-                                   dataAccess: DataAccess,
-                                   userInfo: UserInfo,
-                                   isCurator: Boolean,
-                                   gm: (RawlsUser, SlickWorkspaceContext, DataAccess) => ReadAction[WorkspaceAccessLevel])
-                                  (op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
+                             operations: Seq[AttributeUpdateOperation],
+                             dataAccess: DataAccess,
+                             userInfo: UserInfo,
+                             isCurator: Boolean,
+                             getMaxAccess: (RawlsUser, SlickWorkspaceContext, DataAccess) => ReadAction[WorkspaceAccessLevel])
+                            (op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
     val names = operations.map(attribute => attribute.name)
     for {
       canShare <- dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
       hasCatalogOnly <- dataAccess.workspaceQuery.getUserCatalogPermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
-      userLevel <- gm(RawlsUser(userInfo), ctx, dataAccess)
+      userLevel <- getMaxAccess(RawlsUser(userInfo), ctx, dataAccess)
       result <- getPermissionChecker(names, isCurator, canShare, hasCatalogOnly, userLevel).withPermissions(op)
     } yield result
   }
 
   def getPermissionChecker(names: Seq[AttributeName], isCurator: Boolean, canShare: Boolean, hasCatalogOnly: Boolean, userLevel: WorkspaceAccessLevel) = {
     val hasCatalog = hasCatalogOnly && userLevel >= WorkspaceAccessLevels.Read
-    // need to conver to seq to reduce del and add ops when changing discoverable attribute, and back to Seq to match in case
-    names.toSet.toSeq match {
+    // need to multiple delete and add ops when changing discoverable attribute
+    names.distinct match {
       case Seq(`publishedFlag`) => ChangePublishedChecker(isCurator, hasCatalog, userLevel)
       case Seq(`discoverableWSAttribute`) => ChangeDiscoverabilityChecker(canShare, hasCatalog, userLevel)
-      case x if x.contains(publishedFlag) => throw new RawlsException("Unsupported parameter - can't modify published with other attribtes")
+      case x if x.contains(publishedFlag) => throw new RawlsException("Unsupported parameter - can't modify published with other attributes")
       case x if x.contains(discoverableWSAttribute) => ChangeDiscoverabilityAndMetadataChecker(canShare, hasCatalog, userLevel)
       case _ => ChangeMetadataChecker(hasCatalog, userLevel)
     }
   }
-
 
   def withLibraryAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
     val namespaces = attributeNames.map(_.namespace).toSet
@@ -103,8 +102,5 @@ case class ChangeDiscoverabilityAndMetadataChecker(canShare: Boolean, hasCatalog
       op
     else
       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must be an owner or have catalog with read permissions."))
-  }
-  protected def canModify(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean = {
-    maxLevel >= WorkspaceAccessLevels.Owner || canShare || hasCatalog
   }
 }
