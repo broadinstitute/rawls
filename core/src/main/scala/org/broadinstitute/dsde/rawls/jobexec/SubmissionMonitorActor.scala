@@ -174,6 +174,21 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   }
 
   /**
+    * Helper function to re-fetch the WorkflowRecords in workflowsWithOutputs, in case they've had their versions bumped
+    */
+  private def refetchWorkflowsAndOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)(implicit executionContext: ExecutionContext) = {
+    //findWorkflowsByIds below uses inSetBind, which doesn't guarantee the same ordering of returned results.
+    //so keep track of which workflow records are associated with each output
+    val idsToOutputs = (workflowsWithOutputs map { case (rec, outputs) =>
+      (rec.id, outputs)
+    }) toMap
+
+    dataAccess.workflowQuery.findWorkflowByIds(idsToOutputs.keys).result map { updatedRecords =>
+      updatedRecords map (rec => (rec, idsToOutputs(rec.id)))
+    }
+  }
+
+  /**
    * once all the execution service queries have completed this function is called to handle the responses
     *
     * @param response
@@ -208,10 +223,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     //query Cromwell again, and restart from the top of this function with the results.
     workflowsWithOutputsF flatMap { workflowsWithOutputs =>
       datasource.inTransaction { dataAccess =>
-        //re-fetch the workflow records because their version number has been bumped by the batchUpdateStatus
-        DBIO.sequence(workflowsWithOutputs map { case (rec, outputs) =>
-          dataAccess.workflowQuery.findWorkflowById(rec.id).result map { recs => (recs.head, outputs) }
-        }) flatMap { updatedWorkflowsWithOutputs =>
+        //we need to re-fetch the workflow records because their version number has been bumped by batchUpdateStatus above,
+        //and trying to reuse the old workflow records will give a concurrent modification exception in saveErrors if any fail
+        refetchWorkflowsAndOutputs(workflowsWithOutputs, dataAccess) flatMap { updatedWorkflowsWithOutputs =>
           handleOutputs(updatedWorkflowsWithOutputs, dataAccess) flatMap { _ =>
             checkOverallStatus(dataAccess) map {
               shouldStop => StatusCheckComplete(shouldStop)
