@@ -44,7 +44,7 @@ object MethodConfigResolver {
 
   def parseWDL(wdl: String): Try[wdl4s.Workflow] = {
     val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq()).recoverWith { case t: SyntaxError =>
-      Failure(new RawlsException(t.getMessage()))
+      Failure(new RawlsException("Failed to parse WDL" + t.getMessage()))
     }
 
     parsed map( _.workflow )
