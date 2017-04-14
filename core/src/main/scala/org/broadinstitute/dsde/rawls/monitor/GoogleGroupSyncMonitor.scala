@@ -123,7 +123,15 @@ class GoogleGroupSyncMonitorActor(val pollInterval: FiniteDuration, pollInterval
       }
 
     case Status.Failure(t) =>
-      throw t
+      t match {
+        case groupNotFound: RawlsExceptionWithErrorReport if groupNotFound.errorReport.statusCode == Some(StatusCodes.NotFound) =>
+          // this can happen if a group is created then removed before the sync message is handled
+          // acknowledge it so we don't have to handle it again
+          acknowledgeMessage(sender()).map(_ => StartMonitorPass) pipeTo self
+          logger.info(s"group to synchronize not found: ${groupNotFound.errorReport}")
+
+        case regrets: Throwable => throw regrets
+      }
 
     case ReceiveTimeout =>
       throw new RawlsException("GoogleGroupSyncMonitorActor has received no messages for too long")
@@ -138,12 +146,6 @@ class GoogleGroupSyncMonitorActor(val pollInterval: FiniteDuration, pollInterval
 
   override val supervisorStrategy =
     OneForOneStrategy() {
-      case groupNotFound: RawlsExceptionWithErrorReport if groupNotFound.errorReport.statusCode == Some(StatusCodes.NotFound) =>
-        // this can happen if a group is created then removed before the sync message is handled
-        // acknowledge it so we don't have to handle it again
-        acknowledgeMessage(sender()).map(_ => StartMonitorPass) pipeTo self
-        logger.info(s"group to synchronize not found: ${groupNotFound.errorReport}")
-        Resume
       case e => {
         Escalate
       }
