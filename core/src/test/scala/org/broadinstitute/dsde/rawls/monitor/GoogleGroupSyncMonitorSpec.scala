@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpecLike}
 import spray.http.StatusCodes
 
-import scala.concurrent.Await
+import scala.concurrent.{Future, Await}
 import scala.concurrent.duration._
 import spray.json._
 import UserModelJsonSupport._
@@ -123,10 +123,12 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val pubsubDao = new MockGooglePubSubDAO
     val topic = "topic"
 
+    import akka.pattern._
+
     val userServiceConstructor = (userInfo: UserInfo) => {
       new UserService(userInfo, null, null, null, null, null, null) {
         override def receive = {
-          case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "group not found"))
+          case _ => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "group not found"))) pipeTo sender
         }
       }
     }
