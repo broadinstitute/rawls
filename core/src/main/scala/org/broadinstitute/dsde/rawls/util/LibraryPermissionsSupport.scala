@@ -38,7 +38,7 @@ trait LibraryPermissionsSupport extends RoleSupport {
     names.distinct match {
       case Seq(`publishedFlag`) => ChangePublishedChecker(isCurator, hasCatalog, userLevel)
       case Seq(`discoverableWSAttribute`) => ChangeDiscoverabilityChecker(canShare, hasCatalog, userLevel)
-      case x if x.contains(publishedFlag) => throw new RawlsException("Unsupported parameter - can't modify published with other attributes")
+      case x if x.contains(publishedFlag) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Unsupported parameter - can't modify published with other attributes"))
       case x if x.contains(discoverableWSAttribute) => ChangeDiscoverabilityAndMetadataChecker(canShare, hasCatalog, userLevel)
       case _ => ChangeMetadataChecker(hasCatalog, userLevel)
     }

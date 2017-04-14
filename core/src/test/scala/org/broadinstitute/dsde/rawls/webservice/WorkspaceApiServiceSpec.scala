@@ -637,6 +637,23 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 400 on update library with both published flag and other library attributes" in withTestDataApiServices { services =>
+
+
+    val updatePayload = Seq(
+      AddUpdateAttribute(AttributeName.withLibraryNS("published"),AttributeBoolean(true)): AttributeUpdateOperation,
+      AddUpdateAttribute(AttributeName.withLibraryNS("attrName"),AttributeString("attrVal")): AttributeUpdateOperation
+    )
+
+    Patch(testData.workspace.path + "/library", httpJson(updatePayload)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
   it should "return OK on update library (remove) with library-namespace attributes" in withTestDataApiServices { services =>
     val name = AttributeName(AttributeName.libraryNamespace, "whatever")
     val attr: Attribute = AttributeString("something")
