@@ -22,13 +22,12 @@ trait LibraryPermissionsSupport extends RoleSupport {
                              dataAccess: DataAccess,
                              userInfo: UserInfo,
                              isCurator: Boolean,
-                             getMaxAccess: (RawlsUser, SlickWorkspaceContext, DataAccess) => ReadAction[WorkspaceAccessLevel])
+                             userLevel: WorkspaceAccessLevel)
                             (op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
     val names = operations.map(attribute => attribute.name)
     for {
       canShare <- dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
       hasCatalogOnly <- dataAccess.workspaceQuery.getUserCatalogPermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
-      userLevel <- getMaxAccess(RawlsUser(userInfo), ctx, dataAccess)
       result <- getPermissionChecker(names, isCurator, canShare, hasCatalogOnly, userLevel).withPermissions(op)
     } yield result
   }

@@ -345,8 +345,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
         getWorkspaceContext(workspaceName) flatMap { ctx =>
           dataSource.inTransaction { dataAccess =>
-            withLibraryPermissions(ctx, operations, dataAccess, userInfo, isCurator, getMaximumAccessLevel _) {
-              updateWorkspace(operations, dataAccess)(ctx)
+            getMaximumAccessLevel(RawlsUser(userInfo), ctx, dataAccess) flatMap {maxAccessLevel =>
+              withLibraryPermissions(ctx, operations, dataAccess, userInfo, isCurator, maxAccessLevel) {
+                updateWorkspace(operations, dataAccess)(ctx)
+              }
             }
           }
         } map { ws =>
