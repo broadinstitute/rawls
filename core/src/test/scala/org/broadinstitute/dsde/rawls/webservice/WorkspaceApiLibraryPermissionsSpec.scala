@@ -24,6 +24,10 @@ import scala.concurrent.ExecutionContext
   */
 class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
 
+  // awkward, but we copy these next two here to avoid pulling in extraneous traits
+  val publishedFlag = AttributeName.withLibraryNS("published")
+  val discoverableWSAttribute = AttributeName.withLibraryNS("discoverableByGroups")
+
   case class LibraryPermissionUser(
       curator: Boolean,
       catalog: Boolean,
@@ -70,7 +74,9 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
     val publishedWriterGroup = makeRawlsGroup(s"${wsPublishedName} WRITER", users.filter(_.level == WorkspaceAccessLevels.Write).map(_.rawlsUser:RawlsUserRef).toSet)
     val publishedReaderGroup = makeRawlsGroup(s"${wsPublishedName} READER", users.filter(_.level == WorkspaceAccessLevels.Read).map(_.rawlsUser:RawlsUserRef).toSet)
 
-    val publishedWorkspace = Workspace(wsPublishedName.namespace, wsPublishedName.name, None, wsPublishedId.toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+    val publishedAttrs = Map(publishedFlag -> AttributeBoolean(true))
+
+    val publishedWorkspace = Workspace(wsPublishedName.namespace, wsPublishedName.name, None, wsPublishedId.toString, "aBucket", currentTime(), currentTime(), "testUser", publishedAttrs,
       Map(WorkspaceAccessLevels.Owner -> publishedOwnerGroup, WorkspaceAccessLevels.Write -> publishedWriterGroup, WorkspaceAccessLevels.Read -> publishedReaderGroup),
       Map(WorkspaceAccessLevels.Owner -> publishedOwnerGroup, WorkspaceAccessLevels.Write -> publishedWriterGroup, WorkspaceAccessLevels.Read -> publishedReaderGroup))
 
@@ -95,7 +101,6 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
         rawlsGroupQuery.save(publishedWriterGroup),
         rawlsGroupQuery.save(publishedReaderGroup),
         workspaceQuery.save(publishedWorkspace),
-        workspaceAttributeQuery.batchInsertAttributes(Seq(WorkspaceAttributeRecord(-1,wsPublishedId,"library","published",None,None,Some(true),None,None,None,None,false))),
         workspaceQuery.insertUserCatalogPermissions(wsPublishedId, users.filter(_.catalog).map(_.rawlsUser:RawlsUserRef)),
         workspaceQuery.insertUserSharePermissions(wsPublishedId, users.filter(_.canShare).map(_.rawlsUser:RawlsUserRef))
       )
@@ -132,9 +137,6 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
   }
 
   // ====================== Library permissions tests
-  // awkward, but we copy these next two here to avoid pulling in extraneous traits
-  val publishedFlag = AttributeName.withLibraryNS("published")
-  val discoverableWSAttribute = AttributeName.withLibraryNS("discoverableByGroups")
 
   val updatePublishValue = AttributeBoolean(true)
   val updatePublish: Seq[AttributeUpdateOperation] = Seq(AddUpdateAttribute(publishedFlag, updatePublishValue))
@@ -191,6 +193,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
   // TODO: additional test cases for more combinations of level/curator/catalog/canShare
   // TODO: test republish (existing tests only check change-publish)
   // TODO: why do certain APIs return 403, when they should return 400?
+  // TODO: when these tests are solid, remove pre-existing, now obsolete, tests
 
   val tests = Seq(
     LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Owner, curator=true),
