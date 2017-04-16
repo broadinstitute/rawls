@@ -2,8 +2,8 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData, TestDriverComponent}
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SlickDataSource, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData, WorkspaceAttributeRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model._
@@ -12,14 +12,12 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
-import org.scalatest.{FreeSpec, FreeSpecLike}
 import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 import spray.routing.Directive1
 
 import scala.concurrent.ExecutionContext
-import scala.util.Random
 
 /**
   * Created by davidan on 4/15/17.
@@ -76,6 +74,9 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
       Map(WorkspaceAccessLevels.Owner -> publishedOwnerGroup, WorkspaceAccessLevels.Write -> publishedWriterGroup, WorkspaceAccessLevels.Read -> publishedReaderGroup),
       Map(WorkspaceAccessLevels.Owner -> publishedOwnerGroup, WorkspaceAccessLevels.Write -> publishedWriterGroup, WorkspaceAccessLevels.Read -> publishedReaderGroup))
 
+    def enableCurators(gcsDAO: GoogleServicesDAO ) = {
+      users.filter(_.curator).map(u=> gcsDAO.addLibraryCurator(u.rawlsUser.userEmail.value))
+    }
 
     override def save(): ReadWriteAction[Unit] = {
       import driver.api._
@@ -94,6 +95,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
         rawlsGroupQuery.save(publishedWriterGroup),
         rawlsGroupQuery.save(publishedReaderGroup),
         workspaceQuery.save(publishedWorkspace),
+        workspaceAttributeQuery.batchInsertAttributes(Seq(WorkspaceAttributeRecord(-1,wsPublishedId,"library","published",None,None,Some(true),None,None,None,None,false))),
         workspaceQuery.insertUserCatalogPermissions(wsPublishedId, users.filter(_.catalog).map(_.rawlsUser:RawlsUserRef)),
         workspaceQuery.insertUserSharePermissions(wsPublishedId, users.filter(_.canShare).map(_.rawlsUser:RawlsUserRef))
       )
@@ -115,7 +117,10 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
 
   def withLibraryPermissionTestDataApiServicesAndUser[T](user: String)(testCode: TestApiService => T): T = {
     withCustomTestDatabase(libraryPermissionTestData) { dataSource: SlickDataSource =>
-      withApiServices(dataSource, user)(testCode)
+      withApiServices(dataSource, user) { services =>
+        libraryPermissionTestData.enableCurators(services.gcsDAO)
+        testCode(services)
+      }
     }
   }
 
@@ -183,8 +188,9 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
                 workspaceOnly: StatusCode = StatusCodes.Forbidden
               )
 
-  // TODO: handle catalog and grant permissions
-  // TODO: test republish vs. change publish
+  // TODO: additional test cases for more combinations of level/curator/catalog/canShare
+  // TODO: test republish (existing tests only check change-publish)
+  // TODO: why do certain APIs return 403, when they should return 400?
 
   val tests = Seq(
     LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Owner, curator=true),
@@ -214,6 +220,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
     LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Read, canShare=true),
       canShare=true,
       publishedOnly = StatusCodes.Forbidden,
+      discoverPlus = StatusCodes.Forbidden,
       multiLibrary = StatusCodes.Forbidden),
     LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Read),
       publishedOnly = StatusCodes.Forbidden,
