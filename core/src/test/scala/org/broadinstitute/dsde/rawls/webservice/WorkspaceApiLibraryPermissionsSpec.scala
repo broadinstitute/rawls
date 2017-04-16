@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData, WorkspaceAttributeRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -24,10 +24,13 @@ import scala.concurrent.ExecutionContext
   */
 class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
 
-  // awkward, but we copy these next two here to avoid pulling in extraneous traits
+  // awkward, but we copy these next two here to avoid pulling in the LibraryPermissionsSupport trait
   val publishedFlag = AttributeName.withLibraryNS("published")
   val discoverableWSAttribute = AttributeName.withLibraryNS("discoverableByGroups")
 
+  // ==========================================
+  // set up fixture data for the tests
+  // ==========================================
   case class LibraryPermissionUser(
       curator: Boolean,
       catalog: Boolean,
@@ -57,10 +60,8 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
     }
 
     val wsUnpublishedId = UUID.randomUUID()
-    val wsPublishedId = UUID.randomUUID()
 
     val wsUnpublishedName = WorkspaceName("myNamespace", "unpublishedWorkspace")
-    val wsPublishedName = WorkspaceName("myNamespace", "publishedWorkspace")
 
     val unpublishedOwnerGroup = makeRawlsGroup(s"${wsUnpublishedName} OWNER", users.filter(_.level == WorkspaceAccessLevels.Owner).map(_.rawlsUser:RawlsUserRef).toSet)
     val unpublishedWriterGroup = makeRawlsGroup(s"${wsUnpublishedName} WRITER", users.filter(_.level == WorkspaceAccessLevels.Write).map(_.rawlsUser:RawlsUserRef).toSet)
@@ -70,16 +71,6 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
       Map(WorkspaceAccessLevels.Owner -> unpublishedOwnerGroup, WorkspaceAccessLevels.Write -> unpublishedWriterGroup, WorkspaceAccessLevels.Read -> unpublishedReaderGroup),
       Map(WorkspaceAccessLevels.Owner -> unpublishedOwnerGroup, WorkspaceAccessLevels.Write -> unpublishedWriterGroup, WorkspaceAccessLevels.Read -> unpublishedReaderGroup))
 
-    val publishedOwnerGroup = makeRawlsGroup(s"${wsPublishedName} OWNER", users.filter(_.level == WorkspaceAccessLevels.Owner).map(_.rawlsUser:RawlsUserRef).toSet)
-    val publishedWriterGroup = makeRawlsGroup(s"${wsPublishedName} WRITER", users.filter(_.level == WorkspaceAccessLevels.Write).map(_.rawlsUser:RawlsUserRef).toSet)
-    val publishedReaderGroup = makeRawlsGroup(s"${wsPublishedName} READER", users.filter(_.level == WorkspaceAccessLevels.Read).map(_.rawlsUser:RawlsUserRef).toSet)
-
-    val publishedAttrs = Map(publishedFlag -> AttributeBoolean(true))
-
-    val publishedWorkspace = Workspace(wsPublishedName.namespace, wsPublishedName.name, None, wsPublishedId.toString, "aBucket", currentTime(), currentTime(), "testUser", publishedAttrs,
-      Map(WorkspaceAccessLevels.Owner -> publishedOwnerGroup, WorkspaceAccessLevels.Write -> publishedWriterGroup, WorkspaceAccessLevels.Read -> publishedReaderGroup),
-      Map(WorkspaceAccessLevels.Owner -> publishedOwnerGroup, WorkspaceAccessLevels.Write -> publishedWriterGroup, WorkspaceAccessLevels.Read -> publishedReaderGroup))
-
     def enableCurators(gcsDAO: GoogleServicesDAO ) = {
       users.filter(_.curator).map(u=> gcsDAO.addLibraryCurator(u.rawlsUser.userEmail.value))
     }
@@ -88,21 +79,13 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
       import driver.api._
 
       DBIO.seq(
-        DBIO.sequence(users.map( u => rawlsUserQuery.save(u.rawlsUser) ).toSeq),
-
+        DBIO.sequence(users.map(u => rawlsUserQuery.save(u.rawlsUser)).toSeq),
         rawlsGroupQuery.save(unpublishedOwnerGroup),
         rawlsGroupQuery.save(unpublishedWriterGroup),
         rawlsGroupQuery.save(unpublishedReaderGroup),
         workspaceQuery.save(unpublishedWorkspace),
         workspaceQuery.insertUserCatalogPermissions(wsUnpublishedId, users.filter(_.catalog).map(_.rawlsUser:RawlsUserRef)),
-        workspaceQuery.insertUserSharePermissions(wsUnpublishedId, users.filter(_.canShare).map(_.rawlsUser:RawlsUserRef)),
-
-        rawlsGroupQuery.save(publishedOwnerGroup),
-        rawlsGroupQuery.save(publishedWriterGroup),
-        rawlsGroupQuery.save(publishedReaderGroup),
-        workspaceQuery.save(publishedWorkspace),
-        workspaceQuery.insertUserCatalogPermissions(wsPublishedId, users.filter(_.catalog).map(_.rawlsUser:RawlsUserRef)),
-        workspaceQuery.insertUserSharePermissions(wsPublishedId, users.filter(_.canShare).map(_.rawlsUser:RawlsUserRef))
+        workspaceQuery.insertUserSharePermissions(wsUnpublishedId, users.filter(_.canShare).map(_.rawlsUser:RawlsUserRef))
       )
     }
   }
@@ -136,8 +119,9 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
     }
   }
 
-  // ====================== Library permissions tests
-
+  // ==========================================
+  // payloads to use during tests
+  // ==========================================
   val updatePublishValue = AttributeBoolean(true)
   val updatePublish: Seq[AttributeUpdateOperation] = Seq(AddUpdateAttribute(publishedFlag, updatePublishValue))
   val updateDiscoverValue = AttributeValueList(Seq(AttributeString("one"),AttributeString("two")))
@@ -155,8 +139,9 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
   val updateWsValue = AttributeString("arbitrary workspace value")
   val updateWsAttr: Seq[AttributeUpdateOperation] = Seq(AddUpdateAttribute(updateWsName, updateWsValue))
 
-  def testUpdateLibraryAttributes(testcrit: LibraryPermissionTest, payload: Seq[AttributeUpdateOperation], expectedStatusCode: StatusCode = StatusCodes.OK)(implicit services: TestApiService): Option[Workspace] = {
-    Patch(testcrit.workspaceName.path + "/library", httpJson(payload)) ~>
+  // reusable test util - called by every test
+  def testUpdateLibraryAttributes(payload: Seq[AttributeUpdateOperation], expectedStatusCode: StatusCode = StatusCodes.OK, ws: WorkspaceName = libraryPermissionTestData.wsUnpublishedName)(implicit services: TestApiService): Option[Workspace] = {
+    Patch(ws.path + "/library", httpJson(payload)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         expectedStatusCode match {
@@ -180,56 +165,106 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
                 catalog: Boolean = false,
                 canShare: Boolean = false,
                 workspaceName: WorkspaceName = libraryPermissionTestData.wsUnpublishedName,
-                publishedOnly: StatusCode = StatusCodes.OK,
-                discoverOnly: StatusCode = StatusCodes.OK,
+                publishedOnly: StatusCode = StatusCodes.Forbidden,
+                discoverOnly: StatusCode = StatusCodes.Forbidden,
                 publishedPlus: StatusCode = StatusCodes.BadRequest,
-                discoverPlus: StatusCode = StatusCodes.OK,
-                multiLibrary: StatusCode = StatusCodes.OK,
+                discoverPlus: StatusCode = StatusCodes.Forbidden,
+                multiLibrary: StatusCode = StatusCodes.Forbidden,
                 libraryPlusTags: StatusCode = StatusCodes.Forbidden,
                 libraryPlusWorkspace: StatusCode = StatusCodes.Forbidden,
                 workspaceOnly: StatusCode = StatusCodes.Forbidden
               )
 
-  // TODO: additional test cases for more combinations of level/curator/catalog/canShare
-  // TODO: test republish (existing tests only check change-publish)
+  // NB: re-publish case is handled in orchestration; we only need to check change-published here
   // TODO: why do certain APIs return 403, when they should return 400?
   // TODO: when these tests are solid, remove pre-existing, now obsolete, tests
 
   val tests = Seq(
+    // when owner + curator, can do everything
     LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Owner, curator=true),
-      curator=true),
+      curator=true,
+      publishedOnly = StatusCodes.OK,
+      discoverOnly = StatusCodes.OK,
+      discoverPlus = StatusCodes.OK,
+      multiLibrary = StatusCodes.OK),
+    // owner but not curator: everything except change published
     LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Owner),
-      publishedOnly = StatusCodes.Forbidden),
+      discoverOnly = StatusCodes.OK,
+      discoverPlus = StatusCodes.OK,
+      multiLibrary = StatusCodes.OK),
+    // owner + catalog: still can't change published
+    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Owner, catalog=true),
+      catalog = true,
+      discoverOnly = StatusCodes.OK,
+      discoverPlus = StatusCodes.OK,
+      multiLibrary = StatusCodes.OK),
+    // owner + grant: still can't change published
+    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Owner, canShare=true),
+      canShare = true,
+      discoverOnly = StatusCodes.OK,
+      discoverPlus = StatusCodes.OK,
+      multiLibrary = StatusCodes.OK),
+    // owner + grant + catalog: still can't change published
+    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Owner, canShare=true, catalog=true),
+      canShare = true, catalog = true,
+      discoverOnly = StatusCodes.OK,
+      discoverPlus = StatusCodes.OK,
+      multiLibrary = StatusCodes.OK),
+
+    // writer + curator: can only edit library attrs
     LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Write, curator=true),
       curator=true,
-      publishedOnly = StatusCodes.Forbidden,
-      discoverOnly = StatusCodes.Forbidden,
-      discoverPlus = StatusCodes.Forbidden),
+      multiLibrary = StatusCodes.OK),
+    // plain-old writer: still can only edit library attributes
     LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Write),
-      publishedOnly = StatusCodes.Forbidden,
-      discoverOnly = StatusCodes.Forbidden,
-      discoverPlus = StatusCodes.Forbidden),
+      multiLibrary = StatusCodes.OK),
+    // writer + catalog: everything except change published
+    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Write, catalog=true),
+      catalog = true,
+      discoverOnly = StatusCodes.OK,
+      discoverPlus = StatusCodes.OK,
+      multiLibrary = StatusCodes.OK),
+    // writer + grant: everything except change published
+    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Write, canShare=true),
+      canShare=true,
+      discoverOnly = StatusCodes.OK,
+      discoverPlus = StatusCodes.OK,
+      multiLibrary = StatusCodes.OK),
+    // writer + grant + catalog: everything except change published
+    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Write, canShare=true, catalog=true),
+      canShare = true, catalog = true,
+      discoverOnly = StatusCodes.OK,
+      discoverPlus = StatusCodes.OK,
+      multiLibrary = StatusCodes.OK),
+
+    // reader + curator: nothing
     LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Read, curator=true),
-      curator=true,
-      publishedOnly = StatusCodes.Forbidden,
-      discoverOnly = StatusCodes.Forbidden,
-      discoverPlus = StatusCodes.Forbidden,
-      multiLibrary = StatusCodes.Forbidden),
-    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Read, curator=true, catalog=true),
-      curator=true, catalog=true),
-    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Read, catalog=true),
+      curator=true),
+    // plain-old reader: nothing
+    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Read)),
+    // reader + catalog: everything except change published
+    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Read,catalog=true),
       catalog=true,
-      publishedOnly = StatusCodes.Forbidden),
+      discoverOnly = StatusCodes.OK,
+      discoverPlus = StatusCodes.OK,
+      multiLibrary = StatusCodes.OK),
+    // reader + grant: change discoverability (but not other attrs)
     LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Read, canShare=true),
       canShare=true,
-      publishedOnly = StatusCodes.Forbidden,
-      discoverPlus = StatusCodes.Forbidden,
-      multiLibrary = StatusCodes.Forbidden),
-    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Read),
-      publishedOnly = StatusCodes.Forbidden,
-      discoverOnly = StatusCodes.Forbidden,
-      discoverPlus = StatusCodes.Forbidden,
-      multiLibrary = StatusCodes.Forbidden)
+      discoverOnly = StatusCodes.OK),
+    // reader + grant + catalog: everything except change published
+    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Read, canShare=true, catalog=true),
+      canShare=true, catalog=true,
+      discoverOnly = StatusCodes.OK,
+      discoverPlus = StatusCodes.OK,
+      multiLibrary = StatusCodes.OK),
+    // reader + curator + catalog: everything except change published
+    LibraryPermissionTest(makeRawlsUser(WorkspaceAccessLevels.Read, curator=true, catalog=true),
+      curator=true, catalog=true,
+      publishedOnly = StatusCodes.OK,
+      discoverOnly = StatusCodes.OK,
+      discoverPlus = StatusCodes.OK,
+      multiLibrary = StatusCodes.OK)
   )
 
 
@@ -241,9 +276,9 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
 
     behavior of s"Library attribute permissions for $testNameSuffix"
 
-    it should s"return ${testcrit.publishedOnly.value} when updating published flag as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
+    it should s"return ${testcrit.publishedOnly.value} when changing published flag as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
       val payload = updatePublish
-      val ws = testUpdateLibraryAttributes(testcrit, payload, testcrit.publishedOnly)(services)
+      val ws = testUpdateLibraryAttributes(payload, testcrit.publishedOnly)(services)
       if (testcrit.publishedOnly == StatusCodes.OK) {
         assertResult(updatePublishValue) {
           ws.get.attributes(publishedFlag)
@@ -251,9 +286,9 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
       }
     }
 
-    it should s"return ${testcrit.discoverOnly.value} when updating discoverability list as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
+    it should s"return ${testcrit.discoverOnly.value} when changing discoverability list as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
       val payload = updateDiscover
-      val ws = testUpdateLibraryAttributes(testcrit, payload, testcrit.discoverOnly)(services)
+      val ws = testUpdateLibraryAttributes(payload, testcrit.discoverOnly)(services)
       if (testcrit.discoverOnly == StatusCodes.OK) {
         assertResult(updateDiscoverValue) {
           ws.get.attributes(discoverableWSAttribute)
@@ -261,14 +296,14 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
       }
     }
 
-    it should s"return ${testcrit.publishedPlus.value} when updating published flag with another attr as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
+    it should s"return ${testcrit.publishedPlus.value} when changing published flag with another attr as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
       val payload = updatePublish ++ updateLibAttr
-      testUpdateLibraryAttributes(testcrit, payload, testcrit.publishedPlus)(services)
+      testUpdateLibraryAttributes(payload, testcrit.publishedPlus)(services)
     }
 
-    it should s"return ${testcrit.discoverPlus.value} when updating discoverability list with another attr as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
+    it should s"return ${testcrit.discoverPlus.value} when changing discoverability list with another attr as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
       val payload = updateDiscover ++ updateLibAttr
-      val ws = testUpdateLibraryAttributes(testcrit, payload, testcrit.discoverPlus)(services)
+      val ws = testUpdateLibraryAttributes(payload, testcrit.discoverPlus)(services)
       if (testcrit.discoverPlus == StatusCodes.OK) {
         assertResult(updateDiscoverValue) {
           ws.get.attributes(discoverableWSAttribute)
@@ -278,9 +313,9 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
         }
       }
     }
-    it should s"return ${testcrit.multiLibrary.value} when updating multiple standard library attrs as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
+    it should s"return ${testcrit.multiLibrary.value} when changing multiple standard library attrs as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
       val payload = updateLibAttr ++ updateLibAttr2
-      val ws = testUpdateLibraryAttributes(testcrit, payload, testcrit.multiLibrary)(services)
+      val ws = testUpdateLibraryAttributes(payload, testcrit.multiLibrary)(services)
       if (testcrit.multiLibrary == StatusCodes.OK) {
         assertResult(updateLibValue) {
           ws.get.attributes(updateLibName)
@@ -291,19 +326,19 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
       }
     }
 
-    it should s"return ${testcrit.libraryPlusTags.value} when updating library attrs and tags as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
+    it should s"return ${testcrit.libraryPlusTags.value} when changing library attrs and tags as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
       val payload = updateLibAttr ++ updateTagAttr
-      val ws = testUpdateLibraryAttributes(testcrit, payload, testcrit.libraryPlusTags)(services)
+      val ws = testUpdateLibraryAttributes(payload, testcrit.libraryPlusTags)(services)
     }
 
-    it should s"return ${testcrit.libraryPlusWorkspace.value} when updating library attrs and workspace attrs as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
+    it should s"return ${testcrit.libraryPlusWorkspace.value} when changing library attrs and workspace attrs as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
       val payload = updateLibAttr ++ updateWsAttr
-      val ws = testUpdateLibraryAttributes(testcrit, payload, testcrit.libraryPlusWorkspace)(services)
+      val ws = testUpdateLibraryAttributes(payload, testcrit.libraryPlusWorkspace)(services)
     }
 
-    it should s"return ${testcrit.workspaceOnly.value} when updating workspace attrs as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
+    it should s"return ${testcrit.workspaceOnly.value} when changing workspace attrs as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
       val payload = updateWsAttr
-      val ws = testUpdateLibraryAttributes(testcrit, payload, testcrit.workspaceOnly)(services)
+      val ws = testUpdateLibraryAttributes(payload, testcrit.workspaceOnly)(services)
     }
 
   }
