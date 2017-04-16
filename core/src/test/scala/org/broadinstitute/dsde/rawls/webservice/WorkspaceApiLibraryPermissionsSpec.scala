@@ -170,13 +170,12 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
                 publishedPlus: StatusCode = StatusCodes.BadRequest,
                 discoverPlus: StatusCode = StatusCodes.Forbidden,
                 multiLibrary: StatusCode = StatusCodes.Forbidden,
-                libraryPlusTags: StatusCode = StatusCodes.Forbidden,
-                libraryPlusWorkspace: StatusCode = StatusCodes.Forbidden,
-                workspaceOnly: StatusCode = StatusCodes.Forbidden
+                libraryPlusTags: StatusCode = StatusCodes.BadRequest,
+                libraryPlusWorkspace: StatusCode = StatusCodes.BadRequest,
+                workspaceOnly: StatusCode = StatusCodes.BadRequest
               )
 
   // NB: re-publish case is handled in orchestration; we only need to check change-published here
-  // TODO: why do certain APIs return 403, when they should return 400?
 
   val tests = Seq(
     // when owner + curator, can do everything

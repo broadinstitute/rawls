@@ -51,7 +51,7 @@ trait LibraryPermissionsSupport extends RoleSupport {
     val invalidNamespaces = namespaces -- Set(AttributeName.libraryNamespace)
     if (invalidNamespaces.isEmpty) op
     else {
-      val err = ErrorReport(statusCode = StatusCodes.Forbidden, message = s"All attributes must be in the library namespace")
+      val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = s"All attributes must be in the library namespace")
       throw new RawlsExceptionWithErrorReport(errorReport = err)
     }
   }
