@@ -177,7 +177,6 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
 
   // NB: re-publish case is handled in orchestration; we only need to check change-published here
   // TODO: why do certain APIs return 403, when they should return 400?
-  // TODO: when these tests are solid, remove pre-existing, now obsolete, tests
 
   val tests = Seq(
     // when owner + curator, can do everything
