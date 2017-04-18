@@ -160,6 +160,14 @@ case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, f
 
 case class EntityQueryResponse(parameters: EntityQuery, resultMetadata: EntityQueryResultMetadata, results: Seq[Entity])
 
+case class EntityCopyResponse(entitiesCopied: Seq[AttributeEntityReference], hardConflicts: Seq[EntityHardConflict], softConflicts: Seq[EntitySoftConflict])
+
+case class EntitySoftConflict(entityType: String, entityName: String, conflicts: Seq[EntitySoftConflict])
+
+case class EntityHardConflict(entityType: String, entityName: String)
+
+case class EntityPath(path: Seq[AttributeEntityReference])
+
 case class MethodConfigurationName(
                    name: String,
                    namespace: String,
@@ -238,8 +246,6 @@ case class MethodRepoConfigurationExport(
                                          methodRepoName: String,
                                          source: MethodConfigurationName
                                          )
-
-case class ConflictingEntities(conflicts: Seq[String])
 
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspace: Workspace,
@@ -394,6 +400,12 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityCopyDefinitionFormat = jsonFormat4(EntityCopyDefinition)
 
+  implicit val EntitySoftConflictFormat: JsonFormat[EntitySoftConflict] = lazyFormat(jsonFormat3(EntitySoftConflict))
+
+  implicit val EntityHardConflictFormat = jsonFormat2(EntityHardConflict)
+
+  implicit val EntityCopyResponseFormat = jsonFormat3(EntityCopyResponse)
+
   implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod)
 
   implicit val MethodConfigurationFormat = jsonFormat9(MethodConfiguration)
@@ -405,8 +417,6 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val MethodRepoConfigurationImportFormat = jsonFormat4(MethodRepoConfigurationImport)
 
   implicit val MethodRepoConfigurationExportFormat = jsonFormat3(MethodRepoConfigurationExport)
-
-  implicit val ConflictingEntitiesFormat = jsonFormat1(ConflictingEntities)
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 

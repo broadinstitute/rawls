@@ -125,9 +125,13 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
     } ~
     path("workspaces" / "entities" / "copy" ) {
       post {
-        entity(as[EntityCopyDefinition]) { copyDefinition =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.CopyEntities(copyDefinition, requestContext.request.uri))
+        parameters('linkExistingEntities.?) { (linkExistingEntities) =>
+          val linkExistingEntitiesBool = Try(linkExistingEntities.getOrElse("false").toBoolean).getOrElse(false)
+          entity(as[EntityCopyDefinition]) { copyDefinition =>
+            requestContext =>
+              perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+                WorkspaceService.CopyEntities(copyDefinition, requestContext.request.uri, linkExistingEntitiesBool))
+          }
         }
       }
     }

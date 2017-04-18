@@ -2072,17 +2072,15 @@ paths:
         '201':
           description: Successful Request
           schema:
-            type: array
-            items:
-              $ref: '#/definitions/Entity'
+            $ref: '#/definitions/EntityCopyResponse'
         '404':
           description: Source workspace not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
-          description: One or more entities with the destination name/type already exist
+          description: There are conflicts in your copy operation. Retry with the paramater linkExistingEntities=true to link all soft conflicts to the entities that already exist in your workspace.
           schema:
-            $ref: '#/definitions/ErrorReport'
+            $ref: '#/definitions/EntityCopyResponse'
         '422':
           description: Destination workspace must match source's realm, if the source has a realm
           schema:
@@ -2097,6 +2095,12 @@ paths:
       summary: copy entities from one workspace into another workspace
       operationId: copy_entities
       parameters:
+        - in: query
+          description: true to link new entities to existing entities, false to fail instead of link
+          name: linkExistingEntities
+          required: false
+          default: false
+          type: boolean
         - in: body
           description: Source and destination for entities
           name: entityCopyDefinition
@@ -3927,6 +3931,61 @@ definitions:
         description: stack trace
         items:
           $ref: '#/definitions/StackTraceElement'
+
+  EntityCopyResponse:
+    description: ''
+    required:
+      - entitiesCopied
+      - softConflicts
+      - hardConflicts
+    properties:
+      entitiesCopied:
+        type: array
+        description: 'the entities that were successfully copied into the workspace'
+        items:
+          $ref: '#/definitions/AttributeEntityReference'
+      hardConflicts:
+        type: array
+        description: 'these entities already exist in your workspace'
+        items:
+          $ref: '#/definitions/EntityHardConflict'
+      softConflicts:
+        type: array
+        description: 'the conflicts within your entity subtrees. note that this will be empty if there are hard conflicts'
+        items:
+          $ref: '#/definitions/EntitySoftConflict'
+
+  EntityHardConflict:
+    description: ''
+    required:
+      - entityType
+      - entityName
+    properties:
+      entityType:
+        type: string
+        description: 'the type of the entity'
+      entityName:
+        type: string
+        description: 'the name of the entity'
+
+  EntitySoftConflict:
+    description: ''
+    required:
+      - entityType
+      - entityName
+      - conflicts
+    properties:
+      entityType:
+        type: string
+        description: 'the type of the entity'
+      entityName:
+        type: string
+        description: 'the name of the entity'
+      conflicts:
+        type: array
+        description: 'the next entity in the path to the conflict'
+        items:
+          $ref: '#/definitions/EntitySoftConflict'
 
   StackTraceElement:
     description: ''

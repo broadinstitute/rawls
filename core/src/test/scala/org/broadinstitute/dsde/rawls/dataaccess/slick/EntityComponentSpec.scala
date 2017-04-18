@@ -286,8 +286,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   }
 
-  it should "return None when an entity does not exist" in withDefaultTestDatabase { 
-    
+  it should "return None when an entity does not exist" in withDefaultTestDatabase {
+
       withWorkspaceContext(testData.workspace) { context =>
         assertResult(None) {
           runAndWait(entityQuery.get(context, "pair", "fnord"))
@@ -465,7 +465,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   }
 
-  it should "rename an entity" in withDefaultTestDatabase { 
+  it should "rename an entity" in withDefaultTestDatabase {
 
       withWorkspaceContext(testData.workspace) { context =>
         assertResult(Option(testData.pair1)) { runAndWait(entityQuery.get(context, "Pair", "pair1")) }
@@ -481,11 +481,25 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
    */
   it should "get entity subtrees from a list of entities" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      val expected = Set(testData.sset1, testData.sset2, testData.sset3, testData.sample1, testData.aliquot1, testData.sample6, testData.sample2, testData.sample3, testData.sample5)
+      val sampleSet1Paths = Seq(EntityPath(Seq(testData.sset1.toReference)),
+                                EntityPath(Seq(testData.sset1.toReference, testData.sample1.toReference)),
+                                EntityPath(Seq(testData.sset1.toReference, testData.sample1.toReference, testData.aliquot1.toReference)),
+                                EntityPath(Seq(testData.sset1.toReference, testData.sample2.toReference)),
+                                EntityPath(Seq(testData.sset1.toReference, testData.sample3.toReference)),
+                                EntityPath(Seq(testData.sset1.toReference, testData.sample3.toReference, testData.sample1.toReference)))
+      val sampleSet2Paths = Seq(EntityPath(Seq(testData.sset2.toReference)),
+                                EntityPath(Seq(testData.sset2.toReference, testData.sample2.toReference)))
+      val sampleSet3Paths = Seq(EntityPath(Seq(testData.sset3.toReference)),
+                                EntityPath(Seq(testData.sset3.toReference, testData.sample5.toReference)),
+                                EntityPath(Seq(testData.sset3.toReference, testData.sample6.toReference)))
+
+      val expected = sampleSet1Paths ++ sampleSet2Paths ++ sampleSet3Paths
       assertSameElements(expected, runAndWait(entityQuery.getEntitySubtrees(context, "SampleSet", List("sset1", "sset2", "sset3", "sampleSetDOESNTEXIST"))))
 
-      val expected2 = Set(testData.indiv2, testData.sset2, testData.sample2)
-      assertSameElements(expected2, runAndWait(entityQuery.getEntitySubtrees(context, "Individual", List("indiv2"))))
+      val individual2Paths = Seq(EntityPath(Seq(testData.indiv2.toReference)),
+                                 EntityPath(Seq(testData.indiv2.toReference, testData.sset2.toReference)),
+                                 EntityPath(Seq(testData.indiv2.toReference, testData.sset2.toReference, testData.sample2.toReference)))
+      assertSameElements(individual2Paths, runAndWait(entityQuery.getEntitySubtrees(context, "Individual", List("indiv2"))))
     }
   }
 
@@ -530,6 +544,20 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     Map.empty
   )
 
+  val workspace3 = Workspace(
+    namespace = testData.wsName.namespace + "3",
+    name = testData.wsName.name + "3",
+    None,
+    workspaceId = UUID.randomUUID.toString,
+    bucketName = "aBucket",
+    createdDate = currentTime(),
+    lastModified = currentTime(),
+    createdBy = "Joe Biden",
+    Map.empty,
+    Map.empty,
+    Map.empty
+  )
+
   it should "copy entities without a conflict" in withDefaultTestDatabase {
     runAndWait(workspaceQuery.save(workspace2))
     withWorkspaceContext(testData.workspace) { context1 =>
@@ -544,12 +572,10 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
         // note: we're copying FROM workspace2 INTO workspace
         assertResult(Seq.empty) {
-          runAndWait(entityQuery.getCopyConflicts(context1, Seq(x1, x2_updated)))
+          runAndWait(entityQuery.getCopyConflicts(context1, Seq(x1, x2_updated).map(_.toReference)))
         }
 
-        assertResult(Seq.empty) {
-          runAndWait(entityQuery.copyEntities(context2, context1, "SampleSet", Seq("x2")))
-        }
+        assertSameElements(Seq(x1.toReference, x2.toReference), runAndWait(entityQuery.copyEntities(context2, context1, "SampleSet", Seq("x2"), false)).entitiesCopied)
 
         //verify it was actually copied into the workspace
         assert(runAndWait(entityQuery.list(context1, "SampleSet")).toList.contains(x1))
@@ -570,6 +596,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         val a3 = Entity("a3", "test", Map(AttributeName.withDefaultNS("next") -> AttributeEntityReference("test", "a4"), AttributeName.withDefaultNS("side") -> AttributeEntityReference("test", "a")))
         val a2 = Entity("a2", "test", Map(AttributeName.withDefaultNS("next") -> AttributeEntityReference("test", "a3")))
         val a1 = Entity("a1", "test", Map(AttributeName.withDefaultNS("next") -> AttributeEntityReference("test", "a2")))
+        val allEntities = Seq(a, a1, a2, a3, a4, a5, a6)
         runAndWait(entityQuery.save(context2, a))
 
         // save a6 first without attributes because a1 does not exist yet
@@ -585,17 +612,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
         // note: we're copying FROM workspace2 INTO workspace
         assertResult(Seq.empty) {
-          runAndWait(entityQuery.getCopyConflicts(context1, Seq(a1, a2, a3, a4, a5, a6, a)))
+          runAndWait(entityQuery.getCopyConflicts(context1, allEntities.map(_.toReference)))
         }
 
-        assertResult(Seq.empty) {
-          runAndWait(entityQuery.copyEntities(context2, context1, "test", Seq("a1")))
-        }
+        assertSameElements(allEntities.map(_.toReference), runAndWait(entityQuery.copyEntities(context2, context1, "test", Seq("a1"), false)).entitiesCopied)
 
         //verify it was actually copied into the workspace
-        assertResult(Set(a1, a2, a3, a4, a5, a6, a)) {
-          runAndWait(entityQuery.list(context1, "test")).toSet
-        }
+        assertSameElements(allEntities, runAndWait(entityQuery.list(context1, "test")).toSet)
       }
     }
 
@@ -604,12 +627,12 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   it should "copy entities with a conflict" in withDefaultTestDatabase {
 
       withWorkspaceContext(testData.workspace) { context =>
-        assertResult(Set(testData.sample1)) {
-          runAndWait(entityQuery.getCopyConflicts(context, Seq(testData.sample1))).toSet
+        assertResult(Set(testData.sample1.toReference)) {
+          runAndWait(entityQuery.getCopyConflicts(context, Seq(testData.sample1).map(_.toReference))).map(_.toReference).toSet
         }
 
-        assertResult(Set(testData.sample1, testData.aliquot1)) {
-          runAndWait(entityQuery.copyEntities(context, context, "Sample", Seq("sample1"))).toSet
+        assertResult(Set(EntityHardConflict(testData.sample1.entityType, testData.sample1.name))) {
+          runAndWait(entityQuery.copyEntities(context, context, "Sample", Seq("sample1"), false)).hardConflicts.toSet
         }
 
         //verify that it wasn't copied into the workspace again
@@ -618,7 +641,42 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   }
 
-  it should "fail when putting dots in user-specified strings" in withDefaultTestDatabase { 
+  it should "copy entities with a conflict in the entity subtrees and properly link already existing entities" in withDefaultTestDatabase {
+
+    runAndWait(workspaceQuery.save(workspace2))
+    runAndWait(workspaceQuery.save(workspace3))
+    withWorkspaceContext(workspace2) { context2 =>
+      withWorkspaceContext(workspace3) { context3 =>
+        val participant1 = Entity("participant1", "participant", Map.empty)
+        val sample1 = Entity("sample1", "sample", Map(AttributeName.withDefaultNS("participant") -> AttributeEntityReference("participant", "participant1")))
+
+        runAndWait(entityQuery.save(context2, participant1))
+        runAndWait(entityQuery.save(context3, participant1))
+        runAndWait(entityQuery.save(context3, sample1))
+
+        assertResult(List()){
+          runAndWait(entityQuery.list(context2, "sample")).toList
+        }
+
+        assertResult(List(participant1)){
+          runAndWait(entityQuery.list(context2, "participant")).toList
+        }
+
+        runAndWait(entityQuery.copyEntities(context3, context2, "sample", Seq("sample1"), true))
+
+        assertResult(List(sample1)){
+          runAndWait(entityQuery.list(context2, "sample")).toList
+        }
+
+        assertResult(List(participant1)){
+          runAndWait(entityQuery.list(context2, "participant")).toList
+        }
+
+      }
+    }
+  }
+
+  it should "fail when putting dots in user-specified strings" in withDefaultTestDatabase {
     val dottyName = Entity("dotty.name", "Sample", Map.empty)
     val dottyType = Entity("dottyType", "Sam.ple", Map.empty)
     val dottyAttr = Entity("dottyAttr", "Sample", Map(AttributeName.withDefaultNS("foo.bar") -> AttributeBoolean(true)))
