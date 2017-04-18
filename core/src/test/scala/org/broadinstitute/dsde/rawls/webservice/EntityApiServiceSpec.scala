@@ -45,8 +45,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  def dbId(ent: Entity): Long = runAndWait(entityQuery.lookupEntitiesByNames(SlickWorkspaceContext(testData.workspace).workspaceId, Set(ent.toReference))).head.id
-  def dbName(id: Long): String = runAndWait(entityQuery.listByIds(Seq(id))).head._2.name
+  def dbId(ent: Entity): Long = runAndWait(entityQuery.getEntityRecords(SlickWorkspaceContext(testData.workspace).workspaceId, Set(ent.toReference))).head.id
+  def dbName(id: Long): String = runAndWait(entityQuery.getEntities(Seq(id))).head._2.name
 
   "EntityApi" should "return 404 on Entity CRUD when workspace does not exist" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.copy(name = "DNE").path}/entities", httpJson(testData.sample2)) ~>
@@ -251,13 +251,13 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   // entity and attribute counts, regardless of deleted status
   def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listEntitiesAllTypes(SlickWorkspaceContext(testData.workspace)))
+    val ents = runAndWait(entityQuery.listEntities(SlickWorkspaceContext(testData.workspace)))
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
   // entity and attribute counts, non-deleted only
   def countActiveEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listActiveEntitiesAllTypes(SlickWorkspaceContext(testData.workspace)))
+    val ents = runAndWait(entityQuery.listActiveEntities(SlickWorkspaceContext(testData.workspace)))
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
@@ -1022,7 +1022,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.list(SlickWorkspaceContext(constantData.workspace), "Sample"))
+        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(SlickWorkspaceContext(constantData.workspace), "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected)
         assertSameElements(dbSamples, expected)
       }
@@ -1055,7 +1055,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.list(SlickWorkspaceContext(constantData.workspace), "Sample"))
+        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(SlickWorkspaceContext(constantData.workspace), "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected :+ newSample)
         assertSameElements(dbSamples, expected :+ newSample)
       }
@@ -1075,7 +1075,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.list(SlickWorkspaceContext(constantData.workspace), "Sample"))
+        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(SlickWorkspaceContext(constantData.workspace), "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected)
         assertSameElements(dbSamples, expected)
       }

@@ -452,7 +452,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
 
               withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
-                dataAccess.entityQuery.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+                dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
                   dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                     val inserts = methodConfigShorts.map { methodConfigShort =>
                       dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
@@ -821,7 +821,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           realmCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
             val entityNames = entityCopyDef.entityNames
             val entityType = entityCopyDef.entityType
-            val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
+            val copyResults = dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
             copyResults.map { response =>
               if(response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntities)) RequestComplete(StatusCodes.Created, response)
               else RequestComplete(StatusCodes.Conflict, response)
@@ -866,7 +866,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     withAttributeNamespaceCheck(namesToCheck) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-          val updateTrialsAction = dataAccess.entityQuery.list(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
+          val updateTrialsAction = dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
             val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
             entityUpdates.map { entityUpdate =>
               entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
@@ -911,7 +911,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def listEntities(workspaceName: WorkspaceName, entityType: String): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.entityQuery.list(workspaceContext, entityType).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
+        dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
       }
     }
 

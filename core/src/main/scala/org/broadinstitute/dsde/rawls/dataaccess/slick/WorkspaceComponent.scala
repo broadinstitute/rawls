@@ -209,7 +209,7 @@ trait WorkspaceComponent {
         workspaceAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
       }
 
-      entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
+      entityQuery.getEntityRecords(workspaceId, entitiesToLookup) flatMap { entityRecords =>
         val entityIdsByRef = entityRecords.map(e => e.toReference -> e.id).toMap
         val attributesToSave = workspace.attributes flatMap { attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef) }
 
