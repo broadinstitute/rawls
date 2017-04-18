@@ -10,11 +10,13 @@ import scala.concurrent.Future
 import scala.util.{Random, Try}
 
 
-class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,ExecutionServiceDAO], dataSource: SlickDataSource) extends ExecutionServiceCluster {
+class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,ExecutionServiceDAO], submitMembers: Map[ExecutionServiceId, ExecutionServiceDAO], dataSource: SlickDataSource) extends ExecutionServiceCluster {
 
   // make a copy of the members map as an array for easy reads; routing algorithm will return an index in this array.
   // ensure we sort the array by key for determinism/easy understanding
   private val memberArray:Array[ClusterMember] = (members map {case (id, dao) => ClusterMember(id, dao)})
+      .toList.sortBy(_.key.id).toArray
+  private val submitMemberArray:Array[ClusterMember] = (submitMembers map {case (id, dao) => ClusterMember(id, dao)})
       .toList.sortBy(_.key.id).toArray
 
   // ====================
@@ -79,9 +81,9 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
     // inspect the first workflow in the batch, retrieve a long value of its last-updated timestamp
     // (could also use workflowId or some other number)
     val shardingSeed = workflowRecs.head.statusLastChangedDate.getTime
-    val shardIndex = targetIndex(shardingSeed, members.size)
+    val shardIndex = targetIndex(shardingSeed, submitMembers.size)
 
-    memberArray(shardIndex)
+    submitMemberArray(shardIndex)
   }
 
   // ====================
