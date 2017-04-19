@@ -312,7 +312,12 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
       }
     }
     it should s"return ${testcrit.multiLibrary.value} when changing multiple standard library attrs as $testNameSuffix" in withLibraryPermissionTestDataApiServicesAndUser(user.userEmail.value) { services =>
-      val payload = updateLibAttr ++ updateLibAttr2
+      // tweak to make sure no state is persisted and that we (on some tests) check for unique values
+      val uniqueLibName = AttributeName.withLibraryNS(UUID.randomUUID().toString)
+      val uniqueLibValue = AttributeString(UUID.randomUUID().toString)
+      val uniqueLibAttr: Seq[AttributeUpdateOperation] = Seq(AddUpdateAttribute(uniqueLibName, uniqueLibValue))
+
+      val payload = updateLibAttr ++ updateLibAttr2 ++ uniqueLibAttr
       val ws = testUpdateLibraryAttributes(payload, testcrit.multiLibrary)(services)
       if (testcrit.multiLibrary == StatusCodes.OK) {
         assertResult(updateLibValue) {
@@ -320,6 +325,9 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
         }
         assertResult(updateLibValue2) {
           ws.get.attributes(updateLibName2)
+        }
+        assertResult(uniqueLibValue) {
+          ws.get.attributes(uniqueLibName)
         }
       }
     }

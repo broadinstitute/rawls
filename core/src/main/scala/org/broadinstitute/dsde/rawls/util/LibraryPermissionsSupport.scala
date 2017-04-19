@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.util
 
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspaceAccessLevels, _}
@@ -28,7 +28,7 @@ trait LibraryPermissionsSupport extends RoleSupport {
     for {
       canShare <- dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
       hasCatalogOnly <- dataAccess.workspaceQuery.getUserCatalogPermissions(RawlsUserSubjectId(userInfo.userSubjectId), ctx)
-      result <- getPermissionChecker(names, isCurator, canShare, hasCatalogOnly, userLevel).withPermissions(op)
+      result <- getPermissionChecker(names, isCurator, canShare, hasCatalogOnly, userLevel)(op)
     } yield result
   }
 
@@ -36,11 +36,11 @@ trait LibraryPermissionsSupport extends RoleSupport {
     val hasCatalog = hasCatalogOnly && userLevel >= WorkspaceAccessLevels.Read
     // need to multiple delete and add ops when changing discoverable attribute
     names.distinct match {
-      case Seq(`publishedFlag`) => ChangePublishedChecker(isCurator, hasCatalog, userLevel)
-      case Seq(`discoverableWSAttribute`) => ChangeDiscoverabilityChecker(canShare, hasCatalog, userLevel)
+      case Seq(`publishedFlag`) => changePublishedChecker(isCurator, hasCatalog, userLevel) _
+      case Seq(`discoverableWSAttribute`) => changeDiscoverabilityChecker(canShare, hasCatalog, userLevel) _
       case x if x.contains(publishedFlag) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Unsupported parameter - can't modify published with other attributes"))
-      case x if x.contains(discoverableWSAttribute) => ChangeDiscoverabilityAndMetadataChecker(canShare, hasCatalog, userLevel)
-      case _ => ChangeMetadataChecker(hasCatalog, userLevel)
+      case x if x.contains(discoverableWSAttribute) => changeDiscoverabilityAndMetadataChecker(canShare, hasCatalog, userLevel) _
+      case _ => changeMetadataChecker(hasCatalog, userLevel) _
     }
   }
 
@@ -55,51 +55,32 @@ trait LibraryPermissionsSupport extends RoleSupport {
       throw new RawlsExceptionWithErrorReport(errorReport = err)
     }
   }
-}
 
-trait LibraryPermissionChecker {
-  def withPermissions(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace]
-}
+  private def maybeExecuteOp(canModify: Boolean, cantModifyMessage: String, op: => ReadWriteAction[Workspace]) = {
+    if (canModify) op
+    else throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, cantModifyMessage))
+  }
 
-case class ChangeMetadataChecker(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel) extends LibraryPermissionChecker {
-  def canModify: Boolean = {
+  def canChangeMetadata(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean =
     maxLevel >= WorkspaceAccessLevels.Write || hasCatalog
-  }
-  def withPermissions(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
-    if (canModify)
-      op
-    else
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must have write+ or catalog with read permissions."))
-  }
-}
-
-case class ChangeDiscoverabilityChecker(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel) extends LibraryPermissionChecker {
-  def canModify: Boolean = {
+  def canChangeDiscoverability(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean =
     maxLevel >= WorkspaceAccessLevels.Owner || canShare || hasCatalog
-  }
-  def withPermissions(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
-    if (canModify)
-      op
-    else
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must be an owner or have catalog or share permissions."))
+  def canChangePublished(isCurator: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean =
+    isCurator && (maxLevel >= WorkspaceAccessLevels.Owner || hasCatalog)
+
+
+  def changeMetadataChecker(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] =
+    maybeExecuteOp(canChangeMetadata(hasCatalog, maxLevel), "You must have write+ or catalog with read permissions.", op)
+
+  def changeDiscoverabilityChecker(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] =
+    maybeExecuteOp(canChangeDiscoverability(canShare, hasCatalog, maxLevel), "You must be an owner or have catalog or share permissions.", op)
+
+  def changePublishedChecker(isCurator: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] =
+    maybeExecuteOp(canChangePublished(isCurator, hasCatalog, maxLevel), "You must be a curator and either be an owner or have catalog with read+.", op)
+
+  def changeDiscoverabilityAndMetadataChecker(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
+    val canDo = canChangeMetadata(hasCatalog, maxLevel) && canChangeDiscoverability(canShare, hasCatalog, maxLevel)
+    maybeExecuteOp(canDo, "You must be an owner or have catalog with read permissions.", op)
   }
 }
 
-case class ChangePublishedChecker(isCurator: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel) extends LibraryPermissionChecker {
-  def withPermissions(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
-    if (isCurator && (maxLevel >= WorkspaceAccessLevels.Owner || hasCatalog))
-      op
-    else
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must be a curator and either be an owner or have catalog with read+."))
-  }
-}
-
-case class ChangeDiscoverabilityAndMetadataChecker(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel) extends LibraryPermissionChecker {
-  def withPermissions(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
-    if (ChangeMetadataChecker(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel).canModify &&
-      ChangeDiscoverabilityChecker(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel).canModify)
-      op
-    else
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You must be an owner or have catalog with read permissions."))
-  }
-}
