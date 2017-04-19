@@ -32,9 +32,9 @@ trait LibraryPermissionsSupport extends RoleSupport {
     } yield result
   }
 
-  def getPermissionChecker(names: Seq[AttributeName], isCurator: Boolean, canShare: Boolean, hasCatalogOnly: Boolean, userLevel: WorkspaceAccessLevel) = {
+  def getPermissionChecker(names: Seq[AttributeName], isCurator: Boolean, canShare: Boolean, hasCatalogOnly: Boolean, userLevel: WorkspaceAccessLevel): ((=> ReadWriteAction[Workspace]) => ReadWriteAction[Workspace]) = {
     val hasCatalog = hasCatalogOnly && userLevel >= WorkspaceAccessLevels.Read
-    // need to multiple delete and add ops when changing discoverable attribute
+    // need to combine multiple delete and add ops when changing discoverable attribute
     names.distinct match {
       case Seq(`publishedFlag`) => changePublishedChecker(isCurator, hasCatalog, userLevel) _
       case Seq(`discoverableWSAttribute`) => changeDiscoverabilityChecker(canShare, hasCatalog, userLevel) _
