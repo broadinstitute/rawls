@@ -18,6 +18,7 @@ case class SlickExpressionContext(workspaceContext: SlickWorkspaceContext, rootE
 
 trait SlickExpressionParser extends JavaTokenParsers {
   this: DriverComponent
+    with ExprEvalComponent
     with EntityComponent
     with WorkspaceComponent
     with AttributeComponent =>
@@ -388,7 +389,7 @@ class SlickExpressionEvaluator protected (val parser: DataAccess, val rootEntiti
   val transactionId = UUID.randomUUID().toString
 
   def populateExprEvalScratchTable() = {
-    val exprEvalBatches = rootEntities.map( e => parser.ExprEvalRecord(e.id, e.name, transactionId) ).grouped(parser.batchSize)
+    val exprEvalBatches = rootEntities.map( e => ExprEvalRecord(e.id, e.name, transactionId) ).grouped(parser.batchSize)
 
     DBIO.sequence(exprEvalBatches.toSeq.map(batch => parser.exprEvalQuery ++= batch))
   }

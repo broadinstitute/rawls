@@ -4,7 +4,7 @@ package org.broadinstitute.dsde.rawls.expressions
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ExprEvalRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap

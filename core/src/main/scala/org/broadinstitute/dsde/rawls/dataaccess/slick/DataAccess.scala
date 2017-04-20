@@ -15,6 +15,7 @@ trait DataAccess
   with SubmissionComponent
   with WorkflowComponent
   with ManagedGroupComponent
+  with ExprEvalComponent
   with SlickExpressionParser {
 
   this: DriverComponent =>
