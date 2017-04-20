@@ -63,8 +63,29 @@ trait DriverComponent {
     new Timestamp(System.currentTimeMillis())
   }
 
-  def renameForHiding(name: String): String = {
-    name + "_" + DateTime.now().toString("yyyy-MM-dd_HH.mm.ss.SSS")
+  def getSufficientlyRandomPostfix(recordCount: Long, desiredCollisionProbability: Double = 0.000000001): String = {
+    def log2(n: Double): Double = Math.log(n) / Math.log(2)
+
+    //see https://en.wikipedia.org/wiki/Birthday_attack#Simple_approximation
+    // H = n^2 / 2p(n)
+    //calibrated for a one-in-a-billion chance of collision.
+    val H = (recordCount*recordCount)/(2.0*desiredCollisionProbability)
+
+    //the number of bits of entropy required. if this ever gets above 128 we're in trouble.
+    //but you need 128 bits when you're around the 824 quadrillion records mark, so we're probably safe.
+    val bits = Math.ceil(log2(H)).toLong
+
+    val uuid = UUID.randomUUID()
+
+    if( bits <= 64 ) {
+      f"${uuid.getMostSignificantBits >> (64 - bits) }%x"
+    } else {
+      f"${uuid.getMostSignificantBits}%x" + f"${uuid.getLeastSignificantBits >> (128-bits)}%x"
+    }
+  }
+
+  def renameForHiding(recordCount: Long, name: String, desiredCollisionProbability: Double = 0.000000001): String = {
+    name + "_" + getSufficientlyRandomPostfix(recordCount, desiredCollisionProbability)
   }
 }
 

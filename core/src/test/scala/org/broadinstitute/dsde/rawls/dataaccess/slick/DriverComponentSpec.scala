@@ -75,4 +75,8 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       runAndWait(concatSqlActions(select, where1, reduceSqlActionsWithDelim(statuses), where2).as[WorkflowRecord])
     }
   }
+
+  it should "get a sufficiently random postfix" in {
+    getSufficientlyRandomPostfix()
+  }
 }

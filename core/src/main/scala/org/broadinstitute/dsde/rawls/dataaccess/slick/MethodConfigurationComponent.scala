@@ -172,7 +172,7 @@ trait MethodConfigurationComponent {
 
     def hideMethodConfigurationAction(id: Long, methodConfigName: String): ReadWriteAction[Int] = {
       findById(id).map(rec => (rec.deleted, rec.name))
-        .update(true, renameForHiding(methodConfigName))
+        .update(true, renameForHiding(id, methodConfigName))
     }
 
     // performs actual deletion (not hiding) of everything that depends on a method configuration

@@ -419,11 +419,11 @@ trait EntityComponent {
     }
 
     private def hideEntityAttribute(attrRec: EntityAttributeRecord): WriteAction[Int] = {
-      entityAttributeQuery.filter(_.id === attrRec.id).map(rec => (rec.deleted, rec.name)).update(true, renameForHiding(attrRec.name))
+      entityAttributeQuery.filter(_.id === attrRec.id).map(rec => (rec.deleted, rec.name)).update(true, renameForHiding(attrRec.id, attrRec.name))
     }
 
     private def hideEntityAction(entRec: EntityRecord): WriteAction[Int] = {
-      findEntityById(entRec.id).map(rec => (rec.deleted, rec.name)).update(true, renameForHiding(entRec.name))
+      findEntityById(entRec.id).map(rec => (rec.deleted, rec.name)).update(true, renameForHiding(entRec.id, entRec.name))
     }
 
     // perform actual deletion (not hiding) of all entities in a workspace
