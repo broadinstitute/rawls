@@ -57,6 +57,7 @@ object WorkspaceService {
   case class GetWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class DeleteWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
+  case class UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case object ListAllWorkspaces extends WorkspaceServiceMessage
   case class GetTags(query: Option[String]) extends WorkspaceServiceMessage
@@ -125,7 +126,7 @@ object WorkspaceService {
     new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, notificationDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
   import dataSource.dataAccess.driver.api._
 
   implicit val timeout = Timeout(5 minutes)
@@ -135,6 +136,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case GetWorkspace(workspaceName) => pipe(getWorkspace(workspaceName)) to sender
     case DeleteWorkspace(workspaceName) => pipe(deleteWorkspace(workspaceName)) to sender
     case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to sender
+    case UpdateLibraryAttributes(workspaceName, operations) => pipe(updateLibraryAttributes(workspaceName, operations)) to sender
     case ListWorkspaces => pipe(listWorkspaces()) to sender
     case ListAllWorkspaces => pipe(listAllWorkspaces()) to sender
     case GetTags(query) => pipe(getTags(query)) to sender
@@ -338,25 +340,48 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(operations.map(_.name)) {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-          val updateAction = Try {
-            val updatedWorkspace = applyOperationsToWorkspace(workspaceContext.workspace, operations)
-            dataAccess.workspaceQuery.save(updatedWorkspace)
-          } match {
-            case Success(result) => result
-            case Failure(e: AttributeUpdateOperationException) =>
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspaceName}", ErrorReport(e))))
-            case Failure(regrets) => DBIO.failed(regrets)
+  def updateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
+    withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
+      tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
+        getWorkspaceContext(workspaceName) flatMap { ctx =>
+          dataSource.inTransaction { dataAccess =>
+            getMaximumAccessLevel(RawlsUser(userInfo), ctx, dataAccess) flatMap {maxAccessLevel =>
+              withLibraryPermissions(ctx, operations, dataAccess, userInfo, isCurator, maxAccessLevel) {
+                updateWorkspace(operations, dataAccess)(ctx)
+              }
+            }
           }
-          updateAction.map { savedWorkspace =>
-            RequestComplete(StatusCodes.OK, savedWorkspace)
-          }
+        } map { ws =>
+          RequestComplete(StatusCodes.OK, ws)
         }
       }
     }
+  }
+
+  def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
+    withAttributeNamespaceCheck(operations.map(_.name)) {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) {
+          updateWorkspace(operations, dataAccess)
+        }
+      } map { ws =>
+        RequestComplete(StatusCodes.OK, ws)
+      }
+    }
+  }
+
+  private def updateWorkspace(operations: Seq[AttributeUpdateOperation], dataAccess: DataAccess)(workspaceContext: SlickWorkspaceContext): ReadWriteAction[Workspace] = {
+    val workspace = workspaceContext.workspace
+    Try {
+      val updatedWorkspace = applyOperationsToWorkspace(workspace, operations)
+      dataAccess.workspaceQuery.save(updatedWorkspace)
+    } match {
+      case Success(result) => result
+      case Failure(e: AttributeUpdateOperationException) =>
+        DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspace.name}", ErrorReport(e))))
+      case Failure(regrets) => DBIO.failed(regrets)
+    }
+  }
 
   def getTags(query: Option[String]): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
@@ -415,32 +440,36 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       .map {p => p.get(workspaceContext.workspaceId).get}
   }
 
-  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(destWorkspaceRequest) {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContextAndPermissions(sourceWorkspaceName, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
-          withClonedRealm(sourceWorkspaceContext, destWorkspaceRequest) { newRealm =>
+  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[PerRequestMessage] = {
+    val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
+    withAttributeNamespaceCheck(workspaceAttributeNames) {
+      withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
+        dataSource.inTransaction { dataAccess =>
+          withWorkspaceContextAndPermissions(sourceWorkspaceName, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
+            withClonedRealm(sourceWorkspaceContext, destWorkspaceRequest) { newRealm =>
 
-            // add to or replace current attributes, on an individual basis
-            val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
+              // add to or replace current attributes, on an individual basis
+              val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
 
-            withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
-              dataAccess.entityQuery.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-                dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
-                  val inserts = methodConfigShorts.map { methodConfigShort =>
-                    dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
-                      dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+              withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
+                dataAccess.entityQuery.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+                  dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                    val inserts = methodConfigShorts.map { methodConfigShort =>
+                      dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                        dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                      }
                     }
-                  }
-                  DBIO.seq(inserts: _*)
-                } andThen {
-                DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceRequest.toWorkspaceName.path))
+                    DBIO.seq(inserts: _*)
+                  } andThen {
+                  DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceRequest.toWorkspaceName.path))
+                }
               }
             }
           }
         }
       }
     }
+  }
 
   private def withClonedRealm(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Option[ManagedGroupRef]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     // if the source has a realm, the dest must also have that realm or no realm, and the source realm is applied to the destination

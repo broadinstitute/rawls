@@ -48,7 +48,8 @@ object AttributeName {
   val defaultNamespace = "default"
   val libraryNamespace = "library"
   val tagsNamespace = "tag"
-  val validNamespaces = Set(AttributeName.defaultNamespace, AttributeName.libraryNamespace, AttributeName.tagsNamespace)
+  // removed library from the set because these attributes should no longer be set with updateWorkspace
+  val validNamespaces = Set(AttributeName.defaultNamespace, AttributeName.tagsNamespace)
 
   val delimiter = ':'
 
