@@ -429,17 +429,24 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     insertObject(bucketName, s"HttpGoogleServiceDAOSpec-object-${UUID.randomUUID().toString}", "delete me")
 
     Await.result(gcsDAO.deleteBucket(bucketName, bucketDeletionMonitor), Duration.Inf)
-    /*
-     * There's no reason for callers to wait for the result, but there will be 2 Google calls in this case: one to
-     * delete the bucket (which will fail) and one to set the lifecycle rule. Therefore, this test needs to wait
-     * "a little bit" for those operations to complete. 1s seems to be enough.
-     */
-    Thread.sleep(1000)
 
-    val fetchedBucket = Await.result(gcsDAO.getBucket(bucketName), Duration.Inf)
-    val lifecycle = fetchedBucket.get.getLifecycle
-    lifecycle.getRule.length should be (1)
-    val rule = lifecycle.getRule.head
+    /*
+     * There will be 2 Google calls in this case: one to delete the bucket (which will fail) and one to set the
+     * lifecycle rule. deleteBucket doesn't wait for delete to fail before returning and the call to set the lifecycle
+     * rule gets a separate Future. Therefore, waiting on deleteBucket doesn't guarantee that the lifecycle rule has
+     * been set. However, it should happen within a couple of seconds so this test will just wait a little bit.
+     */
+    val rule = Await.result(retryUntilSuccessOrTimeout(failureLogMessage = "Bucket has no lifecycle rules")(1 second, 10 seconds) { () =>
+      val fetchedBucket = Await.result(gcsDAO.getBucket(bucketName), Duration.Inf)
+      val lifecycle = fetchedBucket.get.getLifecycle
+      Option(lifecycle) match {
+        case Some(l) =>
+          l.getRule.length should be (1)
+          Future.successful(l.getRule.head)
+        case None =>
+          Future.failed(new NullPointerException("No lifecycle rules"))
+      }
+    }, Duration.Inf)
     rule.getAction.getType should be ("Delete")
     rule.getCondition.getAge should be (0)
 
