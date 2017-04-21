@@ -16,9 +16,9 @@ trait NotificationsApiService extends HttpService with PerRequestCreator with Us
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
-  //this route does not have the notifications prefix
+  //this route requires UserInfo
   val sendChangeNotificationRoute = requireUserInfo() { userInfo =>
-    path("workspace" / Segment / Segment / "sendChangeNotification") { (namespace, name) =>
+    path("notifications"/ "workspace" / Segment / Segment / "sendChangeNotification") { (namespace, name) =>
       post {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.SendChangeNotification(WorkspaceName(namespace, name)))
