@@ -87,9 +87,9 @@ object Notifications {
     override val description = "Invitation"
   })
 
-  case class WorkspaceChangedNotification(recipientUserId: String, workspaceName: WorkspaceName) extends WorkspaceNotification
+  case class WorkspaceChangedNotification(workspaceName: WorkspaceName) extends WorkspaceNotification
   val WorkspaceChangedNotificationType = register(new WorkspaceNotificationType[WorkspaceChangedNotification] {
-    override val format = jsonFormat2(WorkspaceChangedNotification.apply)
+    override val format = jsonFormat1(WorkspaceChangedNotification.apply)
     override val description = "Workspace changed"
   })
 
