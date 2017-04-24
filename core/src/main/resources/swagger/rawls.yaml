@@ -2082,7 +2082,7 @@ paths:
           schema:
             $ref: '#/definitions/EntityCopyResponse'
         '422':
-          description: Destination workspace must match source's realm, if the source has a realm
+          description: Destination workspace must match source's authorization domain, if the source has one
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
@@ -3246,7 +3246,7 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
         '422':
-          description: Destination workspace must match source's realm, if the dest has a realm
+          description: Destination workspace must match source's authorization domain, if the dest has one
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
@@ -4802,9 +4802,9 @@ definitions:
       name:
         type: string
         description: The name of the workspace
-      realm:
+      authorizationDomain:
         $ref: '#/definitions/ManagedGroupRef'
-        description: An optional realm for the workspace
+        description: An optional Authorization Domain for the workspace
       workspaceId:
         type: string
         description: A UUID associated with the workspace
@@ -4865,9 +4865,9 @@ definitions:
       name:
         type: string
         description: The name of the workspace
-      realm:
+      authorizationDomain:
         $ref: '#/definitions/ManagedGroupRef'
-        description: An optional realm for the workspace
+        description: An optional Authorization Domain for the workspace
       attributes:
         $ref: ''
 

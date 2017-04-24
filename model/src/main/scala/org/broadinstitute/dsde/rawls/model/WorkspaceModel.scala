@@ -74,10 +74,10 @@ object AttributeName {
 }
 
 case class WorkspaceRequest (
-                      namespace: String,
-                      name: String,
-                      realm: Option[ManagedGroupRef],
-                      attributes: AttributeMap
+                              namespace: String,
+                              name: String,
+                              authorizationDomain: Option[ManagedGroupRef],
+                              attributes: AttributeMap
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -87,7 +87,7 @@ case class WorkspaceRequest (
 case class Workspace(
                       namespace: String,
                       name: String,
-                      realm: Option[ManagedGroupRef],
+                      authorizationDomain: Option[ManagedGroupRef],
                       workspaceId: String,
                       bucketName: String,
                       createdDate: DateTime,
