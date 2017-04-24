@@ -78,9 +78,9 @@ trait DriverComponent {
     val uuid = UUID.randomUUID()
 
     if( bits <= 64 ) {
-      f"${uuid.getMostSignificantBits >> (64 - bits) }%x"
+      f"${uuid.getLeastSignificantBits >>> (64 - bits) }%x" //triple >>> for zero-extending bitshift
     } else {
-      f"${uuid.getMostSignificantBits}%x" + f"${uuid.getLeastSignificantBits >> (128-bits)}%x"
+      f"${uuid.getMostSignificantBits}%x" + f"${uuid.getLeastSignificantBits >>> (128-bits)}%x"
     }
   }
 

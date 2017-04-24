@@ -77,6 +77,12 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   }
 
   it should "get a sufficiently random postfix" in {
-    getSufficientlyRandomPostfix()
+    //this corresponds to 16 bits of entropy => 4 characters
+    val sixteenBitPostfix = getSufficientlyRandomPostfix(64, 1.0/32.0)
+    assert( sixteenBitPostfix.length == 4 )
+
+    //one more record should tip us over
+    val seventeenBitPostfix = getSufficientlyRandomPostfix(65, 1.0/32.0)
+    assert( seventeenBitPostfix.length == 5 )
   }
 }
