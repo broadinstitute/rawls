@@ -1394,7 +1394,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(workspace2Request) {
           val ws = runAndWait(workspaceQuery.findByName(workspace2Request.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
         }
 
         Post(s"${workspace2Request.path}/entities", httpJson(z1)) ~>
@@ -1585,7 +1585,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(ManagedGroup.toRef(newRealm))) {
-          responseAs[Workspace].realm
+          responseAs[Workspace].authorizationDomain
         }
       }
 

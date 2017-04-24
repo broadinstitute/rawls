@@ -230,11 +230,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(newWorkspace) {
           val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
         }
         assertResult(newWorkspace) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
@@ -269,7 +269,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -281,11 +281,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(workspaceWithRealm) {
           val ws = runAndWait(workspaceQuery.findByName(workspaceWithRealm.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
         }
         assertResult(workspaceWithRealm) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceWithRealm.path))))) {
@@ -299,7 +299,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -822,7 +822,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -834,15 +834,15 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", workspaceWithRealm.realm, Map.empty)
+    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", workspaceWithRealm.authorizationDomain, Map.empty)
     Post(s"${workspaceWithRealm.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(workspaceWithRealm.realm) {
-          responseAs[Workspace].realm
+        assertResult(workspaceWithRealm.authorizationDomain) {
+          responseAs[Workspace].authorizationDomain
         }
       }
   }
@@ -861,7 +861,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup1),
+      authorizationDomain = Option(realmGroup1),
       Map.empty
     )
 
@@ -897,7 +897,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          responseAs[Workspace].realm
+          responseAs[Workspace].authorizationDomain
         }
       }
 
@@ -911,7 +911,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(ManagedGroup.toRef(realmGroup))) {
-          responseAs[Workspace].realm
+          responseAs[Workspace].authorizationDomain
         }
       }
   }
@@ -922,7 +922,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -960,7 +960,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(ManagedGroupRef(realmGroup.groupName)),
+      authorizationDomain = Option(ManagedGroupRef(realmGroup.groupName)),
       Map.empty
     )
 
@@ -991,7 +991,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -1077,7 +1077,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -1194,7 +1194,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 

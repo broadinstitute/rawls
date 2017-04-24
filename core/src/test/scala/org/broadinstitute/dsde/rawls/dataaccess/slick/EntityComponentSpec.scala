@@ -357,7 +357,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     val workspaceClone = Workspace(
       namespace = testData.wsName.namespace + "Clone",
       name = testData.wsName.name + "Clone",
-      realm = None,
+      authorizationDomain = None,
       workspaceId = UUID.randomUUID.toString,
       bucketName = "anotherBucket",
       createdDate = currentTime(),

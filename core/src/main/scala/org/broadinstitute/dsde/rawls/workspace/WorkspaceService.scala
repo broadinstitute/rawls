@@ -296,7 +296,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }}
 
         //Gather the Google groups to remove, but don't remove project owners group which is used by other workspaces
-        groupRefsToRemove: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.filterKeys(_ != ProjectOwner).values.toSet ++ workspaceContext.workspace.realm.map(_ => workspaceContext.workspace.realmACLs.values).getOrElse(Seq.empty)
+        groupRefsToRemove: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.filterKeys(_ != ProjectOwner).values.toSet ++ workspaceContext.workspace.authorizationDomain.map(_ => workspaceContext.workspace.realmACLs.values).getOrElse(Seq.empty)
         groupsToRemove <- DBIO.sequence(groupRefsToRemove.toSeq.map(groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
 
         // Delete components of the workspace
@@ -405,7 +405,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
         permissionsPairs.map { permissionsPair =>
           workspacesById.get(permissionsPair.workspaceId).map { workspace =>
-            def trueAccessLevel = workspace.realm match {
+            def trueAccessLevel = workspace.authorizationDomain match {
               case None => permissionsPair.accessLevel
               case Some(realm) =>
                 if (realmsForUser.flatten.contains(realm)) permissionsPair.accessLevel
@@ -451,7 +451,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               // add to or replace current attributes, on an individual basis
               val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
 
-              withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
+              withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
                 dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
                   dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                     val inserts = methodConfigShorts.map { methodConfigShort =>
@@ -474,7 +474,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def withClonedRealm(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Option[ManagedGroupRef]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     // if the source has a realm, the dest must also have that realm or no realm, and the source realm is applied to the destination
     // otherwise, the caller may choose to apply a realm
-    (sourceWorkspaceContext.workspace.realm, destWorkspaceRequest.realm) match {
+    (sourceWorkspaceContext.workspace.authorizationDomain, destWorkspaceRequest.authorizationDomain) match {
       case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
         val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot change it to $destRealm when cloning"
         DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
@@ -834,7 +834,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // can't use withClonedRealm because the Realm -> no Realm logic is different
   private def realmCheck(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
     // if the source has a realm, the dest must also have that realm
-    (sourceWorkspaceContext.workspace.realm, destWorkspaceContext.workspace.realm) match {
+    (sourceWorkspaceContext.workspace.authorizationDomain, destWorkspaceContext.workspace.authorizationDomain) match {
       case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
         val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot copy entities to realm $destRealm"
         DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
@@ -1812,7 +1812,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val workspace = Workspace(
         namespace = workspaceRequest.namespace,
         name = workspaceRequest.name,
-        realm = workspaceRequest.realm,
+        authorizationDomain = workspaceRequest.authorizationDomain,
         workspaceId = workspaceId,
         bucketName = googleWorkspaceInfo.bucketName,
         createdDate = currentDate,
@@ -1844,11 +1844,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             // we have already verified that the user is in the realm but the project owners might not be
             // so if there is a realm we have to do the intersection. There should not be any readers or writers
             // at this point (brand new workspace) so we don't need to do intersections for those
-            realmProjectOwnerIntersection <- DBIOUtils.maybeDbAction(workspaceRequest.realm) {
+            realmProjectOwnerIntersection <- DBIOUtils.maybeDbAction(workspaceRequest.authorizationDomain) {
               realm => dataAccess.rawlsGroupQuery.intersectGroupMembership(project.get.groups(ProjectRoles.Owner), realm.toUsersGroupRef)
             }
 
-            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.realm, realmProjectOwnerIntersection))
+            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain, realmProjectOwnerIntersection))
 
             savedWorkspace <- saveNewWorkspace(workspaceId, googleWorkspaceInfo, workspaceRequest, dataAccess)
             response <- op(SlickWorkspaceContext(savedWorkspace))
@@ -1866,7 +1866,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case true =>
         dataAccess.rawlsBillingProjectQuery.load(projectName).flatMap {
           case Some(RawlsBillingProject(_, _, _, CreationStatuses.Ready, _, _)) =>
-            workspaceRequest.realm match {
+            workspaceRequest.authorizationDomain match {
               case Some(realm) => dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUser(userInfo)) flatMap { realmAccesses =>
                 if(realmAccesses.contains(ManagedGroupAccess(realm, ManagedRoles.User))) op
                 else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.usersGroupName.value}] as you do not have access to it.")))
