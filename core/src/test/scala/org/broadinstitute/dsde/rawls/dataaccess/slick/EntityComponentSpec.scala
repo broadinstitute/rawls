@@ -16,13 +16,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   // entity and attribute counts, regardless of deleted status
   def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listEntitiesAllTypes(SlickWorkspaceContext(workspace)))
+    val ents = runAndWait(entityQuery.listEntities(SlickWorkspaceContext(workspace)))
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
   // entity and attribute counts, non-deleted only
   def countActiveEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listActiveEntitiesAllTypes(SlickWorkspaceContext(workspace)))
+    val ents = runAndWait(entityQuery.listActiveEntities(SlickWorkspaceContext(workspace)))
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
@@ -129,7 +129,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "list all entities of all entity types" in withConstantTestDatabase {
     withWorkspaceContext(constantData.workspace) { context =>
-      assertSameElements(constantData.allEntities, runAndWait(entityQuery.listActiveEntitiesAllTypes(context)))
+      assertSameElements(constantData.allEntities, runAndWait(entityQuery.listActiveEntities(context)))
     }
   }
 
@@ -143,7 +143,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "skip deleted entities when listing all entity types with their counts" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      val deleteSamples = entityQuery.findEntityByType(context.workspaceId, "Sample").result flatMap { entityRecs =>
+      val deleteSamples = entityQuery.findActiveEntityByType(context.workspaceId, "Sample").result flatMap { entityRecs =>
         val deleteActions = entityRecs map { rec => entityQuery.hide(context, Seq(rec.toReference)) }
         DBIO.seq(deleteActions:_*)
       }
@@ -385,14 +385,14 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           val c3_updated = Entity("c3", "samples", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3), AttributeName.withDefaultNS("cycle3") -> AttributeEntityReference("samples", "c1")))
 
           runAndWait(entityQuery.save(originalContext, c3_updated))
-          runAndWait(entityQuery.cloneAllEntities(originalContext, cloneContext))
+          runAndWait(entityQuery.copyAllEntities(originalContext, cloneContext))
 
           val expectedEntities = Set(c1, c2, c3_updated)
           assertResult(expectedEntities) {
-            runAndWait(entityQuery.listActiveEntitiesAllTypes(originalContext)).toSet
+            runAndWait(entityQuery.listActiveEntities(originalContext)).toSet
           }
           assertResult(expectedEntities) {
-            runAndWait(entityQuery.listActiveEntitiesAllTypes(cloneContext)).toSet
+            runAndWait(entityQuery.listActiveEntities(cloneContext)).toSet
           }
         }
       }
@@ -421,7 +421,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       constantData.sample8)
 
     withWorkspaceContext(constantData.workspace) { context =>
-      assertSameElements(expected, runAndWait(entityQuery.list(context, "Sample")))
+      assertSameElements(expected, runAndWait(entityQuery.listActiveEntitiesOfType(context, "Sample")))
     }
   }
 
@@ -494,12 +494,12 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
                                 EntityPath(Seq(testData.sset3.toReference, testData.sample6.toReference)))
 
       val expected = sampleSet1Paths ++ sampleSet2Paths ++ sampleSet3Paths
-      assertSameElements(expected, runAndWait(entityQuery.getEntitySubtrees(context, "SampleSet", List("sset1", "sset2", "sset3", "sampleSetDOESNTEXIST"))))
+      assertSameElements(expected, runAndWait(entityQuery.getEntitySubtrees(context, "SampleSet", Set("sset1", "sset2", "sset3", "sampleSetDOESNTEXIST"))))
 
       val individual2Paths = Seq(EntityPath(Seq(testData.indiv2.toReference)),
                                  EntityPath(Seq(testData.indiv2.toReference, testData.sset2.toReference)),
                                  EntityPath(Seq(testData.indiv2.toReference, testData.sset2.toReference, testData.sample2.toReference)))
-      assertSameElements(individual2Paths, runAndWait(entityQuery.getEntitySubtrees(context, "Individual", List("indiv2"))))
+      assertSameElements(individual2Paths, runAndWait(entityQuery.getEntitySubtrees(context, "Individual", Set("indiv2"))))
     }
   }
 
@@ -567,19 +567,19 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         val x2_updated = Entity("x2", "SampleSet", Map(AttributeName.withDefaultNS("child") -> AttributeEntityReference("SampleSet", "x1")))
         runAndWait(entityQuery.save(context2, x2_updated))
 
-        assert(runAndWait(entityQuery.list(context2, "SampleSet")).toList.contains(x1))
-        assert(runAndWait(entityQuery.list(context2, "SampleSet")).toList.contains(x2_updated))
+        assert(runAndWait(entityQuery.listActiveEntitiesOfType(context2, "SampleSet")).toList.contains(x1))
+        assert(runAndWait(entityQuery.listActiveEntitiesOfType(context2, "SampleSet")).toList.contains(x2_updated))
 
         // note: we're copying FROM workspace2 INTO workspace
         assertResult(Seq.empty) {
           runAndWait(entityQuery.getCopyConflicts(context1, Seq(x1, x2_updated).map(_.toReference)))
         }
 
-        assertSameElements(Seq(x1.toReference, x2.toReference), runAndWait(entityQuery.copyEntities(context2, context1, "SampleSet", Seq("x2"), false)).entitiesCopied)
+        assertSameElements(Seq(x1.toReference, x2.toReference), runAndWait(entityQuery.checkAndCopyEntities(context2, context1, "SampleSet", Seq("x2"), false)).entitiesCopied)
 
         //verify it was actually copied into the workspace
-        assert(runAndWait(entityQuery.list(context1, "SampleSet")).toList.contains(x1))
-        assert(runAndWait(entityQuery.list(context1, "SampleSet")).toList.contains(x2_updated))
+        assert(runAndWait(entityQuery.listActiveEntitiesOfType(context1, "SampleSet")).toList.contains(x1))
+        assert(runAndWait(entityQuery.listActiveEntitiesOfType(context1, "SampleSet")).toList.contains(x2_updated))
       }
     }
   }
@@ -615,10 +615,10 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           runAndWait(entityQuery.getCopyConflicts(context1, allEntities.map(_.toReference)))
         }
 
-        assertSameElements(allEntities.map(_.toReference), runAndWait(entityQuery.copyEntities(context2, context1, "test", Seq("a1"), false)).entitiesCopied)
+        assertSameElements(allEntities.map(_.toReference), runAndWait(entityQuery.checkAndCopyEntities(context2, context1, "test", Seq("a1"), false)).entitiesCopied)
 
         //verify it was actually copied into the workspace
-        assertSameElements(allEntities, runAndWait(entityQuery.list(context1, "test")).toSet)
+        assertSameElements(allEntities, runAndWait(entityQuery.listActiveEntitiesOfType(context1, "test")).toSet)
       }
     }
 
@@ -632,11 +632,11 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         }
 
         assertResult(Set(EntityHardConflict(testData.sample1.entityType, testData.sample1.name))) {
-          runAndWait(entityQuery.copyEntities(context, context, "Sample", Seq("sample1"), false)).hardConflicts.toSet
+          runAndWait(entityQuery.checkAndCopyEntities(context, context, "Sample", Seq("sample1"), false)).hardConflicts.toSet
         }
 
         //verify that it wasn't copied into the workspace again
-        assert(runAndWait(entityQuery.list(context, "Sample")).toList.filter(entity => entity == testData.sample1).size == 1)
+        assert(runAndWait(entityQuery.listActiveEntitiesOfType(context, "Sample")).toList.filter(entity => entity == testData.sample1).size == 1)
       }
 
   }
@@ -655,21 +655,21 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         runAndWait(entityQuery.save(context3, sample1))
 
         assertResult(List()){
-          runAndWait(entityQuery.list(context2, "sample")).toList
+          runAndWait(entityQuery.listActiveEntitiesOfType(context2, "sample")).toList
         }
 
         assertResult(List(participant1)){
-          runAndWait(entityQuery.list(context2, "participant")).toList
+          runAndWait(entityQuery.listActiveEntitiesOfType(context2, "participant")).toList
         }
 
-        runAndWait(entityQuery.copyEntities(context3, context2, "sample", Seq("sample1"), true))
+        runAndWait(entityQuery.checkAndCopyEntities(context3, context2, "sample", Seq("sample1"), true))
 
         assertResult(List(sample1)){
-          runAndWait(entityQuery.list(context2, "sample")).toList
+          runAndWait(entityQuery.listActiveEntitiesOfType(context2, "sample")).toList
         }
 
         assertResult(List(participant1)){
-          runAndWait(entityQuery.list(context2, "participant")).toList
+          runAndWait(entityQuery.listActiveEntitiesOfType(context2, "participant")).toList
         }
 
       }

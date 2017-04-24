@@ -291,7 +291,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   }
 
   def listWorkflowEntitiesById(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadAction[scala.collection.Map[Long, Entity]] = {
-    dataAccess.entityQuery.listByIds(workflowsWithOutputs.map { case (workflowRec, outputs) => workflowRec.workflowEntityId }).map(_.toMap)
+    dataAccess.entityQuery.getEntities(workflowsWithOutputs.map { case (workflowRec, outputs) => workflowRec.workflowEntityId }).map(_.toMap)
   }
 
   def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {

@@ -4,7 +4,7 @@ package org.broadinstitute.dsde.rawls.expressions
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ExprEvalRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -138,7 +138,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "this.samples.library:chapter"))
       }
 
-      val resultsByType = runAndWait(entityQuery.findEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
+      val resultsByType = runAndWait(entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
         ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
           evaluator.evalFinalAttribute(workspaceContext, "this.library:chapter")
         }
@@ -180,7 +180,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
         "sample8" -> TrySuccess(Seq(AttributeString("tumor"))))
 
       assertResult(allTheTypes) { runAndWait(
-        entityQuery.findEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
+        entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
           ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, "this.type")
           }
@@ -198,7 +198,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
         "sample8" -> TrySuccess(Seq()))
 
       assertResult(allTheTumorTypes) { runAndWait(
-        entityQuery.findEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
+        entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
           ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, "this.tumortype")
           }
@@ -598,7 +598,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   test("extra data in entity attribute temp table should not mess things up") {
     withTestWorkspace { workspaceContext =>
       val action = for {
-        entityRecs <- this.entityQuery.findEntityByWorkspace(workspaceContext.workspaceId).result
+        entityRecs <- this.entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceId).result
         extraScratchRecord = ExprEvalRecord(entityRecs.tail.head.id, entityRecs.tail.head.name, "not a transaction id")
         _ <- this.exprEvalQuery += extraScratchRecord
         result <- evalFinalAttribute(workspaceContext, entityRecs.head.entityType, entityRecs.head.name, "this.name").transactionally

@@ -178,7 +178,7 @@ trait WorkflowComponent {
       }
 
       for {
-        entityRecs <- entityQuery.lookupEntitiesByNames(workspaceContext.workspaceId, workflows.map(_.workflowEntity))
+        entityRecs <- entityQuery.getEntityRecords(workspaceContext.workspaceId, workflows.map(_.workflowEntity).toSet)
         workflowRecsByEntity <- insertWorkflowRecs(submissionId, workflows, entityRecs)
         inputResolutionRecs <- insertInputResolutionRecs(submissionId, workflows, workflowRecsByEntity)
         _ <- insertInputResolutionAttributes(workflows, inputResolutionRecs)

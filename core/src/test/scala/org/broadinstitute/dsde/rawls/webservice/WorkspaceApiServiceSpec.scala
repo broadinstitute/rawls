@@ -420,7 +420,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // check that length of result is > 0:
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(entityQuery.findEntityByWorkspace(workspaceContext.workspaceId).length.result) > 0
+        runAndWait(entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceId).length.result) > 0
       }
     }
     // delete the workspace
@@ -434,7 +434,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // now you should have no entities listed
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(entityQuery.findEntityByWorkspace(workspaceContext.workspaceId).length.result) == 0
+        runAndWait(entityQuery.findActiveEntityByWorkspace(workspaceContext.workspaceId).length.result) == 0
       }
     }
   }
@@ -649,8 +649,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
           withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
             //Name, namespace, creation date, and owner might change, so this is all that remains.
-            assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
-              runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntities(copiedWorkspaceContext)).toSet
             }
             assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
               runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
@@ -673,7 +673,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val mcToDelete = testData.methodConfig.toShort
     withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
       assert {
-        runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSeq.contains(entToDelete)
+        runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSeq.contains(entToDelete)
       }
       assert {
           runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).contains(mcToDelete)
@@ -683,7 +683,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       runAndWait(entityQuery.hide(sourceWorkspaceContext, Seq(entToDelete.toReference)))
 
       assert {
-        !runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSeq.contains(entToDelete)
+        !runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSeq.contains(entToDelete)
       }
       assert {
         !runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).contains(mcToDelete)
@@ -704,8 +704,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
             // Name, namespace, creation date, and owner might change, so this is all that remains.
 
-            val srcEnts = runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext))
-            val copiedEnts = runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext))
+            val srcEnts = runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext))
+            val copiedEnts = runAndWait(entityQuery.listActiveEntities(copiedWorkspaceContext))
             assertSameElements(srcEnts, copiedEnts)
 
             val srcMCs = runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext))
@@ -765,8 +765,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
           withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
             //Name, namespace, creation date, and owner might change, so this is all that remains.
-            assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
-              runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntities(copiedWorkspaceContext)).toSet
             }
             assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
               runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
@@ -800,8 +800,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
           withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
             //Name, namespace, creation date, and owner might change, so this is all that remains.
-            assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
-              runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntities(copiedWorkspaceContext)).toSet
             }
             assertResult(runAndWait(methodConfigurationQuery.listActive(sourceWorkspaceContext)).toSet) {
               runAndWait(methodConfigurationQuery.listActive(copiedWorkspaceContext)).toSet
