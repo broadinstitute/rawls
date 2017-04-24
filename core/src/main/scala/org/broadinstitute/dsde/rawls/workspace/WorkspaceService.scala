@@ -645,20 +645,22 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def sendChangeNotification(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
 
-    def getEmails = {
+    def getUserEmails = {
       dataSource.inTransaction{ dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) {workspaceContext =>
-          dataAccess.workspaceQuery.listEmailsAndAccessLevel(workspaceContext)
+          DBIO.sequence(workspaceContext.workspace.accessLevels.values.map { group =>
+            dataAccess.rawlsGroupQuery.flattenGroupMembership(group)
+          }.map(_.map(user => userInfo.userEmail)))
         }
       }
     }
-
     for {
-      emails <- getEmails
+      emails <- getUserEmails
     } yield {
-      val notificationMessages = emails.map(_._1).map(email => Notifications.WorkspaceChangedNotification(email, workspaceName))
+      val notificationMessages = emails.map(email => Notifications.WorkspaceChangedNotification(email, workspaceName))
       notificationDAO.fireAndForgetNotifications(notificationMessages)
     }
+
   }
 
   private def updateCatalogPermissions(catalogUpdates: Seq[WorkspaceCatalog], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[WorkspaceCatalogUpdateResponseList] = {
