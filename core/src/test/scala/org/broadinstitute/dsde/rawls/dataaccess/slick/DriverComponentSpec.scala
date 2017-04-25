@@ -76,6 +76,11 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  //base64 represents every six bits with one character. but we round up our input number of bits to the nearest 8, so:
+  def expectedStringLength(bits: Int): Int = {
+    Math.ceil(Math.ceil(bits/8.0)*8.0/6.0).toInt
+  }
+
   it should "get a sufficiently random postfix" in {
     //this corresponds to 16 bits of entropy if my math is right
     assert( getNumberOfBitsForSufficientRandomness(64, 1.0/32.0) == 16)
@@ -88,11 +93,10 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     //2^30 is close to 1 in a billion: 1073741824
     assert(getNumberOfBitsForSufficientRandomness(17179869184L, 1.0/1073741824) == 97)
 
-    //fact: base64 represents every six bits with one character. but we round up to the nearest byte, ergo:
-    // (ceil(ceil(bits/8)*8/6), essentially
-    assert(getRandomStringWithThisManyBitsOfEntropy(2).length == 2)
-    assert(getRandomStringWithThisManyBitsOfEntropy(8).length == 2)
-    assert(getRandomStringWithThisManyBitsOfEntropy(9).length == 3)
-    assert(getRandomStringWithThisManyBitsOfEntropy(59).length == 11)
+    //test that the properties of the random string hold as expected
+    assert(getRandomStringWithThisManyBitsOfEntropy(2).length == expectedStringLength(2))
+    assert(getRandomStringWithThisManyBitsOfEntropy(8).length == expectedStringLength(8))
+    assert(getRandomStringWithThisManyBitsOfEntropy(9).length == expectedStringLength(9))
+    assert(getRandomStringWithThisManyBitsOfEntropy(59).length == expectedStringLength(59))
   }
 }
