@@ -89,8 +89,8 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assert(getNumberOfBitsForSufficientRandomness(65, 1.0/32.0) == 17)
 
     //check we don't overflow when we have a ton of records:
-    //2^34 records! 17179869184
-    //2^30 is close to 1 in a billion: 1073741824
+    //2^34 records ~17bn! 17,179,869,184
+    //2^30 is close to 1 in a billion: 1,073,741,824
     assert(getNumberOfBitsForSufficientRandomness(17179869184L, 1.0/1073741824) == 97)
 
     //test that the properties of the random string hold as expected
