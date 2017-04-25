@@ -116,8 +116,8 @@ trait DriverComponent {
     getRandomStringWithThisManyBitsOfEntropy(bits)
   }
 
-  def renameForHiding(recordCount: Long, name: String, desiredCollisionProbability: Double = 0.000000001): String = {
-    name + "_" + getSufficientlyRandomSuffix(recordCount, desiredCollisionProbability)
+  def renameForHiding(recordCount: Long, name: String): String = {
+    name + "_" + getSufficientlyRandomSuffix(recordCount)
   }
 }
 
