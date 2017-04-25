@@ -65,7 +65,7 @@ object WorkspaceService {
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UpdateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate], inviteUsersNotFound: Boolean) extends WorkspaceServiceMessage
-  case class SendChangeNotification(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class SendChangeNotifications(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class GetCatalog(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UpdateCatalog(workspaceName: WorkspaceName, catalogUpdates: Seq[WorkspaceCatalog]) extends WorkspaceServiceMessage
   case class LockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -145,7 +145,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case CloneWorkspace(sourceWorkspace, destWorkspaceRequest) => pipe(cloneWorkspace(sourceWorkspace, destWorkspaceRequest)) to sender
     case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
     case UpdateACL(workspaceName, aclUpdates, inviteUsersNotFound) => pipe(updateACL(workspaceName, aclUpdates, inviteUsersNotFound)) to sender
-    case SendChangeNotification(workspaceName) => pipe(sendChangeNotification(workspaceName)) to sender
+    case SendChangeNotifications(workspaceName) => pipe(sendChangeNotifications(workspaceName)) to sender
     case GetCatalog(workspaceName) => pipe(getCatalog(workspaceName)) to sender
     case UpdateCatalog(workspaceName, catalogUpdates) => pipe(updateCatalog(workspaceName, catalogUpdates)) to sender
     case LockWorkspace(workspaceName: WorkspaceName) => pipe(lockWorkspace(workspaceName)) to sender
@@ -643,14 +643,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def sendChangeNotification(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+  def sendChangeNotifications(workspaceName: WorkspaceName) = {
 
     def getUserEmails = {
       dataSource.inTransaction{ dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) {workspaceContext =>
-          DBIO.sequence(workspaceContext.workspace.accessLevels.values.map { group =>
-            dataAccess.rawlsGroupQuery.flattenGroupMembership(group)
-          }.map(_.map(user => userInfo.userEmail)))
+          requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Write, dataAccess) {
+            DBIO.sequence(workspaceContext.workspace.accessLevels.values.map { group =>
+              dataAccess.rawlsGroupQuery.flattenGroupMembership(group)
+            }.map(_.map(user => userInfo.userEmail)))
+          }
         }
       }
     }

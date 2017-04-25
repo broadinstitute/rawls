@@ -1,30 +1,16 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.model.{Notifications, UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{Notifications, WorkspaceName}
 import org.broadinstitute.dsde.rawls.model.Notifications.{NotificationType, WorkspaceNotification, WorkspaceNotificationType}
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import spray.routing.HttpService
 import spray.httpx.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
 
-import scala.concurrent.ExecutionContext
 /**
  * Created by dvoet on 3/28/17.
  */
-trait NotificationsApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
-  implicit val executionContext: ExecutionContext
+trait NotificationsApiService extends HttpService {
 
-  val workspaceServiceConstructor: UserInfo => WorkspaceService
-  //this route requires UserInfo
-  val sendChangeNotificationRoute = requireUserInfo() { userInfo =>
-    path("notifications"/ "workspace" / Segment / Segment / "sendChangeNotification") { (namespace, name) =>
-      post {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.SendChangeNotification(WorkspaceName(namespace, name)))
-      }
-    }
-  }
   val notificationsRoutes = pathPrefix("notifications") {
     path("workspace" / Segment / Segment) { (namespace, name) =>
       get {

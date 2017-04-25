@@ -3834,8 +3834,8 @@ paths:
             - openid
             - email
             - profile
-  '/api/notifications/workspace/{workspaceNamespace}/{workspaceName}/sendChangeNotification':
-    get:
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/sendChangeNotification':
+    post:
       responses:
         200:
           description: Success
@@ -3851,8 +3851,8 @@ paths:
           required: true
           type: string
       tags:
-        - notifications
-      summary: Send Notification of data added to ACL
+        - workspaces
+      summary: Send Notification of data added to Workspace
       operationId: sendChangeNotification
       security:
         - authorization:
