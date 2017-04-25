@@ -77,12 +77,22 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   }
 
   it should "get a sufficiently random postfix" in {
-    //this corresponds to 16 bits of entropy => 4 characters
-    val sixteenBitPostfix = getSufficientlyRandomPostfix(64, 1.0/32.0)
-    assert( sixteenBitPostfix.length == 4 )
+    //this corresponds to 16 bits of entropy if my math is right
+    assert( getNumberOfBitsForSufficientRandomness(64, 1.0/32.0) == 16)
 
     //one more record should tip us over
-    val seventeenBitPostfix = getSufficientlyRandomPostfix(65, 1.0/32.0)
-    assert( seventeenBitPostfix.length == 5 )
+    assert(getNumberOfBitsForSufficientRandomness(65, 1.0/32.0) == 17)
+
+    //check we don't overflow when we have a ton of records:
+    //2^34 records! 17179869184
+    //2^30 is close to 1 in a billion: 1073741824
+    assert(getNumberOfBitsForSufficientRandomness(17179869184L, 1.0/1073741824) == 97)
+
+    //fact: base64 represents every six bits with one character. but we round up to the nearest byte, ergo:
+    // (ceil(ceil(bits/8)*8/6), essentially
+    assert(getRandomStringWithThisManyBitsOfEntropy(2).length == 2)
+    assert(getRandomStringWithThisManyBitsOfEntropy(8).length == 2)
+    assert(getRandomStringWithThisManyBitsOfEntropy(9).length == 3)
+    assert(getRandomStringWithThisManyBitsOfEntropy(59).length == 11)
   }
 }
