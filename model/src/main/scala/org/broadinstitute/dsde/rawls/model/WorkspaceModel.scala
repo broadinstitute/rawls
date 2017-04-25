@@ -206,7 +206,8 @@ case class MethodConfiguration(
                    outputs: Map[String, AttributeString],
                    methodRepoMethod: MethodRepoMethod,
                    methodConfigVersion: Int = 1,
-                   deleted: Boolean = false
+                   deleted: Boolean = false,
+                   deletedDate: Option[DateTime] = None
                    ) {
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ): String = workspaceName.path+s"/methodconfigs/${namespace}/${name}"
@@ -409,7 +410,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod)
 
-  implicit val MethodConfigurationFormat = jsonFormat9(MethodConfiguration)
+  implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
 
   implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
 

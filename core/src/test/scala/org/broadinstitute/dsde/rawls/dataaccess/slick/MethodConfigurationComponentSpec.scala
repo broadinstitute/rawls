@@ -124,5 +124,10 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     assertResult(Some(true)) {
       deletedMethod.map(_.deleted)
     }
+
+    //Check that the deleted method dumped a timestamp in the deleted timestamp
+    assertResult(Some(true)) {
+      deletedMethod.map(_.deletedDate.isDefined)
+    }
   }
 }

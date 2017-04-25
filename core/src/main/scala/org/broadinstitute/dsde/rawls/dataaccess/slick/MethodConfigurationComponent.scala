@@ -1,9 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
+import java.sql.Timestamp
+import java.util.{Date, UUID}
 
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
+import org.joda.time.DateTime
 import slick.driver.JdbcDriver
 
 case class MethodConfigurationRecord(id: Long,
@@ -15,7 +17,8 @@ case class MethodConfigurationRecord(id: Long,
                                      methodName: String,
                                      methodVersion: Int,
                                      methodConfigVersion: Int,
-                                     deleted: Boolean)
+                                     deleted: Boolean,
+                                     deletedDate: Option[Timestamp])
 
 case class MethodConfigurationInputRecord(methodConfigId: Long, id: Long, key: String, value: String)
 
@@ -39,8 +42,9 @@ trait MethodConfigurationComponent {
     def methodVersion = column[Int]("METHOD_VERSION")
     def methodConfigVersion = column[Int]("METHOD_CONFIG_VERSION")
     def deleted = column[Boolean]("DELETED")
+    def deletedDate = column[Option[Timestamp]]("deleted_date")
 
-    def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion, methodConfigVersion, deleted) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
+    def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion, methodConfigVersion, deleted, deletedDate) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
 
     def workspace = foreignKey("FK_MC_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def namespaceNameIdx = index("IDX_CONFIG", (workspaceId, namespace, name, methodConfigVersion), unique = true)
@@ -171,8 +175,9 @@ trait MethodConfigurationComponent {
     }
 
     def hideMethodConfigurationAction(id: Long, methodConfigName: String): ReadWriteAction[Int] = {
-      findById(id).map(rec => (rec.deleted, rec.name))
-        .update(true, renameForHiding(id, methodConfigName))
+      val currentTime = new Timestamp(new Date().getTime)
+      findById(id).map(rec => (rec.deleted, rec.name, rec.deletedDate))
+        .update(true, renameForHiding(id, methodConfigName), Some(currentTime))
     }
 
     // performs actual deletion (not hiding) of everything that depends on a method configuration
@@ -279,11 +284,11 @@ trait MethodConfigurationComponent {
      */
 
     private def marshalMethodConfig(workspaceId: UUID, methodConfig: MethodConfiguration) = {
-      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, methodConfig.methodConfigVersion, methodConfig.deleted)
+      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, methodConfig.methodConfigVersion, methodConfig.deleted, methodConfig.deletedDate.map( d => new Timestamp(d.getMillis)))
     }
 
     def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], prereqs: Map[String, AttributeString]): MethodConfiguration = {
-      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, prereqs, inputs, outputs, MethodRepoMethod(methodConfigRec.methodNamespace, methodConfigRec.methodName, methodConfigRec.methodVersion), methodConfigRec.methodConfigVersion, methodConfigRec.deleted)
+      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, prereqs, inputs, outputs, MethodRepoMethod(methodConfigRec.methodNamespace, methodConfigRec.methodName, methodConfigRec.methodVersion), methodConfigRec.methodConfigVersion, methodConfigRec.deleted, methodConfigRec.deletedDate.map(ts => new DateTime(ts)))
     }
 
     private def unmarshalMethodConfigToShort(methodConfigRec: MethodConfigurationRecord): MethodConfigurationShort = {

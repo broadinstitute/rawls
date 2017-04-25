@@ -216,9 +216,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val id2 = 2   // arbitrary
 
       // count distinct misses rows with null columns, like this one
-      runAndWait(entityQuery += EntityRecord(id1, "test1", "null_attrs_type", context.workspaceId, 0, None, deleted = false))
+      runAndWait(entityQuery += EntityRecord(id1, "test1", "null_attrs_type", context.workspaceId, 0, None, deleted = false, None))
 
-      runAndWait(entityQuery += EntityRecord(id2, "test2", "blank_attrs_type", context.workspaceId, 0, Some(""), deleted = false))
+      runAndWait(entityQuery += EntityRecord(id2, "test2", "blank_attrs_type", context.workspaceId, 0, Some(""), deleted = false, None))
 
       val desiredTypeMetadata = Map[String, EntityTypeMetadata](
         "null_attrs_type" -> EntityTypeMetadata(1, "null_attrs_type_id", Seq()),

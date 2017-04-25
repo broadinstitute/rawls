@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
+import java.sql.Timestamp
+import java.util.{Date, UUID}
 
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, model}
@@ -14,7 +15,14 @@ import spray.http.StatusCodes
 /**
  * Created by dvoet on 2/4/16.
  */
-case class EntityRecord(id: Long, name: String, entityType: String, workspaceId: UUID, recordVersion: Long, allAttributeValues: Option[String], deleted: Boolean) {
+case class EntityRecord(id: Long,
+                        name: String,
+                        entityType: String,
+                        workspaceId: UUID,
+                        recordVersion: Long,
+                        allAttributeValues: Option[String],
+                        deleted: Boolean,
+                        deletedDate: Option[Timestamp]) {
   def toReference = AttributeEntityReference(entityType, name)
 }
 
@@ -33,11 +41,12 @@ trait EntityComponent {
     def version = column[Long]("record_version")
     def allAttributeValues = column[Option[String]]("all_attribute_values")
     def deleted = column[Boolean]("deleted")
+    def deletedDate = column[Option[Timestamp]]("deleted_date")
 
     def workspace = foreignKey("FK_ENTITY_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def uniqueTypeName = index("idx_entity_type_name", (workspaceId, entityType, name), unique = true)
 
-    def * = (id, name, entityType, workspaceId, version, allAttributeValues, deleted) <> (EntityRecord.tupled, EntityRecord.unapply)
+    def * = (id, name, entityType, workspaceId, version, allAttributeValues, deleted, deletedDate) <> (EntityRecord.tupled, EntityRecord.unapply)
   }
 
   object entityQuery extends TableQuery(new EntityTable(_)) {
@@ -49,10 +58,10 @@ trait EntityComponent {
 
     private object EntityRecordRawSqlQuery extends RawSqlQuery {
       val driver: JdbcDriver = EntityComponent.this.driver
-      implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<) }
+      implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<, r.<<) }
 
       def action(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
-        val baseSelect = sql"select id, name, entity_type, workspace_id, record_version, deleted from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
+        val baseSelect = sql"select id, name, entity_type, workspace_id, record_version, deleted, deleted_date from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
         concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
       }
@@ -67,16 +76,16 @@ trait EntityComponent {
       // tells slick how to convert a result row from a raw sql query to an instance of EntityAndAttributesResult
       implicit val getEntityAndAttributesResult = GetResult { r =>
         // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
-        val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<)
+        val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<, r.<<)
 
         val attributeIdOption: Option[Long] = r.<<
-        val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+        val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
         val refEntityRecOption = for {
           attributeRec <- attributeRecOption
           refId <- attributeRec.valueEntityRef
         } yield {
-          EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<)
+          EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<, r.<<)
         }
 
         EntityAndAttributesResult(entityRec, attributeRecOption, refEntityRecOption)
@@ -84,9 +93,9 @@ trait EntityComponent {
 
       // the where clause for this query is filled in specific to the use case
       val baseEntityAndAttributeSql =
-        s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted,
-          a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted,
-          e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted
+        s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
+          a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
+          e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
           from ENTITY e
           left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id and a.deleted = e.deleted
           left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
@@ -419,11 +428,13 @@ trait EntityComponent {
     }
 
     private def hideEntityAttribute(attrRec: EntityAttributeRecord): WriteAction[Int] = {
-      entityAttributeQuery.filter(_.id === attrRec.id).map(rec => (rec.deleted, rec.name)).update(true, renameForHiding(attrRec.id, attrRec.name))
+      val currentTime = new Timestamp(new Date().getTime)
+      entityAttributeQuery.filter(_.id === attrRec.id).map(rec => (rec.deleted, rec.name, rec.deletedDate)).update(true, renameForHiding(attrRec.id, attrRec.name), Option(currentTime))
     }
 
     private def hideEntityAction(entRec: EntityRecord): WriteAction[Int] = {
-      findEntityById(entRec.id).map(rec => (rec.deleted, rec.name)).update(true, renameForHiding(entRec.id, entRec.name))
+      val currentTime = new Timestamp(new Date().getTime)
+      findEntityById(entRec.id).map(rec => (rec.deleted, rec.name, rec.deletedDate)).update(true, renameForHiding(entRec.id, entRec.name), Option(currentTime))
     }
 
     // perform actual deletion (not hiding) of all entities in a workspace
@@ -621,7 +632,7 @@ trait EntityComponent {
     // Marshal/Unmarshal methods
 
     private def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecord = {
-      EntityRecord(0, entity.name, entity.entityType, workspaceId, 0, createAllAttributesString(entity), deleted = false)
+      EntityRecord(0, entity.name, entity.entityType, workspaceId, 0, createAllAttributesString(entity), deleted = false, deletedDate = None)
     }
 
     private def unmarshalEntity(entityRecord: EntityRecord, attributes: AttributeMap): Entity = {
