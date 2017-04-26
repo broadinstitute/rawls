@@ -194,7 +194,7 @@ trait WorkspaceComponent {
     private def insertOrUpdateAccessRecords(workspace: Workspace): WriteAction[Int] = {
       val id = UUID.fromString(workspace.workspaceId)
       val accessRecords = workspace.accessLevels.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, false) }
-      val realmAclRecords = workspace.realmACLs.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, true) }
+      val realmAclRecords = workspace.authDomainACLs.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, true) }
       DBIO.sequence((accessRecords ++ realmAclRecords).map { workspaceAccessQuery insertOrUpdate }).map(_.sum)
     }
 

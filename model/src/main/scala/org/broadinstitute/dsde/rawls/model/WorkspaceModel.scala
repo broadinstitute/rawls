@@ -95,7 +95,7 @@ case class Workspace(
                       createdBy: String,
                       attributes: AttributeMap,
                       accessLevels: Map[WorkspaceAccessLevel, RawlsGroupRef],
-                      realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef],
+                      authDomainACLs: Map[WorkspaceAccessLevel, RawlsGroupRef],
                       isLocked: Boolean = false
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
