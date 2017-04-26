@@ -6,7 +6,7 @@ import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException, InputStreamContent}
-import com.google.api.services.admin.directory.model.Member
+import com.google.api.services.admin.directory.model.{Group, Member}
 import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
@@ -33,6 +33,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperat
 
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
+import scala.util.Try
 
 class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with Retry with TestDriverComponent with BeforeAndAfterAll with LazyLogging {
 
@@ -54,7 +55,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     gcsConfig.getString("billingPemEmail"),
     gcsConfig.getString("pathToBillingPem"),
     gcsConfig.getString("billingEmail"),
-    gcsConfig.getInt("bucketLogsMaxAge")
+    gcsConfig.getInt("bucketLogsMaxAge"),
+    2
   )
 
   slickDataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
@@ -547,6 +549,36 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       }
     }
     caught.getMessage should be("Not Available")
+  }
+
+  it should "recursively list group members" in {
+    val directory = gcsDAO.getGroupDirectory
+    val groupEmail = s"recursivetest@${gcsConfig.getString("appsDomain")}"
+    val groupEmailSingle = s"recursivetestsingle@${gcsConfig.getString("appsDomain")}"
+
+    Try { directory.groups().insert(new Group().setEmail(groupEmail)).execute() }
+    Try { directory.groups().insert(new Group().setEmail(groupEmailSingle)).execute() }
+
+    val emails = for (x <- 1 to 20) yield {
+      val userEmail = s"foo$x@bar.com"
+      Await.ready(gcsDAO.addEmailToGoogleGroup(groupEmail, userEmail), Duration.Inf)
+      userEmail
+    }
+
+    val singleUserEmail = "foo@bar.com"
+    Await.ready(gcsDAO.addEmailToGoogleGroup(groupEmailSingle, singleUserEmail), Duration.Inf)
+
+    assertResult(emails.toSet) {
+      Await.result(gcsDAO.listGroupMembers(RawlsGroup(null, RawlsGroupEmail(groupEmail), Set.empty, Set.empty)), Duration.Inf).get.keySet
+    }
+
+    assertResult(Set(singleUserEmail)) {
+      Await.result(gcsDAO.listGroupMembers(RawlsGroup(null, RawlsGroupEmail(groupEmailSingle), Set.empty, Set.empty)), Duration.Inf).get.keySet
+    }
+
+    assertResult(None) {
+      Await.result(gcsDAO.listGroupMembers(RawlsGroup(null, RawlsGroupEmail(s"doesnotexist@${gcsConfig.getString("appsDomain")}"), Set.empty, Set.empty)), Duration.Inf)
+    }
   }
 
 

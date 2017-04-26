@@ -67,7 +67,8 @@ class HttpGoogleServicesDAO(
   billingPemEmail: String,
   billingPemFile: String,
   val billingEmail: String,
-  bucketLogsMaxAge: Int)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport with LazyLogging with GoogleUtilities {
+  bucketLogsMaxAge: Int,
+  maxPageSize: Int = 200)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport with LazyLogging with GoogleUtilities {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
   val API_SERVICE_MANAGEMENT = "ServiceManagement"
@@ -451,18 +452,48 @@ class HttpGoogleServicesDAO(
   }
 
   private def listGroupMembersInternal(groupName: String): Future[Option[Seq[String]]] = {
-    val fetcher = getGroupDirectory.members.list(groupName)
-    retryWithRecoverWhen500orGoogleError(() => {
-      val result = blocking {
-        executeGoogleRequest(fetcher).getMembers
-      }
+    val fetcher = getGroupDirectory.members.list(groupName).setMaxResults(maxPageSize)
 
-      Option(result) match {
-        case None => Option(Seq.empty)
-        case Some(list) => Option(list.map(_.getEmail))
+    listGroupMembersRecursive(fetcher) map { pagesOption =>
+      pagesOption.map { pages =>
+        pages.toSeq.flatMap { page =>
+          Option(page.getMembers) match {
+            case None => Seq.empty
+            case Some(members) => members.map(_.getEmail)
+          }
+        }
       }
-    }) {
-      case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
+    }
+  }
+
+  /**
+   * recursive because the call to list all members is paginated.
+   * @param fetcher
+   * @param accumulated the accumulated Members objects, 1 for each page, the head element is the last prior request
+   *                    for easy retrieval. The initial state is Some(Nil). This is what is eventually returned. This
+   *                    is None when the group does not exist.
+   * @return None if the group does not exist or a Members object for each page.
+   */
+  private def listGroupMembersRecursive(fetcher: Directory#Members#List, accumulated: Option[List[Members]] = Some(Nil)): Future[Option[List[Members]]] = {
+    accumulated match {
+      // when accumulated has a Nil list then this must be the first request
+      case Some(Nil) => retryWithRecoverWhen500orGoogleError(() => {
+        blocking {
+          Option(executeGoogleRequest(fetcher))
+        }
+      }) {
+        case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
+      }.flatMap(firstPage => listGroupMembersRecursive(fetcher, firstPage.map(List(_))))
+
+      // the head is the Members object of the prior request which contains next page token
+      case Some(head :: xs) if head.getNextPageToken != null => retryWhen500orGoogleError(() => {
+        blocking {
+          executeGoogleRequest(fetcher.setPageToken(head.getNextPageToken))
+        }
+      }).flatMap(nextPage => listGroupMembersRecursive(fetcher, accumulated.map(pages => nextPage :: pages)))
+
+      // when accumulated is None (group does not exist) or next page token is null
+      case _ => Future.successful(accumulated)
     }
   }
 
