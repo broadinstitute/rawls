@@ -1065,7 +1065,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
-    val workspaceGroupRefs = (testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values) - testData.workspace.accessLevels(ProjectOwner)
+    val workspaceGroupRefs = (testData.workspace.accessLevels.values.toSet ++ testData.workspace.authDomainACLs.values) - testData.workspace.accessLevels(ProjectOwner)
     workspaceGroupRefs foreach { case groupRef =>
       assertResult(Option(groupRef)) {
         runAndWait(rawlsGroupQuery.load(groupRef)) map RawlsGroup.toRef

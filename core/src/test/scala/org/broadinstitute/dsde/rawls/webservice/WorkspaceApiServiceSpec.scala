@@ -488,7 +488,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
-    val workspaceGroupRefs = (testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values) - testData.workspace.accessLevels(ProjectOwner)
+    val workspaceGroupRefs = (testData.workspace.accessLevels.values.toSet ++ testData.workspace.authDomainACLs.values) - testData.workspace.accessLevels(ProjectOwner)
     workspaceGroupRefs foreach { case groupRef =>
       assertResult(Option(groupRef)) {
         runAndWait(rawlsGroupQuery.load(groupRef)) map RawlsGroup.toRef
@@ -1014,7 +1014,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(false){
-      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws1.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //add userWriter to realm
@@ -1031,10 +1031,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(true){
-      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws2.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
     assertResult(true){
-      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Owner))).get.users.contains(RawlsUserRef(testData.userOwner.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws2.authDomainACLs(WorkspaceAccessLevels.Owner))).get.users.contains(RawlsUserRef(testData.userOwner.userSubjectId))
     }
 
     //remove userWriter from realm
@@ -1051,7 +1051,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws3 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(false){
-      runAndWait(rawlsGroupQuery.load(ws3.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws3.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -1151,7 +1151,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(true) {
-      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws1.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //remove userWriter from group A
@@ -1168,7 +1168,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(false) {
-      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws2.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -1266,7 +1266,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(true) {
-      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws1.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //remove userWriter from group C
@@ -1283,7 +1283,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(false) {
-      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws2.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -1973,7 +1973,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(expected) {
-          ws.realmACLs
+          ws.authDomainACLs
         }
       }
   }
@@ -2017,7 +2017,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(expectedIntersectionGroups(ws.workspaceId)) {
-          ws.realmACLs
+          ws.authDomainACLs
         }
       }
   }

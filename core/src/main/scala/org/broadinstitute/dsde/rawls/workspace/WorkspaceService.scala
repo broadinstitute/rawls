@@ -228,7 +228,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def getMaximumAccessLevel(user: RawlsUser, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[WorkspaceAccessLevel] = {
-    val accessLevels = workspaceContext.workspace.realmACLs.map { case (accessLevel, groupRef) =>
+    val accessLevels = workspaceContext.workspace.authDomainACLs.map { case (accessLevel, groupRef) =>
       dataAccess.rawlsGroupQuery.loadGroupIfMember(groupRef, user).map {
         case Some(_) => accessLevel
         case None => WorkspaceAccessLevels.NoAccess
@@ -296,7 +296,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }}
 
         //Gather the Google groups to remove, but don't remove project owners group which is used by other workspaces
-        groupRefsToRemove: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.filterKeys(_ != ProjectOwner).values.toSet ++ workspaceContext.workspace.authorizationDomain.map(_ => workspaceContext.workspace.realmACLs.values).getOrElse(Seq.empty)
+        groupRefsToRemove: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.filterKeys(_ != ProjectOwner).values.toSet ++ workspaceContext.workspace.authorizationDomain.map(_ => workspaceContext.workspace.authDomainACLs.values).getOrElse(Seq.empty)
         groupsToRemove <- DBIO.sequence(groupRefsToRemove.toSeq.map(groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
 
         // Delete components of the workspace
@@ -1639,7 +1639,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           _.rawlsGroupQuery.load(groupRef)
         }
       }
-      val rawlsIntersectionGroupRefs = workspace.realmACLs
+      val rawlsIntersectionGroupRefs = workspace.authDomainACLs
       val googleIntersectionGroupRefs = rawlsIntersectionGroupRefs map { case (accessLevel, groupRef) =>
         accessLevel -> run {
           _.rawlsGroupQuery.load(groupRef)
@@ -1820,7 +1820,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         createdBy = userInfo.userEmail,
         attributes = workspaceRequest.attributes,
         accessLevels = accessGroups,
-        realmACLs = intersectionGroups getOrElse accessGroups
+        authDomainACLs = intersectionGroups getOrElse accessGroups
       )
 
       val groupInserts =
