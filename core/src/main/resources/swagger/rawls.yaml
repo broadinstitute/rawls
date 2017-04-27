@@ -5260,11 +5260,11 @@ definitions:
   ManagedGroupAccess:
     description: an element of a list of groups a user has access to
     required:
-      - managedGroupRef
+      - groupName
       - accessLevel
     properties:
-      managedGroupRef:
-        $ref: '#/definitions/ManagedGroupRef'
+      groupName:
+        type: string
       accessLevel:
         type: string
         enum: ["user", "owner"]

@@ -31,7 +31,7 @@ case class ManagedGroupRef(usersGroupName: RawlsGroupName) extends UserAuthRef {
   def toUsersGroupRef: RawlsGroupRef = RawlsGroupRef(usersGroupName)
 }
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
-case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, accessLevel: ManagedRole)
+case class ManagedGroupAccess(groupName: String, accessLevel: ManagedRole)
 case class ManagedGroupWithMembers(usersGroup: RawlsGroupShort, ownersGroup: RawlsGroupShort, usersEmails: Seq[String], ownersEmails: Seq[String])
 
 sealed trait UserAuthType { val value: String }
