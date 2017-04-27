@@ -4828,7 +4828,7 @@ definitions:
       accessLevels:
          $ref: ''
          description: Map[String, RawlsGroupRef]
-      realmACLs:
+      authDomainACLs:
          $ref: ''
          description: Map[String, RawlsGroupRef]
       isLocked:
