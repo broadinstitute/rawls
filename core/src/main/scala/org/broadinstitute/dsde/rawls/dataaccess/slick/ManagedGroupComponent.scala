@@ -64,7 +64,7 @@ trait ManagedGroupComponent {
             case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.usersGroupName => ManagedRoles.User
             case _ => throw new RawlsException("this should not have happened") // the guard in the for statement prevents this
           }
-          ManagedGroupAccess(unmarshalManagedGroupRef(managedGroupRecord), role)
+          ManagedGroupAccess(managedGroupRecord.usersGroupName, role)
         }
       }
     }

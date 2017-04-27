@@ -1868,7 +1868,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           case Some(RawlsBillingProject(_, _, _, CreationStatuses.Ready, _, _)) =>
             workspaceRequest.authorizationDomain match {
               case Some(realm) => dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUser(userInfo)) flatMap { realmAccesses =>
-                if(realmAccesses.contains(ManagedGroupAccess(realm, ManagedRoles.User))) op
+                if(realmAccesses.contains(ManagedGroupAccess(realm.usersGroupName.value, ManagedRoles.User))) op
                 else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.usersGroupName.value}] as you do not have access to it.")))
               }
               case None => op
