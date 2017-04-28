@@ -24,6 +24,9 @@ object Notifications {
     val format: RootJsonFormat[T]
     val notificationType = typeOf[T].typeSymbol.asClass.name.toString
     val description: String
+
+    /** means the user can never turn it off */
+    val alwaysOn = false
   }
 
   sealed abstract class WorkspaceNotificationType[T <: WorkspaceNotification: TypeTag] extends NotificationType[T] {
@@ -67,16 +70,17 @@ object Notifications {
   val ActivationNotificationType = register(new NotificationType[ActivationNotification] {
     override val format = jsonFormat1(ActivationNotification.apply)
     override val description = "Account Activation"
+    override val alwaysOn = true
   })
 
-  case class WorkspaceAddedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerEmail: String) extends WorkspaceNotification
-  val WorkspaceAddedNotificationType = register(new WorkspaceNotificationType[WorkspaceAddedNotification] {
+  case class WorkspaceAddedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerEmail: String) extends UserNotification
+  val WorkspaceAddedNotificationType = register(new NotificationType[WorkspaceAddedNotification] {
     override val format = jsonFormat4(WorkspaceAddedNotification.apply)
     override val description = "Workspace Access Added or Changed"
   })
 
-  case class WorkspaceRemovedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerEmail: String) extends WorkspaceNotification
-  val WorkspaceRemovedNotificationType = register(new WorkspaceNotificationType[WorkspaceRemovedNotification] {
+  case class WorkspaceRemovedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerEmail: String) extends UserNotification
+  val WorkspaceRemovedNotificationType = register(new NotificationType[WorkspaceRemovedNotification] {
     override val format = jsonFormat4(WorkspaceRemovedNotification.apply)
     override val description = "Workspace Access Removed"
   })
@@ -85,6 +89,7 @@ object Notifications {
   val WorkspaceInvitedNotificationType = register(new NotificationType[WorkspaceInvitedNotification] {
     override val format = jsonFormat2(WorkspaceInvitedNotification.apply)
     override val description = "Invitation"
+    override val alwaysOn = true
   })
 
   // IMPORTANT that this comes after all the calls to register

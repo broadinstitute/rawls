@@ -16,7 +16,7 @@ trait NotificationsApiService extends HttpService {
         val workspaceName = WorkspaceName(namespace, name)
 
         val workspaceNotificationTypes = Notifications.allNotificationTypes.values.collect {
-          case nt: WorkspaceNotificationType[_] if nt.workspaceNotification => nt
+          case nt: WorkspaceNotificationType[_] if nt.workspaceNotification && !nt.alwaysOn => nt
         }
 
         complete {
@@ -29,7 +29,7 @@ trait NotificationsApiService extends HttpService {
     path("general") {
       get {
         val workspaceNotificationTypes = Notifications.allNotificationTypes.values.collect {
-          case nt: NotificationType[_] if !nt.workspaceNotification => nt
+          case nt: NotificationType[_] if !nt.workspaceNotification && !nt.alwaysOn => nt
         }
 
         complete {
