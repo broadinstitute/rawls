@@ -798,18 +798,17 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
 
     withApiServices(dataSource, usersTestData.userUser) { services =>
-      import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupAccessFormat
+      import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupAccessResponseFormat
       Get("/groups") ~>
         sealRoute(services.userRoutes) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
           }
-          responseAs[Seq[ManagedGroupAccess]] should contain theSameElementsAs Seq(
-            ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(ownerOnlyGroupName)), Seq(ManagedRoles.Owner)),
-            ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(userOnlyGroupName)), Seq(ManagedRoles.User)),
-            ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(bothGroupName)), Seq(ManagedRoles.Owner)),
-            ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(bothGroupName)), Seq(ManagedRoles.User))
+          responseAs[Seq[ManagedGroupAccessResponse]] should contain theSameElementsAs Seq(
+            ManagedGroupAccessResponse(ownerOnlyGroupName, Set(ManagedRoles.Owner)),
+            ManagedGroupAccessResponse(userOnlyGroupName, Set(ManagedRoles.User)),
+            ManagedGroupAccessResponse(bothGroupName, Set(ManagedRoles.Owner, ManagedRoles.User))
           )
         }
     }
