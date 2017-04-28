@@ -31,7 +31,8 @@ case class ManagedGroupRef(usersGroupName: RawlsGroupName) extends UserAuthRef {
   def toUsersGroupRef: RawlsGroupRef = RawlsGroupRef(usersGroupName)
 }
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
-case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, accessLevels: Seq[ManagedRole])
+case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, accessLevels: ManagedRole)
+case class ManagedGroupAccessResponse(groupName: String, accessLevels: Set[ManagedRole])
 case class ManagedGroupWithMembers(usersGroup: RawlsGroupShort, ownersGroup: RawlsGroupShort, usersEmails: Seq[String], ownersEmails: Seq[String])
 
 sealed trait UserAuthType { val value: String }
@@ -63,13 +64,6 @@ class UserModelJsonSupport extends JsonSupport {
     }
   }
 
-  implicit object ManagedGroupAccessFormat extends RootJsonFormat[ManagedGroupAccess] {
-    override def write(obj: ManagedGroupAccess): JsValue =
-      JsObject(Map(("groupName", JsString(obj.managedGroupRef.usersGroupName.value)), ("accessLevels", JsArray(obj.accessLevels.map(l => JsString(l.toString)).toVector))))
-
-    override def read(obj: JsValue) = ???
-  }
-
   implicit val RawlsUserEmailFormat = UserModelJsonFormatter(RawlsUserEmail)
   implicit val RawlsUserSubjectIdFormat = UserModelJsonFormatter(RawlsUserSubjectId)
 
@@ -82,6 +76,8 @@ class UserModelJsonSupport extends JsonSupport {
   implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef)
   implicit val RawlsGroupShortFormat = jsonFormat2(RawlsGroupShort)
   implicit val ManagedGroupRefFormat = jsonFormat1(ManagedGroupRef)
+  implicit val ManagedGroupAccessFormat = jsonFormat2(ManagedGroupAccess)
+  implicit val ManagedGroupAccessResponseFormat = jsonFormat2(ManagedGroupAccessResponse)
   implicit val ManagedGroupWithMembersFormat = jsonFormat4(ManagedGroupWithMembers)
 }
 

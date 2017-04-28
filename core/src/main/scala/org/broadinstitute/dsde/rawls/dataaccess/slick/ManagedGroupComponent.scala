@@ -55,7 +55,7 @@ trait ManagedGroupComponent {
         allManagedGroupRecs <- listAllManagedGroups()
         groupsForUser <- rawlsGroupQuery.listGroupsForUser(userRef)
       } yield {
-        val groupsAndAccessLevel = for {
+        for {
           managedGroupRecord <- allManagedGroupRecs
           groupForUser <- groupsForUser if Seq(managedGroupRecord.ownersGroupName, managedGroupRecord.usersGroupName).contains(groupForUser.groupName.value)
         } yield {
@@ -64,11 +64,8 @@ trait ManagedGroupComponent {
             case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.usersGroupName => ManagedRoles.User
             case _ => throw new RawlsException("this should not have happened") // the guard in the for statement prevents this
           }
-          (unmarshalManagedGroupRef(managedGroupRecord), role)
+          ManagedGroupAccess(unmarshalManagedGroupRef(managedGroupRecord), role)
         }
-        groupsAndAccessLevel.groupBy { case (ref, _) => ref }.map { case (ref, roles) =>
-          ManagedGroupAccess(ref, roles.map(_._2).toSeq)
-        }.toSet
       }
     }
 
