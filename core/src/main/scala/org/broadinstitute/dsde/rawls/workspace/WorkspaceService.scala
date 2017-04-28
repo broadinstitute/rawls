@@ -643,9 +643,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = Future {
+  def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
 
-    def getUserEmails = {
+    val getUserEmails = {
       dataSource.inTransaction{ dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) {workspaceContext =>
           requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Write, dataAccess) {
@@ -659,8 +659,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     getUserEmails.map { emails =>
       val notificationMessages = emails.map { email => Notifications.WorkspaceChangedNotification(email, workspaceName) }
       notificationDAO.fireAndForgetNotifications(notificationMessages)
+      RequestComplete(StatusCodes.OK, emails)
     }
-    RequestComplete(StatusCodes.OK)
+
 
   }
 

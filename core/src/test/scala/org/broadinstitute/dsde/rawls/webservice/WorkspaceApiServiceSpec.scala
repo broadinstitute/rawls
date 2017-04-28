@@ -1430,6 +1430,47 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  // Send Change Notification for Workspace require WRITE access. Accept if OWNER or WRITE; Reject if READ or NO ACCESS
+  it should "allow an owner to send change notifications" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
+    Post(s"${testData.workspace.path}/sendChangeNotification", httpJsonEmpty) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "allow user with write-access to send change notifications" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
+    Post(s"${testData.workspace.path}/sendChangeNotification", httpJsonEmpty) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK){
+          status
+        }
+      }
+  }
+
+  it should "not allow user with read-access to send change notifications" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
+    Post(s"${testData.workspace.path}/sendChangeNotification", httpJsonEmpty) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
+  it should "not allow user with no-access to send change notifications" in withTestDataApiServicesAndUser("no-access") { services =>
+    Post(s"${testData.workspace.path}/sendChangeNotification", httpJsonEmpty) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check{
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
   // Update Workspace requires WRITE access.  Accept if OWNER or WRITE; Reject if READ or NO ACCESS
 
   it should "allow an project-owner-access user to update a workspace" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
