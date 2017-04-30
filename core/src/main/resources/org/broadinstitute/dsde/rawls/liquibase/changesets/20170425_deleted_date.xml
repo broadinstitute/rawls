@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="hussein" id="entity_deleteddate_column">
+        <addColumn tableName="ENTITY">
+            <column name="deleted_date" defaultValue="null" type="TIMESTAMP(6)"></column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="hussein" id="methodconf_deleteddate_column">
+        <addColumn tableName="METHOD_CONFIG">
+            <column name="deleted_date" defaultValue="null" type="TIMESTAMP(6)"></column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="entity_attribute_deleteddate_column" author="hussein" logicalFilePath="dummy">
+        <addColumn tableName="ENTITY_ATTRIBUTE">
+            <column name="deleted_date" defaultValue="null" type="TIMESTAMP(6)"></column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="entity_attribute_scratch_deleteddate_column" author="hussein" logicalFilePath="dummy">
+        <addColumn tableName="ENTITY_ATTRIBUTE_SCRATCH">
+            <column name="deleted_date" defaultValue="null" type="TIMESTAMP(6)"></column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="workspace_attribute_deleteddate_column" author="hussein" logicalFilePath="dummy">
+        <addColumn tableName="WORKSPACE_ATTRIBUTE">
+            <column name="deleted_date" defaultValue="null" type="TIMESTAMP(6)"></column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="workspace_attribute_scratch_deleteddate_column" author="hussein" logicalFilePath="dummy">
+        <addColumn tableName="WORKSPACE_ATTRIBUTE_SCRATCH">
+            <column name="deleted_date" defaultValue="null" type="TIMESTAMP(6)"></column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="submission_attribute_deleteddate_column" author="hussein" logicalFilePath="dummy">
+        <addColumn tableName="SUBMISSION_ATTRIBUTE">
+            <column name="deleted_date" defaultValue="null" type="TIMESTAMP(6)"></column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

@@ -75,4 +75,28 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       runAndWait(concatSqlActions(select, where1, reduceSqlActionsWithDelim(statuses), where2).as[WorkflowRecord])
     }
   }
+
+  //base64 represents every six bits with one character. but we round up our input number of bits to the nearest 8, so:
+  def expectedStringLength(bits: Int): Int = {
+    Math.ceil(Math.ceil(bits/8.0)*8.0/6.0).toInt
+  }
+
+  it should "get a sufficiently random postfix" in {
+    //this corresponds to 16 bits of entropy if my math is right
+    assert( getNumberOfBitsForSufficientRandomness(64, 1.0/32.0) == 16)
+
+    //one more record should tip us over
+    assert(getNumberOfBitsForSufficientRandomness(65, 1.0/32.0) == 17)
+
+    //check we don't overflow when we have a ton of records:
+    //2^34 records ~17bn! 17,179,869,184
+    //2^30 is close to 1 in a billion: 1,073,741,824
+    assert(getNumberOfBitsForSufficientRandomness(17179869184L, 1.0/1073741824) == 97)
+
+    //test that the properties of the random string hold as expected
+    assert(getRandomStringWithThisManyBitsOfEntropy(2).length == expectedStringLength(2))
+    assert(getRandomStringWithThisManyBitsOfEntropy(8).length == expectedStringLength(8))
+    assert(getRandomStringWithThisManyBitsOfEntropy(9).length == expectedStringLength(9))
+    assert(getRandomStringWithThisManyBitsOfEntropy(59).length == expectedStringLength(59))
+  }
 }

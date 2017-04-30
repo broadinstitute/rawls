@@ -1,14 +1,17 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import java.nio.ByteOrder
 import java.sql.Timestamp
 import java.util.UUID
 
+import akka.util.{ByteString, ByteStringBuilder}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
 import slick.driver.JdbcDriver
 import slick.jdbc.{GetResult, PositionedParameters, SQLActionBuilder, SetParameter}
 import spray.http.StatusCodes
+import org.apache.commons.codec.binary.Base64
 
 import scala.concurrent.ExecutionContext
 
@@ -63,8 +66,58 @@ trait DriverComponent {
     new Timestamp(System.currentTimeMillis())
   }
 
-  def renameForHiding(name: String): String = {
-    name + "_" + DateTime.now().toString("yyyy-MM-dd_HH.mm.ss.SSS")
+  private[slick] def getNumberOfBitsForSufficientRandomness(recordCount: Long, desiredCollisionProbability: Double = 0.000000001): Int = {
+    def log2(n: Double): Double = Math.log(n) / Math.log(2)
+
+    /* Uh oh. A huge comment block approaches!
+
+     * What we want here is a string that adds "sufficient randomness" to make it unlikely that this record will collide
+     * with another. This is the birthday attack problem!
+     *
+     * There's some math about how to escape being attacked by a birthday on Wikipedia:
+     * https://en.wikipedia.org/wiki/Birthday_attack#Simple_approximation
+     * H = n^2 / 2p(n)
+     * H is "the number of possible outputs our hash function needs to be able to generate".
+
+     * Below is the naive formula:
+     * val H = (recordCount*recordCount)/(2.0*desiredCollisionProbability)
+
+     * However, for large (billions+) counts of records, and very low collision probabilities, H will overflow a double.
+     * Thankfully, what we _really_ want is the number of bits of entropy we need to generate.
+     * The formula for this is log2(H), which we can push into H to keep the values nice and low.
+    */
+    Math.ceil( log2(recordCount)*2.0 - log2(2.0*desiredCollisionProbability) ).toInt
+  }
+
+  private[slick] def getRandomStringWithThisManyBitsOfEntropy(bits: Int): String = {
+    val uuid = UUID.randomUUID()
+
+    //The goal here is to make this string as short as possible, so base64encode the resulting
+    //bits for maximum squishiness
+    val byteBuilder = ByteString.newBuilder
+    val byteOrder = ByteOrder.nativeOrder()
+
+    if( bits <= 64 ) {
+      byteBuilder.putLongPart(uuid.getLeastSignificantBits, Math.ceil(bits/8.0).toInt)(byteOrder)
+    } else {
+      byteBuilder.putLong(uuid.getLeastSignificantBits)(byteOrder)
+      byteBuilder.putLongPart(uuid.getMostSignificantBits, ((bits-64)/8.0).toInt)(byteOrder)
+    }
+
+    Base64.encodeBase64URLSafeString(byteBuilder.result().toArray)
+  }
+
+  //By default, calibrated for a one-in-a-billion chance of collision.
+  def getSufficientlyRandomSuffix(recordCount: Long, desiredCollisionProbability: Double = 0.000000001): String = {
+
+    //the number of bits of entropy required. if this ever gets above 128 we're in trouble.
+    val bits = getNumberOfBitsForSufficientRandomness(recordCount, desiredCollisionProbability)
+
+    getRandomStringWithThisManyBitsOfEntropy(bits)
+  }
+
+  def renameForHiding(recordCount: Long, name: String): String = {
+    name + "_" + getSufficientlyRandomSuffix(recordCount)
   }
 }
 
