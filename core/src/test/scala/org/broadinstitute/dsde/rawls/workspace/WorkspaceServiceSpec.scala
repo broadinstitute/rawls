@@ -584,18 +584,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       vComplete.response._1
     }
 
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    val user2 = RawlsUser(RawlsUserSubjectId("soismichelle"), RawlsUserEmail("michelle@whitehouse.gov"))
-    runAndWait(rawlsUserQuery.save(user))
-    runAndWait(rawlsUserQuery.save(user2))
-    val aclAdd = Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(user2.userEmail.value, WorkspaceAccessLevels.Write, None))
-    val vComplete2 = Await.result(services.workspaceService.sendChangeNotifications(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-
-    assertResult(2, "Number of notifications sent should match number of users on workspace") {
-      vComplete2.response._2.size
+    assertResult(Set("owner-access", "reader-access"), "Number of notifications sent should match number of users on workspace") {
+      vComplete.response._2
     }
-
 
   }
 

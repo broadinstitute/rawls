@@ -651,17 +651,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Write, dataAccess) {
             DBIO.sequence(workspaceContext.workspace.accessLevels.values.map {group =>
               dataAccess.rawlsGroupQuery.flattenGroupMembership(group)
-            }).map(_.flatten.toSet).map(_.map{u => userInfo.userEmail})
+            })
           }
         }
       }
     }
-    getUserEmails.map { emails =>
+    getUserEmails.map { groups =>
+      val emails = groups.toSeq.flatten.map(user => userInfo.userEmail).toSet
       val notificationMessages = emails.map { email => Notifications.WorkspaceChangedNotification(email, workspaceName) }
       notificationDAO.fireAndForgetNotifications(notificationMessages)
       RequestComplete(StatusCodes.OK, emails)
     }
-
 
   }
 
