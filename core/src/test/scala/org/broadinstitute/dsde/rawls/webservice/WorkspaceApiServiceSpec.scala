@@ -1465,7 +1465,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/sendChangeNotification", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check{
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.NotFound) {
           status
         }
       }
