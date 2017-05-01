@@ -584,8 +584,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       vComplete.response._1
     }
 
-    assertResult(Set("owner-access", "reader-access"), "Number of notifications sent should match number of users on workspace") {
-      vComplete.response._2
+    assertResult(4, "Number of notifications sent should match number of users on workspace") {
+      vComplete.response._2.size
     }
 
   }
