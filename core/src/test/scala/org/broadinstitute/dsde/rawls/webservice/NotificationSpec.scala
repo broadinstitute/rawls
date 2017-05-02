@@ -35,6 +35,15 @@ class NotificationSpec extends ApiServiceSpec {
     }
   }
 
+  def withTestDataApiServicesAndUser[T](user: String)(testCode: TestApiService => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource, user) { services =>
+        testData.createWorkspaceGoogleGroups(services.gcsDAO)
+        testCode(services)
+      }
+    }
+  }
+
 
   "Notification" should "be sent for invitation" in withTestDataApiServices { services =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
@@ -86,4 +95,48 @@ class NotificationSpec extends ApiServiceSpec {
     TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(ActivationNotification(user.userSubjectId.value)).compactPrint}"), 10 seconds)
 
   } }
+  // Send Change Notification for Workspace require WRITE access. Accept if OWNER or WRITE; Reject if READ or NO ACCESS
+  it should "allow an owner to send change notifications" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
+    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(user.userSubjectId.value, testData.workspace.toWorkspaceName)).compactPrint}"), 10 seconds)
+      }
+  }
+
+ it should "allow user with write-access to send change notifications" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK){
+          status
+        }
+      }
+  }
+
+  it should "not allow user with read-access to send change notifications" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
+  it should "not allow user with no-access to send change notifications" in withTestDataApiServicesAndUser("no-access") { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check{
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
 }

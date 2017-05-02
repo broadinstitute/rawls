@@ -577,33 +577,16 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "send notification messages to all users on workspace" in withTestDataServices { services =>
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    val user2 = RawlsUser(RawlsUserSubjectId("soismichelle"), RawlsUserEmail("michelle@whitehouse.gov"))
-    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set(user, user2), Set.empty[RawlsGroupRef])
-    val group2 = RawlsGroup(RawlsGroupName("test2"), RawlsGroupEmail("group2@whitehouse.gov"), Set(user2), Set.empty[RawlsGroupRef])
-    runAndWait(rawlsUserQuery.save(user))
-    runAndWait(rawlsUserQuery.save(user2))
-    runAndWait(rawlsGroupQuery.save(group))
-    runAndWait(rawlsGroupQuery.save(group2))
-
-    services.gcsDAO.createGoogleGroup(group)
-    services.gcsDAO.createGoogleGroup(group2)
-
-    //add ACL
-    val aclAdd = Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(group2.groupEmail.value, WorkspaceAccessLevels.Read, None), WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Write, None))
-    val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-
-    val expectedSet = Set(testData.userProjectOwner.userSubjectId.value, testData.userOwner.userSubjectId.value, testData.userWriter.userSubjectId.value, testData.userReader.userSubjectId.value, "obamaiscool", "soismichelle")
-
     val vComplete = Await.result(services.workspaceService.sendChangeNotifications(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
+      .asInstanceOf[RequestComplete[(StatusCode, String)]]
 
     assertResult(StatusCodes.OK, "Notification shouldn't error") {
       vComplete.response._1
     }
 
-    assertSameElements(expectedSet, vComplete.response._2)
+    assertResult("4", "Number of notifications sent should match number of users on workspace") {
+      vComplete.response._2
+    }
 
   }
 

@@ -659,8 +659,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     getUsers.map { groups =>
       val userIds = groups.flatten.map(user => user.userSubjectId.value).toSet
       val notificationMessages = userIds.map { userId => Notifications.WorkspaceChangedNotification(userId, workspaceName) }
+      val numMessages = notificationMessages.size.toString
       notificationDAO.fireAndForgetNotifications(notificationMessages)
-      RequestComplete(StatusCodes.OK, userIds)
+      RequestComplete(StatusCodes.OK, numMessages)
     }
 
   }
