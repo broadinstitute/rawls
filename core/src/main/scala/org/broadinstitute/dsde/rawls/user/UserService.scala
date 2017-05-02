@@ -618,7 +618,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           usersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.membersGroup)
           ownersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.adminsGroup)
         } yield {
-          RequestComplete(ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort, managedGroup.adminsGroup.toRawlsGroupShort, usersEmails, ownersEmails))
+          // we want to hide the fact that the users group contains the owners group because this structure is
+          // confusing to the user even though the functionality is desired
+          val userEmailsSansOwnerGroup = usersEmails.filterNot(_ == managedGroup.adminsGroup.groupEmail.value)
+          RequestComplete(ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort, managedGroup.adminsGroup.toRawlsGroupShort, userEmailsSansOwnerGroup, ownersEmails))
         }
       }
     }
