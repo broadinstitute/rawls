@@ -30,13 +30,6 @@
         <suffixPattern>[%level] [%d{HH:mm:ss.SSS}] [%thread] %logger{36} - %msg%n</suffixPattern>
     </appender>
 
-    <!-- Configure the Console appender -->
-    <appender name="SentryToConsole" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
     <!-- Configure the Sentry appender, overriding the logging threshold to the WARN level -->
     <appender name="Sentry" class="com.getsentry.raven.logback.SentryAppender">
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
@@ -49,7 +42,6 @@
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
-        <appender-ref ref="SentryToConsole" />
         <appender-ref ref="Sentry" />
     </logger>
 
@@ -69,14 +61,12 @@
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
-        <appender-ref ref="SentryToConsole" />
         <appender-ref ref="Sentry" />
     </logger>
     <logger name="org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO" level="debug" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
-        <appender-ref ref="SentryToConsole" />
         <appender-ref ref="Sentry" />
     </logger>
 
@@ -84,7 +74,6 @@
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
-        <appender-ref ref="SentryToConsole" />
         <appender-ref ref="Sentry" />
     </logger>
 
@@ -107,7 +96,6 @@
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
         <appender-ref ref="SYSLOG"/>
-        <appender-ref ref="SentryToConsole" />
         <appender-ref ref="Sentry" />
     </root>
 
