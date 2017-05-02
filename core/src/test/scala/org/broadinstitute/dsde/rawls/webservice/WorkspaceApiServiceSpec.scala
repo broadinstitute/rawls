@@ -170,8 +170,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace3Groups.map(rawlsGroupQuery.save).toSeq),
-        rawlsGroupQuery.save(defaultRealmGroup.usersGroup),
-        rawlsGroupQuery.save(defaultRealmGroup.ownersGroup),
+        rawlsGroupQuery.save(defaultRealmGroup.membersGroup),
+        rawlsGroupQuery.save(defaultRealmGroup.adminsGroup),
         managedGroupQuery.createManagedGroup(defaultRealmGroup),
 
         workspaceQuery.save(workspace),
@@ -849,7 +849,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   def createAndSaveManagedGroup(name: String, users: Set[RawlsUserRef], owners: Set[RawlsUserRef] = Set.empty): ManagedGroup = {
     val realmGroup = makeManagedGroup(name, users, owners = owners)
-    runAndWait(rawlsGroupQuery.save(realmGroup.usersGroup) andThen rawlsGroupQuery.save(realmGroup.ownersGroup) andThen managedGroupQuery.createManagedGroup(realmGroup))
+    runAndWait(rawlsGroupQuery.save(realmGroup.membersGroup) andThen rawlsGroupQuery.save(realmGroup.adminsGroup) andThen managedGroupQuery.createManagedGroup(realmGroup))
   }
 
   it should "not allow changing a workspace's Realm if it exists" in withTestDataApiServices { services =>

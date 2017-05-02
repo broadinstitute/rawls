@@ -60,8 +60,8 @@ trait ManagedGroupComponent {
           groupForUser <- groupsForUser if Seq(managedGroupRecord.ownersGroupName, managedGroupRecord.usersGroupName).contains(groupForUser.groupName.value)
         } yield {
           val role = groupForUser match {
-            case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.ownersGroupName => ManagedRoles.Owner
-            case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.usersGroupName => ManagedRoles.User
+            case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.ownersGroupName => ManagedRoles.Administrator
+            case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.usersGroupName => ManagedRoles.Member
             case _ => throw new RawlsException("this should not have happened") // the guard in the for statement prevents this
           }
           ManagedGroupAccess(unmarshalManagedGroupRef(managedGroupRecord), role)
@@ -78,7 +78,7 @@ trait ManagedGroupComponent {
     }
 
     private def marshalManagedGroup(managedGroup: ManagedGroup): ManagedGroupRecord = {
-      ManagedGroupRecord(managedGroup.usersGroup.groupName.value, managedGroup.ownersGroup.groupName.value)
+      ManagedGroupRecord(managedGroup.membersGroup.groupName.value, managedGroup.adminsGroup.groupName.value)
     }
 
     private def findManagedGroup(managedGroupRef: ManagedGroupRef): ManagedGroupQuery = {

@@ -90,11 +90,11 @@ trait UserWiths {
     dataAccess.managedGroupQuery.load(managedGroupRef) flatMap {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${managedGroupRef.usersGroupName.value}] not found")))
       case Some(managedGroup) =>
-        dataAccess.rawlsGroupQuery.isGroupMember(managedGroup.ownersGroup, userRef) flatMap {
+        dataAccess.rawlsGroupQuery.isGroupMember(managedGroup.adminsGroup, userRef) flatMap {
           case true => op(managedGroup)
           case false =>
             // figure out what error to show - if they are a user show 403 otherwise 404
-            dataAccess.rawlsGroupQuery.isGroupMember(managedGroup.usersGroup, userRef) flatMap {
+            dataAccess.rawlsGroupQuery.isGroupMember(managedGroup.membersGroup, userRef) flatMap {
               case true => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "unauthorized")))
               case false => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${managedGroupRef.usersGroupName.value}] not found")))
             }

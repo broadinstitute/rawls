@@ -580,10 +580,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     val ownersGroupRef = RawlsGroupRef(RawlsGroupName(groupRef.usersGroupName.value + "-owners"))
     for {
       managedGroup <- createManagedGroupInternal(usersGroupRef, ownersGroupRef)
-      _ <- updateGroupMembership(managedGroup.ownersGroup, addUsers = Set(RawlsUser(userInfo)))
-      _ <- updateGroupMembership(managedGroup.usersGroup, addSubGroups = Set(managedGroup.ownersGroup))
+      _ <- updateGroupMembership(managedGroup.adminsGroup, addUsers = Set(RawlsUser(userInfo)))
+      _ <- updateGroupMembership(managedGroup.membersGroup, addSubGroups = Set(managedGroup.adminsGroup))
     } yield {
-      RequestComplete(StatusCodes.Created, ManagedGroupWithMembers(managedGroup.usersGroup.toRawlsGroupShort, managedGroup.ownersGroup.toRawlsGroupShort, Seq(managedGroup.ownersGroup.groupEmail.value), Seq(userInfo.userEmail)))
+      RequestComplete(StatusCodes.Created, ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort, managedGroup.adminsGroup.toRawlsGroupShort, Seq(managedGroup.adminsGroup.groupEmail.value), Seq(userInfo.userEmail)))
     }
   }
 
@@ -615,10 +615,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
         for {
-          usersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.usersGroup)
-          ownersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.ownersGroup)
+          usersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.membersGroup)
+          ownersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.adminsGroup)
         } yield {
-          RequestComplete(ManagedGroupWithMembers(managedGroup.usersGroup.toRawlsGroupShort, managedGroup.ownersGroup.toRawlsGroupShort, usersEmails, ownersEmails))
+          RequestComplete(ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort, managedGroup.adminsGroup.toRawlsGroupShort, usersEmails, ownersEmails))
         }
       }
     }
@@ -628,7 +628,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId))).map { groupsWithAccess =>
         val response = groupsWithAccess.groupBy(_.managedGroupRef).map { case (groupRef, accessEntries) =>
-          ManagedGroupAccessResponse(groupRef.usersGroupName.value, accessEntries.map(_.accessLevels))
+          ManagedGroupAccessResponse(groupRef.usersGroupName.value, accessEntries.map(_.role))
         }
         RequestComplete(StatusCodes.OK, response)
       }
@@ -656,7 +656,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   private def updateManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, addMemberList: RawlsGroupMemberList = RawlsGroupMemberList(), removeMemberList: RawlsGroupMemberList = RawlsGroupMemberList()): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        if (role == ManagedRoles.Owner &&
+        if (role == ManagedRoles.Administrator &&
           (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail) ||
             removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId))) {
 
@@ -672,15 +672,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def rawlsGroupForRole(role: ManagedRole, managedGroup: ManagedGroup): RawlsGroup = {
     role match {
-      case ManagedRoles.Owner => managedGroup.ownersGroup
-      case ManagedRoles.User => managedGroup.usersGroup
+      case ManagedRoles.Administrator => managedGroup.adminsGroup
+      case ManagedRoles.Member => managedGroup.membersGroup
     }
   }
 
   def overwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        if (role == ManagedRoles.Owner &&
+        if (role == ManagedRoles.Administrator &&
           !memberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail) &&
             !memberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId)) {
 
@@ -703,9 +703,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
           DBIO.seq(
             dataAccess.managedGroupQuery.deleteManagedGroup(groupRef),
-            dataAccess.rawlsGroupQuery.delete(managedGroup.usersGroup),
-            dataAccess.rawlsGroupQuery.delete(managedGroup.ownersGroup)
-          ).map(_ => Seq(managedGroup.usersGroup, managedGroup.ownersGroup))
+            dataAccess.rawlsGroupQuery.delete(managedGroup.membersGroup),
+            dataAccess.rawlsGroupQuery.delete(managedGroup.adminsGroup)
+          ).map(_ => Seq(managedGroup.membersGroup, managedGroup.adminsGroup))
         }
       }.recover {
         // assume any sql exception is a FK violation, to be more specific catch MySQLIntegrityConstraintViolationException
