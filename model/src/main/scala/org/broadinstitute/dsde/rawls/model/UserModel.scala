@@ -16,23 +16,23 @@ object ManagedRoles {
   }
 
   def withName(name: String): ManagedRole = name.toLowerCase match {
-    case "owner" => Owner
-    case "user" => User
+    case "administrator" => Administrator
+    case "member" => Member
     case _ => throw new RawlsException(s"invalid role [${name}]")
   }
 
-  case object Owner extends ManagedRole
-  case object User extends ManagedRole
+  case object Administrator extends ManagedRole
+  case object Member extends ManagedRole
 
-  val all: Set[ManagedRole] = Set(Owner, User)
+  val all: Set[ManagedRole] = Set(Administrator, Member)
 }
 
 case class ManagedGroupRef(usersGroupName: RawlsGroupName) extends UserAuthRef {
   def toUsersGroupRef: RawlsGroupRef = RawlsGroupRef(usersGroupName)
 }
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
-case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, accessLevels: ManagedRole)
-case class ManagedGroupAccessResponse(groupName: String, accessLevels: Set[ManagedRole])
+case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, role: ManagedRole)
+case class ManagedGroupAccessResponse(groupName: String, roles: Set[ManagedRole])
 case class ManagedGroupWithMembers(usersGroup: RawlsGroupShort, ownersGroup: RawlsGroupShort, usersEmails: Seq[String], ownersEmails: Seq[String])
 
 sealed trait UserAuthType { val value: String }
