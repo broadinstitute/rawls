@@ -656,7 +656,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   private def updateManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, addMemberList: RawlsGroupMemberList = RawlsGroupMemberList(), removeMemberList: RawlsGroupMemberList = RawlsGroupMemberList()): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        if (role == ManagedRoles.Administrator &&
+        if (role == ManagedRoles.Admin &&
           (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail) ||
             removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId))) {
 
@@ -672,7 +672,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def rawlsGroupForRole(role: ManagedRole, managedGroup: ManagedGroup): RawlsGroup = {
     role match {
-      case ManagedRoles.Administrator => managedGroup.adminsGroup
+      case ManagedRoles.Admin => managedGroup.adminsGroup
       case ManagedRoles.Member => managedGroup.membersGroup
     }
   }
@@ -680,7 +680,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def overwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        if (role == ManagedRoles.Administrator &&
+        if (role == ManagedRoles.Admin &&
           !memberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail) &&
             !memberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId)) {
 

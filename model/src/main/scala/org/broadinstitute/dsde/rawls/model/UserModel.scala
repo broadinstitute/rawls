@@ -21,15 +21,15 @@ object ManagedRoles {
   }
 
   def withName(name: String): ManagedRole = name.toLowerCase match {
-    case "administrator" => Administrator
+    case "admin" => Admin
     case "member" => Member
     case _ => throw new RawlsException(s"invalid role [${name}]")
   }
 
-  case object Administrator extends ManagedRole
+  case object Admin extends ManagedRole
   case object Member extends ManagedRole
 
-  val all: Set[ManagedRole] = Set(Administrator, Member)
+  val all: Set[ManagedRole] = Set(Admin, Member)
 }
 
 case class ManagedGroupRef(usersGroupName: RawlsGroupName) extends UserAuthRef {
