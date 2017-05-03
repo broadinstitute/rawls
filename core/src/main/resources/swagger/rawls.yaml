@@ -3626,7 +3626,7 @@ paths:
           schema:
             $ref: '#/definitions/ManagedGroupWithMembers'
         403:
-          description: You must be an owner of this group in order to view members
+          description: You must be an administrator of this group in order to view members
           schema:
             $ref: '#/definitions/ErrorReport'
         404:
@@ -3686,7 +3686,7 @@ paths:
         204:
           description: Successfully Deleted Group
         403:
-          description: You must be an owner of this group in order to delete it
+          description: You must be an administrator of this group in order to delete it
           schema:
             $ref: '#/definitions/ErrorReport'
         404:
@@ -3722,7 +3722,7 @@ paths:
         204:
           description: Successfully Added User or Group To Group
         403:
-          description: You must be an owner of this group in order to add members
+          description: You must be an administrator of this group in order to add members
           schema:
             $ref: '#/definitions/ErrorReport'
         404:
@@ -3744,7 +3744,7 @@ paths:
           name: role
           required: true
           type: string
-          enum: ["user", "owner"]
+          enum: ["member", "administrator"]
         - in: path
           description: email of user or group to add
           name: email
@@ -3764,7 +3764,7 @@ paths:
         204:
           description: Successfully Removed User or Group From Group
         403:
-          description: You must be an owner of this group in order to remove members
+          description: You must be an administrator of this group in order to remove members
           schema:
             $ref: '#/definitions/ErrorReport'
         400:
@@ -3790,7 +3790,7 @@ paths:
           name: role
           required: true
           type: string
-          enum: ["user", "owner"]
+          enum: ["member", "administrator"]
         - in: path
           description: email of user or group to remove
           name: email

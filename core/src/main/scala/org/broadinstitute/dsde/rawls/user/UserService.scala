@@ -628,7 +628,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId))).map { groupsWithAccess =>
         val response = groupsWithAccess.groupBy(_.managedGroupRef).map { case (groupRef, accessEntries) =>
-          ManagedGroupAccessResponse(groupRef.usersGroupName.value, accessEntries.map(_.role).max)
+          ManagedGroupAccessResponse(groupRef.usersGroupName, accessEntries.map(_.role).max)
         }
         RequestComplete(StatusCodes.OK, response)
       }
