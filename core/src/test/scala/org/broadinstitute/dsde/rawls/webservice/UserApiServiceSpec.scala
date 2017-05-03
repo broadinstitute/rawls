@@ -806,9 +806,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
           responseAs[Seq[ManagedGroupAccessResponse]] should contain theSameElementsAs Seq(
-            ManagedGroupAccessResponse(ownerOnlyGroupName, Set(ManagedRoles.Administrator)),
-            ManagedGroupAccessResponse(userOnlyGroupName, Set(ManagedRoles.Member)),
-            ManagedGroupAccessResponse(bothGroupName, Set(ManagedRoles.Administrator, ManagedRoles.Member))
+            ManagedGroupAccessResponse(ownerOnlyGroupName, ManagedRoles.Administrator),
+            ManagedGroupAccessResponse(userOnlyGroupName, ManagedRoles.Member),
+            ManagedGroupAccessResponse(bothGroupName, ManagedRoles.Administrator)
           )
         }
     }

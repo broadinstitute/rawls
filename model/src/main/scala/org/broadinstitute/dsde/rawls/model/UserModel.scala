@@ -9,10 +9,15 @@ case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
 case class RawlsGroupRef(groupName: RawlsGroupName) extends UserAuthRef
 
 object ManagedRoles {
-  sealed trait ManagedRole extends RawlsEnumeration[ManagedRole] {
+  sealed trait ManagedRole extends RawlsEnumeration[ManagedRole] with Ordered[ManagedRole] {
     override def toString = getClass.getSimpleName.stripSuffix("$")
 
     override def withName(name: String): ManagedRole = ManagedRoles.withName(name)
+
+    def compare(that: ManagedRole): Int = {
+      // just do string compare such that admin will be greatest
+      that.toString.compareTo(this.toString)
+    }
   }
 
   def withName(name: String): ManagedRole = name.toLowerCase match {
@@ -32,7 +37,7 @@ case class ManagedGroupRef(usersGroupName: RawlsGroupName) extends UserAuthRef {
 }
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, role: ManagedRole)
-case class ManagedGroupAccessResponse(groupName: String, roles: Set[ManagedRole])
+case class ManagedGroupAccessResponse(groupName: String, role: ManagedRole)
 case class ManagedGroupWithMembers(usersGroup: RawlsGroupShort, ownersGroup: RawlsGroupShort, usersEmails: Seq[String], ownersEmails: Seq[String])
 
 sealed trait UserAuthType { val value: String }
