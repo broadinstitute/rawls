@@ -5,11 +5,14 @@ import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDat
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Notifications._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import spray.http.{StatusCode, StatusCodes}
+import org.broadinstitute.dsde.rawls.openam.{MockUserInfoDirectives, UserInfoDirectives}
+import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
+
 import scala.concurrent.duration._
 import spray.json.DefaultJsonProtocol._
 import WorkspaceACLJsonSupport._
+import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
+import spray.routing.Directive1
 
 import scala.concurrent.{Await, ExecutionContext}
 
@@ -18,6 +21,20 @@ import scala.concurrent.{Await, ExecutionContext}
  */
 class NotificationSpec extends ApiServiceSpec {
 
+  trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
+  val user: String
+  def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
+    // just return the cookie text as the common name
+    user match {
+      case testData.userProjectOwner.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userProjectOwner.userSubjectId.value))
+      case testData.userOwner.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userOwner.userSubjectId.value))
+      case testData.userWriter.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userWriter.userSubjectId.value))
+      case testData.userReader.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userReader.userSubjectId.value))
+      case "no-access" => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212348"))
+      case _ => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212349"))
+    }
+  }
+}
   case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
@@ -97,16 +114,17 @@ class NotificationSpec extends ApiServiceSpec {
   } }
   // Send Change Notification for Workspace require WRITE access. Accept if OWNER or WRITE; Reject if READ or NO ACCESS
   it should "allow an owner to send change notifications" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(user.userSubjectId.value, testData.workspace.toWorkspaceName)).compactPrint}"), 10 seconds)
       }
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(testData.userProjectOwner.userSubjectId.value, testData.workspace.toWorkspaceName)).compactPrint}"), 10 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(testData.userOwner.userSubjectId.value, testData.workspace.toWorkspaceName)).compactPrint}"), 10 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(testData.userWriter.userSubjectId.value, testData.workspace.toWorkspaceName)).compactPrint}"), 10 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(testData.userReader.userSubjectId.value, testData.workspace.toWorkspaceName)).compactPrint}"), 10 seconds)
   }
 
  it should "allow user with write-access to send change notifications" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
