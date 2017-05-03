@@ -10,7 +10,8 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
 import slick.dbio.Effect.{Read, Write}
 import slick.driver.JdbcDriver
-import slick.jdbc.GetResult
+import scalaz._
+import Scalaz._
 
 /**
  * Created by mbemis on 2/18/16.
@@ -36,7 +37,8 @@ trait WorkflowComponent {
   this: DriverComponent
     with EntityComponent
     with SubmissionComponent
-    with AttributeComponent =>
+    with AttributeComponent
+    with RawlsUserComponent =>
 
   import driver.api._
 
@@ -283,6 +285,20 @@ trait WorkflowComponent {
     def countWorkflowsByQueueStatus: ReadAction[Map[String, Int]] = {
       val groupedSeq = findQueuedAndRunningWorkflows.groupBy(_.status).map { case (status, recs) => (status, recs.length) }.result
       groupedSeq.map(_.toMap)
+    }
+
+    def countWorkflowsByQueueStatusByUser: ReadAction[Map[String, Map[String, Int]]] = {
+      // Query for a Seq of (User, Workflow) tuples.
+      val userWorkflows = (for {
+        workflow <- findQueuedAndRunningWorkflows
+        submission <- submissionQuery if workflow.submissionId === submission.id
+        user <- rawlsUserQuery if submission.submitterId === user.userSubjectId
+      } yield (user, workflow)).result
+
+      // Combine results into a nested map using Scalaz semigroups for aggregation.
+      userWorkflows.map(_.foldLeft(Map.empty[String, Map[String, Int]]) { case (result, (user, workflow)) =>
+        result |+| Map(user.userEmail -> Map(workflow.status -> 1))
+      })
     }
 
     def countWorkflowsAheadOfUserInQueue(userInfo: UserInfo): ReadAction[Int] = {

@@ -16,7 +16,7 @@ import spray.http._
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{WorkspaceFormat, WorkspaceStatusFormat, ErrorReportFormat, WorkspaceListResponseFormat, AttributeReferenceFormat}
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserStatusFormat, UserListFormat}
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{CreateRawlsBillingProjectFullRequestFormat, SyncReportFormat, RawlsBillingProjectMembershipFormat, RawlsGroupMemberListFormat, RawlsUserInfoListFormat}
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsBillingProjectNameFormat, RawlsGroupRefFormat}
@@ -1138,6 +1138,28 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.InternalServerError) {
           status
         }
+      }
+  }
+
+  it should "get queue status by user" in withTestDataApiServices { services =>
+    import driver.api._
+    Get("/admin/submissions/queueStatusByUser") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val workflowRecs = runAndWait(workflowQuery.result)
+        val groupedWorkflowRecs = workflowRecs.groupBy(_.status)
+          .filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
+          .mapValues(_.size)
+        val expected = WorkflowQueueStatusByUserResponse(
+          groupedWorkflowRecs,
+          Map(testData.userOwner.userEmail.value -> groupedWorkflowRecs),
+          services.maxActiveWorkflowsTotal,
+          services.maxActiveWorkflowsPerUser)
+        val response = responseAs[WorkflowQueueStatusByUserResponse]
+        response should equal (expected)
       }
   }
 }

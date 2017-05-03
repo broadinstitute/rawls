@@ -85,6 +85,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
 
     val execServiceBatchSize = 3
+    val maxActiveWorkflowsTotal = 10
+    val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
@@ -94,7 +96,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       notificationDAO,
       submissionSupervisor,
       bucketDeletionMonitor,
-      userServiceConstructor
+      userServiceConstructor,
+      maxActiveWorkflowsTotal,
+      maxActiveWorkflowsPerUser
     )_
 
     def cleanupSupervisor = {

@@ -125,6 +125,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
     )_
 
     val execServiceBatchSize = 3
+    val maxActiveWorkflowsTotal = 10
+    val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
@@ -134,7 +136,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
       notificationDAO,
       submissionSupervisor,
       bucketDeletionMonitor,
-      userServiceConstructor
+      userServiceConstructor,
+      maxActiveWorkflowsTotal,
+      maxActiveWorkflowsPerUser
     )_
 
     def cleanupSupervisor = {

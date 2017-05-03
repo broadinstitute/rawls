@@ -214,6 +214,14 @@ case class WorkflowQueueStatusResponse
   workflowCountsByStatus: Map[String, Int]
 )
 
+case class WorkflowQueueStatusByUserResponse
+(
+  statuses: Map[String, Int],
+  users: Map[String, Map[String, Int]],
+  maxActiveWorkflowsTotal: Int,
+  maxActiveWorkflowsPerUser: Int
+)
+
 case class SubmissionWorkflowStatusResponse(
   submissionId: UUID,
   workflowStatus: String,
@@ -305,6 +313,34 @@ class ExecutionJsonSupport extends JsonSupport {
   implicit val ActiveSubmissionFormat = jsonFormat3(ActiveSubmission)
 
   implicit val WorkflowQueueStatusResponseFormat = jsonFormat3(WorkflowQueueStatusResponse)
+
+  implicit object WorkflowQueueStatusByUserResponseFormat extends RootJsonFormat[WorkflowQueueStatusByUserResponse] {
+    def write(r: WorkflowQueueStatusByUserResponse) = JsObject(
+      "statuses" -> r.statuses.toJson,
+      // add 1 layer of nesting to `users` to include the `statuses` key
+      "users" -> JsObject {
+        r.users.map { case (u, s) =>
+          u -> JsObject("statuses" -> s.toJson)
+        }
+      },
+      "maxActiveWorkflowsTotal" -> r.maxActiveWorkflowsTotal.toJson,
+      "maxActiveWorkflowsPerUser" -> r.maxActiveWorkflowsPerUser.toJson
+    )
+
+    def read(value: JsValue) = {
+      value.asJsObject.getFields("statuses", "users", "maxActiveWorkflowsTotal", "maxActiveWorkflowsPerUser") match {
+        case Seq(statuses @ JsObject(_), users @ JsObject(_), JsNumber(maxActiveWorkflowsTotal), JsNumber(maxActiveWorkflowsPerUser)) =>
+          WorkflowQueueStatusByUserResponse(
+            statuses.convertTo[Map[String, Int]],
+            // remove 1 layer of nesting from `users` to remove the middle `statuses` map
+            users.convertTo[Map[String, Map[String, Map[String, Int]]]].flatMap { case (k, v) =>
+              v.values.map(v2 => k -> v2)
+            },
+            maxActiveWorkflowsTotal.intValue,
+            maxActiveWorkflowsPerUser.intValue)
+      }
+    }
+  }
 }
 
 object WorkflowStatuses {

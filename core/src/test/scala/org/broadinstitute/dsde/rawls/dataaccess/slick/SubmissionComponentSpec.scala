@@ -251,6 +251,26 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
+  it should "count workflows by queue status" in withDefaultTestDatabase {
+    val result = runAndWait(workflowQuery.countWorkflowsByQueueStatus)
+    validateCountsByQueueStatus(result)
+  }
+
+  it should "count workflows by queue status by user" in withDefaultTestDatabase {
+    val result = runAndWait(workflowQuery.countWorkflowsByQueueStatusByUser)
+    result.size should be (1)
+    result.keySet should contain (testData.userOwner.userEmail.value)
+    result.values.foreach(validateCountsByQueueStatus)
+  }
+
+  private def validateCountsByQueueStatus(counts: Map[String, Int]): Unit = {
+    val workflowRecs = runAndWait(workflowQuery.result)
+    val expected = workflowRecs.groupBy(_.status)
+      .filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
+      .mapValues(_.size)
+    counts should equal (expected)
+  }
+
   WorkflowStatuses.runningStatuses.foreach { status =>
     it should s"count $status workflows by submitter" in withDefaultTestDatabase {
       val workflowRecs = runAndWait(workflowQuery.result)

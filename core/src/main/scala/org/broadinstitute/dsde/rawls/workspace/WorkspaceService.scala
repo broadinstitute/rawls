@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionServiceValidationFormat, ExecutionServiceVersionFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionServiceValidationFormat, ExecutionServiceVersionFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat, WorkflowQueueStatusByUserResponseFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -114,6 +114,7 @@ object WorkspaceService {
   case object AdminListAllActiveSubmissions extends WorkspaceServiceMessage
   case class AdminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class AdminDeleteWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case object AdminWorkflowQueueStatusByUser extends WorkspaceServiceMessage
 
   case class HasAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class GrantAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -123,11 +124,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, notificationDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, notificationDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
   import dataSource.dataAccess.driver.api._
 
   implicit val timeout = Timeout(5 minutes)
@@ -194,6 +195,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case AdminListAllActiveSubmissions => asFCAdmin { listAllActiveSubmissions() } pipeTo sender
     case AdminAbortSubmission(workspaceName,submissionId) => pipe(adminAbortSubmission(workspaceName,submissionId)) to sender
     case AdminDeleteWorkspace(workspaceName) => pipe(adminDeleteWorkspace(workspaceName)) to sender
+    case AdminWorkflowQueueStatusByUser => pipe(adminWorkflowQueueStatusByUser()) to sender
 
     case HasAllUserReadAccess(workspaceName) => pipe(hasAllUserReadAccess(workspaceName)) to sender
     case GrantAllUserReadAccess(workspaceName) => pipe(grantAllUserReadAccess(workspaceName)) to sender
@@ -1542,6 +1544,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             }
           case _ => DBIO.successful(RequestComplete(StatusCodes.OK, WorkflowQueueStatusResponse(0, 0, statusMap)))
         }
+      }
+    }
+  }
+
+  def adminWorkflowQueueStatusByUser() = {
+    asFCAdmin {
+      dataSource.inTransaction { dataAccess =>
+        for {
+          global <- dataAccess.workflowQuery.countWorkflowsByQueueStatus
+          perUser <- dataAccess.workflowQuery.countWorkflowsByQueueStatusByUser
+        } yield RequestComplete(StatusCodes.OK, WorkflowQueueStatusByUserResponse(global, perUser, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser))
       }
     }
   }

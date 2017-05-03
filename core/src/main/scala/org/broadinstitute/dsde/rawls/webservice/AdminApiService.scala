@@ -275,6 +275,13 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           )
         }
       }
+    } ~
+    path("admin" / "submissions" / "queueStatusByUser") {
+      get {
+        requestContext => perRequest(requestContext,
+          WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.AdminWorkflowQueueStatusByUser)
+      }
     }
   }
 }
