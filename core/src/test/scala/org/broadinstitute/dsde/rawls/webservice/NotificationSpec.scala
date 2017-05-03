@@ -5,14 +5,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDat
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Notifications._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.{MockUserInfoDirectives, UserInfoDirectives}
-import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
+import spray.http.StatusCodes
 
 import scala.concurrent.duration._
 import spray.json.DefaultJsonProtocol._
 import WorkspaceACLJsonSupport._
-import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
-import spray.routing.Directive1
+import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 
 import scala.concurrent.{Await, ExecutionContext}
 
@@ -21,23 +19,10 @@ import scala.concurrent.{Await, ExecutionContext}
  */
 class NotificationSpec extends ApiServiceSpec {
 
-  trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
-  val user: String
-  def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
-    // just return the cookie text as the common name
-    user match {
-      case testData.userProjectOwner.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userProjectOwner.userSubjectId.value))
-      case testData.userOwner.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userOwner.userSubjectId.value))
-      case testData.userWriter.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userWriter.userSubjectId.value))
-      case testData.userReader.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userReader.userSubjectId.value))
-      case "no-access" => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212348"))
-      case _ => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212349"))
-    }
-  }
-}
-  case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
 
-  def withApiServices[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
+  case class TestApiService(dataSource: SlickDataSource, user: RawlsUser, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
+
+  def withApiServices[T](dataSource: SlickDataSource, user: RawlsUser = testData.userOwner)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
     try {
       testCode(apiService)
@@ -52,7 +37,7 @@ class NotificationSpec extends ApiServiceSpec {
     }
   }
 
-  def withTestDataApiServicesAndUser[T](user: String)(testCode: TestApiService => T): T = {
+  def withTestDataApiServicesAndUser[T](user: RawlsUser)(testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource, user) { services =>
         testData.createWorkspaceGoogleGroups(services.gcsDAO)
@@ -113,7 +98,7 @@ class NotificationSpec extends ApiServiceSpec {
 
   } }
   // Send Change Notification for Workspace require WRITE access. Accept if OWNER or WRITE; Reject if READ or NO ACCESS
-  it should "allow an owner to send change notifications" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
+  it should "allow an owner to send change notifications" in withTestDataApiServicesAndUser(testData.userOwner) { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -127,7 +112,7 @@ class NotificationSpec extends ApiServiceSpec {
     TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(testData.userReader.userSubjectId.value, testData.workspace.toWorkspaceName)).compactPrint}"), 10 seconds)
   }
 
- it should "allow user with write-access to send change notifications" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
+ it should "allow user with write-access to send change notifications" in withTestDataApiServicesAndUser(testData.userWriter) { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -137,7 +122,7 @@ class NotificationSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow user with read-access to send change notifications" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
+  it should "not allow user with read-access to send change notifications" in withTestDataApiServicesAndUser(testData.userReader) { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -147,7 +132,7 @@ class NotificationSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow user with no-access to send change notifications" in withTestDataApiServicesAndUser("no-access") { services =>
+  it should "not allow user with no-access to send change notifications" in withTestDataApiServicesAndUser(RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("obamaiscool"))) { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check{
