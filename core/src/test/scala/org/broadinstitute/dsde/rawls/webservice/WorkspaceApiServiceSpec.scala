@@ -170,8 +170,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace3Groups.map(rawlsGroupQuery.save).toSeq),
-        rawlsGroupQuery.save(defaultRealmGroup.usersGroup),
-        rawlsGroupQuery.save(defaultRealmGroup.ownersGroup),
+        rawlsGroupQuery.save(defaultRealmGroup.membersGroup),
+        rawlsGroupQuery.save(defaultRealmGroup.adminsGroup),
         managedGroupQuery.createManagedGroup(defaultRealmGroup),
 
         workspaceQuery.save(workspace),
@@ -230,11 +230,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(newWorkspace) {
           val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
         }
         assertResult(newWorkspace) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
@@ -269,7 +269,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -281,11 +281,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(workspaceWithRealm) {
           val ws = runAndWait(workspaceQuery.findByName(workspaceWithRealm.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
         }
         assertResult(workspaceWithRealm) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceWithRealm.path))))) {
@@ -299,7 +299,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -488,7 +488,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
-    val workspaceGroupRefs = (testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values) - testData.workspace.accessLevels(ProjectOwner)
+    val workspaceGroupRefs = (testData.workspace.accessLevels.values.toSet ++ testData.workspace.authDomainACLs.values) - testData.workspace.accessLevels(ProjectOwner)
     workspaceGroupRefs foreach { case groupRef =>
       assertResult(Option(groupRef)) {
         runAndWait(rawlsGroupQuery.load(groupRef)) map RawlsGroup.toRef
@@ -822,7 +822,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -834,22 +834,22 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", workspaceWithRealm.realm, Map.empty)
+    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", workspaceWithRealm.authorizationDomain, Map.empty)
     Post(s"${workspaceWithRealm.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(workspaceWithRealm.realm) {
-          responseAs[Workspace].realm
+        assertResult(workspaceWithRealm.authorizationDomain) {
+          responseAs[Workspace].authorizationDomain
         }
       }
   }
 
   def createAndSaveManagedGroup(name: String, users: Set[RawlsUserRef], owners: Set[RawlsUserRef] = Set.empty): ManagedGroup = {
     val realmGroup = makeManagedGroup(name, users, owners = owners)
-    runAndWait(rawlsGroupQuery.save(realmGroup.usersGroup) andThen rawlsGroupQuery.save(realmGroup.ownersGroup) andThen managedGroupQuery.createManagedGroup(realmGroup))
+    runAndWait(rawlsGroupQuery.save(realmGroup.membersGroup) andThen rawlsGroupQuery.save(realmGroup.adminsGroup) andThen managedGroupQuery.createManagedGroup(realmGroup))
   }
 
   it should "not allow changing a workspace's Realm if it exists" in withTestDataApiServices { services =>
@@ -861,7 +861,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup1),
+      authorizationDomain = Option(realmGroup1),
       Map.empty
     )
 
@@ -897,7 +897,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(None) {
-          responseAs[Workspace].realm
+          responseAs[Workspace].authorizationDomain
         }
       }
 
@@ -911,7 +911,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Some(ManagedGroup.toRef(realmGroup))) {
-          responseAs[Workspace].realm
+          responseAs[Workspace].authorizationDomain
         }
       }
   }
@@ -922,7 +922,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -960,7 +960,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(ManagedGroupRef(realmGroup.groupName)),
+      authorizationDomain = Option(ManagedGroupRef(realmGroup.groupName)),
       Map.empty
     )
 
@@ -980,7 +980,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(ownerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(ownerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -991,7 +991,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -1014,12 +1014,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(false){
-      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws1.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //add userWriter to realm
     val groupAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(groupAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(groupAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1031,15 +1031,15 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(true){
-      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws2.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
     assertResult(true){
-      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Owner))).get.users.contains(RawlsUserRef(testData.userOwner.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws2.authDomainACLs(WorkspaceAccessLevels.Owner))).get.users.contains(RawlsUserRef(testData.userOwner.userSubjectId))
     }
 
     //remove userWriter from realm
     val groupRemove = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Delete(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(groupRemove)) ~>
+    Delete(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(groupRemove)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1051,7 +1051,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws3 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(false){
-      runAndWait(rawlsGroupQuery.load(ws3.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws3.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -1066,7 +1066,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //add the owner to the realm
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(ownerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(ownerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1077,7 +1077,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -1129,7 +1129,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     val writerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(writerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(writerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1151,12 +1151,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(true) {
-      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws1.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //remove userWriter from group A
     val removeWriterFromA = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Delete(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(removeWriterFromA)) ~>
+    Delete(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(removeWriterFromA)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1168,7 +1168,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(false) {
-      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws2.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -1183,7 +1183,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //add the owner to the realm
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(ownerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(ownerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1194,7 +1194,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      realm = Option(realmGroup),
+      authorizationDomain = Option(realmGroup),
       Map.empty
     )
 
@@ -1247,7 +1247,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //add group D to realm
     val addDtoRealm= RawlsGroupMemberList(None, None, None, Some(Seq(groupD.groupName.value)))
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(addDtoRealm)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(addDtoRealm)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1266,7 +1266,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(true) {
-      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws1.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //remove userWriter from group C
@@ -1283,7 +1283,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
     assertResult(false) {
-      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+      runAndWait(rawlsGroupQuery.load(ws2.authDomainACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -1973,7 +1973,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(expected) {
-          ws.realmACLs
+          ws.authDomainACLs
         }
       }
   }
@@ -2017,7 +2017,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(expectedIntersectionGroups(ws.workspaceId)) {
-          ws.realmACLs
+          ws.authDomainACLs
         }
       }
   }

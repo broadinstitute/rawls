@@ -239,7 +239,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     ),Map(
       WorkspaceAccessLevels.Owner -> Set.empty,
       WorkspaceAccessLevels.Write -> Set.empty,
-      WorkspaceAccessLevels.Read -> Set(dbGapAuthorizedUsersGroup.usersGroup)
+      WorkspaceAccessLevels.Read -> Set(dbGapAuthorizedUsersGroup.membersGroup)
     ))_
 
     val wsAttrs = Map(
@@ -496,7 +496,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         workspaceMixedSubmissionsGroups ++
         workspaceTerminatedSubmissionsGroups ++
         controlledWorkspaceGroups ++
-        Seq(realm.usersGroup, realm.ownersGroup, realm2.usersGroup, realm2.ownersGroup)
+        Seq(realm.membersGroup, realm.adminsGroup, realm2.membersGroup, realm2.adminsGroup)
 
       groups.foreach(gcsDAO.createGoogleGroup(_))
     }
@@ -525,8 +525,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsUserQuery.save(userReader),
         rawlsUserQuery.save(userReaderViaGroup),
         rawlsGroupQuery.save(nestedProjectGroup),
-        rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.usersGroup),
-        rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.ownersGroup),
+        rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.membersGroup),
+        rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.adminsGroup),
         DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(testProject1.groups.values.map(rawlsGroupQuery.save).toSeq),
@@ -536,10 +536,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         DBIO.sequence(testProject3.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsBillingProjectQuery.create(testProject3),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
-        rawlsGroupQuery.save(realm.usersGroup),
-        rawlsGroupQuery.save(realm.ownersGroup),
-        rawlsGroupQuery.save(realm2.usersGroup),
-        rawlsGroupQuery.save(realm2.ownersGroup),
+        rawlsGroupQuery.save(realm.membersGroup),
+        rawlsGroupQuery.save(realm.adminsGroup),
+        rawlsGroupQuery.save(realm2.membersGroup),
+        rawlsGroupQuery.save(realm2.adminsGroup),
         DBIO.sequence(workspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(controlledWorkspaceGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(otherWorkspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
@@ -555,7 +555,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         managedGroupQuery.createManagedGroup(dbGapAuthorizedUsersGroup),
         saveAllWorkspacesAction,
         workspaceQuery.insertUserSharePermissions(workspaceToTestGrantId, Seq(RawlsUserRef(userWriter.userSubjectId))),
-        workspaceQuery.insertGroupSharePermissions(workspaceToTestGrantId, Seq(dbGapAuthorizedUsersGroup.usersGroup)),
+        workspaceQuery.insertGroupSharePermissions(workspaceToTestGrantId, Seq(dbGapAuthorizedUsersGroup.membersGroup)),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),

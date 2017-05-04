@@ -33,6 +33,8 @@
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>
     </logger>
+    -->
+    <!--
     <logger name="slick.jdbc.StatementInvoker.result" level="DEBUG" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>

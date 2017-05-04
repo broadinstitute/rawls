@@ -2,37 +2,43 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
-import spray.json._
+import spray.json.{JsObject, _}
 
 sealed trait UserAuthRef
 case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
 case class RawlsGroupRef(groupName: RawlsGroupName) extends UserAuthRef
 
 object ManagedRoles {
-  sealed trait ManagedRole extends RawlsEnumeration[ManagedRole] {
+  sealed trait ManagedRole extends RawlsEnumeration[ManagedRole] with Ordered[ManagedRole] {
     override def toString = getClass.getSimpleName.stripSuffix("$")
 
     override def withName(name: String): ManagedRole = ManagedRoles.withName(name)
+
+    def compare(that: ManagedRole): Int = {
+      // just do string compare such that admin will be greatest
+      that.toString.compareTo(this.toString)
+    }
   }
 
   def withName(name: String): ManagedRole = name.toLowerCase match {
-    case "owner" => Owner
-    case "user" => User
+    case "admin" => Admin
+    case "member" => Member
     case _ => throw new RawlsException(s"invalid role [${name}]")
   }
 
-  case object Owner extends ManagedRole
-  case object User extends ManagedRole
+  case object Admin extends ManagedRole
+  case object Member extends ManagedRole
 
-  val all: Set[ManagedRole] = Set(Owner, User)
+  val all: Set[ManagedRole] = Set(Admin, Member)
 }
 
-case class ManagedGroupRef(usersGroupName: RawlsGroupName) extends UserAuthRef {
-  def toUsersGroupRef: RawlsGroupRef = RawlsGroupRef(usersGroupName)
+case class ManagedGroupRef(membersGroupName: RawlsGroupName) extends UserAuthRef {
+  def toMembersGroupRef: RawlsGroupRef = RawlsGroupRef(membersGroupName)
 }
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
-case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, accessLevel: ManagedRole)
-case class ManagedGroupWithMembers(usersGroup: RawlsGroupShort, ownersGroup: RawlsGroupShort, usersEmails: Seq[String], ownersEmails: Seq[String])
+case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, role: ManagedRole)
+case class ManagedGroupAccessResponse(groupName: RawlsGroupName, role: ManagedRole)
+case class ManagedGroupWithMembers(membersGroup: RawlsGroupShort, adminsGroup: RawlsGroupShort, membersEmails: Seq[String], adminsEmails: Seq[String])
 
 sealed trait UserAuthType { val value: String }
 case class RawlsUserEmail(value: String) extends UserAuthType
@@ -76,6 +82,7 @@ class UserModelJsonSupport extends JsonSupport {
   implicit val RawlsGroupShortFormat = jsonFormat2(RawlsGroupShort)
   implicit val ManagedGroupRefFormat = jsonFormat1(ManagedGroupRef)
   implicit val ManagedGroupAccessFormat = jsonFormat2(ManagedGroupAccess)
+  implicit val ManagedGroupAccessResponseFormat = jsonFormat2(ManagedGroupAccessResponse)
   implicit val ManagedGroupWithMembersFormat = jsonFormat4(ManagedGroupWithMembers)
 }
 

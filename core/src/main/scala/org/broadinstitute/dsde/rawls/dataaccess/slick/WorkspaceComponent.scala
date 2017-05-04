@@ -70,7 +70,7 @@ trait WorkspaceComponent {
     def recordVersion = column[Long]("record_version")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
-    def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, managedGroupQuery)(_.usersGroupName.?)
+    def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, managedGroupQuery)(_.membersGroupName.?)
 
     def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, realmGroupName, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
@@ -194,7 +194,7 @@ trait WorkspaceComponent {
     private def insertOrUpdateAccessRecords(workspace: Workspace): WriteAction[Int] = {
       val id = UUID.fromString(workspace.workspaceId)
       val accessRecords = workspace.accessLevels.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, false) }
-      val realmAclRecords = workspace.realmACLs.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, true) }
+      val realmAclRecords = workspace.authDomainACLs.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, true) }
       DBIO.sequence((accessRecords ++ realmAclRecords).map { workspaceAccessQuery insertOrUpdate }).map(_.sum)
     }
 
@@ -448,7 +448,7 @@ trait WorkspaceComponent {
         val flatRealms = allRealms.flatten.toSet
         DBIO.sequence(flatRealms.toSeq.map { realm =>
           val realmRef = ManagedGroupRef(RawlsGroupName(realm))
-          rawlsGroupQuery.loadGroupIfMember(realmRef.toUsersGroupRef, user) flatMap {
+          rawlsGroupQuery.loadGroupIfMember(realmRef.toMembersGroupRef, user) flatMap {
             case None => DBIO.successful(None)
             case Some(_) => DBIO.successful(Option(realmRef))
           }
@@ -575,7 +575,7 @@ trait WorkspaceComponent {
     }
 
     def findWorkspacesInRealm(realmRef: ManagedGroupRef): WorkspaceQueryType = {
-      filter(_.realmGroupName === realmRef.usersGroupName.value)
+      filter(_.realmGroupName === realmRef.membersGroupName.value)
     }
 
     def listPermissionPairsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[WorkspacePermissionsPair]] = {
@@ -715,7 +715,7 @@ trait WorkspaceComponent {
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, workspace.realm.map(_.usersGroupName.value), 0)
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, workspace.authorizationDomain.map(_.membersGroupName.value), 0)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap, accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {

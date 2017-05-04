@@ -29,15 +29,15 @@ object RawlsGroup {
 }
 
 trait Managed {
-  val usersGroup: RawlsGroup
-  val ownersGroup: RawlsGroup
+  val membersGroup: RawlsGroup
+  val adminsGroup: RawlsGroup
 }
 
 object ManagedGroup {
-  implicit def toRef(mg: ManagedGroup): ManagedGroupRef = ManagedGroupRef(mg.usersGroup.groupName)
+  implicit def toRef(mg: ManagedGroup): ManagedGroupRef = ManagedGroupRef(mg.membersGroup.groupName)
 }
 
-case class ManagedGroup(usersGroup: RawlsGroup, ownersGroup: RawlsGroup) extends Managed
+case class ManagedGroup(membersGroup: RawlsGroup, adminsGroup: RawlsGroup) extends Managed
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
 case class RawlsBillingProject(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String])
