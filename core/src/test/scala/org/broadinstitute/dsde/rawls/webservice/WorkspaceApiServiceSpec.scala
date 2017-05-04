@@ -170,8 +170,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace3Groups.map(rawlsGroupQuery.save).toSeq),
-        rawlsGroupQuery.save(defaultRealmGroup.usersGroup),
-        rawlsGroupQuery.save(defaultRealmGroup.ownersGroup),
+        rawlsGroupQuery.save(defaultRealmGroup.membersGroup),
+        rawlsGroupQuery.save(defaultRealmGroup.adminsGroup),
         managedGroupQuery.createManagedGroup(defaultRealmGroup),
 
         workspaceQuery.save(workspace),
@@ -849,7 +849,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   def createAndSaveManagedGroup(name: String, users: Set[RawlsUserRef], owners: Set[RawlsUserRef] = Set.empty): ManagedGroup = {
     val realmGroup = makeManagedGroup(name, users, owners = owners)
-    runAndWait(rawlsGroupQuery.save(realmGroup.usersGroup) andThen rawlsGroupQuery.save(realmGroup.ownersGroup) andThen managedGroupQuery.createManagedGroup(realmGroup))
+    runAndWait(rawlsGroupQuery.save(realmGroup.membersGroup) andThen rawlsGroupQuery.save(realmGroup.adminsGroup) andThen managedGroupQuery.createManagedGroup(realmGroup))
   }
 
   it should "not allow changing a workspace's Realm if it exists" in withTestDataApiServices { services =>
@@ -980,7 +980,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(ownerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(ownerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1019,7 +1019,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //add userWriter to realm
     val groupAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(groupAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(groupAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1039,7 +1039,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //remove userWriter from realm
     val groupRemove = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Delete(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(groupRemove)) ~>
+    Delete(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(groupRemove)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1066,7 +1066,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //add the owner to the realm
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(ownerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(ownerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1129,7 +1129,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     val writerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(writerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(writerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1156,7 +1156,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //remove userWriter from group A
     val removeWriterFromA = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Delete(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(removeWriterFromA)) ~>
+    Delete(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(removeWriterFromA)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1183,7 +1183,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //add the owner to the realm
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(ownerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(ownerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1247,7 +1247,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //add group D to realm
     val addDtoRealm= RawlsGroupMemberList(None, None, None, Some(Seq(groupD.groupName.value)))
-    Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(addDtoRealm)) ~>
+    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(addDtoRealm)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
