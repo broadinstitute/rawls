@@ -52,4 +52,19 @@
         <renameColumn tableName="MANAGED_GROUP" oldColumnName="OWNERS_GROUP_NAME" newColumnName="ADMINS_GROUP_NAME" columnDataType="varchar(254)"/>
     </changeSet>
 
+    <changeSet id="drop-users-group-fk" author="dvoet" logicalFilePath="dummy">
+        <dropForeignKeyConstraint baseTableName="MANAGED_GROUP" constraintName="FK_MANAGED_GROUP_USERS"/>
+    </changeSet>
+    <changeSet id="drop-owners-group-fk" author="dvoet" logicalFilePath="dummy">
+        <dropForeignKeyConstraint baseTableName="MANAGED_GROUP" constraintName="FK_MANAGED_GROUP_OWNERS"/>
+    </changeSet>
+
+    <changeSet id="members-group-fk" author="dvoet" logicalFilePath="dummy">
+        <addForeignKeyConstraint baseTableName="MANAGED_GROUP" baseColumnNames="MEMBERS_GROUP_NAME" constraintName="FK_MANAGED_GROUP_MEMBERS" referencedTableName="GROUP"
+                                 referencedColumnNames="NAME"/>
+    </changeSet>
+    <changeSet id="admins-group-fk" author="dvoet" logicalFilePath="dummy">
+        <addForeignKeyConstraint baseTableName="MANAGED_GROUP" baseColumnNames="ADMINS_GROUP_NAME" constraintName="FK_MANAGED_GROUP_ADMINS" referencedTableName="GROUP"
+                                 referencedColumnNames="NAME"/>
+    </changeSet>
 </databaseChangeLog>
