@@ -363,7 +363,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- userDirectoryDAO.removeUser(userRef.userSubjectId)
     } yield ()
 
-    val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup)
+    val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup).recover { case e: HttpResponseException if e.getStatusCode == 404 => Unit }
 
     for {
       _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion, deleteRefreshTokenInternal(userRef)))
