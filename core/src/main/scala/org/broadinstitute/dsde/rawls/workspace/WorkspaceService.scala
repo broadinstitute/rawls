@@ -1845,7 +1845,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             // so if there is a realm we have to do the intersection. There should not be any readers or writers
             // at this point (brand new workspace) so we don't need to do intersections for those
             realmProjectOwnerIntersection <- DBIOUtils.maybeDbAction(workspaceRequest.authorizationDomain) {
-              realm => dataAccess.rawlsGroupQuery.intersectGroupMembership(project.get.groups(ProjectRoles.Owner), realm.toUsersGroupRef)
+              realm => dataAccess.rawlsGroupQuery.intersectGroupMembership(project.get.groups(ProjectRoles.Owner), realm.toMembersGroupRef)
             }
 
             googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain, realmProjectOwnerIntersection))
@@ -1869,7 +1869,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             workspaceRequest.authorizationDomain match {
               case Some(realm) => dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUser(userInfo)) flatMap { realmAccesses =>
                 if(realmAccesses.contains(ManagedGroupAccess(realm, ManagedRoles.Member))) op
-                else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.usersGroupName.value}] as you do not have access to it.")))
+                else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.membersGroupName.value}] as you do not have access to it.")))
               }
               case None => op
             }

@@ -32,8 +32,8 @@ object ManagedRoles {
   val all: Set[ManagedRole] = Set(Admin, Member)
 }
 
-case class ManagedGroupRef(usersGroupName: RawlsGroupName) extends UserAuthRef {
-  def toUsersGroupRef: RawlsGroupRef = RawlsGroupRef(usersGroupName)
+case class ManagedGroupRef(membersGroupName: RawlsGroupName) extends UserAuthRef {
+  def toMembersGroupRef: RawlsGroupRef = RawlsGroupRef(membersGroupName)
 }
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, role: ManagedRole)

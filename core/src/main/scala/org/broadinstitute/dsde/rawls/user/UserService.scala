@@ -576,8 +576,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def createManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
-    val usersGroupRef = groupRef.toUsersGroupRef
-    val ownersGroupRef = RawlsGroupRef(RawlsGroupName(groupRef.usersGroupName.value + "-owners"))
+    val usersGroupRef = groupRef.toMembersGroupRef
+    val ownersGroupRef = RawlsGroupRef(RawlsGroupName(groupRef.membersGroupName.value + "-owners"))
     for {
       managedGroup <- createManagedGroupInternal(usersGroupRef, ownersGroupRef)
       _ <- updateGroupMembership(managedGroup.adminsGroup, addUsers = Set(RawlsUser(userInfo)))
@@ -628,7 +628,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId))).map { groupsWithAccess =>
         val response = groupsWithAccess.groupBy(_.managedGroupRef).map { case (groupRef, accessEntries) =>
-          ManagedGroupAccessResponse(groupRef.usersGroupName, accessEntries.map(_.role).max)
+          ManagedGroupAccessResponse(groupRef.membersGroupName, accessEntries.map(_.role).max)
         }
         RequestComplete(StatusCodes.OK, response)
       }

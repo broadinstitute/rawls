@@ -45,4 +45,11 @@
         </sql>
     </changeSet>
 
+    <changeSet logicalFilePath="dummy" author="dvoet" id="rename-users-group">
+        <renameColumn tableName="MANAGED_GROUP" oldColumnName="USERS_GROUP_NAME" newColumnName="MEMBERS_GROUP_NAME" columnDataType="varchar(254)"/>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="dvoet" id="rename-owners-group">
+        <renameColumn tableName="MANAGED_GROUP" oldColumnName="OWNERS_GROUP_NAME" newColumnName="ADMINS_GROUP_NAME" columnDataType="varchar(254)"/>
+    </changeSet>
+
 </databaseChangeLog>

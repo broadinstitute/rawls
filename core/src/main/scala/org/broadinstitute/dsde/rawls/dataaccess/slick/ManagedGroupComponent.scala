@@ -5,11 +5,11 @@ import org.broadinstitute.dsde.rawls.model._
 
 /**
  * Managed groups are groups that can be managed by users. They consist of 2 rawls groups: one containing everyone who
- * is considered members the group (users) and another containing everyone who can change the membership (owners)
+ * is considered members of the group and another containing everyone who can administer the membership
  *
  * Created by dvoet on 3/8/17.
  */
-case class ManagedGroupRecord(usersGroupName: String, ownersGroupName: String)
+case class ManagedGroupRecord(membersGroupName: String, adminsGroupName: String)
 
 trait ManagedGroupComponent {
   this: DriverComponent
@@ -18,13 +18,13 @@ trait ManagedGroupComponent {
   import driver.api._
 
   class ManagedGroupTable(tag: Tag) extends Table[ManagedGroupRecord](tag, "MANAGED_GROUP") {
-    def usersGroupName = column[String]("USERS_GROUP_NAME", O.Length(254), O.PrimaryKey)
-    def ownersGroupName = column[String]("OWNERS_GROUP_NAME", O.Length(254))
+    def membersGroupName = column[String]("MEMBERS_GROUP_NAME", O.Length(254), O.PrimaryKey)
+    def adminsGroupName = column[String]("ADMINS_GROUP_NAME", O.Length(254))
 
-    def * = (usersGroupName, ownersGroupName) <> (ManagedGroupRecord.tupled, ManagedGroupRecord.unapply)
+    def * = (membersGroupName, adminsGroupName) <> (ManagedGroupRecord.tupled, ManagedGroupRecord.unapply)
 
-    def usersGroup = foreignKey("FK_MANAGED_GROUP_USERS", usersGroupName, rawlsGroupQuery)(_.groupName)
-    def ownersGroup = foreignKey("FK_MANAGED_GROUP_OWNERS", ownersGroupName, rawlsGroupQuery)(_.groupName)
+    def membersGroup = foreignKey("FK_MANAGED_GROUP_MEMBERS", membersGroupName, rawlsGroupQuery)(_.groupName)
+    def adminsGroup = foreignKey("FK_MANAGED_GROUP_ADMINS", adminsGroupName, rawlsGroupQuery)(_.groupName)
   }
 
   type ManagedGroupQuery = Query[ManagedGroupTable, ManagedGroupRecord, Seq]
@@ -38,12 +38,12 @@ trait ManagedGroupComponent {
       uniqueResult[ManagedGroupRecord](findManagedGroup(managedGroupRef)).flatMap {
         case Some(mg) =>
           for {
-            usersGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(mg.usersGroupName)))
-            ownersGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(mg.ownersGroupName)))
+            membersGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(mg.membersGroupName)))
+            adminsGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(mg.adminsGroupName)))
           } yield {
             Option(ManagedGroup(
-              usersGroup.getOrElse(throw new RawlsException(s"users group ${mg.usersGroupName} does not exist")),
-              ownersGroup.getOrElse(throw new RawlsException(s"owners group ${mg.ownersGroupName} does not exist"))
+              membersGroup.getOrElse(throw new RawlsException(s"members group ${mg.membersGroupName} does not exist")),
+              adminsGroup.getOrElse(throw new RawlsException(s"admins group ${mg.adminsGroupName} does not exist"))
             ))
           }
         case None => DBIO.successful(None)
@@ -57,11 +57,11 @@ trait ManagedGroupComponent {
       } yield {
         for {
           managedGroupRecord <- allManagedGroupRecs
-          groupForUser <- groupsForUser if Seq(managedGroupRecord.ownersGroupName, managedGroupRecord.usersGroupName).contains(groupForUser.groupName.value)
+          groupForUser <- groupsForUser if Seq(managedGroupRecord.adminsGroupName, managedGroupRecord.membersGroupName).contains(groupForUser.groupName.value)
         } yield {
           val role = groupForUser match {
-            case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.ownersGroupName => ManagedRoles.Admin
-            case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.usersGroupName => ManagedRoles.Member
+            case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.adminsGroupName => ManagedRoles.Admin
+            case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.membersGroupName => ManagedRoles.Member
             case _ => throw new RawlsException("this should not have happened") // the guard in the for statement prevents this
           }
           ManagedGroupAccess(unmarshalManagedGroupRef(managedGroupRecord), role)
@@ -82,11 +82,11 @@ trait ManagedGroupComponent {
     }
 
     private def findManagedGroup(managedGroupRef: ManagedGroupRef): ManagedGroupQuery = {
-      managedGroupQuery.filter(_.usersGroupName === managedGroupRef.usersGroupName.value)
+      managedGroupQuery.filter(_.membersGroupName === managedGroupRef.membersGroupName.value)
     }
 
     private def unmarshalManagedGroupRef(managedGroup: ManagedGroupRecord): ManagedGroupRef = {
-      ManagedGroupRef(RawlsGroupName(managedGroup.usersGroupName))
+      ManagedGroupRef(RawlsGroupName(managedGroup.membersGroupName))
     }
   }
 }
