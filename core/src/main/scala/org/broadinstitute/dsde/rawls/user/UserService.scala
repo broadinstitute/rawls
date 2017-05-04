@@ -359,7 +359,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
 
     val userDirectoryRemoval = for {
-      _ <- userDirectoryDAO.disableUser(userRef.userSubjectId)   // may not be strictly necessary, but does not hurt
+//      _ <- userDirectoryDAO.disableUser(userRef.userSubjectId)   // may not be strictly necessary, but does not hurt
       _ <- userDirectoryDAO.removeUser(userRef.userSubjectId)
     } yield ()
 
