@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Notifications}
-import org.broadinstitute.dsde.rawls.model.Notifications.{WorkspaceNotificationType, WorkspaceNotification, NotificationType}
+import org.broadinstitute.dsde.rawls.model.{Notifications, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.Notifications.{NotificationType, WorkspaceNotification, WorkspaceNotificationType}
 import spray.routing.HttpService
 import spray.httpx.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
@@ -10,6 +10,7 @@ import spray.json.DefaultJsonProtocol._
  * Created by dvoet on 3/28/17.
  */
 trait NotificationsApiService extends HttpService {
+
   val notificationsRoutes = pathPrefix("notifications") {
     path("workspace" / Segment / Segment) { (namespace, name) =>
       get {

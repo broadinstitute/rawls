@@ -123,6 +123,12 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.GetTags(queryString))
         }
       }
+    } ~
+    path("workspaces" / Segment / Segment / "sendChangeNotification") { (namespace, name) =>
+      post {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.SendChangeNotifications(WorkspaceName(namespace, name)))
+      }
     }
   }
 }

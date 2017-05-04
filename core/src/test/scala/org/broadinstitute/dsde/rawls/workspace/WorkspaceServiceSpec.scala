@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.PoisonPill
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import akka.testkit.{TestKit, TestActorRef}
+import akka.testkit.{TestActorRef, TestKit}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
@@ -575,6 +575,21 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     assert(!vComplete4.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false))))
   }
+
+  it should "send notification messages to all users on workspace" in withTestDataServices { services =>
+    val vComplete = Await.result(services.workspaceService.sendChangeNotifications(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, String)]]
+
+    assertResult(StatusCodes.OK, "Notification shouldn't error") {
+      vComplete.response._1
+    }
+
+    assertResult("4", "Number of notifications sent should match number of users on workspace") {
+      vComplete.response._2
+    }
+
+  }
+
 
   it should "retrieve catalog permission" in withTestDataServices { services =>
     val vComplete = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)

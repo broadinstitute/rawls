@@ -92,6 +92,12 @@ object Notifications {
     override val alwaysOn = true
   })
 
+  case class WorkspaceChangedNotification(recipientUserId: String, workspaceName: WorkspaceName) extends WorkspaceNotification
+  val WorkspaceChangedNotificationType = register(new WorkspaceNotificationType[WorkspaceChangedNotification] {
+    override val format = jsonFormat2(WorkspaceChangedNotification.apply)
+    override val description = "Workspace changed"
+  })
+
   // IMPORTANT that this comes after all the calls to register
   val allNotificationTypes: Map[String, NotificationType[_ <: Notification]] = allNotificationTypesBuilder.result()
 
