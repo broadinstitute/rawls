@@ -37,7 +37,7 @@ case class ManagedGroupRef(membersGroupName: RawlsGroupName) extends UserAuthRef
 }
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, role: ManagedRole)
-case class ManagedGroupAccessResponse(groupName: RawlsGroupName, role: ManagedRole)
+case class ManagedGroupAccessResponse(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail, role: ManagedRole)
 case class ManagedGroupWithMembers(membersGroup: RawlsGroupShort, adminsGroup: RawlsGroupShort, membersEmails: Seq[String], adminsEmails: Seq[String])
 
 sealed trait UserAuthType { val value: String }
@@ -82,7 +82,7 @@ class UserModelJsonSupport extends JsonSupport {
   implicit val RawlsGroupShortFormat = jsonFormat2(RawlsGroupShort)
   implicit val ManagedGroupRefFormat = jsonFormat1(ManagedGroupRef)
   implicit val ManagedGroupAccessFormat = jsonFormat2(ManagedGroupAccess)
-  implicit val ManagedGroupAccessResponseFormat = jsonFormat2(ManagedGroupAccessResponse)
+  implicit val ManagedGroupAccessResponseFormat = jsonFormat3(ManagedGroupAccessResponse)
   implicit val ManagedGroupWithMembersFormat = jsonFormat4(ManagedGroupWithMembers)
 }
 
