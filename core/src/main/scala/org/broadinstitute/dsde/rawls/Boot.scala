@@ -25,6 +25,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
+import spray.http.StatusCodes
 import spray.json._
 
 import scala.concurrent.duration._
@@ -201,7 +202,7 @@ object Boot extends App with LazyLogging {
   def enableServiceAccount(gcsDAO: HttpGoogleServicesDAO, userDirDAO: JndiUserDirectoryDAO): Unit = {
     val enableServiceAccountFuture = for {
       serviceAccountUser <- gcsDAO.getServiceAccountRawlsUser()
-      _ <- userDirDAO.createUser(serviceAccountUser.userSubjectId).recover { case e: NameAlreadyBoundException => Unit } // if it already exists, ok
+      _ <- userDirDAO.createUser(serviceAccountUser.userSubjectId).recover { case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.Conflict) => Unit } // if it already exists, ok
       _ <- userDirDAO.enableUser(serviceAccountUser.userSubjectId).recover { case e: AttributeInUseException => Unit } // if it is already enabled, ok
     } yield Unit
 
