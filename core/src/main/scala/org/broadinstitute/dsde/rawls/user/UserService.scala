@@ -626,9 +626,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def listManagedGroupsForUser(): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId))).map { groupsWithAccess =>
+      for {
+        groupsWithAccess <- dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId)))
+        emailsByGroup <- dataAccess.rawlsGroupQuery.loadEmails(groupsWithAccess.map(_.managedGroupRef.toMembersGroupRef).toSeq)
+      } yield {
         val response = groupsWithAccess.groupBy(_.managedGroupRef).map { case (groupRef, accessEntries) =>
-          ManagedGroupAccessResponse(groupRef.membersGroupName, accessEntries.map(_.role).max)
+          ManagedGroupAccessResponse(groupRef.membersGroupName, emailsByGroup(groupRef.toMembersGroupRef), accessEntries.map(_.role).max)
         }
         RequestComplete(StatusCodes.OK, response)
       }

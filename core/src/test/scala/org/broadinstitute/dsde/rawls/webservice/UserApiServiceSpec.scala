@@ -806,9 +806,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
           responseAs[Seq[ManagedGroupAccessResponse]] should contain theSameElementsAs Seq(
-            ManagedGroupAccessResponse(RawlsGroupName(ownerOnlyGroupName), ManagedRoles.Admin),
-            ManagedGroupAccessResponse(RawlsGroupName(userOnlyGroupName), ManagedRoles.Member),
-            ManagedGroupAccessResponse(RawlsGroupName(bothGroupName), ManagedRoles.Admin)
+            ManagedGroupAccessResponse(RawlsGroupName(ownerOnlyGroupName), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(ownerOnlyGroupName))), ManagedRoles.Admin),
+            ManagedGroupAccessResponse(RawlsGroupName(userOnlyGroupName), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(userOnlyGroupName))), ManagedRoles.Member),
+            ManagedGroupAccessResponse(RawlsGroupName(bothGroupName), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(bothGroupName))), ManagedRoles.Admin)
           )
         }
     }

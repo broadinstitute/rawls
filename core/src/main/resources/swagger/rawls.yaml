@@ -5278,7 +5278,7 @@ definitions:
   ManagedGroupRef:
     description: a reference to a group that can be managed by users
     required:
-      - usersGroupName
+      - membersGroupName
     properties:
       usersGroupName:
         type: string
@@ -5286,31 +5286,32 @@ definitions:
     description: an element of a list of groups a user has access to
     required:
       - groupName
-      - accessLevels
+      - groupEmail
+      - role
     properties:
       groupName:
         type: string
-      accessLevels:
-        type: array
-        items:
-          type: string
+      groupEmail:
+        type: string
+      role:
+        type: string
   ManagedGroupWithMembers:
     description: a group with all of its members
     required:
-      - usersGroup
-      - ownersGroup
-      - usersEmails
-      - ownersEmails
+      - membersGroup
+      - adminsGroup
+      - membersEmails
+      - adminsEmails
     properties:
-      usersGroup:
+      membersGroup:
         $ref: '#/definitions/RawlsGroupShort'
-      ownersGroup:
+      adminsGroup:
         $ref: '#/definitions/RawlsGroupShort'
-      usersEmails:
+      membersEmails:
         type: array
         items:
           type: string
-      ownersEmails:
+      adminsEmails:
         type: array
         items:
           type: string
