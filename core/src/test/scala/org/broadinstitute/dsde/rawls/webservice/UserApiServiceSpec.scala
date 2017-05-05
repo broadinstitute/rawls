@@ -836,7 +836,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
               assertResult(ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort,
                 managedGroup.adminsGroup.toRawlsGroupShort,
-                Seq(managedGroup.adminsGroup.groupEmail.value),
+                Seq.empty,
                 Seq(usersTestData.userOwner.userEmail.value, usersTestData.userUser.userEmail.value))) {
 
                 responseAs[ManagedGroupWithMembers]
