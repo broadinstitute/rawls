@@ -4378,10 +4378,10 @@ definitions:
     properties:
       statuses:
         type: object
-        description: workflow counts by status: Map[String, Int]
+        description: Map[String, Int]
       users:
         type: object
-        description: workflow counts by status, by user: Map[String, Map[String, Int]]
+        description: Map[String, Map[String, Int]]
       maxActiveWorkflowsTotal:
         type: integer
         description: maximum number of active workflows allowed in total
