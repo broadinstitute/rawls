@@ -1143,6 +1143,26 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "get queue status by user" in withTestDataApiServices { services =>
     import driver.api._
+
+    // Create a new test user and a few new submissions
+    val testEmail = "testUser"
+    val statusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val testUser = RawlsUser(UserInfo(testEmail, OAuth2BearerToken("token"), 123, "123456789876543212346"))
+      runAndWait(rawlsUserQuery.save(testUser))
+      val inputResolutionsList = Seq(SubmissionValidationValue(Option(
+        AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
+      statusCounts.flatMap { case (st, count) =>
+        for (_ <- 0 until count) yield {
+          createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testUser,
+            Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
+            Seq.empty, Map.empty, st)
+        }
+      }.foreach { sub =>
+        runAndWait(submissionQuery.create(ctx, sub))
+      }
+    }
+
     Get("/admin/submissions/queueStatusByUser") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -1153,13 +1173,19 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         val groupedWorkflowRecs = workflowRecs.groupBy(_.status)
           .filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
           .mapValues(_.size)
-        val expected = WorkflowQueueStatusByUserResponse(
+        val userOwnerWorkflows = (testData.userOwner.userEmail.value ->
+          groupedWorkflowRecs.map { case (k, v) =>
+            k -> (v - statusCounts.getOrElse(WorkflowStatuses.withName(k), 0))
+          }.filter(_._2 > 0))
+        val testUserWorkflows = (testEmail -> statusCounts.map { case (k, v) => k.toString -> v })
+        val expectedResponse = WorkflowQueueStatusByUserResponse(
           groupedWorkflowRecs,
-          Map(testData.userOwner.userEmail.value -> groupedWorkflowRecs),
+          Map(userOwnerWorkflows, testUserWorkflows),
           services.maxActiveWorkflowsTotal,
           services.maxActiveWorkflowsPerUser)
-        val response = responseAs[WorkflowQueueStatusByUserResponse]
-        response should equal (expected)
+        assertResult(expectedResponse) {
+          responseAs[WorkflowQueueStatusByUserResponse]
+        }
       }
   }
 }

@@ -10,8 +10,8 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
 import slick.dbio.Effect.{Read, Write}
 import slick.driver.JdbcDriver
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 /**
  * Created by mbemis on 2/18/16.
@@ -288,16 +288,39 @@ trait WorkflowComponent {
     }
 
     def countWorkflowsByQueueStatusByUser: ReadAction[Map[String, Map[String, Int]]] = {
-      // Query for a Seq of (User, Workflow) tuples.
-      val userWorkflows = (for {
+      // Run query for workflow counts, grouping by user email and workflow status.
+      // The query returns a Seq[(userEmail, workflowStatus, count)].
+      val userWorkflowQuery = for {
         workflow <- findQueuedAndRunningWorkflows
         submission <- submissionQuery if workflow.submissionId === submission.id
         user <- rawlsUserQuery if submission.submitterId === user.userSubjectId
-      } yield (user, workflow)).result
+      } yield (user, workflow)
 
-      // Combine results into a nested map using Scalaz semigroups for aggregation.
-      userWorkflows.map(_.foldLeft(Map.empty[String, Map[String, Int]]) { case (result, (user, workflow)) =>
-        result |+| Map(user.userEmail -> Map(workflow.status -> 1))
+      val groupedSeq = userWorkflowQuery.groupBy { case (user, workflow) =>
+        (user.userEmail, workflow.status)
+      }.map { case ((email, status), recs) =>
+        (email, status, recs.length)
+      }.result
+
+      // Convert the Seq[(String, String, Int)] from the database to a nested Map[String, Map[String, Int]].
+      //
+      // There's some cats magic going on here. Basically we're using the `Foldable` typeclass instance
+      // for List to invoke the `foldMap` method on the database result set. `foldMap` maps every A value
+      // into B and then combines them using the given Monoid[B] instance. In this case our B is a
+      // Map[String, Map[String, Int]]. Cats provides a Monoid instance for Map out of the box which groups
+      // the keys and sums the values, which is exactly what we want in this case.
+      //
+      // For more information on Foldable (and cats in general), see:
+      // - http://typelevel.org/cats/typeclasses/foldable.html
+      // - https://www.scala-exercises.org/cats/foldable
+      //
+      // For reference, an implementation using the standard library might look something like this:
+      //  groupedSeq.map(_.groupBy(_._1).
+      //    mapValues(_.groupBy(_._2).
+      //      mapValues { case Seq((_, _, n)) => n }))
+
+      groupedSeq.map(_.toList.foldMap { case (user, workflow, n) =>
+        Map(user -> Map(workflow -> n))
       })
     }
 
