@@ -433,7 +433,8 @@ trait AttributeComponent {
       if (attributeRec.valueBoolean.isDefined) {
         AttributeBoolean(attributeRec.valueBoolean.get)
       } else if (attributeRec.valueNumber.isDefined) {
-        AttributeNumber(attributeRec.valueNumber.get)
+        val n = attributeRec.valueNumber.get
+        if (n.isValidInt) AttributeNumber(n.toInt) else AttributeNumber(n)
       } else if (attributeRec.valueString.isDefined) {
         AttributeString(attributeRec.valueString.get)
       } else if (attributeRec.valueJson.isDefined) {

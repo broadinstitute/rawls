@@ -234,7 +234,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertResult(0) { runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).size }
   }
 
-  it should "unmarshall attribute records" in withEmptyTestDatabase {
+  it should "unmarshal attribute records" in withEmptyTestDatabase {
     val attributeRecs = Seq(
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "string", Some("value"), None, None, None, None, None, None, false, None)), None),
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.libraryNamespace, "string", Some("lib-value"), None, None, None, None, None, None, false, None)), None),
@@ -267,6 +267,46 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       workspaceAttributeQuery.unmarshalAttributes(attributeRecs)
 
     }
+  }
+
+  it should "unmarshal ints and doubles with appropriate precision" in withEmptyTestDatabase {
+    val attributeRecs = Seq(
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "int", None, Some(2), None, None, None, None, None, false, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "negInt", None, Some(-2), None, None, None, None, None, false, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "doubleRounded", None, Some(2.0), None, None, None, None, None, false, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "negDoubleRounded", None, Some(-2.0), None, None, None, None, None, false, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "double", None, Some(2.34), None, None, None, None, None, false, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "negDouble", None, Some(-2.34), None, None, None, None, None, false, None)), None)
+    )
+
+    val unmarshalled = workspaceAttributeQuery.unmarshalAttributes(attributeRecs)
+
+    assertResult(
+      Map(
+        1 -> Map(
+          AttributeName.withDefaultNS("int") -> AttributeNumber(2),
+          AttributeName.withDefaultNS("negInt") -> AttributeNumber(-2),
+          AttributeName.withDefaultNS("doubleRounded") -> AttributeNumber(2),
+          AttributeName.withDefaultNS("negDoubleRounded") -> AttributeNumber(-2),
+          AttributeName.withDefaultNS("double") -> AttributeNumber(2.34),
+          AttributeName.withDefaultNS("negDouble") -> AttributeNumber(-2.34)
+      ))) { unmarshalled }
+
+    val attrs = unmarshalled(1)
+
+    def assertScale(key: String, expectedScale: Int) = {
+      attrs(AttributeName.withDefaultNS(key)) match {
+        case num:AttributeNumber => assertResult(expectedScale, s"scale of $key attribute") {num.value.scale}
+        case _ => fail(s"expected AttributeNumber for $key")
+      }
+    }
+
+    assertScale("int", 0)
+    assertScale("negInt", 0)
+    assertScale("doubleRounded", 0)
+    assertScale("negDoubleRounded", 0)
+    assertScale("double", 2)
+    assertScale("negDouble", 2)
   }
 
   it should "throw exception unmarshalling a list without listLength set for all" in withEmptyTestDatabase {
