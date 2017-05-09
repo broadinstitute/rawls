@@ -1141,21 +1141,21 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "get queue status by user" in withTestDataApiServices { services =>
+  it should "get queue status by user" in withConstantTestDataApiServices { services =>
     import driver.api._
 
-    // Create a new test user and a few new submissions
-    val testEmail = "testUser"
-    val statusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
-    withWorkspaceContext(testData.workspace) { ctx =>
-      val testUser = RawlsUser(UserInfo(testEmail, OAuth2BearerToken("token"), 123, "123456789876543212346"))
+    // Create a new test user and some new submissions
+    val testUserEmail = "testUser"
+    val testUserStatusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
+    withWorkspaceContext(constantData.workspace) { ctx =>
+      val testUser = RawlsUser(UserInfo(testUserEmail, OAuth2BearerToken("token"), 123, "123456789876543212346"))
       runAndWait(rawlsUserQuery.save(testUser))
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
-      statusCounts.flatMap { case (st, count) =>
+      testUserStatusCounts.flatMap { case (st, count) =>
         for (_ <- 0 until count) yield {
-          createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testUser,
-            Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
+          createTestSubmission(constantData.workspace, constantData.methodConfig, constantData.sset1, testUser,
+            Seq(constantData.sset1), Map(constantData.sset1 -> inputResolutionsList),
             Seq.empty, Map.empty, st)
         }
       }.foreach { sub =>
@@ -1173,11 +1173,15 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         val groupedWorkflowRecs = workflowRecs.groupBy(_.status)
           .filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
           .mapValues(_.size)
-        val userOwnerWorkflows = (testData.userOwner.userEmail.value ->
+
+        val testUserWorkflows = (testUserEmail -> testUserStatusCounts.map { case (k, v) => k.toString -> v })
+
+        // userOwner workflow counts should be equal to all workflows in the system except for testUser's workflows.
+        val userOwnerWorkflows = (constantData.userOwner.userEmail.value ->
           groupedWorkflowRecs.map { case (k, v) =>
-            k -> (v - statusCounts.getOrElse(WorkflowStatuses.withName(k), 0))
+            k -> (v - testUserStatusCounts.getOrElse(WorkflowStatuses.withName(k), 0))
           }.filter(_._2 > 0))
-        val testUserWorkflows = (testEmail -> statusCounts.map { case (k, v) => k.toString -> v })
+
         val expectedResponse = WorkflowQueueStatusByUserResponse(
           groupedWorkflowRecs,
           Map(userOwnerWorkflows, testUserWorkflows),
