@@ -1,15 +1,16 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
-import AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import spray.httpx.SprayJsonSupport._
+import spray.json.DefaultJsonProtocol._
 import spray.routing.Directive.pimpApply
 import spray.routing._
-import spray.json.DefaultJsonProtocol._
-import spray.httpx.SprayJsonSupport._
 
 import scala.concurrent.ExecutionContext
 
@@ -21,6 +22,8 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
+  val genomicsServiceConstructor: UserInfo => GenomicsService
+
   val workspaceRoutes = requireUserInfo() { userInfo =>
     path("workspaces") {
       post {
@@ -128,6 +131,14 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
       post {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.SendChangeNotifications(WorkspaceName(namespace, name)))
+      }
+    } ~
+    path("workspaces" / "genomics" / "operations" / Segment ) { jobId =>
+      get {
+        requestContext => perRequest(requestContext,
+          GenomicsService.props(genomicsServiceConstructor, userInfo),
+          GenomicsService.GetOperation(jobId)
+        )
       }
     }
   }

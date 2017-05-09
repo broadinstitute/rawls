@@ -4,10 +4,11 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import akka.actor.PoisonPill
-import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import akka.testkit.{TestActorRef, TestKit}
+import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -80,6 +81,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       gpsDAO,
       "test-topic-name",
       notificationDAO
+    )_
+
+    val genomicsServiceConstructor = GenomicsService.constructor(
+      slickDataSource,
+      gcsDAO,
+      directoryDAO
     )_
 
     val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
