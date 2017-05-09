@@ -73,6 +73,13 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           WorkspaceService.AdminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
       }
     } ~
+    path("admin" / "submissions" / "queueStatusByUser") {
+      get {
+        requestContext => perRequest(requestContext,
+          WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.AdminWorkflowQueueStatusByUser)
+      }
+    } ~
     path("admin" / "groups") { //create group
       post {
         entity(as[RawlsGroupRef]) { groupRef =>

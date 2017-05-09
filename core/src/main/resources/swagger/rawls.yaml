@@ -1241,6 +1241,32 @@ paths:
             - openid
             - email
             - profile
+  '/api/admin/submissions/queueStatusByUser':
+    get:
+      responses:
+        '200':
+          description: Successful request
+          schema:
+            $ref: '#/definitions/WorkflowQueueStatusByUserResponse'
+        '403':
+          description: You must be an admin
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: List workflow counts by queueing state and by user
+      tags:
+        - admin
+        - submissions
+      summary: workflow queue status by user
+      operationId: workflowQueueStatusByUser
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:
@@ -4341,6 +4367,27 @@ definitions:
       workflowCountsByStatus:
         type: object
         description: Map[String,Int]
+
+  WorkflowQueueStatusByUserResponse:
+    description: Information about the status of workflows and the workflow queue, broken out by user
+    required:
+      - statuses
+      - users
+      - maxActiveWorkflowsTotal
+      - maxActiveWorkflowsPerUser
+    properties:
+      statuses:
+        type: object
+        description: Map[String, Int]
+      users:
+        type: object
+        description: Map[String, Map[String, Int]]
+      maxActiveWorkflowsTotal:
+        type: integer
+        description: maximum number of active workflows allowed in total
+      maxActiveWorkflowsPerUser:
+        type: integer
+        description: maximum number of active workflows allower per user
 
   WorkspaceName:
     description: ''

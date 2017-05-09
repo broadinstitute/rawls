@@ -16,7 +16,7 @@ import spray.http._
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{WorkspaceFormat, WorkspaceStatusFormat, ErrorReportFormat, WorkspaceListResponseFormat, AttributeReferenceFormat}
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserStatusFormat, UserListFormat}
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{CreateRawlsBillingProjectFullRequestFormat, SyncReportFormat, RawlsBillingProjectMembershipFormat, RawlsGroupMemberListFormat, RawlsUserInfoListFormat}
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsBillingProjectNameFormat, RawlsGroupRefFormat}
@@ -1137,6 +1137,58 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.InternalServerError) {
           status
+        }
+      }
+  }
+
+  it should "get queue status by user" in withConstantTestDataApiServices { services =>
+    import driver.api._
+
+    // Create a new test user and some new submissions
+    val testUserEmail = "testUser"
+    val testUserStatusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
+    withWorkspaceContext(constantData.workspace) { ctx =>
+      val testUser = RawlsUser(UserInfo(testUserEmail, OAuth2BearerToken("token"), 123, "0001"))
+      runAndWait(rawlsUserQuery.save(testUser))
+      val inputResolutionsList = Seq(SubmissionValidationValue(Option(
+        AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
+      testUserStatusCounts.flatMap { case (st, count) =>
+        for (_ <- 0 until count) yield {
+          createTestSubmission(constantData.workspace, constantData.methodConfig, constantData.sset1, testUser,
+            Seq(constantData.sset1), Map(constantData.sset1 -> inputResolutionsList),
+            Seq.empty, Map.empty, st)
+        }
+      }.foreach { sub =>
+        runAndWait(submissionQuery.create(ctx, sub))
+      }
+    }
+
+    Get("/admin/submissions/queueStatusByUser") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val workflowRecs = runAndWait(workflowQuery.result)
+        val groupedWorkflowRecs = workflowRecs.groupBy(_.status)
+          .filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
+          .mapValues(_.size)
+
+        val testUserWorkflows = (testUserEmail -> testUserStatusCounts.map { case (k, v) => k.toString -> v })
+
+        // userOwner workflow counts should be equal to all workflows in the system except for testUser's workflows.
+        val userOwnerWorkflows = (constantData.userOwner.userEmail.value ->
+          groupedWorkflowRecs.map { case (k, v) =>
+            k -> (v - testUserStatusCounts.getOrElse(WorkflowStatuses.withName(k), 0))
+          }.filter(_._2 > 0))
+
+        val expectedResponse = WorkflowQueueStatusByUserResponse(
+          groupedWorkflowRecs,
+          Map(userOwnerWorkflows, testUserWorkflows),
+          services.maxActiveWorkflowsTotal,
+          services.maxActiveWorkflowsPerUser)
+        assertResult(expectedResponse) {
+          responseAs[WorkflowQueueStatusByUserResponse]
         }
       }
   }

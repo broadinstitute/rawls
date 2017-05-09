@@ -5,6 +5,10 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses._
+import spray.http.OAuth2BearerToken
+import cats._
+import cats.implicits._
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -249,6 +253,69 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     intercept[RawlsConcurrentModificationException] {
       runAndWait(workflowQuery.updateStatus(workflowRecBefore, WorkflowStatuses.Failed))
     }
+  }
+
+  it should "count workflows by queue status" in withDefaultTestDatabase {
+    // Create some test submissions
+    val statusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
+    withWorkspaceContext(testData.workspace) { ctx =>
+      statusCounts.flatMap { case (st, count) =>
+        for (_ <- 0 until count) yield {
+          createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
+            Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
+            Seq.empty, Map.empty, st)
+        }
+      }.foreach { sub =>
+        runAndWait(submissionQuery.create(ctx, sub))
+      }
+    }
+
+    val result = runAndWait(workflowQuery.countWorkflowsByQueueStatus)
+    validateCountsByQueueStatus(result)
+    statusCounts.foreach { case (st, count) =>
+      result(st.toString) should be >= count
+    }
+  }
+
+  it should "count workflows by queue status by user" in withDefaultTestDatabase {
+    // Create a new test user and some test submissions
+    val testUserEmail = "testUser"
+    val testUserStatusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val testUser = RawlsUser(UserInfo(testUserEmail, OAuth2BearerToken("token"), 123, "0001"))
+      runAndWait(rawlsUserQuery.save(testUser))
+      testUserStatusCounts.flatMap { case (st, count) =>
+        for (_ <- 0 until count) yield {
+          createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testUser,
+            Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
+            Seq.empty, Map.empty, st)
+        }
+      }.foreach { sub =>
+        runAndWait(submissionQuery.create(ctx, sub))
+      }
+    }
+
+    // Validate testUser counts
+    val result = runAndWait(workflowQuery.countWorkflowsByQueueStatusByUser)
+    result should contain key (testUserEmail)
+    testUserStatusCounts.foreach { case (st, count) =>
+      result(testUserEmail)(st.toString) should be (count)
+    }
+
+    // Validate all workspace counts by status
+    validateCountsByQueueStatus(result.combineAll)
+  }
+
+  /**
+    * Validates workflow counts by status against the current contents of the database.
+    * @param counts workflow counts by status
+    */
+  private def validateCountsByQueueStatus(counts: Map[String, Int]): Unit = {
+    val workflowRecs = runAndWait(workflowQuery.result)
+    val expected = workflowRecs.groupBy(_.status)
+      .filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
+      .mapValues(_.size)
+    counts should equal (expected)
   }
 
   WorkflowStatuses.runningStatuses.foreach { status =>

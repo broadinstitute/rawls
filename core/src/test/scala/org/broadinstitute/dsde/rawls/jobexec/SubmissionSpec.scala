@@ -189,6 +189,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
 
       val execServiceBatchSize = 3
+      val maxActiveWorkflowsTotal = 10
+      val maxActiveWorkflowsPerUser = 2
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
@@ -198,7 +200,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         notificationDAO,
         submissionSupervisor,
         bucketDeletionMonitor,
-        userServiceConstructor
+        userServiceConstructor,
+        maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser
       )_
       lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
       try {
