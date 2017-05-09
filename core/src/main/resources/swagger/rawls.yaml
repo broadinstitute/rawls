@@ -3644,6 +3644,28 @@ paths:
             - openid
             - email
             - profile
+  '/api/groups/accessInstructions':
+    get:
+      responses:
+        200:
+          description: Successfully listed group access instructions
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/ManagedGroupAccessResponse'
+        500:
+          description: FireCloud Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      tags:
+        - groups
+      summary: get the list of the groups that the caller is a member of
+      operationId: getGroupAccessInstructions
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/groups/{groupName}':
     get:
       responses:
@@ -3742,6 +3764,38 @@ paths:
             - openid
             - email
             - profile
+  '/api/groups/{groupName}/requestAccess':
+    post:
+      responses:
+        204:
+          description: Successfully requested access to group
+        403:
+          description: You must be an owner of this group in order to view members
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        404:
+          description: Group not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        500:
+          description: FireCloud Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      parameters:
+        - in: path
+          description: Group name
+          name: groupName
+          required: true
+          type: string
+      tags:
+        - groups
+      summary: request access to a group
+      operationId: requestGroupAccess
+      security:
+        - authorization:
+          - openid
+          - email
+          - profile
   '/api/groups/{groupName}/{role}/{email}':
     put:
       responses:
@@ -3855,6 +3909,31 @@ paths:
         - notifications
       summary: Gets the notifications available for a workspace
       operationId: workspaceNotifications
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/accessInstructions':
+    get:
+      responses:
+        200:
+          description: Success
+      parameters:
+        - in: path
+          description: workspace namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: workspace name
+          name: workspaceName
+          required: true
+          type: string
+      tags:
+        - workspaces
+      summary: Get access instructions for the workspace
+      operationId: getAccessInstructions
       security:
         - authorization:
             - openid
