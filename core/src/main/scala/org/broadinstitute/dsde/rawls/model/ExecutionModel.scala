@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.model
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -127,10 +127,10 @@ case class SubmissionListResponse(
   methodConfigurationName: String,
   submissionEntity: AttributeEntityReference,
   status: SubmissionStatus,
-  workflowStatuses: Map[String, Int],
+  workflowStatuses: StatusCounts,
   useCallCache: Boolean
 ) {
-  def this(submission: Submission, rawlsUser: RawlsUser, workflowStatuses: Map[String, Int]) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status, workflowStatuses, submission.useCallCache)
+  def this(submission: Submission, rawlsUser: RawlsUser, workflowStatuses: StatusCounts) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status, workflowStatuses, submission.useCallCache)
 }
 
 // method configuration input parameter, it's name and the associated expression from the method config
@@ -211,13 +211,13 @@ case class WorkflowQueueStatusResponse
 (
   estimatedQueueTimeMS: Long, // milliseconds to drain queue
   workflowsBeforeNextUserWorkflow: Int,
-  workflowCountsByStatus: Map[String, Int]
+  workflowCountsByStatus: StatusCounts
 )
 
 case class WorkflowQueueStatusByUserResponse
 (
-  statuses: Map[String, Int],
-  users: Map[String, Map[String, Int]],
+  statuses: StatusCounts,
+  users: StatusCountsByUser,
   maxActiveWorkflowsTotal: Int,
   maxActiveWorkflowsPerUser: Int
 )
@@ -231,6 +231,11 @@ class ExecutionJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 
   type OutputType = Either[Attribute, UnsupportedOutputType]
+  // status string -> count
+  type StatusCounts = Map[String, Int]
+  // user email -> status counts
+  type StatusCountsByUser = Map[String, StatusCounts]
+
   implicit override val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
 
   implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatus] {
@@ -331,9 +336,9 @@ class ExecutionJsonSupport extends JsonSupport {
       value.asJsObject.getFields("statuses", "users", "maxActiveWorkflowsTotal", "maxActiveWorkflowsPerUser") match {
         case Seq(statuses @ JsObject(_), users @ JsObject(_), JsNumber(maxActiveWorkflowsTotal), JsNumber(maxActiveWorkflowsPerUser)) =>
           WorkflowQueueStatusByUserResponse(
-            statuses.convertTo[Map[String, Int]],
+            statuses.convertTo[StatusCounts],
             // remove 1 layer of nesting from `users` to remove the middle `statuses` map
-            users.convertTo[Map[String, Map[String, Map[String, Int]]]].flatMap { case (k, v) =>
+            users.convertTo[Map[String, StatusCountsByUser]].flatMap { case (k, v) =>
               v.values.map(v2 => k -> v2)
             },
             maxActiveWorkflowsTotal.intValue,
