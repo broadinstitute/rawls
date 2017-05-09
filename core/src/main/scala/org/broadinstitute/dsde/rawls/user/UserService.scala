@@ -63,7 +63,6 @@ object UserService {
   case class GetManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
   case object ListManagedGroupsForUser extends UserServiceMessage
   case class RequestAccessToManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
-  case object GetGroupAccessInstructions extends UserServiceMessage
   case class AddManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) extends UserServiceMessage
   case class RemoveManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) extends UserServiceMessage
   case class OverwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList) extends UserServiceMessage
@@ -140,7 +139,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case CreateManagedGroup(groupRef) => createManagedGroup(groupRef) pipeTo sender
     case GetManagedGroup(groupRef) => getManagedGroup(groupRef) pipeTo sender
     case RequestAccessToManagedGroup(groupRef) => requestAccessToManagedGroup(groupRef) pipeTo sender
-    case GetGroupAccessInstructions => getGroupAccessInstructions pipeTo sender
     case ListManagedGroupsForUser => listManagedGroupsForUser pipeTo sender
     case AddManagedGroupMembers(groupRef, role, email) => addManagedGroupMembers(groupRef, role, email) pipeTo sender
     case RemoveManagedGroupMembers(groupRef, role, email) => removeManagedGroupMembers(groupRef, role, email) pipeTo sender
@@ -643,49 +641,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         }
         RequestComplete(StatusCodes.OK, response)
       }
-    }
-  }
-
-  def getGroupAccessInstructions: Future[PerRequestMessage] = {
-    listWorkspaces().map { x => RequestComplete(StatusCodes.OK, x)}
-  }
-
-  def listWorkspaces(): Future[Seq[Option[ManagedGroupRef]]] =
-    dataSource.inTransaction ({ dataAccess =>
-
-      val query = for {
-        permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
-        realmsForUser <- dataAccess.workspaceQuery.getAuthorizedRealms(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo))
-        workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
-      } yield (permissionsPairs, realmsForUser, workspaces)
-
-      val results = query.map { case (permissionsPairs, realmsForUser, workspaces) =>
-        val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
-        permissionsPairs.flatMap { permissionsPair =>
-          workspacesById.get(permissionsPair.workspaceId).map { workspace =>
-            workspace.authorizationDomain match {
-              case None => None
-              case Some(realm) =>
-                if (realmsForUser.flatten.contains(realm)) None
-                else workspace.authorizationDomain
-            }
-          }
-        }
-      }
-
-      results
-    }, TransactionIsolation.ReadCommitted)
-
-  def listWorkspaces(user: RawlsUser, dataAccess: DataAccess): ReadAction[Seq[WorkspacePermissionsPair]] = {
-    val rawPairs = for {
-      groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
-      pairs <- dataAccess.workspaceQuery.listPermissionPairsForGroups(groups)
-    } yield pairs
-
-    rawPairs.map { pairs =>
-      pairs.groupBy(_.workspaceId).map { case (workspaceId, pairsInWorkspace) =>
-        pairsInWorkspace.reduce((a, b) => WorkspacePermissionsPair(workspaceId, WorkspaceAccessLevels.max(a.accessLevel, b.accessLevel)))
-      }.toSeq
     }
   }
 

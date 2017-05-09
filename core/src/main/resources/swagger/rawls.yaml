@@ -3644,28 +3644,6 @@ paths:
             - openid
             - email
             - profile
-  '/api/groups/accessInstructions':
-    get:
-      responses:
-        200:
-          description: Successfully listed group access instructions
-          schema:
-            type: array
-            items:
-              $ref: '#/definitions/ManagedGroupAccessResponse'
-        500:
-          description: FireCloud Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      tags:
-        - groups
-      summary: get the list of the groups that the caller is a member of
-      operationId: getGroupAccessInstructions
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   '/api/groups/{groupName}':
     get:
       responses:

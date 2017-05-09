@@ -50,7 +50,6 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
     } ~
     path("workspaces" / Segment / Segment / "accessInstructions" ) { (workspaceNamespace, workspaceName) =>
       get {
-            println("foobarfoundit")
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.GetAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName)))
       }
