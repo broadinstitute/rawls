@@ -1550,12 +1550,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def adminWorkflowQueueStatusByUser() = {
     asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
+      dataSource.inTransaction ({ dataAccess =>
         for {
           global <- dataAccess.workflowQuery.countWorkflowsByQueueStatus
           perUser <- dataAccess.workflowQuery.countWorkflowsByQueueStatusByUser
         } yield RequestComplete(StatusCodes.OK, WorkflowQueueStatusByUserResponse(global, perUser, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser))
-      }
+      }, TransactionIsolation.ReadUncommitted)
     }
   }
 
