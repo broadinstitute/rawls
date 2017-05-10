@@ -3747,10 +3747,6 @@ paths:
       responses:
         204:
           description: Successfully requested access to group
-        403:
-          description: You must be an owner of this group in order to view members
-          schema:
-            $ref: '#/definitions/ErrorReport'
         404:
           description: Group not found
           schema:
