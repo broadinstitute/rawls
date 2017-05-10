@@ -1822,7 +1822,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   RequestComplete(StatusCodes.OK, instructions)
                 }
               }
-              case None => DBIO.successful(RequestComplete(StatusCodes.OK, Seq.empty[WorkspaceAccessInstructions]))
+              case None => DBIO.successful(RequestComplete(StatusCodes.OK, Seq.empty[ManagedGroupAccessInstructions]))
             }
           }
         }

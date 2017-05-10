@@ -35,6 +35,10 @@ trait ManagedGroupComponent {
       (managedGroupQuery += marshalManagedGroup(managedGroup)).map(_ => managedGroup)
     }
 
+    def setManagedGroupAccessInstructions(managedGroupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions): WriteAction[Int] = {
+      managedGroupQuery.filter(_.membersGroupName === managedGroupRef.membersGroupName.value).map(_.accessInstructions).update(Option(instructions.instructions))
+    }
+
     def load(managedGroupRef: ManagedGroupRef): ReadAction[Option[ManagedGroup]] = {
       uniqueResult[ManagedGroupRecord](findManagedGroup(managedGroupRef)).flatMap {
         case Some(mg) =>
@@ -70,13 +74,13 @@ trait ManagedGroupComponent {
       }
     }
 
-    def getManagedGroupAccessInstructions(groupList: Seq[ManagedGroupRef]): ReadAction[Seq[WorkspaceAccessInstructions]] = {
+    def getManagedGroupAccessInstructions(groupList: Seq[ManagedGroupRef]): ReadAction[Seq[ManagedGroupAccessInstructions]] = {
       val authDomainQuery: ReadAction[Seq[ManagedGroupRecord]] = managedGroupQuery.filter(_.membersGroupName inSetBind groupList.map(_.membersGroupName.value)).result
 
       authDomainQuery.map { authDomains =>
         authDomains.flatMap { authDomain =>
           authDomain.accessInstructions match {
-            case Some(instructions) => Option(WorkspaceAccessInstructions(authDomain.membersGroupName, instructions))
+            case Some(instructions) => Option(ManagedGroupAccessInstructions(authDomain.membersGroupName, instructions))
             case None => None
           }
         }

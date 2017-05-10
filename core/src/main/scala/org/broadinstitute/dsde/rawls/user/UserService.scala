@@ -63,6 +63,7 @@ object UserService {
   case class GetManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
   case object ListManagedGroupsForUser extends UserServiceMessage
   case class RequestAccessToManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
+  case class SetManagedGroupAccessInstructions(groupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions) extends UserServiceMessage
   case class AddManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) extends UserServiceMessage
   case class RemoveManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) extends UserServiceMessage
   case class OverwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList) extends UserServiceMessage
@@ -139,6 +140,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case CreateManagedGroup(groupRef) => createManagedGroup(groupRef) pipeTo sender
     case GetManagedGroup(groupRef) => getManagedGroup(groupRef) pipeTo sender
     case RequestAccessToManagedGroup(groupRef) => requestAccessToManagedGroup(groupRef) pipeTo sender
+    case SetManagedGroupAccessInstructions(groupRef, instructions) => setManagedGroupAccessInstructions(groupRef, instructions) pipeTo sender
     case ListManagedGroupsForUser => listManagedGroupsForUser pipeTo sender
     case AddManagedGroupMembers(groupRef, role, email) => addManagedGroupMembers(groupRef, role, email) pipeTo sender
     case RemoveManagedGroupMembers(groupRef, role, email) => removeManagedGroupMembers(groupRef, role, email) pipeTo sender
@@ -648,7 +650,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       dataAccess.managedGroupQuery.load(groupRef).flatMap {
         case None => {
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"The admins of the group ${groupRef.membersGroupName.value} were not found"))
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"The admins of the group ${groupRef.membersGroupName.value} were not found"))
         }
         case Some(managedGroup) => {
           dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
@@ -658,6 +660,16 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           }.map(_ => RequestComplete(StatusCodes.NoContent))
         }
       }
+    }
+  }
+
+  def setManagedGroupAccessInstructions(managedGroupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.managedGroupQuery.setManagedGroupAccessInstructions(managedGroupRef, instructions).map {
+        case 0 => RequestComplete(StatusCodes.BadRequest, "We were unable to update the access instructions")
+        case 1 => RequestComplete(StatusCodes.NoContent)
+      }
+
     }
   }
 

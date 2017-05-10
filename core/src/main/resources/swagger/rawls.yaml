@@ -430,6 +430,46 @@ paths:
              - openid
              - email
              - profile
+  '/api/admin/groups/{groupName}/accessInstructions':
+     post:
+       responses:
+         '204':
+           description: Successfully updated instructions
+         '400':
+           description: Group didn't exist or text was invalid
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '403':
+           description: You must be an admin
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: Administratively set access instructions for a managed group
+       tags:
+         - admin
+         - groups
+       summary: update access instructions for a managed group
+       operationId: adminSetAccessInstructions
+       parameters:
+         - in: path
+           description: group name
+           name: groupName
+           required: true
+           type: string
+         - in: body
+           description: instructions
+           name: instructions
+           required: true
+           schema:
+            $ref: '#/definitions/ManagedGroupAccessInstructions'
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
   '/api/admin/groups/{groupName}/members':
      post:
        responses:
@@ -3896,7 +3936,7 @@ paths:
           schema:
             type: array
             items:
-              $ref: '#/definitions/WorkspaceAccessInstructions'
+              $ref: '#/definitions/ManagedGroupAccessInstructions'
       parameters:
         - in: path
           description: workspace namespace
@@ -4853,7 +4893,7 @@ definitions:
         items:
           $ref: '#/definitions/WorkspaceACLUpdate'
 
-  WorkspaceAccessInstructions:
+  ManagedGroupAccessInstructions:
     description: ''
     required:
       - authorizationDomain

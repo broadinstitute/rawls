@@ -98,6 +98,16 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
             UserService.AdminDeleteGroup(rawlsGroupRef))
         }
       } ~
+      path("accessInstructions") {
+        post {
+          entity(as[ManagedGroupAccessInstructions]) { instructions =>
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.SetManagedGroupAccessInstructions(ManagedGroupRef(RawlsGroupName(URLDecoder.decode(groupNameRaw, "UTF-8"))), instructions))
+          }
+        }
+      } ~
       // there are 3 methods supported to modify group membership:
       // PUT = "set the group members to exactly this list"
       // POST = "add these things to the list"
