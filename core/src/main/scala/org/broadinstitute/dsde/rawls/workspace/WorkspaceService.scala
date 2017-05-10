@@ -1816,8 +1816,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         accessGroups.flatMap { memberOf =>
           if (memberOf.flatten.isEmpty) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
           else {
-            dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Seq(workspaceContext.workspace.authorizationDomain.get)) map { instructions =>
-              RequestComplete(StatusCodes.OK, instructions)
+            workspaceContext.workspace.authorizationDomain match {
+              case Some(authDomain) => {
+                dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Seq(workspaceContext.workspace.authorizationDomain.get)) map { instructions =>
+                  RequestComplete(StatusCodes.OK, instructions)
+                }
+              }
+              case None => DBIO.successful(RequestComplete(StatusCodes.OK, Seq.empty[WorkspaceAccessInstructions]))
             }
           }
         }
