@@ -17,7 +17,7 @@ class NotificationsSpec extends FlatSpec with Matchers {
     "WorkspaceRemovedNotification" -> Notifications.WorkspaceRemovedNotification("asdf", "user", WorkspaceName("namespace", "name"), "foo@bar.com"),
     "WorkspaceInvitedNotification" -> Notifications.WorkspaceInvitedNotification("asdf", "foo@bar.com"),
     "WorkspaceChangedNotification" -> Notifications.WorkspaceChangedNotification("user", WorkspaceName("namespace", "name")),
-    "GroupRequestAccessNotification" -> Notifications.GroupRequestAccessNotification("user", "my-group", "foo@bar.com")
+    "GroupAccessRequestNotification" -> Notifications.GroupAccessRequestNotification("user", "my-group", "foo@bar.com")
   )
 
   Notifications.allNotificationTypes.foreach { case (notificationTypeString, notificationType) =>
