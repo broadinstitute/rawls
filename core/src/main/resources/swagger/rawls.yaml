@@ -5029,6 +5029,7 @@ definitions:
         type: array
         items:
           type: string
+
   WorkspaceListResponse:
     description: ''
     properties:
@@ -5042,6 +5043,14 @@ definitions:
         type: array
         items:
           type: string
+
+  WorkspaceAccessLevel:
+    description: 'The level of access a user or group has on a Workspace. NoAccess, Read, Write, Owner, ProjectOwner'
+    properties:
+      name:
+        type: string
+        description: Workspace Access Level
+
   CallMetadata:
     description: Stuff you need to know about calls
     properties:
