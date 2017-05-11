@@ -650,7 +650,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       dataAccess.managedGroupQuery.load(groupRef).flatMap {
         case None => {
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"The admins of the group ${groupRef.membersGroupName.value} were not found"))
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"The admins of the group ${groupRef.membersGroupName.value} were not found"))
         }
         case Some(managedGroup) => {
           dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
@@ -667,7 +667,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       dataAccess.managedGroupQuery.setManagedGroupAccessInstructions(managedGroupRef, instructions).map {
         case 0 => RequestComplete(StatusCodes.BadRequest, "We were unable to update the access instructions")
-        case 1 => RequestComplete(StatusCodes.NoContent)
+        case _ => RequestComplete(StatusCodes.NoContent)
       }
 
     }
