@@ -4471,7 +4471,7 @@ definitions:
       - attributeNames
     properties:
       count:
-        type: int
+        type: integer
         description: The number of entities of this type
       idName:
         type: string
