@@ -3384,7 +3384,6 @@ paths:
          - users
        summary: Create user
        operationId: create
-       parameters:
        security:
          - authorization:
             - openid
@@ -3407,7 +3406,6 @@ paths:
          - users
        summary: gets the status of a user
        operationId: status
-       parameters:
        security:
          - authorization:
             - openid
