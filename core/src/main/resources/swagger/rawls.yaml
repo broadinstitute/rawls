@@ -5222,7 +5222,7 @@ definitions:
     properties:
       cromwell:
         type: string
-  EntityQueryParameters:
+  EntityQuery:
     description: ''
     required:
       - page
@@ -5269,7 +5269,7 @@ definitions:
       - results
     properties:
       parameters:
-        $ref: '#/definitions/EntityQueryParameters'
+        $ref: '#/definitions/EntityQuery'
       resultMetadata:
         $ref: '#/definitions/EntityQueryResultMetadata'
       results:
