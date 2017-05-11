@@ -261,7 +261,7 @@ case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
                              workspaceSubmissionStats: WorkspaceSubmissionStats,
                              owners: Seq[String])
 
-case class ManagedGroupAccessInstructions(authorizationDomain: String, instructions: String)
+case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
 
 case class WorkspacePermissionsPair(workspaceId: String,
                                     accessLevel: WorkspaceAccessLevel)

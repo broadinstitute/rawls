@@ -4896,16 +4896,16 @@ definitions:
   ManagedGroupAccessInstructions:
     description: ''
     required:
-      - authorizationDomain
+      - groupName
       - instructions
     type: object
     properties:
-      authorizationDomain:
+      groupName:
         type: string
-        description: The name of the authorization domain with instructions
+        description: The name of the Group with instructions
       instructions:
         type: string
-        description: The instructions for applying to the authorization domain
+        description: The instructions for applying to the Group
 
   WorkspaceCatalog:
     description: ''
