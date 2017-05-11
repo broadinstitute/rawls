@@ -140,7 +140,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case CreateManagedGroup(groupRef) => createManagedGroup(groupRef) pipeTo sender
     case GetManagedGroup(groupRef) => getManagedGroup(groupRef) pipeTo sender
     case RequestAccessToManagedGroup(groupRef) => requestAccessToManagedGroup(groupRef) pipeTo sender
-    case SetManagedGroupAccessInstructions(groupRef, instructions) => setManagedGroupAccessInstructions(groupRef, instructions) pipeTo sender
+    case SetManagedGroupAccessInstructions(groupRef, instructions) => asFCAdmin { setManagedGroupAccessInstructions(groupRef, instructions) } pipeTo sender
     case ListManagedGroupsForUser => listManagedGroupsForUser pipeTo sender
     case AddManagedGroupMembers(groupRef, role, email) => addManagedGroupMembers(groupRef, role, email) pipeTo sender
     case RemoveManagedGroupMembers(groupRef, role, email) => removeManagedGroupMembers(groupRef, role, email) pipeTo sender
