@@ -5006,10 +5006,12 @@ definitions:
         type: string
         description: Description of the event
       startTime:
-        type: date-time
+        type: string
+        format: date-time
         description: When the event started
       endTime:
-        type: date-time
+        type: string
+        format: date-time
         description: When the event finished
 
   WorkspaceResponse:
