@@ -551,6 +551,7 @@ paths:
      get:
        responses:
          '200':
+            description: Successfully retrieved group member list
             schema:
               type: array
               description: list of users
