@@ -5,7 +5,7 @@ import javax.naming._
 import javax.naming.directory._
 
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUser, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, Monitorable, RawlsUser, RawlsUserSubjectId}
 import spray.http.StatusCodes
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -15,7 +15,7 @@ import scala.collection.JavaConversions._
 /**
  * Created by dvoet on 11/5/15.
  */
-class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, groupDn: String, memberAttribute: String, userObjectClasses: List[String], userAttributes: List[String], userDnFormat: String)(implicit executionContext: ExecutionContext) extends UserDirectoryDAO {
+class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, groupDn: String, memberAttribute: String, userObjectClasses: List[String], userAttributes: List[String], userDnFormat: String)(implicit executionContext: ExecutionContext) extends UserDirectoryDAO with Monitorable {
 
   override def createUser(user: RawlsUserSubjectId): Future[Unit] = withContext { ctx =>
     try {
@@ -47,6 +47,14 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
 
     members.contains(new Person(user).name)
   }
+
+  override def test: Future[Unit] = withContext { ctx =>
+    val controls = new SearchControls()
+    controls.setSearchScope(SearchControls.SUBTREE_SCOPE)
+    ctx.search("", "(objectclass=person)", controls)
+  }
+
+  override def systemName: String = "LDAP"
 
   private def getContext(): InitialDirContext = {
     val env = new util.Hashtable[String, String]()
