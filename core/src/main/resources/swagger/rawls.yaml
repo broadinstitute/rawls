@@ -5061,10 +5061,9 @@ definitions:
         type: string
         description: status of call
       executionEvents:
-          schema:
-            type: array
-            items:
-              $ref: '#/definitions/ExecutionEvent'
+        type: array
+        items:
+          $ref: '#/definitions/ExecutionEvent'
       backendStatus:
         type: string
         description: status of the backend
