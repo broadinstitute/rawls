@@ -3931,6 +3931,7 @@ securityDefinitions:
       profile: profile authorization
       https://www.googleapis.com/auth/devstorage.full_control: storage authorization
       https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
+      https://www.googleapis.com/auth/genomics: genomics authorization
 definitions:
   BillingAccount:
     description: 'Details for a single billing account'

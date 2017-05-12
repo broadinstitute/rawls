@@ -36,7 +36,7 @@ class GenomicsService(protected val userInfo: UserInfo, val dataSource: SlickDat
   }
 
   def getOperation(jobId: String): Future[PerRequestMessage] = {
-    gcsDAO.getGenomicsOperation(jobId).map {
+    gcsDAO.getGenomicsOperation(userInfo, jobId).map {
       case Some(jsobj) => RequestComplete(jsobj)
       case None => RequestComplete(StatusCodes.NotFound, s"jobId $jobId not found.")
     }

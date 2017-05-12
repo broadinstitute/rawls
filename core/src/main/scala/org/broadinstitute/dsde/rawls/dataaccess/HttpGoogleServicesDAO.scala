@@ -753,13 +753,10 @@ class HttpGoogleServicesDAO(
     } )
   }
 
-  override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = {
-
-    import spray.json._
-
+  override def getGenomicsOperation(userInfo: UserInfo, jobId: String): Future[Option[JsObject]] = {
     val opId = s"operations/$jobId"
 
-    val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
+    val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getUserCredential(userInfo)).setApplicationName(appName).build()
     val operationRequest = genomicsApi.operations().get(opId)
 
     retryWithRecoverWhen500orGoogleError[Option[JsObject]](() => {
@@ -1004,6 +1001,8 @@ class HttpGoogleServicesDAO(
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
   }
+
+  // Note: not currently used as we now use the user account for genomics operations
   def getGenomicsServiceAccountCredential: Credential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)

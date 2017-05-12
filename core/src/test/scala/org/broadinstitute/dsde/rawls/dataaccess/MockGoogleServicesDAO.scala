@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.joda.time.DateTime
 import spray.http.OAuth2BearerToken
-import spray.json.JsObject
+import spray.json._
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -261,8 +261,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = Future.successful(Unit)
 
-  override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = {
-    import spray.json._
+  override def getGenomicsOperation(userInfo: UserInfo, jobId: String): Future[Option[JsObject]] = {
     Future.successful(Some("""{"foo":"bar"}""".parseJson.asJsObject))
   }
 
