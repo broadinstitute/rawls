@@ -262,7 +262,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = Future.successful(Unit)
 
   override def getGenomicsOperation(userInfo: UserInfo, jobId: String): Future[JsObject] = {
-    Future.successful(Some("""{"foo":"bar"}""".parseJson.asJsObject))
+    Future.successful("""{"foo":"bar"}""".parseJson.asJsObject)
   }
 
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] =
