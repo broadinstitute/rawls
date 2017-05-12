@@ -753,18 +753,19 @@ class HttpGoogleServicesDAO(
     } )
   }
 
-  override def getGenomicsOperation(userInfo: UserInfo, jobId: String): Future[Option[JsObject]] = {
+  override def getGenomicsOperation(userInfo: UserInfo, jobId: String): Future[JsObject] = {
     val opId = s"operations/$jobId"
 
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getUserCredential(userInfo)).setApplicationName(appName).build()
     val operationRequest = genomicsApi.operations().get(opId)
 
-    retryWithRecoverWhen500orGoogleError[Option[JsObject]](() => {
+    retryWithRecoverWhen500orGoogleError[JsObject](() => {
       // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
       // So, use Google's functionality to get the json string, then parse it back into a generic json object
-      Some(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
-    }) {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
+      executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject
+    }) { case e: GoogleJsonResponseException =>
+      val statusCode = StatusCodes.getForKey(e.getStatusCode).getOrElse(StatusCodes.InternalServerError)
+      throw new RawlsExceptionWithErrorReport(ErrorReport(statusCode, e.getDetails.getMessage))
     }
   }
 

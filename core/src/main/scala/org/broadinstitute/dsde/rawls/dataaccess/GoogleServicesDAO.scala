@@ -127,7 +127,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit]
   def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit]
 
-  def getGenomicsOperation(userInfo: UserInfo, jobId: String): Future[Option[JsObject]]
+  def getGenomicsOperation(userInfo: UserInfo, jobId: String): Future[JsObject]
 
   def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
   def toUserFromProxy(proxy: String): String
