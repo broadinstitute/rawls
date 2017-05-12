@@ -551,6 +551,7 @@ paths:
      get:
        responses:
          '200':
+            description: Successfully retrieved group member list
             schema:
               type: array
               description: list of users
@@ -3384,7 +3385,6 @@ paths:
          - users
        summary: Create user
        operationId: create
-       parameters:
        security:
          - authorization:
             - openid
@@ -3407,7 +3407,6 @@ paths:
          - users
        summary: gets the status of a user
        operationId: status
-       parameters:
        security:
          - authorization:
             - openid
@@ -4287,7 +4286,7 @@ definitions:
         items:
           $ref: '#/definitions/ExecutionServiceCallLogs'
       outputs:
-        $ref: ''
+        type: object
         description: Map[String,String]
 
   ExecutionServiceCallLogs:
@@ -4300,7 +4299,7 @@ definitions:
         type: string
         description: Google bucket location for standard error
       backendLogs:
-        $ref: ''
+        type: object
         description: Map[String,String]
 
   SubmissionReport:
@@ -4448,7 +4447,7 @@ definitions:
         type: string
         description: The type of the entity
       attributes:
-        type: ''
+        type: object
         description: Map[String,Attribute]
 
   AttributeEntityReference:
@@ -4471,7 +4470,7 @@ definitions:
       - attributeNames
     properties:
       count:
-        type: int
+        type: integer
         description: The number of entities of this type
       idName:
         type: string
@@ -4747,7 +4746,7 @@ definitions:
       - acl
     properties:
       acl:
-        $ref: ''
+        type: object
         description: Map[String,WorkspaceAccessEntry]
 
   WorkspaceACLUpdate:
@@ -4895,13 +4894,13 @@ definitions:
         type: string
         description: The user who created the workspace
       attributes:
-        $ref: ''
+        type: object
         description: Map[String, Attribute]
       accessLevels:
-         $ref: ''
+         type: object
          description: Map[String, RawlsGroupRef]
       authDomainACLs:
-         $ref: ''
+         type: object
          description: Map[String, RawlsGroupRef]
       isLocked:
         type: boolean
@@ -5006,10 +5005,12 @@ definitions:
         type: string
         description: Description of the event
       startTime:
-        type: date-time
+        type: string
+        format: date-time
         description: When the event started
       endTime:
-        type: date-time
+        type: string
+        format: date-time
         description: When the event finished
 
   WorkspaceResponse:
@@ -5029,6 +5030,7 @@ definitions:
         type: array
         items:
           type: string
+
   WorkspaceListResponse:
     description: ''
     properties:
@@ -5042,6 +5044,14 @@ definitions:
         type: array
         items:
           type: string
+
+  WorkspaceAccessLevel:
+    description: 'The level of access a user or group has on a Workspace. NoAccess, Read, Write, Owner, ProjectOwner'
+    properties:
+      name:
+        type: string
+        description: Workspace Access Level
+
   CallMetadata:
     description: Stuff you need to know about calls
     properties:
@@ -5052,10 +5062,9 @@ definitions:
         type: string
         description: status of call
       executionEvents:
-          schema:
-            type: array
-            items:
-              $ref: '#/definitions/ExecutionEvent'
+        type: array
+        items:
+          $ref: '#/definitions/ExecutionEvent'
       backendStatus:
         type: string
         description: status of the backend
@@ -5131,7 +5140,7 @@ definitions:
       userInfo:
         $ref: '#/definitions/RawlsUser'
       enabled:
-        type: ''
+        type: object
         description: Map[String,Boolean]
   RawlsUser:
     description: information about a rawls user
@@ -5213,7 +5222,7 @@ definitions:
     properties:
       cromwell:
         type: string
-  EntityQueryParameters:
+  EntityQuery:
     description: ''
     required:
       - page
@@ -5235,7 +5244,7 @@ definitions:
         description: asc or desc
       filterTerms:
         type: string
-        descriptions: terms to filter results by
+        description: terms to filter results by
   EntityQueryResultMetadata:
     description: ''
     required:
@@ -5260,7 +5269,7 @@ definitions:
       - results
     properties:
       parameters:
-        $ref: '#/definitions/EntityQueryParameters'
+        $ref: '#/definitions/EntityQuery'
       resultMetadata:
         $ref: '#/definitions/EntityQueryResultMetadata'
       results:
