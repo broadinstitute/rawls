@@ -201,7 +201,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val userReaderViaGroup = RawlsUser(UserInfo("reader-access-via-group", OAuth2BearerToken("token"), 123, "123456789876543212349"))
-    val userNoAccess = RawlsUser(UserInfo("no-access", OAuth2BearerToken("token"), 123, "123456789876543212350"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
     val wsName3 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigs")
@@ -525,7 +524,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
         rawlsUserQuery.save(userReaderViaGroup),
-        rawlsUserQuery.save(userNoAccess),
         rawlsGroupQuery.save(nestedProjectGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.membersGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.adminsGroup),
