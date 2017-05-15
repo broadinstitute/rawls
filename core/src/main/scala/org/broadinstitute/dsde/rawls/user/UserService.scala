@@ -648,16 +648,23 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def requestAccessToManagedGroup(groupRef: ManagedGroupRef): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.managedGroupQuery.load(groupRef).flatMap {
-        case None => {
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"The admins of the group ${groupRef.membersGroupName.value} were not found"))
-        }
-        case Some(managedGroup) => {
-          dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
-            users.foreach { user =>
-              notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId.value, groupRef.membersGroupName.value, managedGroup.adminsGroup.groupEmail.value, userInfo.userEmail))
+      for {
+        group <- dataAccess.managedGroupQuery.load(groupRef)
+        accessInstructions <- dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Seq(groupRef))
+      } yield {
+        group match {
+          case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"The group [${groupRef.membersGroupName.value}] was not found"))
+          case Some(managedGroup) =>
+            accessInstructions match {
+              case Seq(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "You may not request access to this group"))
+              case Seq() =>
+                dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
+                  users.foreach { user =>
+                    notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId.value, groupRef.membersGroupName.value, managedGroup.adminsGroup.groupEmail.value, userInfo.userEmail))
+                  }
+                }
+                RequestComplete(StatusCodes.NoContent)
             }
-          }.map(_ => RequestComplete(StatusCodes.NoContent))
         }
       }
     }
@@ -666,10 +673,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def setManagedGroupAccessInstructions(managedGroupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.managedGroupQuery.setManagedGroupAccessInstructions(managedGroupRef, instructions).map {
-        case 0 => RequestComplete(StatusCodes.BadRequest, "We were unable to update the access instructions")
+        case 0 => RequestComplete(StatusCodes.InternalServerError, "We were unable to update the access instructions")
         case _ => RequestComplete(StatusCodes.NoContent)
       }
-
     }
   }
 

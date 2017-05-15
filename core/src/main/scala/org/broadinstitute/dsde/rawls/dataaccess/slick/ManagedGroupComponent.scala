@@ -75,15 +75,13 @@ trait ManagedGroupComponent {
     }
 
     def getManagedGroupAccessInstructions(groupList: Seq[ManagedGroupRef]): ReadAction[Seq[ManagedGroupAccessInstructions]] = {
-      val authDomainQuery: ReadAction[Seq[ManagedGroupRecord]] = managedGroupQuery.filter(_.membersGroupName inSetBind groupList.map(_.membersGroupName.value)).result
+      val managedGroupsQuery: ReadAction[Seq[ManagedGroupRecord]] = managedGroupQuery.filter(_.membersGroupName inSetBind groupList.map(_.membersGroupName.value)).result
 
-      authDomainQuery.map { authDomains =>
-        authDomains.flatMap { authDomain =>
-          authDomain.accessInstructions match {
-            case Some(instructions) => Option(ManagedGroupAccessInstructions(authDomain.membersGroupName, instructions))
-            case None => None
-          }
-        }
+      managedGroupsQuery.map { managedGroups =>
+        for {
+          managedGroup <- managedGroups
+          instructions <- managedGroup.accessInstructions
+        } yield ManagedGroupAccessInstructions(managedGroup.membersGroupName, instructions)
       }
     }
 
