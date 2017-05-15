@@ -8,8 +8,6 @@ import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
-import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
-import com.google.api.client.http.json.JsonHttpContent
 import com.google.api.client.http.{HttpResponseException, InputStreamContent}
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.admin.directory.model._
@@ -23,7 +21,7 @@ import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.genomics.{Genomics, GenomicsScopes}
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
-import com.google.api.services.servicemanagement.{model, ServiceManagement}
+import com.google.api.services.servicemanagement.ServiceManagement
 import com.google.api.services.servicemanagement.model.EnableServiceRequest
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
@@ -37,20 +35,18 @@ import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
-import org.broadinstitute.dsde.rawls.util.{Retry, FutureSupport}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time
 import spray.client.pipelining._
-import spray.http.HttpHeaders.Authorization
-import spray.http.{HttpResponse, OAuth2BearerToken, StatusCode, StatusCodes}
+import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
 import spray.json._
-import spray.json.DefaultJsonProtocol._
 
 import scala.collection.JavaConversions._
-import scala.concurrent.{Future, _}
 import scala.concurrent.duration._
+import scala.concurrent.{Future, _}
 import scala.io.Source
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Try}
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -753,10 +749,10 @@ class HttpGoogleServicesDAO(
     } )
   }
 
-  override def getGenomicsOperation(userInfo: UserInfo, jobId: String): Future[JsObject] = {
+  override def getGenomicsOperation(jobId: String): Future[JsObject] = {
     val opId = s"operations/$jobId"
 
-    val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getUserCredential(userInfo)).setApplicationName(appName).build()
+    val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
     val operationRequest = genomicsApi.operations().get(opId)
 
     retryWithRecoverWhen500orGoogleError[JsObject](() => {
@@ -1003,7 +999,6 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
-  // Note: not currently used as we now use the user account for genomics operations
   def getGenomicsServiceAccountCredential: Credential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)

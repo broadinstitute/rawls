@@ -104,6 +104,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       submissionSupervisor,
       bucketDeletionMonitor,
       userServiceConstructor,
+      genomicsServiceConstructor,
       maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser
     )_

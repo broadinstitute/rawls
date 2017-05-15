@@ -5,18 +5,18 @@ import java.util.UUID
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import slick.backend.DatabaseConfig
+import slick.driver.JdbcDriver
+import slick.driver.MySQLDriver.api._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.Owner
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{WorkspaceAccessLevel, ProjectOwner}
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers, Suite}
-import _root_.slick.backend.DatabaseConfig
-import _root_.slick.driver.JdbcDriver
-import _root_.slick.driver.MySQLDriver.api._
 import spray.http.OAuth2BearerToken
 
 import scala.concurrent.duration._
@@ -201,6 +201,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val userReaderViaGroup = RawlsUser(UserInfo("reader-access-via-group", OAuth2BearerToken("token"), 123, "123456789876543212349"))
+    val userNoAccess = RawlsUser(UserInfo("no-access", OAuth2BearerToken("token"), 123, "123456789876543212350"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
     val wsName3 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigs")
@@ -524,6 +525,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
         rawlsUserQuery.save(userReaderViaGroup),
+        rawlsUserQuery.save(userNoAccess),
         rawlsGroupQuery.save(nestedProjectGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.membersGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.adminsGroup),

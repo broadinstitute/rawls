@@ -3,12 +3,13 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
-import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
+import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import spray.json.JsObject
+
 import scala.concurrent.Future
 import scala.util.Try
 
@@ -127,7 +128,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit]
   def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit]
 
-  def getGenomicsOperation(userInfo: UserInfo, jobId: String): Future[JsObject]
+  def getGenomicsOperation(jobId: String): Future[JsObject]
 
   def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
   def toUserFromProxy(proxy: String): String

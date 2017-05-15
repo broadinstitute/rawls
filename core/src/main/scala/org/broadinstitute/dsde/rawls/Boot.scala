@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls
 
-import java.io.{File, StringReader}
-import javax.naming.NameAlreadyBoundException
+import java.io.StringReader
 import javax.naming.directory.AttributeInUseException
 
 import _root_.slick.backend.DatabaseConfig
@@ -12,12 +11,12 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.typesafe.config.{ConfigRenderOptions, ConfigFactory}
+import com.typesafe.config.{ConfigFactory, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{WorkflowSubmissionActor, SubmissionSupervisor}
+import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor}
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
@@ -28,11 +27,10 @@ import spray.can.Http
 import spray.http.StatusCodes
 import spray.json._
 
-import scala.concurrent.duration._
-import scala.util.{Try, Failure, Success}
-
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.JavaConversions._
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import scala.util.{Failure, Success, Try}
 
 object Boot extends App with LazyLogging {
   private def startup(): Unit = {
@@ -172,6 +170,7 @@ object Boot extends App with LazyLogging {
         submissionSupervisor,
         bucketDeletionMonitor,
         userServiceConstructor,
+        genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser),
       userServiceConstructor,

@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -22,7 +21,6 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
-  val genomicsServiceConstructor: UserInfo => GenomicsService
 
   val workspaceRoutes = requireUserInfo() { userInfo =>
     path("workspaces") {
@@ -133,12 +131,10 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
           WorkspaceService.SendChangeNotifications(WorkspaceName(namespace, name)))
       }
     } ~
-    path("workspaces" / "genomics" / "operations" / Segment ) { jobId =>
+    path("workspaces" / Segment / Segment / "genomics" / "operations" / Segment ) { (namespace, name, jobId) =>
       get {
-        requestContext => perRequest(requestContext,
-          GenomicsService.props(genomicsServiceConstructor, userInfo),
-          GenomicsService.GetOperation(jobId)
-        )
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.GetGenomicsOperation(WorkspaceName(namespace, name), jobId))
       }
     }
   }

@@ -5,12 +5,14 @@ import java.util.concurrent.TimeUnit
 import akka.actor.PoisonPill
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.monitor.{GoogleGroupSyncMonitorSupervisor, BucketDeletionMonitor}
+import org.broadinstitute.dsde.rawls.model.RawlsUser
+import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor}
+import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.{ContentTypes, HttpEntity, StatusCodes}
@@ -20,8 +22,6 @@ import spray.routing._
 import spray.testkit.ScalatestRouteTest
 
 import scala.concurrent.duration._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
-import org.broadinstitute.dsde.rawls.model.RawlsUser
 
 // common trait to be inherited by API service tests
 trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with HttpService with ScalatestRouteTest with SprayJsonSupport with RawlsTestUtils {
@@ -137,6 +137,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
       submissionSupervisor,
       bucketDeletionMonitor,
       userServiceConstructor,
+      genomicsServiceConstructor,
       maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser
     )_

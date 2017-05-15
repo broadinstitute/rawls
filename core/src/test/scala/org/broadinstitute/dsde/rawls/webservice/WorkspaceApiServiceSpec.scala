@@ -2163,8 +2163,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return 200 when reading a Google Genomics operation" in withTestDataApiServices { services => {
-    Get("/workspaces/genomics/operations/dummy-job-id") ~>
+  it should "return 200 when reading a Google Genomics operation" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
+    Get(s"${testWorkspaces.workspace.path}/genomics/operations/dummy-job-id") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -2175,6 +2175,37 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           responseAs[JsObject]
         }
       }
-  }}
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a non-existent workspace" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
+    Get(s"${testWorkspaces.workspace.copy(name = "bogus").path}/genomics/operations/dummy-job-id") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a non-existent job" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
+    Get(s"${testWorkspaces.workspace.path}/genomics/operations/bogus") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a user with no access" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+    Get(s"${testWorkspaces.workspace.path}/genomics/operations/dummy-job-id") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
 }
 
