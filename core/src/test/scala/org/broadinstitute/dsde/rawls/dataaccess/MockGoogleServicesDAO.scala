@@ -264,11 +264,11 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = Future.successful(Unit)
 
-  override def getGenomicsOperation(jobId: String): Future[JsObject] = Future {
+  override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = Future {
     if (jobId == mockJobId) {
-      """{"foo":"bar"}""".parseJson.asJsObject
+      Some("""{"foo":"bar"}""".parseJson.asJsObject)
     } else {
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "not found!"))
+      None
     }
   }
 

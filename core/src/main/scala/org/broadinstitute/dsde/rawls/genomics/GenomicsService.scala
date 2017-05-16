@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsService._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
+import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
 import spray.json.JsObject
@@ -36,7 +37,10 @@ class GenomicsService(protected val userInfo: UserInfo, val dataSource: SlickDat
   }
 
   def getOperation(jobId: String): Future[PerRequestMessage] = {
-    gcsDAO.getGenomicsOperation(jobId).map(RequestComplete.apply[JsObject])
+    gcsDAO.getGenomicsOperation(jobId).map {
+      case Some(jsobj) => RequestComplete(jsobj)
+      case None => RequestComplete(StatusCodes.NotFound, s"jobId $jobId not found.")
+    }
   }
 }
 

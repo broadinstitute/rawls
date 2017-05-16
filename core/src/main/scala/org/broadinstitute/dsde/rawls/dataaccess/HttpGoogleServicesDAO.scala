@@ -4,8 +4,6 @@ import java.io._
 import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem}
-import cats.syntax.cartesian._
-import cats.instances.all._
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -751,25 +749,19 @@ class HttpGoogleServicesDAO(
     } )
   }
 
-  override def getGenomicsOperation(jobId: String): Future[JsObject] = {
+  override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = {
     val opId = s"operations/$jobId"
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
     val operationRequest = genomicsApi.operations().get(opId)
 
-    // This predicate is true when it's a 500 or Google error but NOT a Google 404.
-    //
-    // This uses the "applicative builder" syntax from cats to combine 2 predicates
-    // (when500orGoogleError and whenGoogle404) using a binary operator (e.g.
-    // (Boolean, Boolean) => Boolean), and return a resulting predicate.
-    val predicate = (when500orGoogleError |@| whenGoogle404).map((a, b) => a && !b)
-
-    retryWhen(predicate) { () =>
-      executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject
-    }.recover { case e: GoogleJsonResponseException =>
-      // If the result is a GoogleJsonResponseException, map the exception to a RawlsExceptionWithErrorReport
-      // so we can preserve the Google error code and message for display to the user.
-      val statusCode = StatusCodes.getForKey(e.getStatusCode).getOrElse(StatusCodes.InternalServerError)
-      throw new RawlsExceptionWithErrorReport(ErrorReport(statusCode, e.getDetails.getMessage))
+    retryWithRecoverWhen500orGoogleError[Option[JsObject]](() => {
+      // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
+      // So, use Google's functionality to get the json string, then parse it back into a generic json object
+      Some(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
+    }) {
+      // Recover from Google 404 errors because it's an expected return status.
+      // Here we use `None` to represent a 404 from Google.
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
     }
   }
 
