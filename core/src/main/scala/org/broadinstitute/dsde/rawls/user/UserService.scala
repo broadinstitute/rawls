@@ -648,22 +648,23 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def requestAccessToManagedGroup(groupRef: ManagedGroupRef): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
-      for {
+      val query = for {
         group <- dataAccess.managedGroupQuery.load(groupRef)
         accessInstructions <- dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Seq(groupRef))
-      } yield {
+      } yield (group, accessInstructions)
+
+      query.flatMap { case (group, accessInstructions) =>
         group match {
           case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"The group [${groupRef.membersGroupName.value}] was not found"))
           case Some(managedGroup) =>
-            accessInstructions match {
-              case Seq(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "You may not request access to this group"))
-              case Seq() =>
-                dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
-                  users.foreach { user =>
-                    notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId.value, groupRef.membersGroupName.value, users.map(_.userSubjectId.value) + userInfo.userSubjectId, userInfo.userEmail))
-                  }
+            if (accessInstructions.nonEmpty) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "You may not request access to this group"))
+            else {
+              dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
+                users.foreach { user =>
+                  notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId.value, groupRef.membersGroupName.value, users.map(_.userSubjectId.value) + userInfo.userSubjectId, userInfo.userEmail))
                 }
                 RequestComplete(StatusCodes.NoContent)
+              }
             }
         }
       }
