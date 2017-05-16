@@ -1799,11 +1799,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getGenomicsOperation(workspaceName: WorkspaceName, jobId: String): Future[PerRequestMessage] = {
+    // First check the workspace context and permissions in a DB transaction.
+    // We don't need any DB information beyond that, so just return Unit on success.
     dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        val genomicsServiceRef = context.actorOf(GenomicsService.props(genomicsServiceConstructor, userInfo))
-        DBIO.from((genomicsServiceRef ? GenomicsService.GetOperation(jobId)).mapTo[PerRequestMessage])
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { _ =>
+        DBIO.successful(())
       }
+    }
+    // Next call GenomicsService, which actually makes the Google Genomics API call.
+    .flatMap { _ =>
+      val genomicsServiceRef = context.actorOf(GenomicsService.props(genomicsServiceConstructor, userInfo))
+      (genomicsServiceRef ? GenomicsService.GetOperation(jobId)).mapTo[PerRequestMessage]
     }
   }
 

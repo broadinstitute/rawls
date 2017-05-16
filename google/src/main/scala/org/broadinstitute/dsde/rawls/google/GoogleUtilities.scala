@@ -22,7 +22,7 @@ import scala.util.{Failure, Success, Try}
 trait GoogleUtilities extends LazyLogging with Retry {
   implicit val executionContext: ExecutionContext
 
-  protected def when500orGoogleError( throwable: Throwable ): Boolean = {
+  protected def when500orGoogleError: Predicate[Throwable] = throwable => {
     throwable match {
       case t: GoogleJsonResponseException => {
         ((t.getStatusCode == 403 || t.getStatusCode == 429) && t.getDetails.getErrors.head.getDomain.equalsIgnoreCase("usageLimits")) ||
@@ -36,11 +36,22 @@ trait GoogleUtilities extends LazyLogging with Retry {
     }
   }
 
-  protected def retryWhen500orGoogleError[T](op: () => T) = {
+  protected def whenGoogle404: Predicate[Throwable] = throwable => {
+    throwable match {
+      case t: GoogleJsonResponseException if t.getStatusCode == 404 => true
+      case _ => false
+    }
+  }
+
+  protected def retryWhen[T](pred: Predicate[Throwable])(op: () => T): Future[T] = {
+    retryExponentially(pred)(() => Future(blocking(op())))
+  }
+
+  protected def retryWhen500orGoogleError[T](op: () => T): Future[T] = {
     retryExponentially(when500orGoogleError)(() => Future(blocking(op())))
   }
 
-  protected def retryWithRecoverWhen500orGoogleError[T](op: () => T)(recover: PartialFunction[Throwable, T]) = {
+  protected def retryWithRecoverWhen500orGoogleError[T](op: () => T)(recover: PartialFunction[Throwable, T]): Future[T] = {
     retryExponentially(when500orGoogleError)(() => Future(blocking(op())).recover(recover))
   }
 
