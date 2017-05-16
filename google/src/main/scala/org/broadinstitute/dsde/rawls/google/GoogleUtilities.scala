@@ -36,13 +36,6 @@ trait GoogleUtilities extends LazyLogging with Retry {
     }
   }
 
-  protected def whenGoogle404: Predicate[Throwable] = throwable => {
-    throwable match {
-      case t: GoogleJsonResponseException if t.getStatusCode == 404 => true
-      case _ => false
-    }
-  }
-
   protected def retryWhen[T](pred: Predicate[Throwable])(op: () => T): Future[T] = {
     retryExponentially(pred)(() => Future(blocking(op())))
   }

@@ -32,7 +32,10 @@ object Dependencies {
 
   val utilDependencies = Seq(
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
-    "com.typesafe.akka" %% "akka-actor" % akkaV
+    "com.typesafe.akka" %% "akka-actor" % akkaV,
+    "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
+    "org.scalatest" %% "scalatest" % "2.2.4" % "test",
+    "org.mockito" % "mockito-core" % "2.7.22" % "test"
   )
 
   val modelDependencies = Seq(
