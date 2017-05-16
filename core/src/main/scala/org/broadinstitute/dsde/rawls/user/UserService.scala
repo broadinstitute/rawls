@@ -306,7 +306,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     // retrying this call will retry the failures, failures due to already added entries are ok
     loadUser(userRef) flatMap { user =>
       handleFutures(Future.sequence(Seq(
-        toFutureTry(gcsDAO.addUserToProxyGroup(user)),
+        toFutureTry(gcsDAO.addUserToProxyGroup(user).recover { case e: HttpResponseException if e.getStatusCode == 409 => Unit }),
         toFutureTry(userDirectoryDAO.enableUser(user.userSubjectId))
 
       )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors enabling user"))
