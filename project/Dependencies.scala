@@ -2,11 +2,11 @@ import sbt._
 
 object Dependencies {
   val akkaV = "2.3.6"
-  val sprayV = "1.3.2"
+  val sprayV = "1.3.3"
   val slickV = "3.1.1"
 
   val googleDependencies = Seq(
-    "io.spray" %% "spray-json" % "1.3.2",
+    "io.spray" %% "spray-json" % sprayV,
     "io.spray" %% "spray-http" % sprayV,
     "com.typesafe.akka" %% "akka-actor" % akkaV,
     "com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0"
