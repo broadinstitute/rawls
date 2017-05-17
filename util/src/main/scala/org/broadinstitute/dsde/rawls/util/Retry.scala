@@ -17,6 +17,8 @@ trait Retry {
 
   type Predicate[A] = A => Boolean
 
+  def always[A]: Predicate[A] = _ => true
+
   val defaultErrorMessage = "retry-able operation failed"
 
   def retry[T](pred: Predicate[Throwable] = always, failureLogMessage: String = defaultErrorMessage)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
@@ -60,8 +62,6 @@ trait Retry {
         Future.failed(t)
     }
   }
-
-  def always( throwable: Throwable ) = { true }
 
   private val allBackoffIntervals = Seq(100 milliseconds, 1 second, 3 seconds)
 

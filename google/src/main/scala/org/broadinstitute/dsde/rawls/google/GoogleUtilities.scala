@@ -36,10 +36,6 @@ trait GoogleUtilities extends LazyLogging with Retry {
     }
   }
 
-  protected def retryWhen[T](pred: Predicate[Throwable])(op: () => T): Future[T] = {
-    retryExponentially(pred)(() => Future(blocking(op())))
-  }
-
   protected def retryWhen500orGoogleError[T](op: () => T): Future[T] = {
     retryExponentially(when500orGoogleError)(() => Future(blocking(op())))
   }
