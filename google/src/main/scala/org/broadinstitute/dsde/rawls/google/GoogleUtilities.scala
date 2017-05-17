@@ -22,7 +22,7 @@ import scala.util.{Failure, Success, Try}
 trait GoogleUtilities extends LazyLogging with Retry {
   implicit val executionContext: ExecutionContext
 
-  protected def when500orGoogleError: Predicate[Throwable] = throwable => {
+  protected def when500orGoogleError(throwable: Throwable): Boolean = {
     throwable match {
       case t: GoogleJsonResponseException => {
         ((t.getStatusCode == 403 || t.getStatusCode == 429) && t.getDetails.getErrors.head.getDomain.equalsIgnoreCase("usageLimits")) ||
