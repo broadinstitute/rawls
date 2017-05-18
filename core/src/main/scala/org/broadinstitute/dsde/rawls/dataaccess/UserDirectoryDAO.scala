@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.model.{RawlsUser, RawlsUserSubjectId}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * Created by dvoet on 11/5/15.
@@ -13,4 +13,5 @@ trait UserDirectoryDAO {
   def enableUser(user: RawlsUserSubjectId): Future[Unit]
   def disableUser(user: RawlsUserSubjectId): Future[Unit]
   def isEnabled(user: RawlsUserSubjectId): Future[Boolean]
+  def getAnyUser(implicit executionContext: ExecutionContext): Future[RawlsUserSubjectId]
 }

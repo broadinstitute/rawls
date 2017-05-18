@@ -227,6 +227,16 @@ case class SubmissionWorkflowStatusResponse(
   workflowStatus: String,
   count: Int)
 
+case class SubsystemStatus(
+  ok: Boolean,
+  messages: Option[String]
+)
+
+case class StatusCheckResponse(
+  ok: Boolean,
+  systems: Map[String, SubsystemStatus]
+)
+
 class ExecutionJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 

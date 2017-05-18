@@ -2,12 +2,12 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import javax.naming.NameAlreadyBoundException
 
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUser, RawlsUserSubjectId}
 import spray.http.StatusCodes
 
 import scala.collection.mutable
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * Created by dvoet on 11/6/15.
@@ -30,6 +30,11 @@ class MockUserDirectoryDAO extends UserDirectoryDAO{
   override def disableUser(user: RawlsUserSubjectId): Future[Unit] = Future.successful(users += (user -> false))
 
   override def enableUser(user: RawlsUserSubjectId): Future[Unit] = Future.successful(users += (user -> true))
+
+  override def getAnyUser(implicit executionContext: ExecutionContext): Future[RawlsUserSubjectId] = users.keys.headOption match {
+    case Some(user) => Future.successful(user)
+    case None => Future.failed(new RawlsException("no users found"))
+  }
 
   def exists(user: RawlsUserSubjectId) = users.keys.exists(_ == user)
 }
