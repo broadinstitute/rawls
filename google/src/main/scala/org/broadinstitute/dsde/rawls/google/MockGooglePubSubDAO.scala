@@ -6,6 +6,7 @@ import java.util.{Collections, UUID}
 
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
+import com.google.api.services.pubsub.model.Topic
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 
@@ -94,6 +95,14 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
 //    credential.setRefreshToken(token)
     credential.setExpiresInSeconds(1000000L) // make sure not to refresh this token
     credential
+  }
+
+  override def getTopic(topicName: String)(implicit executionContext: ExecutionContext): Future[Option[Topic]] = Future {
+    if (topics.contains(topicName)) {
+      val topic = new Topic
+      topic.setName(topicName)
+      Some(topic)
+    } else None
   }
 
   case class Subscription(name: String, topic: String, queue: ConcurrentLinkedQueue[String])

@@ -69,7 +69,7 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
     new InitialDirContext(env)
   }
 
-  private def withContext[T](op: InitialDirContext => T): Future[T] = Future {
+  private def withContext[T](op: InitialDirContext => T)(implicit executionContext: ExecutionContext): Future[T] = Future {
     val ctx = getContext()
     val t = Try(op(ctx))
     ctx.close()

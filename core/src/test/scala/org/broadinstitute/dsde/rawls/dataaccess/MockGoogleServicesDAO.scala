@@ -6,19 +6,19 @@ import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
-import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
+import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, _}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
-import spray.http.{OAuth2BearerToken, StatusCodes}
-import spray.json._
-
+import spray.http.OAuth2BearerToken
+import spray.json.JsObject
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Success, Try}
 
 class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) {
@@ -38,6 +38,11 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     val firecloudHasThisOne = RawlsBillingAccount(accessibleBillingAccountName, true, "testBillingAccount")
     val firecloudDoesntHaveThisOne = RawlsBillingAccount(inaccessibleBillingAccountName, false, "testBillingAccount")
     Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
+  }
+
+  override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {
+    val firecloudHasThisOne = RawlsBillingAccount(accessibleBillingAccountName, true, "testBillingAccount")
+    Future.successful(Seq(firecloudHasThisOne))
   }
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
@@ -129,7 +134,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def deleteBucket(bucketName: String, monitorRef: ActorRef) = Future.successful(Unit)
 
-  override def getBucket(bucketName: String): Future[Option[Bucket]] = Future.successful(Some(new Bucket))
+  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(Some(new Bucket))
 
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = Future.successful(Some(List.fill(5)(new BucketAccessControl)))
 
@@ -202,7 +207,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   }
   override def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean] = Future.successful(true)
 
-  override def getGoogleGroup(groupName: String): Future[Option[Group]] = Future.successful(Some(new Group))
+  override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] = Future.successful(Some(new Group))
 
   def getBucketUsage(projectName: RawlsBillingProjectName, bucketName: String, maxResults: Option[Long]): Future[BigInt] = Future.successful(42)
 
@@ -270,6 +275,10 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     } else {
       None
     }
+  }
+
+  override def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]] = {
+    Future.successful(Seq(new Operation))
   }
 
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] =

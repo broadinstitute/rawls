@@ -5,6 +5,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
@@ -229,12 +230,12 @@ case class SubmissionWorkflowStatusResponse(
 
 case class SubsystemStatus(
   ok: Boolean,
-  messages: Option[String]
+  messages: Seq[String]
 )
 
 case class StatusCheckResponse(
   ok: Boolean,
-  systems: Map[String, SubsystemStatus]
+  systems: Map[Subsystem, SubsystemStatus]
 )
 
 class ExecutionJsonSupport extends JsonSupport {
@@ -260,6 +261,14 @@ class ExecutionJsonSupport extends JsonSupport {
     override def write(obj: SubmissionStatus): JsValue = JsString(obj.toString)
     override def read(json: JsValue): SubmissionStatus = json match {
       case JsString(name) => SubmissionStatuses.withName(name)
+      case x => throw new DeserializationException("invalid value: " + x)
+    }
+  }
+
+  implicit object SubsystemFormat extends RootJsonFormat[Subsystem] {
+    override def write(obj: Subsystem): JsValue = JsString(obj.toString)
+    override def read(json: JsValue): Subsystem = json match {
+      case JsString(name) => Subsystems.withName(name)
       case x => throw new DeserializationException("invalid value: " + x)
     }
   }
@@ -430,6 +439,40 @@ object SubmissionStatuses {
   case object Aborting extends SubmissionStatus
   case object Aborted extends SubmissionStatus
   case object Done extends SubmissionStatus
+}
+
+object Subsystems {
+  val googleSubsystems = Set(GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub)
+
+  sealed trait Subsystem extends RawlsEnumeration[Subsystem] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String) = Subsystems.withName(name)
+    def isGoogle = googleSubsystems.contains(this)
+  }
+
+  def withName(name: String): Subsystem = {
+    name match {
+      case "Agora" => Agora
+      case "Cromwell" => Cromwell
+      case "Database" => Database
+      case "GoogleBilling" => GoogleBilling
+      case "GoogleBuckets" => GoogleBuckets
+      case "GoogleGenomics" => GoogleGenomics
+      case "GoogleGroups" => GoogleGroups
+      case "GooglePubSub" => GooglePubSub
+      case _ => throw new RawlsException(s"invalid Subsystem [$name]")
+    }
+  }
+
+  case object Agora extends Subsystem
+  case object Cromwell extends Subsystem
+  case object Database extends Subsystem
+  case object GoogleBilling extends Subsystem
+  case object GoogleBuckets extends Subsystem
+  case object GoogleGenomics extends Subsystem
+  case object GoogleGroups extends Subsystem
+  case object GooglePubSub extends Subsystem
+  case object LDAP extends Subsystem
 }
 
 object ExecutionJsonSupport extends ExecutionJsonSupport
