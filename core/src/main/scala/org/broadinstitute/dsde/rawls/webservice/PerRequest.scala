@@ -170,7 +170,7 @@ object PerRequest {
 trait PerRequestCreator {
   implicit def actorRefFactory: ActorRefFactory
 
-  def perRequest(r: RequestContext, props: Props, message: AnyRef, timeout: Duration = 3 minutes) =
+  def perRequest(r: RequestContext, props: Props, message: AnyRef, timeout: Duration = 3 minutes): ActorRef =
     actorRefFactory.actorOf(Props(new WithProps(r, props, message, timeout)))
 }
 

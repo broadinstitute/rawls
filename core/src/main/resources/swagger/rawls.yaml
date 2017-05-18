@@ -1183,33 +1183,6 @@ paths:
             - openid
             - email
             - profile
-  '/api/admin/genomics/operations/{jobId}':
-    get:
-      responses:
-        '200':
-          description: operations info
-        '403':
-          description: You must be an admin
-        '404':
-          description: jobId not found
-        '500':
-          description: Rawls Internal Error
-      description: retrieve operations info from Google Genomics API
-      tags:
-        - admin
-      summary: retrieve operations info from Google Genomics API
-      operationId: admin_genomics_operations_get
-      parameters:
-        - in: path
-          description: operations job id; do not include "operations/"
-          name: jobId
-          required: true
-          type: string
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   '/api/admin/statistics':
     get:
       responses:
@@ -3367,6 +3340,45 @@ paths:
           - openid
           - email
           - profile
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/genomics/operations/{jobId}':
+      get:
+        responses:
+          '200':
+            description: operations info
+          '404':
+            description: workspace or jobId not found
+            schema:
+              $ref: '#/definitions/ErrorReport'
+          '500':
+            description: Rawls Internal Error
+            schema:
+              $ref: '#/definitions/ErrorReport'
+        description: retrieve operations info from Google Genomics API
+        tags:
+          - workspaces
+        summary: retrieve operations info from Google Genomics API
+        operationId: workspaces_genomics_operations_get
+        parameters:
+          - in: path
+            description: Workspace Namespace
+            name: workspaceNamespace
+            required: true
+            type: string
+          - in: path
+            description: Workspace Name
+            name: workspaceName
+            required: true
+            type: string
+          - in: path
+            description: operations job id; do not include "operations/"
+            name: jobId
+            required: true
+            type: string
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
   '/register/user':
      post:
        responses:

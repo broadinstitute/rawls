@@ -5,18 +5,18 @@ import java.util.UUID
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import slick.backend.DatabaseConfig
+import slick.driver.JdbcDriver
+import slick.driver.MySQLDriver.api._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.Owner
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{WorkspaceAccessLevel, ProjectOwner}
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers, Suite}
-import _root_.slick.backend.DatabaseConfig
-import _root_.slick.driver.JdbcDriver
-import _root_.slick.driver.MySQLDriver.api._
 import spray.http.OAuth2BearerToken
 
 import scala.concurrent.duration._

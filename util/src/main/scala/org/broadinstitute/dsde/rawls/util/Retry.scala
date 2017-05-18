@@ -15,13 +15,17 @@ trait Retry {
   this: LazyLogging =>
   val system: ActorSystem
 
+  type Predicate[A] = A => Boolean
+
+  def always[A]: Predicate[A] = _ => true
+
   val defaultErrorMessage = "retry-able operation failed"
 
-  def retry[T](pred: (Throwable) => Boolean = always, failureLogMessage: String = defaultErrorMessage)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
+  def retry[T](pred: Predicate[Throwable] = always, failureLogMessage: String = defaultErrorMessage)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
     retry(allBackoffIntervals)(op, pred, failureLogMessage)
   }
 
-  def retryExponentially[T](pred: (Throwable) => Boolean = always, failureLogMessage: String = defaultErrorMessage)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
+  def retryExponentially[T](pred: Predicate[Throwable] = always, failureLogMessage: String = defaultErrorMessage)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
     retry(exponentialBackOffIntervals)(op, pred, failureLogMessage)
   }
 
@@ -35,12 +39,12 @@ trait Retry {
    * @tparam T
    * @return
    */
-  def retryUntilSuccessOrTimeout[T](pred: (Throwable) => Boolean = always, failureLogMessage: String = defaultErrorMessage)(interval: FiniteDuration, timeout: FiniteDuration)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
+  def retryUntilSuccessOrTimeout[T](pred: Predicate[Throwable] = always, failureLogMessage: String = defaultErrorMessage)(interval: FiniteDuration, timeout: FiniteDuration)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
     val trialCount = Math.ceil(timeout / interval).toInt
     retry(Seq.fill(trialCount)(interval))(op, pred, failureLogMessage)
   }
 
-  private def retry[T](remainingBackoffIntervals: Seq[FiniteDuration])(op: => () => Future[T], pred: (Throwable) => Boolean, failureLogMessage: String)(implicit executionContext: ExecutionContext): Future[T] = {
+  private def retry[T](remainingBackoffIntervals: Seq[FiniteDuration])(op: => () => Future[T], pred: Predicate[Throwable], failureLogMessage: String)(implicit executionContext: ExecutionContext): Future[T] = {
     op().recoverWith {
       case t if pred(t) && !remainingBackoffIntervals.isEmpty =>
         logger.info(s"$failureLogMessage: ${remainingBackoffIntervals.size} retries remaining, retrying in ${remainingBackoffIntervals.head}", t)
@@ -58,8 +62,6 @@ trait Retry {
         Future.failed(t)
     }
   }
-
-  def always( throwable: Throwable ) = { true }
 
   private val allBackoffIntervals = Seq(100 milliseconds, 1 second, 3 seconds)
 

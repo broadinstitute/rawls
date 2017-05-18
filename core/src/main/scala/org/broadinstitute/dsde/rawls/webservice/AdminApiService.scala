@@ -7,15 +7,11 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.net.URLDecoder
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.joda.time.DateTime
 import spray.routing._
 
 import scala.concurrent.ExecutionContext
@@ -29,7 +25,6 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val userServiceConstructor: UserInfo => UserService
-  val genomicsServiceConstructor: UserInfo => GenomicsService
   val statisticsServiceConstructor: UserInfo => StatisticsService
 
   val adminRoutes = requireUserInfo() { userInfo =>
@@ -262,14 +257,6 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.AdminDeleteAllRefreshTokens
-        )
-      }
-    } ~
-    path("admin" / "genomics" / "operations" / Segment ) { jobId =>
-      get {
-        requestContext => perRequest(requestContext,
-          GenomicsService.props(genomicsServiceConstructor, userInfo),
-          GenomicsService.GetOperation(jobId)
         )
       }
     } ~
