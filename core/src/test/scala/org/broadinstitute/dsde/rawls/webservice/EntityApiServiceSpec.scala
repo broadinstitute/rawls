@@ -682,6 +682,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 204 when batch upserting nothing" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq.empty[EntityUpdateDefinition])) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+  }
+
   it should "return 204 when batch upserting an entity that does not yet exist" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition("newSample", "Sample", Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo"))))
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1))) ~>
@@ -892,6 +902,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))))) {
           runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+        }
+      }
+  }
+
+  it should "return 204 when batch updating nothing" in withTestDataApiServices { services =>
+    Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq.empty[EntityUpdateDefinition])) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
         }
       }
   }
