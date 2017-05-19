@@ -6,19 +6,20 @@ import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
-import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
+import com.google.api.services.genomics.model.Operation
+import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, _}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import spray.http.OAuth2BearerToken
-import spray.json.JsObject
+import spray.json._
+
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Success, Try}
 
 class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) {

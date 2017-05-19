@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.sql.SQLTimeoutException
-import java.util.concurrent.{ExecutorService, Executors}
+import java.util.concurrent.{Executors, ExecutorService}
 
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcDriver
@@ -10,12 +10,14 @@ import _root_.slick.jdbc.meta.MTable
 import com.google.common.base.Throwables
 import com.typesafe.config.ConfigValueFactory
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, DataAccessComponent, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, DataAccess, DataAccessComponent}
 import sun.security.provider.certpath.SunCertPathBuilderException
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
+
 import liquibase.{Contexts, Liquibase}
 import liquibase.database.jvm.JdbcConnection
 import liquibase.resource.{ClassLoaderResourceAccessor, ResourceAccessor}
@@ -39,7 +41,7 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
    * - https://github.com/slick/slick/issues/1274
    * - https://groups.google.com/d/msg/scalaquery/5MCUnwaJ7U0/NLLMotX9BQAJ
    *
-   * Custom future thread poolR based on:
+   * Custom future thread pool based on:
    * - http://stackoverflow.com/questions/15285284/how-to-configure-a-fine-tuned-thread-pool-for-futures#comment23278672_15285441
    *
    * Database config parameter defaults based on: (expand the `forConfig` scaladoc for a full list of values)
@@ -92,4 +94,4 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
       dbConnection.close()
     }
   }
-}
+ }

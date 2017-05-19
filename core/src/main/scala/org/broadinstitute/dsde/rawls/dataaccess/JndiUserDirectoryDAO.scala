@@ -4,13 +4,13 @@ import java.util
 import javax.naming._
 import javax.naming.directory._
 
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUserSubjectId}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUser, RawlsUserSubjectId}
 import spray.http.StatusCodes
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Success, Try}
 import scala.collection.JavaConversions._
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 /**
  * Created by dvoet on 11/5/15.

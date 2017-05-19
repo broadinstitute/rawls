@@ -1,22 +1,18 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import akka.actor.{ActorContext, ActorRef, ActorSystem, Props}
+import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus, MethodConfiguration, UserInfo}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus, MethodConfiguration, UserInfo}
 import org.broadinstitute.dsde.rawls.util.Retry
-
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.duration.Duration
-import scala.util.{Failure, Success, Try}
-import spray.httpx.UnsuccessfulResponseException
 import spray.client.pipelining._
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
+import spray.httpx.UnsuccessfulResponseException
 import spray.json._
-import spray.json.DefaultJsonProtocol._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
 /**
@@ -67,7 +63,7 @@ class HttpMethodRepoDAO( methodRepoServiceURL: String)( implicit val system: Act
   override def getStatus(implicit executionContext: ExecutionContext): Future[AgoraStatus] = {
     val url = s"${methodRepoServiceURL}/status"
     val pipeline = sendReceive ~> unmarshal[AgoraStatus]
-    // No retries
+    // Don't retry on the status check
     pipeline(Get(url)) recover {
       case NonFatal(e) => AgoraStatus(false, Seq(e.getMessage))
     }

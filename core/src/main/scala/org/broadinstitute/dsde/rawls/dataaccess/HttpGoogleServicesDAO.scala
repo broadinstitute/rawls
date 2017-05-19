@@ -22,7 +22,7 @@ import com.google.api.services.genomics.model.Operation
 import com.google.api.services.genomics.{Genomics, GenomicsScopes}
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
-import com.google.api.services.servicemanagement.{model, ServiceManagement}
+import com.google.api.services.servicemanagement.ServiceManagement
 import com.google.api.services.servicemanagement.model.EnableServiceRequest
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
