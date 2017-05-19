@@ -10,11 +10,11 @@ import scala.concurrent.Future
 import scala.util.{Random, Try}
 
 
-class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,ExecutionServiceDAO], submitMembers: Map[ExecutionServiceId, ExecutionServiceDAO], dataSource: SlickDataSource) extends ExecutionServiceCluster {
+class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId,ExecutionServiceDAO], submitMembers: Map[ExecutionServiceId, ExecutionServiceDAO], dataSource: SlickDataSource) extends ExecutionServiceCluster {
 
   // make a copy of the members map as an array for easy reads; routing algorithm will return an index in this array.
   // ensure we sort the array by key for determinism/easy understanding
-  private val memberArray:Array[ClusterMember] = (members map {case (id, dao) => ClusterMember(id, dao)})
+  private val readMemberArray:Array[ClusterMember] = (readMembers map {case (id, dao) => ClusterMember(id, dao)})
       .toList.sortBy(_.key.id).toArray
   private val submitMemberArray:Array[ClusterMember] = (submitMembers map {case (id, dao) => ClusterMember(id, dao)})
       .toList.sortBy(_.key.id).toArray
@@ -52,7 +52,7 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
     getMember(workflowRec).abort(workflowRec.externalId.get, userInfo)
 
   def version(userInfo: UserInfo): Future[ExecutionServiceVersion] =
-    getRandomMember.version(userInfo)
+    getRandomReadMember.version(userInfo)
 
   // ====================
   // facade-to-cluster entry points
@@ -61,7 +61,7 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
   private def getMember(workflowRec: WorkflowRecord): ExecutionServiceDAO = {
     (workflowRec.externalId, workflowRec.executionServiceKey) match {
       case (Some(extId), Some(execKey)) => {
-        members.get(ExecutionServiceId(execKey)) match {
+        readMembers.get(ExecutionServiceId(execKey)) match {
           case Some(dao) => dao
           case None => throw new RawlsException(s"member with key $execKey does not exist")
         }
@@ -70,8 +70,8 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
     }
   }
 
-  private def getRandomMember: ExecutionServiceDAO = {
-    memberArray(Random.nextInt(memberArray.length)).dao
+  private def getRandomReadMember: ExecutionServiceDAO = {
+    readMemberArray(Random.nextInt(readMemberArray.length)).dao
   }
 
   // for unsubmitted workflows, get the best instance to which we should submit
