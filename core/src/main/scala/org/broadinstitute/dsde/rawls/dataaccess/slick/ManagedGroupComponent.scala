@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.model._
  *
  * Created by dvoet on 3/8/17.
  */
-case class ManagedGroupRecord(membersGroupName: String, adminsGroupName: String)
+case class ManagedGroupRecord(membersGroupName: String, adminsGroupName: String, accessInstructions: Option[String] = None)
 
 trait ManagedGroupComponent {
   this: DriverComponent
@@ -20,8 +20,9 @@ trait ManagedGroupComponent {
   class ManagedGroupTable(tag: Tag) extends Table[ManagedGroupRecord](tag, "MANAGED_GROUP") {
     def membersGroupName = column[String]("MEMBERS_GROUP_NAME", O.Length(254), O.PrimaryKey)
     def adminsGroupName = column[String]("ADMINS_GROUP_NAME", O.Length(254))
+    def accessInstructions = column[Option[String]]("ACCESS_INSTRUCTIONS")
 
-    def * = (membersGroupName, adminsGroupName) <> (ManagedGroupRecord.tupled, ManagedGroupRecord.unapply)
+    def * = (membersGroupName, adminsGroupName, accessInstructions) <> (ManagedGroupRecord.tupled, ManagedGroupRecord.unapply)
 
     def membersGroup = foreignKey("FK_MANAGED_GROUP_MEMBERS", membersGroupName, rawlsGroupQuery)(_.groupName)
     def adminsGroup = foreignKey("FK_MANAGED_GROUP_ADMINS", adminsGroupName, rawlsGroupQuery)(_.groupName)
@@ -32,6 +33,10 @@ trait ManagedGroupComponent {
   object managedGroupQuery extends TableQuery(new ManagedGroupTable(_)) {
     def createManagedGroup(managedGroup: ManagedGroup): WriteAction[ManagedGroup] = {
       (managedGroupQuery += marshalManagedGroup(managedGroup)).map(_ => managedGroup)
+    }
+
+    def setManagedGroupAccessInstructions(managedGroupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions): WriteAction[Int] = {
+      managedGroupQuery.filter(_.membersGroupName === managedGroupRef.membersGroupName.value).map(_.accessInstructions).update(Option(instructions.instructions))
     }
 
     def load(managedGroupRef: ManagedGroupRef): ReadAction[Option[ManagedGroup]] = {
@@ -66,6 +71,17 @@ trait ManagedGroupComponent {
           }
           ManagedGroupAccess(unmarshalManagedGroupRef(managedGroupRecord), role)
         }
+      }
+    }
+
+    def getManagedGroupAccessInstructions(groupList: Seq[ManagedGroupRef]): ReadAction[Seq[ManagedGroupAccessInstructions]] = {
+      val managedGroupsQuery: ReadAction[Seq[ManagedGroupRecord]] = managedGroupQuery.filter(_.membersGroupName inSetBind groupList.map(_.membersGroupName.value)).result
+
+      managedGroupsQuery.map { managedGroups =>
+        for {
+          managedGroup <- managedGroups
+          instructions <- managedGroup.accessInstructions
+        } yield ManagedGroupAccessInstructions(managedGroup.membersGroupName, instructions)
       }
     }
 

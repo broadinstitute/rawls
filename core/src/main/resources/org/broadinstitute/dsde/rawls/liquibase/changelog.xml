@@ -46,4 +46,5 @@
     <include file="changesets/20170321_catalog_permissions.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170310_managed_groups.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170425_deleted_date.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20170503_access_instructions.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

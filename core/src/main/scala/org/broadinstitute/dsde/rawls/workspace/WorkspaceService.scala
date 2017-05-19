@@ -65,6 +65,7 @@ object WorkspaceService {
   case class CheckBucketReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class GetWorkspaceStatus(workspaceName: WorkspaceName, userSubjectId: Option[String]) extends WorkspaceServiceMessage
   case class GetBucketUsage(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class GetAccessInstructions(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
 
   case class CreateEntity(workspaceName: WorkspaceName, entity: Entity) extends WorkspaceServiceMessage
   case class GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) extends WorkspaceServiceMessage
@@ -147,6 +148,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case CheckBucketReadAccess(workspaceName: WorkspaceName) => pipe(checkBucketReadAccess(workspaceName)) to sender
     case GetWorkspaceStatus(workspaceName, userSubjectId) => pipe(getWorkspaceStatus(workspaceName, userSubjectId)) to sender
     case GetBucketUsage(workspaceName) => pipe(getBucketUsage(workspaceName)) to sender
+    case GetAccessInstructions(workspaceName) => pipe(getAccessInstructions(workspaceName)) to sender
 
     case CreateEntity(workspaceName, entity) => pipe(createEntity(workspaceName, entity)) to sender
     case GetEntity(workspaceName, entityType, entityName) => pipe(getEntity(workspaceName, entityType, entityName)) to sender
@@ -1798,6 +1800,30 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  def getAccessInstructions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        val accessGroups = DBIO.sequence(workspaceContext.workspace.accessLevels.values.map { ref =>
+          dataAccess.rawlsGroupQuery.loadGroupIfMember(ref, RawlsUser(userInfo))
+        })
+
+        accessGroups.flatMap { memberOf =>
+          if (memberOf.flatten.isEmpty) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+          else {
+            workspaceContext.workspace.authorizationDomain match {
+              case Some(authDomain) => {
+                dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Seq(workspaceContext.workspace.authorizationDomain.get)) map { instructions =>
+                  RequestComplete(StatusCodes.OK, instructions)
+                }
+              }
+              case None => DBIO.successful(RequestComplete(StatusCodes.OK, Seq.empty[ManagedGroupAccessInstructions]))
+            }
+          }
+        }
+      }
+    }
+  }
+  
   def getGenomicsOperation(workspaceName: WorkspaceName, jobId: String): Future[PerRequestMessage] = {
     // First check the workspace context and permissions in a DB transaction.
     // We don't need any DB information beyond that, so just return Unit on success.

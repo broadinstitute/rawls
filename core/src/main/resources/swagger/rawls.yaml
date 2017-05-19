@@ -430,6 +430,46 @@ paths:
              - openid
              - email
              - profile
+  '/api/admin/groups/{groupName}/accessInstructions':
+     post:
+       responses:
+         '204':
+           description: Successfully updated instructions
+         '400':
+           description: Group didn't exist or text was invalid
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '403':
+           description: You must be an admin
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: Administratively set access instructions for a managed group
+       tags:
+         - admin
+         - groups
+       summary: update access instructions for a managed group
+       operationId: adminSetAccessInstructions
+       parameters:
+         - in: path
+           description: group name
+           name: groupName
+           required: true
+           type: string
+         - in: body
+           description: instructions
+           name: instructions
+           required: true
+           schema:
+            $ref: '#/definitions/ManagedGroupAccessInstructions'
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
   '/api/admin/groups/{groupName}/members':
      post:
        responses:
@@ -3753,6 +3793,34 @@ paths:
             - openid
             - email
             - profile
+  '/api/groups/{groupName}/requestAccess':
+    post:
+      responses:
+        204:
+          description: Successfully requested access to group
+        404:
+          description: Group not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        500:
+          description: FireCloud Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      parameters:
+        - in: path
+          description: Group name
+          name: groupName
+          required: true
+          type: string
+      tags:
+        - groups
+      summary: request access to a group
+      operationId: requestGroupAccess
+      security:
+        - authorization:
+          - openid
+          - email
+          - profile
   '/api/groups/{groupName}/{role}/{email}':
     put:
       responses:
@@ -3866,6 +3934,35 @@ paths:
         - notifications
       summary: Gets the notifications available for a workspace
       operationId: workspaceNotifications
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/accessInstructions':
+    get:
+      responses:
+        200:
+          description: Success
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/ManagedGroupAccessInstructions'
+      parameters:
+        - in: path
+          description: workspace namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: workspace name
+          name: workspaceName
+          required: true
+          type: string
+      tags:
+        - workspaces
+      summary: Get access instructions for the workspace
+      operationId: getWorkspaceAccessInstructions
       security:
         - authorization:
             - openid
@@ -4806,6 +4903,20 @@ definitions:
         description: the users or groups who were not found
         items:
           $ref: '#/definitions/WorkspaceACLUpdate'
+
+  ManagedGroupAccessInstructions:
+    description: ''
+    required:
+      - groupName
+      - instructions
+    type: object
+    properties:
+      groupName:
+        type: string
+        description: The name of the Group with instructions
+      instructions:
+        type: string
+        description: The instructions for applying to the Group
 
   WorkspaceCatalog:
     description: ''

@@ -104,10 +104,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
   def makeManagedGroup(name: String, users: Set[RawlsUserRef], subgroups: Set[RawlsGroupRef] = Set.empty, owners: Set[RawlsUserRef] = Set.empty, ownerSubgroups: Set[RawlsGroupRef] = Set.empty) = {
-    val usersGroup = makeRawlsGroup(name, users, subgroups)
-    val ownersGroup = makeRawlsGroup(name + "-owners", owners, ownerSubgroups)
+    val membersGroup = makeRawlsGroup(name, users, subgroups)
+    val adminsGroup = makeRawlsGroup(name + "-owners", owners, ownerSubgroups)
 
-    ManagedGroup(usersGroup, ownersGroup)
+    ManagedGroup(membersGroup, adminsGroup)
   }
 
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef] = Set.empty) =

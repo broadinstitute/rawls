@@ -1785,6 +1785,45 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   // End ACL-restriction Tests
 
+  // Access instructions
+
+  it should "allow users with access to the workspace to get the access instructions for a workspace" in withTestDataApiServicesAndUser("writer-access") { services =>
+    Get(s"${testData.workspaceWithRealm.path}/accessInstructions") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assert(responseAs[Seq[ManagedGroupAccessInstructions]].isEmpty)
+      }
+  }
+
+  it should "not allow users without access to the workspace to get the access instructions for a workspace" in withTestDataApiServicesAndUser("no-access") { services =>
+    Get(s"${testData.workspaceWithRealm.path}/accessInstructions") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "allow admins to set access instructions and users of the workspace to retrieve them" in withTestDataApiServicesAndUser("writer-access") { services =>
+    val instructions = ManagedGroupAccessInstructions(testData.workspaceWithRealm.authorizationDomain.get.membersGroupName.value, "Test instructions")
+
+    services.gcsDAO.adminList += testData.userWriter.userEmail.value
+
+    Post(s"/admin/groups/${testData.workspaceWithRealm.authorizationDomain.get.membersGroupName.value}/accessInstructions", httpJson(instructions)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+
+    Get(s"${testData.workspaceWithRealm.path}/accessInstructions") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assert(responseAs[Seq[ManagedGroupAccessInstructions]].size == 1)
+        assert(responseAs[Seq[ManagedGroupAccessInstructions]].head.instructions.equals(instructions.instructions))
+      }
+  }
+
   // Workspace Locking
   it should "allow an owner to lock (and re-lock) the workspace" in withEmptyWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
     Put(s"${testData.workspace.path}/lock") ~>

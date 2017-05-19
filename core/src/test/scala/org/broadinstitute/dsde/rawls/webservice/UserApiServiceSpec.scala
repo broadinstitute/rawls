@@ -764,6 +764,23 @@ class UserApiServiceSpec extends ApiServiceSpec {
     assert(services.gcsDAO.googleGroups.contains(managedGroup.membersGroup.groupEmail.value))
   }
 
+  it should "allow users to request access to groups" in withUsersTestDataApiServices(testData.userReader) { services =>
+    Post(s"/groups/my-test-group", httpJsonEmpty) ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created){
+          status
+        }
+      }
+    Post(s"/groups/my-test-group/requestAccess", httpJsonEmpty) ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent){
+          status
+        }
+      }
+  }
+
   it should "200 list groups for user - no groups" in withUsersTestDataApiServices(usersTestData.userNoAccess) { services =>
     import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupAccessFormat
     Get("/groups") ~>

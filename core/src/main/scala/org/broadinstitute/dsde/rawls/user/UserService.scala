@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.user
 
 import java.sql.SQLException
+import java.util.UUID
 
 import _root_.slick.jdbc.TransactionIsolation
 import akka.actor.{Actor, Props}
@@ -12,10 +13,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Notifications._
 import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.user.UserService._
-import org.broadinstitute.dsde.rawls.util.{RoleSupport, FutureSupport, UserWiths}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete, RequestCompleteWithLocation}
 import spray.http.StatusCodes
 import spray.json._
@@ -61,6 +62,8 @@ object UserService {
   case class CreateManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
   case class GetManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
   case object ListManagedGroupsForUser extends UserServiceMessage
+  case class RequestAccessToManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
+  case class SetManagedGroupAccessInstructions(groupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions) extends UserServiceMessage
   case class AddManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) extends UserServiceMessage
   case class RemoveManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) extends UserServiceMessage
   case class OverwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList) extends UserServiceMessage
@@ -136,6 +139,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     case CreateManagedGroup(groupRef) => createManagedGroup(groupRef) pipeTo sender
     case GetManagedGroup(groupRef) => getManagedGroup(groupRef) pipeTo sender
+    case RequestAccessToManagedGroup(groupRef) => requestAccessToManagedGroup(groupRef) pipeTo sender
+    case SetManagedGroupAccessInstructions(groupRef, instructions) => asFCAdmin { setManagedGroupAccessInstructions(groupRef, instructions) } pipeTo sender
     case ListManagedGroupsForUser => listManagedGroupsForUser pipeTo sender
     case AddManagedGroupMembers(groupRef, role, email) => addManagedGroupMembers(groupRef, role, email) pipeTo sender
     case RemoveManagedGroupMembers(groupRef, role, email) => removeManagedGroupMembers(groupRef, role, email) pipeTo sender
@@ -637,6 +642,40 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           ManagedGroupAccessResponse(groupRef.membersGroupName, emailsByGroup(groupRef.toMembersGroupRef), accessEntries.map(_.role).max)
         }
         RequestComplete(StatusCodes.OK, response)
+      }
+    }
+  }
+
+  def requestAccessToManagedGroup(groupRef: ManagedGroupRef): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      val query = for {
+        group <- dataAccess.managedGroupQuery.load(groupRef)
+        accessInstructions <- dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Seq(groupRef))
+      } yield (group, accessInstructions)
+
+      query.flatMap { case (group, accessInstructions) =>
+        group match {
+          case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"The group [${groupRef.membersGroupName.value}] was not found"))
+          case Some(managedGroup) =>
+            if (accessInstructions.nonEmpty) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "You may not request access to this group"))
+            else {
+              dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
+                users.foreach { user =>
+                  notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId.value, groupRef.membersGroupName.value, users.map(_.userSubjectId.value) + userInfo.userSubjectId, userInfo.userEmail))
+                }
+                RequestComplete(StatusCodes.NoContent)
+              }
+            }
+        }
+      }
+    }
+  }
+
+  def setManagedGroupAccessInstructions(managedGroupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.managedGroupQuery.setManagedGroupAccessInstructions(managedGroupRef, instructions).map {
+        case 0 => RequestComplete(StatusCodes.InternalServerError, "We were unable to update the access instructions")
+        case _ => RequestComplete(StatusCodes.NoContent)
       }
     }
   }
