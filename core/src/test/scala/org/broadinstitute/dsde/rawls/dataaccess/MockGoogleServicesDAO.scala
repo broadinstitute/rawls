@@ -6,18 +6,19 @@ import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
-import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
-import org.broadinstitute.dsde.rawls.RawlsException
+import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
-import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, _}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
-import spray.http.OAuth2BearerToken
-import spray.json.JsObject
+import spray.http.{OAuth2BearerToken, StatusCodes}
+import spray.json._
+
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.util.{Success, Try}
 
 class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) {
@@ -30,6 +31,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudHasThisOne")
   val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+
+  val mockJobId = "dummy-job-id"
 
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
     val firecloudHasThisOne = RawlsBillingAccount(accessibleBillingAccountName, true, "testBillingAccount")
@@ -261,9 +264,12 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = Future.successful(Unit)
 
-  override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = {
-    import spray.json._
-    Future.successful(Some("""{"foo":"bar"}""".parseJson.asJsObject))
+  override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = Future {
+    if (jobId == mockJobId) {
+      Some("""{"foo":"bar"}""".parseJson.asJsObject)
+    } else {
+      None
+    }
   }
 
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] =

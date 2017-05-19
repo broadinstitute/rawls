@@ -2,11 +2,11 @@ import sbt._
 
 object Dependencies {
   val akkaV = "2.3.6"
-  val sprayV = "1.3.2"
+  val sprayV = "1.3.3"
   val slickV = "3.1.1"
 
   val googleDependencies = Seq(
-    "io.spray" %% "spray-json" % "1.3.2",
+    "io.spray" %% "spray-json" % sprayV,
     "io.spray" %% "spray-http" % sprayV,
     "com.typesafe.akka" %% "akka-actor" % akkaV,
     "com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0"
@@ -32,13 +32,16 @@ object Dependencies {
 
   val utilDependencies = Seq(
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
-    "com.typesafe.akka" %% "akka-actor" % akkaV
+    "com.typesafe.akka" %% "akka-actor" % akkaV,
+    "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
+    "org.scalatest" %% "scalatest" % "2.2.4" % "test",
+    "org.mockito" % "mockito-core" % "2.7.22" % "test"
   )
 
   val modelDependencies = Seq(
     // I am not certain why I need jackson-core here but IntelliJ is confused without it and tests don't run
     "com.fasterxml.jackson.core" % "jackson-core" % "2.4.3",
-    "io.spray" %% "spray-json" % "1.3.2",
+    "io.spray" %% "spray-json" % sprayV,
     "io.spray" %% "spray-http" % sprayV,
     "io.spray" %% "spray-httpx" % sprayV,
     "joda-time" % "joda-time" % "2.9.4",
