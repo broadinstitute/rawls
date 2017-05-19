@@ -48,7 +48,7 @@ object HealthMonitor {
 }
 
 class HealthMonitor private (val slickDataSource: SlickDataSource, val googleServicesDAO: GoogleServicesDAO, val googlePubSubDAO: GooglePubSubDAO, val userDirectoryDAO: UserDirectoryDAO, val methodRepoDAO: MethodRepoDAO,
-                    val groupsToCheck: Seq[String], val bucketsToCheck: Seq[String], val topicsToCheck: Seq[String],
+                    val groupsToCheck: Seq[String], val topicsToCheck: Seq[String], val bucketsToCheck: Seq[String],
                     val futureTimeout: FiniteDuration, val staleThreshold: FiniteDuration) extends Actor with LazyLogging {
   // Use the execution context for this actor's dispatcher for all asynchronous operations.
   // We define a separate execution context (a fixed thread pool) for health checking to
@@ -163,7 +163,10 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     */
   private def checkLDAP: Future[SubsystemStatus] = {
     logger.debug("Checking LDAP...")
-    userDirectoryDAO.getAnyUser.map(_ => OkStatus)
+    userDirectoryDAO.getAnyUser.map {
+      case None => FailedStatus("Could not find any users in LDAP")
+      case _ => OkStatus
+    }
   }
 
   private def multiCheck[A](itemsToCheck: Seq[String], errPrefix: String)(fn: String => Future[Option[A]]): Future[SubsystemStatus] = {

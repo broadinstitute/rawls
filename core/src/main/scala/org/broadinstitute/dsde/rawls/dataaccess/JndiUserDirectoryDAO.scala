@@ -48,14 +48,14 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
     members.contains(new Person(user).name)
   }
 
-  override def getAnyUser(implicit executionContext: ExecutionContext): Future[RawlsUserSubjectId] = withContext { ctx =>
+  override def getAnyUser(implicit executionContext: ExecutionContext): Future[Option[RawlsUserSubjectId]] = withContext { ctx =>
     val controls = new SearchControls()
     controls.setSearchScope(SearchControls.SUBTREE_SCOPE)
     val results = ctx.search("", "(objectclass=person)", controls)
     if (results.hasMore) {
-      RawlsUserSubjectId(results.next.getName)
+      Some(RawlsUserSubjectId(results.next.getName))
     } else {
-      throw new RawlsException("No users found in LDAP")
+      None
     }
   }
 

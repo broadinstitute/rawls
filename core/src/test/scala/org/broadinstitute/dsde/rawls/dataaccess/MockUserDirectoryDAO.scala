@@ -31,10 +31,7 @@ class MockUserDirectoryDAO extends UserDirectoryDAO{
 
   override def enableUser(user: RawlsUserSubjectId): Future[Unit] = Future.successful(users += (user -> true))
 
-  override def getAnyUser(implicit executionContext: ExecutionContext): Future[RawlsUserSubjectId] = users.keys.headOption match {
-    case Some(user) => Future.successful(user)
-    case None => Future.failed(new RawlsException("no users found"))
-  }
+  override def getAnyUser(implicit executionContext: ExecutionContext): Future[Option[RawlsUserSubjectId]] = Future.successful(users.keys.headOption)
 
   def exists(user: RawlsUserSubjectId) = users.keys.exists(_ == user)
 }
