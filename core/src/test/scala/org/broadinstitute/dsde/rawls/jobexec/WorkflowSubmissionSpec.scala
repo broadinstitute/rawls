@@ -195,7 +195,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
 
       assertResult(workflowIds.map(_ => s"""{"${testData.inputResolutions.head.inputName}":"${testData.inputResolutions.head.value.get.asInstanceOf[AttributeString].value}"}""")) {
-        mockExecCluster.getDefaultMember.asInstanceOf[MockExecutionServiceDAO].submitInput
+        mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
       }
 
       import spray.json._
@@ -213,7 +213,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
             false
           ))) {
-        mockExecCluster.getDefaultMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
+        mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }
     }
   }
