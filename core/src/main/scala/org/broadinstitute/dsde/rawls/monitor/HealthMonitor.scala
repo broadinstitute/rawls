@@ -168,13 +168,13 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
   }
 
   private def multiCheck[A](itemsToCheck: Seq[String], errPrefix: String)(fn: String => Future[Option[A]]): Future[SubsystemStatus] = {
-    val results = itemsToCheck.map { item =>
+    // Note: call to `foldMap` depends on SubsystemStatusMonoid, defined implicitly below
+    itemsToCheck.toList.foldMap { item =>
       fn(item).map {
         case Some(_) => OkStatus
         case None => failedStatus(s"$errPrefix: $item")
       }
     }
-    Future.fold(results)(Monoid[SubsystemStatus].empty)(Monoid[SubsystemStatus].combine)
   }
 
   private def processSubsystemResult(subSystem: Subsystem, result: Future[SubsystemStatus]): Unit = {
