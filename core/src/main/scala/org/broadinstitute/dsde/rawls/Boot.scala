@@ -186,6 +186,18 @@ object Boot extends App with LazyLogging {
     ),
       "rawls-service")
 
+    val healthMonitor = system.actorOf(HealthMonitor.props(
+      slickDataSource,
+      gcsDAO,
+      pubSubDAO,
+      userDirDAO,
+      methodRepoDAO,
+      Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
+      Seq(gcsConfig.getString("notifications.topicName"), gcsConfig.getString("groupMonitor.topicName")),
+      Seq(gcsDAO.tokenBucketName)
+    ).withDispatcher("health-monitor-dispatcher"), "health-monitor")
+    system.scheduler.schedule(1 minute, 1 minute, healthMonitor, HealthMonitor.CheckAll)
+
     implicit val timeout = Timeout(20.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler
     (IO(Http) ? Http.Bind(service, interface = "0.0.0.0", port = 8080)).onComplete {
