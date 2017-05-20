@@ -442,12 +442,13 @@ object SubmissionStatuses {
 }
 
 object Subsystems {
-  val googleSubsystems = Set(GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub)
+  val AllSubsystems = Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub, LDAP)
+  val GoogleSubsystems = Set(GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub)
 
   sealed trait Subsystem extends RawlsEnumeration[Subsystem] {
     override def toString = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String) = Subsystems.withName(name)
-    def isGoogle = googleSubsystems.contains(this)
+    def isGoogle = GoogleSubsystems.contains(this)
   }
 
   def withName(name: String): Subsystem = {
@@ -460,6 +461,7 @@ object Subsystems {
       case "GoogleGenomics" => GoogleGenomics
       case "GoogleGroups" => GoogleGroups
       case "GooglePubSub" => GooglePubSub
+      case "LDAP" => LDAP
       case _ => throw new RawlsException(s"invalid Subsystem [$name]")
     }
   }

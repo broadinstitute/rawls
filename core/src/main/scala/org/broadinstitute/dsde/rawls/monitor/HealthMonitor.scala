@@ -21,22 +21,19 @@ import scala.util.control.NonFatal
   * Created by rtitle on 5/17/17.
   */
 object HealthMonitor {
-  final val AllSubsystems = Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub, LDAP)
-  final val DefaultFutureTimeout = 1 minute
-  final val DefaultStaleThreshold = 15 minutes
+  val DefaultFutureTimeout = 1 minute
+  val DefaultStaleThreshold = 15 minutes
 
   val OkStatus = SubsystemStatus(true, Seq.empty)
   val UnknownStatus = SubsystemStatus(false, Seq("Unknown"))
-  def FailedStatus(message: String) = SubsystemStatus(false, Seq(message))
+  def failedStatus(message: String) = SubsystemStatus(false, Seq(message))
 
   // Actor API:
 
   /** Triggers subsystem checking */
   case object CheckAll
-
   /** Stores status for a particular subsystem */
   case class Store(subsystem: Subsystem, status: SubsystemStatus)
-
   /** Retrieves current status and sends back to caller */
   case object GetCurrentStatus
   case class GetCurrentStatusResponse(statusResponse: StatusCheckResponse)
@@ -56,7 +53,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
   import context.dispatcher
 
   /**
-    * Stores each subsystem status along with a timestamp.
+    * Contains each subsystem status along with a timestamp of when the entry was made.
     * Initialized with unknown status.
     */
   var data: Map[Subsystem, (SubsystemStatus, Long)] = {
@@ -103,6 +100,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
 
   /**
     * Checks database status by running a "select version()" query.
+    * We don't care about the result, besides checking that the query succeeded.
     */
   private def checkDB: Future[SubsystemStatus] = {
     logger.debug("Checking Database...")
@@ -142,7 +140,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
   private def checkGoogleBilling: Future[SubsystemStatus] = {
     logger.debug("Checking Google Billing...")
     googleServicesDAO.listBillingAccountsUsingServiceCredential.map { accts =>
-      if (accts.isEmpty) FailedStatus("Could not find any Rawls billing accounts")
+      if (accts.isEmpty) failedStatus("Could not find any Rawls billing accounts")
       else OkStatus
     }
   }
@@ -164,7 +162,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
   private def checkLDAP: Future[SubsystemStatus] = {
     logger.debug("Checking LDAP...")
     userDirectoryDAO.getAnyUser.map {
-      case None => FailedStatus("Could not find any users in LDAP")
+      case None => failedStatus("Could not find any users in LDAP")
       case _ => OkStatus
     }
   }
@@ -173,7 +171,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     val results = itemsToCheck.map { item =>
       fn(item).map {
         case Some(_) => OkStatus
-        case None => FailedStatus(s"$errPrefix: $item")
+        case None => failedStatus(s"$errPrefix: $item")
       }
     }
     Future.fold(results)(Monoid[SubsystemStatus].empty)(Monoid[SubsystemStatus].combine)
@@ -182,7 +180,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
   private def processSubsystemResult(subSystem: Subsystem, result: Future[SubsystemStatus]): Unit = {
     result.withTimeout(futureTimeout, s"Timed out after ${futureTimeout.toString} waiting for a response from ${subSystem.toString}")
     .recover { case NonFatal(ex) =>
-      FailedStatus(ex.getMessage)
+      failedStatus(ex.getMessage)
     } map {
       Store(subSystem, _)
     } pipeTo self
@@ -195,7 +193,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
 
   private def getCurrentStatus: StatusCheckResponse = {
     val now = System.currentTimeMillis()
-    // Convert any expired statuses to uknown
+    // Convert any expired statuses to unknown
     val processed = data.mapValues {
       case (_, t) if now - t > staleThreshold.toMillis => UnknownStatus
       case (status, _) => status
@@ -219,7 +217,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
 
   /**
     * Adds non-blocking timeout support to futures.
-    * Example:
+    * Example usage:
     * {{{
     *   val future = Future(Thread.sleep(1000*60*60*24*365)) // 1 year
     *   Await.result(future.withTimeout(5 seconds, "Timed out"), 365 days)
