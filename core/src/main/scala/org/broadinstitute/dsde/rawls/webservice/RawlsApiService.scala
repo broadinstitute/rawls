@@ -37,6 +37,7 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
   def receive = runRoute(
     swaggerRoute ~
     versionRoute ~
+    statusRoute ~
     pathPrefix("api") { apiRoutes } ~
     pathPrefix("register") { registerRoutes }
   )

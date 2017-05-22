@@ -10,7 +10,7 @@ import spray.routing.{HttpService, Route}
 trait StatusApiService extends HttpService with PerRequestCreator {
   val statusServiceConstructor: () => StatusService
 
-  val publicStatusRoutes: Route = {
+  val statusRoute: Route = {
     path("status") {
       get {
         requestContext => perRequest(requestContext,

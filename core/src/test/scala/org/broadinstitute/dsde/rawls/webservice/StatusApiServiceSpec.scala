@@ -49,7 +49,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
   "StatusApiService" should "return ok status" in withConstantTestDataApiServices { services =>
     eventually {
       Get("/status") ~>
-        sealRoute(services.publicStatusRoutes) ~>
+        sealRoute(services.statusRoute) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -64,7 +64,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
   List(CONNECT, DELETE, HEAD, OPTIONS, PATCH, POST, PUT, TRACE) foreach { method =>
     it should s"return 405 for $method requests" in withConstantTestDataApiServices { services =>
       new RequestBuilder(method).apply("/status") ~>
-        sealRoute(services.publicStatusRoutes) ~>
+        sealRoute(services.statusRoute) ~>
         check {
           assertResult(StatusCodes.MethodNotAllowed) {
             status
