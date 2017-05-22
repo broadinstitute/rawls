@@ -11,8 +11,9 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.RawlsUser
-import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor}
+import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor, HealthMonitor}
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
+import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.{ContentTypes, HttpEntity, StatusCodes}
@@ -73,7 +74,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
       }
   }
 
-  trait ApiServices extends AdminApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with WorkspaceApiService with BillingApiService with NotificationsApiService {
+  trait ApiServices extends AdminApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with WorkspaceApiService with BillingApiService with NotificationsApiService with StatusApiService {
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
     val gpsDAO: MockGooglePubSubDAO
@@ -124,12 +125,19 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
       directoryDAO
     )_
 
+    val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl + "/methods")
+
+    val healthMonitor = system.actorOf(HealthMonitor.props(
+      dataSource, gcsDAO, gpsDAO, directoryDAO, methodRepoDAO,
+      Seq.empty, Seq.empty, Seq.empty))
+    val statusServiceConstructor = StatusService.constructor(healthMonitor)_
+
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
-      new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
+      methodRepoDAO,
       executionServiceCluster,
       execServiceBatchSize,
       gcsDAO,

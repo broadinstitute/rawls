@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model.Subsystems._
-import org.broadinstitute.dsde.rawls.model.{AgoraStatus, RawlsUserSubjectId, SubsystemStatus}
+import org.broadinstitute.dsde.rawls.model.{AgoraStatus, RawlsUserSubjectId, StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -179,8 +179,8 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
                          errorMessages: PartialFunction[(Subsystem, Seq[String]), Unit] = PartialFunction.empty): Unit = {
     eventually {
       whenReady(actor ? GetCurrentStatus) { resp =>
-        //resp shouldBe a[GetCurrentStatusResponse]
-        val GetCurrentStatusResponse(actual) = resp
+        resp shouldBe a[StatusCheckResponse]
+        val actual = resp.asInstanceOf[StatusCheckResponse]
         actual.ok should equal(overall)
         actual.systems.filter(_._2.ok).keySet should equal(successes)
         actual.systems.filterNot(_._2.ok).filterNot(_._2 == UnknownStatus).keySet should equal(failures)

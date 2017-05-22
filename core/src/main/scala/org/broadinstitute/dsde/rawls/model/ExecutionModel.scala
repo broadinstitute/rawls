@@ -265,14 +265,6 @@ class ExecutionJsonSupport extends JsonSupport {
     }
   }
 
-  implicit object SubsystemFormat extends RootJsonFormat[Subsystem] {
-    override def write(obj: Subsystem): JsValue = JsString(obj.toString)
-    override def read(json: JsValue): Subsystem = json match {
-      case JsString(name) => Subsystems.withName(name)
-      case x => throw new DeserializationException("invalid value: " + x)
-    }
-  }
-
   implicit object ExecutionOutputFormat extends RootJsonFormat[OutputType] {
     override def write(obj: OutputType): JsValue = obj match {
       case Left(attribute) => attributeFormat.write(attribute)
@@ -365,6 +357,18 @@ class ExecutionJsonSupport extends JsonSupport {
       }
     }
   }
+
+  implicit object SubsystemFormat extends RootJsonFormat[Subsystem] {
+    override def write(obj: Subsystem): JsValue = JsString(obj.toString)
+    override def read(json: JsValue): Subsystem = json match {
+      case JsString(name) => Subsystems.withName(name)
+      case x => throw new DeserializationException("invalid value: " + x)
+    }
+  }
+
+  implicit val SubsystemStatusFormat = jsonFormat2(SubsystemStatus)
+
+  implicit val StatusCheckResponseFormat = jsonFormat2(StatusCheckResponse)
 }
 
 object WorkflowStatuses {

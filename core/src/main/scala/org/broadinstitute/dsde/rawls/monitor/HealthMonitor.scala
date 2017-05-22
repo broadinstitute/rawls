@@ -36,7 +36,6 @@ object HealthMonitor {
   case class Store(subsystem: Subsystem, status: SubsystemStatus)
   /** Retrieves current status and sends back to caller */
   case object GetCurrentStatus
-  case class GetCurrentStatusResponse(statusResponse: StatusCheckResponse)
 
   def props(slickDataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, googlePubSubDAO: GooglePubSubDAO, userDirectoryDAO: UserDirectoryDAO, methodRepoDAO: MethodRepoDAO,
             groupsToCheck: Seq[String], topicsToCheck: Seq[String], bucketsToCheck: Seq[String],
@@ -45,8 +44,8 @@ object HealthMonitor {
 }
 
 class HealthMonitor private (val slickDataSource: SlickDataSource, val googleServicesDAO: GoogleServicesDAO, val googlePubSubDAO: GooglePubSubDAO, val userDirectoryDAO: UserDirectoryDAO, val methodRepoDAO: MethodRepoDAO,
-                    val groupsToCheck: Seq[String], val topicsToCheck: Seq[String], val bucketsToCheck: Seq[String],
-                    val futureTimeout: FiniteDuration, val staleThreshold: FiniteDuration) extends Actor with LazyLogging {
+                             val groupsToCheck: Seq[String], val topicsToCheck: Seq[String], val bucketsToCheck: Seq[String],
+                             val futureTimeout: FiniteDuration, val staleThreshold: FiniteDuration) extends Actor with LazyLogging {
   // Use the execution context for this actor's dispatcher for all asynchronous operations.
   // We define a separate execution context (a fixed thread pool) for health checking to
   // not interfere with user facing operations.
@@ -64,7 +63,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
   override def receive: Receive = {
     case CheckAll => checkAll
     case Store(subsystem, status) => store(subsystem, status)
-    case GetCurrentStatus => sender ! GetCurrentStatusResponse(getCurrentStatus)
+    case GetCurrentStatus => sender ! getCurrentStatus
   }
 
   private def checkAll: Unit = {
@@ -78,7 +77,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
       (GoogleGroups, checkGoogleGroups),
       (GooglePubSub, checkGooglePubsub),
       (LDAP, checkLDAP)
-    ).foreach((processSubsystemResult _).tupled)
+    ).foreach(processSubsystemResult _ tupled)
   }
 
   /**
@@ -113,7 +112,13 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     */
   private def checkGooglePubsub: Future[SubsystemStatus] = {
     logger.debug("Checking Google PubSub...")
-    multiCheck(topicsToCheck, "Could not find topic")(googlePubSubDAO.getTopic)
+    // Note: call to `foldMap` depends on SubsystemStatusMonoid, defined implicitly below
+    topicsToCheck.toList.foldMap { topic =>
+      googlePubSubDAO.getTopic(topic).map {
+        case Some(_) => OkStatus
+        case None => failedStatus(s"Could not find topic: $topic")
+      }
+    }
   }
 
   /**
@@ -122,7 +127,13 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     */
   private def checkGoogleGroups: Future[SubsystemStatus] = {
     logger.debug("Checking Google Groups...")
-    multiCheck(groupsToCheck, "Could not find group")(googleServicesDAO.getGoogleGroup)
+    // Note: call to `foldMap` depends on SubsystemStatusMonoid, defined implicitly below
+    groupsToCheck.toList.foldMap { group =>
+      googleServicesDAO.getGoogleGroup(group).map {
+        case Some(_) => OkStatus
+        case None => failedStatus(s"Could not find group: $group")
+      }
+    }
   }
 
   /**
@@ -130,7 +141,13 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     */
   private def checkGoogleBuckets: Future[SubsystemStatus] = {
     logger.debug("Checking Google Buckets...")
-    multiCheck(bucketsToCheck, "Could not find bucket")(googleServicesDAO.getBucket)
+    // Note: call to `foldMap` depends on SubsystemStatusMonoid, defined implicitly below
+    bucketsToCheck.toList.foldMap { bucket =>
+      googleServicesDAO.getBucket(bucket).map {
+        case Some(_) => OkStatus
+        case None => failedStatus(s"Could not find bucket: $bucket")
+      }
+    }
   }
 
   /**
@@ -164,16 +181,6 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     userDirectoryDAO.getAnyUser.map {
       case None => failedStatus("Could not find any users in LDAP")
       case _ => OkStatus
-    }
-  }
-
-  private def multiCheck[A](itemsToCheck: Seq[String], errPrefix: String)(fn: String => Future[Option[A]]): Future[SubsystemStatus] = {
-    // Note: call to `foldMap` depends on SubsystemStatusMonoid, defined implicitly below
-    itemsToCheck.toList.foldMap { item =>
-      fn(item).map {
-        case Some(_) => OkStatus
-        case None => failedStatus(s"$errPrefix: $item")
-      }
     }
   }
 
@@ -229,4 +236,3 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
       Future.firstCompletedOf(Seq(f, after(duration, context.system.scheduler)(Future.failed(new TimeoutException(errMsg)))))
   }
 }
-

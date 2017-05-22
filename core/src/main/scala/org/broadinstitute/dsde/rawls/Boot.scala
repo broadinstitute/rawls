@@ -20,6 +20,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubm
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
+import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -163,6 +164,19 @@ object Boot extends App with LazyLogging {
       ))
     }
 
+    val healthMonitor = system.actorOf(HealthMonitor.props(
+      slickDataSource,
+      gcsDAO,
+      pubSubDAO,
+      userDirDAO,
+      methodRepoDAO,
+      Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
+      Seq(gcsConfig.getString("notifications.topicName"), gcsConfig.getString("groupMonitor.topicName")),
+      Seq(gcsDAO.tokenBucketName)
+    ).withDispatcher("health-monitor-dispatcher"), "health-monitor")
+    system.scheduler.schedule(1 minute, 1 minute, healthMonitor, HealthMonitor.CheckAll)
+    val statusServiceConstructor: () => StatusService = StatusService.constructor(healthMonitor)
+
     val service = system.actorOf(RawlsApiServiceActor.props(
       WorkspaceService.constructor(
         slickDataSource,
@@ -180,23 +194,12 @@ object Boot extends App with LazyLogging {
       userServiceConstructor,
       genomicsServiceConstructor,
       statisticsServiceConstructor,
+      statusServiceConstructor,
       ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
       clientSecrets.getDetails.getClientId,
       submissionTimeout
     ),
       "rawls-service")
-
-    val healthMonitor = system.actorOf(HealthMonitor.props(
-      slickDataSource,
-      gcsDAO,
-      pubSubDAO,
-      userDirDAO,
-      methodRepoDAO,
-      Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
-      Seq(gcsConfig.getString("notifications.topicName"), gcsConfig.getString("groupMonitor.topicName")),
-      Seq(gcsDAO.tokenBucketName)
-    ).withDispatcher("health-monitor-dispatcher"), "health-monitor")
-    system.scheduler.schedule(1 minute, 1 minute, healthMonitor, HealthMonitor.CheckAll)
 
     implicit val timeout = Timeout(20.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler
