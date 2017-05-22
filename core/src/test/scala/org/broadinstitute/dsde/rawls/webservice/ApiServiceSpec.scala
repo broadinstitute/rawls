@@ -125,7 +125,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
       directoryDAO
     )_
 
-    val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl + "/methods")
+    val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl)
 
     val healthMonitor = system.actorOf(HealthMonitor.props(
       dataSource, gcsDAO, gpsDAO, directoryDAO, methodRepoDAO,

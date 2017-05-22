@@ -61,7 +61,7 @@ class HttpMethodRepoDAO( methodRepoServiceURL: String)( implicit val system: Act
   }
 
   override def getStatus(implicit executionContext: ExecutionContext): Future[AgoraStatus] = {
-    val url = s"${methodRepoServiceURL}/status"
+    val url = s"${methodRepoServiceURL}/methods/status"
     val pipeline = sendReceive ~> unmarshal[AgoraStatus]
     // Don't retry on the status check
     pipeline(Get(url)) recover {
