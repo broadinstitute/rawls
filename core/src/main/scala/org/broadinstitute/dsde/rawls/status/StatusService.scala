@@ -37,8 +37,9 @@ class StatusService(val healthMonitor: ActorRef)(implicit val executionContext: 
   }
 
   def getStatus: Future[PerRequestMessage] = {
-    (healthMonitor ? GetCurrentStatus).mapTo[StatusCheckResponse].map { statusResponse =>
-      RequestComplete(StatusCodes.OK, statusResponse)
+    (healthMonitor ? GetCurrentStatus).mapTo[StatusCheckResponse].map { statusCheckResponse =>
+      val httpStatus = if (statusCheckResponse.ok) StatusCodes.OK else StatusCodes.InternalServerError
+      RequestComplete(httpStatus, statusCheckResponse)
     }
   }
 }

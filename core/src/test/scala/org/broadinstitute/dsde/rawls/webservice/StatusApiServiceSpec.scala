@@ -25,28 +25,30 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
+  def withApiServices[T](dataSource: SlickDataSource, subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
     try {
-      initializeSubsystems(apiService)
+      initializeSubsystems(apiService, subsystemsOk)
       testCode(apiService)
     } finally {
       apiService.cleanupSupervisor
     }
   }
 
-  def withConstantTestDataApiServices[T](testCode: TestApiService => T): T = {
+  def withConstantTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
     withConstantTestDatabase { dataSource: SlickDataSource =>
-      withApiServices(dataSource)(testCode)
+      withApiServices(dataSource, subsystemsOk)(testCode)
     }
   }
 
-  def initializeSubsystems(apiService: TestApiService) = {
-    apiService.directoryDAO.createUser(testData.userOwner.userSubjectId)
+  def initializeSubsystems(apiService: TestApiService, subsystemsOk: Boolean) = {
+    if (subsystemsOk) {
+      apiService.directoryDAO.createUser(testData.userOwner.userSubjectId)
+    }
     apiService.healthMonitor ! CheckAll
   }
 
-  "StatusApiService" should "return ok status" in withConstantTestDataApiServices { services =>
+  "StatusApiService" should "return 200 for ok status" in withConstantTestDataApiServices(true) { services =>
     eventually {
       Get("/status") ~>
         sealRoute(services.statusRoute) ~>
@@ -61,8 +63,26 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
     }
   }
 
+  it should "return 500 for non-ok status for any subsystem" in withConstantTestDataApiServices(false) { services =>
+    eventually {
+      Get("/status") ~>
+        sealRoute(services.statusRoute) ~>
+        check {
+          assertResult(StatusCodes.InternalServerError) {
+            status
+          }
+          assertResult(StatusCheckResponse(false, AllSubsystems.map {
+            case LDAP => LDAP -> SubsystemStatus(false, Seq("Could not find any users in LDAP"))
+            case other => other -> SubsystemStatus(true, Seq.empty)
+          }.toMap)) {
+            responseAs[StatusCheckResponse]
+          }
+        }
+    }
+  }
+
   List(CONNECT, DELETE, HEAD, OPTIONS, PATCH, POST, PUT, TRACE) foreach { method =>
-    it should s"return 405 for $method requests" in withConstantTestDataApiServices { services =>
+    it should s"return 405 for $method requests" in withConstantTestDataApiServices(true) { services =>
       new RequestBuilder(method).apply("/status") ~>
         sealRoute(services.statusRoute) ~>
         check {
