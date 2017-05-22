@@ -25,7 +25,7 @@ object HealthMonitor {
   val DefaultStaleThreshold = 15 minutes
 
   val OkStatus = SubsystemStatus(true, Seq.empty)
-  val UnknownStatus = SubsystemStatus(false, Seq("Unknown"))
+  val UnknownStatus = SubsystemStatus(false, Seq("Unknown status"))
   def failedStatus(message: String) = SubsystemStatus(false, Seq(message))
 
   // Actor API:
@@ -90,7 +90,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
 
   /**
     * Checks Cromwell status.
-    * TODO: Cromwell doesn't have a good status check so this is stubbed out for now.
+    * TODO: Cromwell doesn't have a status API yet so this is stubbed out for now.
     */
   private def checkCromwell: Future[SubsystemStatus] = {
     logger.debug("Checking Cromwell...")
@@ -99,7 +99,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
 
   /**
     * Checks database status by running a "select version()" query.
-    * We don't care about the result, besides checking that the query succeeded.
+    * We don't care about the result, besides checking that the query succeeds.
     */
   private def checkDB: Future[SubsystemStatus] = {
     logger.debug("Checking Database...")
@@ -151,7 +151,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
   }
 
   /**
-    * Checks Google billing status by doing a list() using the billing service count.
+    * Checks Google billing status by doing a list() using the billing service account.
     * Expects at least one account to be returned.
     */
   private def checkGoogleBilling: Future[SubsystemStatus] = {

@@ -80,7 +80,6 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       })
   }
 
-
   // Individual negative tests for each subsystem
 
   it should "return a non-ok for Agora" in {

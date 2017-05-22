@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
-import spray.json.{RootJsonFormat, _}
+import spray.json._
 
 import scala.util.{Failure, Success, Try}
 
@@ -249,7 +249,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit override val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
 
-  def rawlsEnumerationFormat[T <: RawlsEnumeration[T]](implicit construct: String => T): RootJsonFormat[T] = {
+  def rawlsEnumerationFormat[T <: RawlsEnumeration[T]](construct: String => T): RootJsonFormat[T] = {
     new RootJsonFormat[T] {
       override def write(obj: T): JsValue = JsString(obj.toString)
       override def read(json: JsValue): T = json match {
