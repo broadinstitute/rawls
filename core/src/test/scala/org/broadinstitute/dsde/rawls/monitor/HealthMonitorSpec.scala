@@ -191,7 +191,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
                 messages shouldBe empty
               } else if (unknowns.contains(s)) {
                 messages.size should be(1)
-                messages(0) should equal("Unknown")
+                messages(0) should equal(UnknownStatus.messages(0))
               } else {
                 messages.size should be(1)
                 messages(0) should not be empty
