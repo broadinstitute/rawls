@@ -48,15 +48,13 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
     members.contains(new Person(user).name)
   }
 
-  override def getAnyUser(implicit executionContext: ExecutionContext): Future[Option[RawlsUserSubjectId]] = withContext { ctx =>
+  override def listUsers(implicit executionContext: ExecutionContext): Future[List[RawlsUserSubjectId]] = withContext { ctx =>
+    val name = userDnFormat.replaceAll("cn=.*?,", "")
+    val filter = s"(&${userObjectClasses.map(oc => s"(objectclass=$oc)").mkString})"
     val controls = new SearchControls()
     controls.setSearchScope(SearchControls.SUBTREE_SCOPE)
-    val results = ctx.search("", "(objectclass=person)", controls)
-    if (results.hasMore) {
-      Some(RawlsUserSubjectId(results.next.getName))
-    } else {
-      None
-    }
+    val results = ctx.search(name, filter, controls)
+    results.toList.map(r => RawlsUserSubjectId(r.getName))
   }
 
   private def getContext(): InitialDirContext = {

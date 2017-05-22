@@ -280,7 +280,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath(methodPath + "/status")
+        .withPath("/status")
     ).respond(
       response()
         .withHeaders(jsonHeader)

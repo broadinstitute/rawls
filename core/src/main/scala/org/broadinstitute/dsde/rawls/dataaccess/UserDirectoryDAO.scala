@@ -13,5 +13,5 @@ trait UserDirectoryDAO {
   def enableUser(user: RawlsUserSubjectId): Future[Unit]
   def disableUser(user: RawlsUserSubjectId): Future[Unit]
   def isEnabled(user: RawlsUserSubjectId): Future[Boolean]
-  def getAnyUser(implicit executionContext: ExecutionContext): Future[Option[RawlsUserSubjectId]]
+  def listUsers(implicit executionContext: ExecutionContext): Future[List[RawlsUserSubjectId]]
 }

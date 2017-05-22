@@ -144,7 +144,8 @@ object Boot extends App with LazyLogging {
 
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO, userDirDAO)
-    val methodRepoDAO = new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server"))
+    val agoraConfig = conf.getConfig("methodrepo")
+    val methodRepoDAO = new HttpMethodRepoDAO(agoraConfig.getString("server"), agoraConfig.getString("path"))
 
     val maxActiveWorkflowsTotal = conf.getInt("executionservice.maxActiveWorkflowsPerServer") * executionServiceServers.size
     val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt("executionservice.activeWorkflowHogFactor")
@@ -177,7 +178,8 @@ object Boot extends App with LazyLogging {
       ).withDispatcher("health-monitor-dispatcher"),
       "health-monitor"
     )
-    system.scheduler.schedule(1 minute, 1 minute, healthMonitor, HealthMonitor.CheckAll)
+    logger.info("Starting health monitor...")
+    system.scheduler.schedule(10 seconds, 1 minute, healthMonitor, HealthMonitor.CheckAll)
 
     val statusServiceConstructor: () => StatusService = StatusService.constructor(healthMonitor)
 

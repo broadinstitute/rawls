@@ -775,8 +775,9 @@ class HttpGoogleServicesDAO(
 
   override def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]] = {
     val opId = "operations"
+    val filter = s"projectId = $serviceProject"
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
-    val operationRequest = genomicsApi.operations().list(opId)
+    val operationRequest = genomicsApi.operations().list(opId).setFilter(filter)
     retryWhen500orGoogleError(() => {
       val list = executeGoogleRequest(operationRequest)
       list.getOperations

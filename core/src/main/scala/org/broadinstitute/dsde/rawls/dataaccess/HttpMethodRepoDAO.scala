@@ -18,7 +18,9 @@ import scala.util.control.NonFatal
 /**
  * @author tsharpe
  */
-class HttpMethodRepoDAO( methodRepoServiceURL: String)( implicit val system: ActorSystem ) extends MethodRepoDAO with DsdeHttpDAO with Retry with LazyLogging {
+class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "")(implicit val system: ActorSystem) extends MethodRepoDAO with DsdeHttpDAO with Retry with LazyLogging {
+
+  private val methodRepoServiceURL = baseMethodRepoServiceURL + apiPath
 
   private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
     import system.dispatcher
@@ -61,7 +63,7 @@ class HttpMethodRepoDAO( methodRepoServiceURL: String)( implicit val system: Act
   }
 
   override def getStatus(implicit executionContext: ExecutionContext): Future[AgoraStatus] = {
-    val url = s"${methodRepoServiceURL}/methods/status"
+    val url = s"${baseMethodRepoServiceURL}/status"
     val pipeline = sendReceive ~> unmarshal[AgoraStatus]
     // Don't retry on the status check
     pipeline(Get(url)) recover {

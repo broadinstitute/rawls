@@ -178,9 +178,9 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     */
   private def checkLDAP: Future[SubsystemStatus] = {
     logger.debug("Checking LDAP...")
-    userDirectoryDAO.getAnyUser.map {
-      case None => failedStatus("Could not find any users in LDAP")
-      case _ => OkStatus
+    userDirectoryDAO.listUsers.map { users =>
+      if (users.isEmpty) failedStatus("Could not find any users in LDAP")
+      else OkStatus
     }
   }
 
