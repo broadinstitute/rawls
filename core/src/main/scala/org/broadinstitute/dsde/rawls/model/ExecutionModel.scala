@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
-import spray.json._
+import spray.json.{RootJsonFormat, _}
 
 import scala.util.{Failure, Success, Try}
 
@@ -249,21 +249,19 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit override val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
 
-  implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatus] {
-    override def write(obj: WorkflowStatus): JsValue = JsString(obj.toString)
-    override def read(json: JsValue): WorkflowStatus = json match {
-      case JsString(name) => WorkflowStatuses.withName(name)
-      case x => throw new DeserializationException("invalid value: " + x)
+  def rawlsEnumerationFormat[T <: RawlsEnumeration[T]](implicit construct: String => T): RootJsonFormat[T] = {
+    new RootJsonFormat[T] {
+      override def write(obj: T): JsValue = JsString(obj.toString)
+      override def read(json: JsValue): T = json match {
+        case JsString(name) => construct(name)
+        case x => throw new DeserializationException("invalid value: " + x)
+      }
     }
   }
 
-  implicit object SubmissionStatusFormat extends RootJsonFormat[SubmissionStatus] {
-    override def write(obj: SubmissionStatus): JsValue = JsString(obj.toString)
-    override def read(json: JsValue): SubmissionStatus = json match {
-      case JsString(name) => SubmissionStatuses.withName(name)
-      case x => throw new DeserializationException("invalid value: " + x)
-    }
-  }
+  implicit val WorkflowStatusFormat = rawlsEnumerationFormat(WorkflowStatuses.withName)
+
+  implicit val SubmissionStatusFormat = rawlsEnumerationFormat(SubmissionStatuses.withName)
 
   implicit object ExecutionOutputFormat extends RootJsonFormat[OutputType] {
     override def write(obj: OutputType): JsValue = obj match {
@@ -358,13 +356,7 @@ class ExecutionJsonSupport extends JsonSupport {
     }
   }
 
-  implicit object SubsystemFormat extends RootJsonFormat[Subsystem] {
-    override def write(obj: Subsystem): JsValue = JsString(obj.toString)
-    override def read(json: JsValue): Subsystem = json match {
-      case JsString(name) => Subsystems.withName(name)
-      case x => throw new DeserializationException("invalid value: " + x)
-    }
-  }
+  implicit val SubsystemFormat = rawlsEnumerationFormat(Subsystems.withName)
 
   implicit val SubsystemStatusFormat = jsonFormat2(SubsystemStatus)
 
