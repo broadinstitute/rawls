@@ -2,25 +2,28 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import akka.actor.{ActorRef, PoisonPill, ActorSystem}
+
+import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.pattern.AskTimeoutException
-import akka.testkit.{TestKit, TestActorRef}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import akka.testkit.{TestActorRef, TestKit}
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.{GoogleGroupSyncMonitorSupervisor, BucketDeletionMonitor}
+import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http.{StatusCode, StatusCodes}
 import spray.json._
-import scala.concurrent.duration._
+
 import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.util.Try
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, TestData}
 
 /**
  * Created with IntelliJ IDEA.
@@ -186,6 +189,12 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         notificationDAO
       )_
 
+      val genomicsServiceConstructor = GenomicsService.constructor(
+        slickDataSource,
+        gcsDAO,
+        directoryDAO
+      )_
+
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
 
       val execServiceBatchSize = 3
@@ -201,6 +210,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         submissionSupervisor,
         bucketDeletionMonitor,
         userServiceConstructor,
+        genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser
       )_

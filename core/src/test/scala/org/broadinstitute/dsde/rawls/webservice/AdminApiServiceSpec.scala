@@ -4,22 +4,21 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{CreateRawlsBillingProjectFullRequestFormat, RawlsBillingProjectMembershipFormat, RawlsGroupMemberListFormat, RawlsUserInfoListFormat, SyncReportFormat}
+import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserListFormat, UserStatusFormat}
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsBillingProjectNameFormat, RawlsGroupRefFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, ErrorReportFormat, WorkspaceFormat, WorkspaceListResponseFormat, WorkspaceStatusFormat}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
+import spray.http._
+import spray.json.DefaultJsonProtocol._
+import spray.json._
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
-
-import spray.http._
-import spray.json._
-import spray.json.DefaultJsonProtocol._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{WorkspaceFormat, WorkspaceStatusFormat, ErrorReportFormat, WorkspaceListResponseFormat, AttributeReferenceFormat}
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserStatusFormat, UserListFormat}
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{CreateRawlsBillingProjectFullRequestFormat, SyncReportFormat, RawlsBillingProjectMembershipFormat, RawlsGroupMemberListFormat, RawlsUserInfoListFormat}
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsBillingProjectNameFormat, RawlsGroupRefFormat}
 
 /**
  * Created by tsharpe on 9/28/15.
@@ -1087,19 +1086,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
 
   }
-
-  it should "return 200 when reading a Google Genomics operation" in withTestDataApiServices { services => {
-    Get("/admin/genomics/operations/dummy-job-id") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
-          responseAs[JsObject]
-        }
-      }
-  }}
 
   it should "return 200 when querying firecloud statistics with valid dates" in withTestDataApiServices { services =>
     Get("/admin/statistics?startDate=2010-10-10&endDate=2011-10-10") ~>

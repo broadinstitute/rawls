@@ -5,18 +5,18 @@ import java.util.UUID
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import slick.backend.DatabaseConfig
+import slick.driver.JdbcDriver
+import slick.driver.MySQLDriver.api._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.Owner
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{WorkspaceAccessLevel, ProjectOwner}
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers, Suite}
-import _root_.slick.backend.DatabaseConfig
-import _root_.slick.driver.JdbcDriver
-import _root_.slick.driver.MySQLDriver.api._
 import spray.http.OAuth2BearerToken
 
 import scala.concurrent.duration._
@@ -104,10 +104,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
   def makeManagedGroup(name: String, users: Set[RawlsUserRef], subgroups: Set[RawlsGroupRef] = Set.empty, owners: Set[RawlsUserRef] = Set.empty, ownerSubgroups: Set[RawlsGroupRef] = Set.empty) = {
-    val usersGroup = makeRawlsGroup(name, users, subgroups)
-    val ownersGroup = makeRawlsGroup(name + "-owners", owners, ownerSubgroups)
+    val membersGroup = makeRawlsGroup(name, users, subgroups)
+    val adminsGroup = makeRawlsGroup(name + "-owners", owners, ownerSubgroups)
 
-    ManagedGroup(usersGroup, ownersGroup)
+    ManagedGroup(membersGroup, adminsGroup)
   }
 
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef] = Set.empty) =

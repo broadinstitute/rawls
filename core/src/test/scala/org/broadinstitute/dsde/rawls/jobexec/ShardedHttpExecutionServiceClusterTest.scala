@@ -28,7 +28,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
 
   // arbitrary choice for the instance we'll use for tests; neither first nor last instances
   val instanceKeyForTests = "instance3"
-  val cluster = new ShardedHttpExecutionServiceCluster(instanceMap, slickDataSource)
+  val cluster = new ShardedHttpExecutionServiceCluster(instanceMap, instanceMap, slickDataSource)
 
   // private method wrapper for testing
   val getMember = PrivateMethod[ExecutionServiceDAO]('getMember)

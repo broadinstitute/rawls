@@ -261,6 +261,8 @@ case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
                              workspaceSubmissionStats: WorkspaceSubmissionStats,
                              owners: Seq[String])
 
+case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
+
 case class WorkspacePermissionsPair(workspaceId: String,
                                     accessLevel: WorkspaceAccessLevel)
 
@@ -425,6 +427,8 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
   implicit val WorkspaceResponseFormat = jsonFormat6(WorkspaceResponse)
+
+  implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 
   implicit val ValidatedMethodConfigurationFormat = jsonFormat5(ValidatedMethodConfiguration)
 

@@ -3,24 +3,23 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import spray.http._
-import spray.json._
 import spray.json.DefaultJsonProtocol._
+import spray.json._
 import spray.routing._
 
 import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
 
 /**
  * Created by dvoet on 4/24/15.
@@ -1056,7 +1055,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when updating subgroup membership" in withTestDataApiServices { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
+
 
     val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
     val groupA = RawlsGroup(RawlsGroupName("GroupA"), RawlsGroupEmail("groupA@firecloud.org"), Set.empty, Set.empty)
@@ -1173,7 +1172,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when updating realm subgroup membership" in withTestDataApiServices { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
+
 
     val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
     val groupC = RawlsGroup(RawlsGroupName("GroupC"), RawlsGroupEmail("groupC@firecloud.org"), Set.empty, Set.empty)
@@ -1786,6 +1785,45 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   // End ACL-restriction Tests
 
+  // Access instructions
+
+  it should "allow users with access to the workspace to get the access instructions for a workspace" in withTestDataApiServicesAndUser("writer-access") { services =>
+    Get(s"${testData.workspaceWithRealm.path}/accessInstructions") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assert(responseAs[Seq[ManagedGroupAccessInstructions]].isEmpty)
+      }
+  }
+
+  it should "not allow users without access to the workspace to get the access instructions for a workspace" in withTestDataApiServicesAndUser("no-access") { services =>
+    Get(s"${testData.workspaceWithRealm.path}/accessInstructions") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "allow admins to set access instructions and users of the workspace to retrieve them" in withTestDataApiServicesAndUser("writer-access") { services =>
+    val instructions = ManagedGroupAccessInstructions(testData.workspaceWithRealm.authorizationDomain.get.membersGroupName.value, "Test instructions")
+
+    services.gcsDAO.adminList += testData.userWriter.userEmail.value
+
+    Post(s"/admin/groups/${testData.workspaceWithRealm.authorizationDomain.get.membersGroupName.value}/accessInstructions", httpJson(instructions)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+
+    Get(s"${testData.workspaceWithRealm.path}/accessInstructions") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assert(responseAs[Seq[ManagedGroupAccessInstructions]].size == 1)
+        assert(responseAs[Seq[ManagedGroupAccessInstructions]].head.instructions.equals(instructions.instructions))
+      }
+  }
+
   // Workspace Locking
   it should "allow an owner to lock (and re-lock) the workspace" in withEmptyWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
     Put(s"${testData.workspace.path}/lock") ~>
@@ -2163,5 +2201,50 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
     }
   }
+
+  it should "return 200 when reading a Google Genomics operation" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
+    Get(s"${testWorkspaces.workspace.path}/genomics/operations/dummy-job-id") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        // message returned by MockGoogleServicesDAO
+        assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
+          responseAs[JsObject]
+        }
+      }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a non-existent workspace" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
+    Get(s"${testWorkspaces.workspace.copy(name = "bogus").path}/genomics/operations/dummy-job-id") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a non-existent job" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
+    Get(s"${testWorkspaces.workspace.path}/genomics/operations/bogus") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a user with no access" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+    Get(s"${testWorkspaces.workspace.path}/genomics/operations/dummy-job-id") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
 }
 
