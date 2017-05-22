@@ -56,7 +56,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(StatusCheckResponse(true, AllSubsystems.map(_ -> SubsystemStatus(true, Seq.empty)).toMap)) {
+          assertResult(StatusCheckResponse(true, AllSubsystems.map(_ -> SubsystemStatus(true, None)).toMap)) {
             responseAs[StatusCheckResponse]
           }
         }
@@ -72,8 +72,8 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
             status
           }
           assertResult(StatusCheckResponse(false, AllSubsystems.map {
-            case LDAP => LDAP -> SubsystemStatus(false, Seq("Could not find any users in LDAP"))
-            case other => other -> SubsystemStatus(true, Seq.empty)
+            case LDAP => LDAP -> SubsystemStatus(false, Some(List("Could not find any users in LDAP")))
+            case other => other -> SubsystemStatus(true, None)
           }.toMap)) {
             responseAs[StatusCheckResponse]
           }

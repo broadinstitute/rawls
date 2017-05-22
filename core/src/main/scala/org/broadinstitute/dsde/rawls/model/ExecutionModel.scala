@@ -230,7 +230,7 @@ case class SubmissionWorkflowStatusResponse(
 
 case class SubsystemStatus(
   ok: Boolean,
-  messages: Seq[String]
+  messages: Option[List[String]]
 )
 
 case class StatusCheckResponse(

@@ -61,7 +61,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       successes = AllSubsystems.filterNot(_ == Agora),
       failures = Set(Agora),
       errorMessages = {
-        case (Agora, messages) =>
+        case (Agora, Some(messages)) =>
           messages.size should be(1)
           messages(0) should equal("test exception")
       })
@@ -74,7 +74,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       successes = AllSubsystems.filterNot(_ == Agora),
       failures = Set(Agora),
       errorMessages = {
-        case (Agora, messages) =>
+        case (Agora, Some(messages)) =>
           messages.size should be(1)
           messages(0) should startWith ("Timed out")
       })
@@ -89,7 +89,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       successes = AllSubsystems.filterNot(_ == Agora),
       failures = Set(Agora),
       errorMessages = {
-        case (Agora, messages) =>
+        case (Agora, Some(messages)) =>
           messages.size should be(1)
           messages(0) should equal("agora failed")
       })
@@ -106,7 +106,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       successes = AllSubsystems.filterNot(_ == GoogleBilling),
       failures = Set(GoogleBilling),
       errorMessages = {
-        case (GoogleBilling, messages) =>
+        case (GoogleBilling, Some(messages)) =>
           messages.size should be (1)
           messages(0) should startWith ("Could not find")
       })
@@ -119,7 +119,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       successes = AllSubsystems.filterNot(_ == GoogleBuckets),
       failures = Set(GoogleBuckets),
       errorMessages = {
-        case (GoogleBuckets, messages) =>
+        case (GoogleBuckets, Some(messages)) =>
           messages.size should be (2)
           messages.foreach(_ should startWith ("Could not find"))
           messages(0) should endWith ("bucket1")
@@ -134,7 +134,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       successes = AllSubsystems.filterNot(_ == GoogleGroups),
       failures = Set(GoogleGroups),
       errorMessages = {
-        case (GoogleGroups, messages) =>
+        case (GoogleGroups, Some(messages)) =>
           messages.size should be (2)
           messages.foreach(_ should startWith ("Could not find"))
           messages(0) should endWith ("group1")
@@ -149,7 +149,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       successes = AllSubsystems.filterNot(_ == GooglePubSub),
       failures = Set(GooglePubSub),
       errorMessages = {
-        case (GooglePubSub, messages) =>
+        case (GooglePubSub, Some(messages)) =>
           messages.size should be (2)
           messages.foreach(_ should startWith ("Could not find"))
           messages(0) should endWith ("topic1")
@@ -164,7 +164,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       successes = AllSubsystems.filterNot(_ == LDAP),
       failures = Set(LDAP),
       errorMessages = {
-        case (LDAP, messages) =>
+        case (LDAP, Some(messages)) =>
           messages.size should be (1)
           messages(0) should be ("Could not find any users in LDAP")
       })
@@ -175,7 +175,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
                          successes: Set[Subsystem] = Set.empty,
                          failures: Set[Subsystem] = Set.empty,
                          unknowns: Set[Subsystem] = Set.empty,
-                         errorMessages: PartialFunction[(Subsystem, Seq[String]), Unit] = PartialFunction.empty): Unit = {
+                         errorMessages: PartialFunction[(Subsystem, Option[List[String]]), Unit] = PartialFunction.empty): Unit = {
     eventually {
       whenReady(actor ? GetCurrentStatus) { resp =>
         resp shouldBe a[StatusCheckResponse]
@@ -185,15 +185,16 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
         actual.systems.filterNot(_._2.ok).filterNot(_._2 == UnknownStatus).keySet should equal(failures)
         actual.systems.filterNot(_._2.ok).filter(_._2 == UnknownStatus).keySet should equal(unknowns)
         actual.systems.foreach { case (sub, SubsystemStatus(_, messages)) =>
-          val fallback: PartialFunction[(Subsystem, Seq[String]), Unit] = {
-            case (s, messages) =>
-              if (successes.contains(s)) {
-                messages shouldBe empty
-              } else if (unknowns.contains(s)) {
-                messages.size should be(1)
-                messages(0) should equal(UnknownStatus.messages(0))
+          val fallback: PartialFunction[(Subsystem, Option[List[String]]), Unit] = {
+            case (s, None) =>
+              successes should contain(s)
+            case (s, Some(messages)) =>
+              successes should not contain(s)
+              messages should not be empty
+              messages.size should be (1)
+              if (unknowns.contains(s)) {
+                messages should equal (UnknownStatus.messages.get)
               } else {
-                messages.size should be(1)
                 messages(0) should not be empty
               }
           }

@@ -24,9 +24,9 @@ object HealthMonitor {
   val DefaultFutureTimeout = 1 minute
   val DefaultStaleThreshold = 15 minutes
 
-  val OkStatus = SubsystemStatus(true, Seq.empty)
-  val UnknownStatus = SubsystemStatus(false, Seq("Unknown status"))
-  def failedStatus(message: String) = SubsystemStatus(false, Seq(message))
+  val OkStatus = SubsystemStatus(true, None)
+  val UnknownStatus = SubsystemStatus(false, Some(List("Unknown status")))
+  def failedStatus(message: String) = SubsystemStatus(false, Some(List(message)))
 
   // Actor API:
 
@@ -85,7 +85,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     */
   private def checkAgora: Future[SubsystemStatus] = {
     logger.debug("Checking Agora...")
-    methodRepoDAO.getStatus.map(agoraStatus => SubsystemStatus(agoraStatus.up, agoraStatus.messages))
+    methodRepoDAO.getStatus.map(agoraStatus => SubsystemStatus(agoraStatus.up, if (agoraStatus.messages.nonEmpty) Some(agoraStatus.messages.toList) else None))
   }
 
   /**
@@ -217,7 +217,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     */
   private implicit val SubsystemStatusMonoid = new Monoid[SubsystemStatus] {
     def combine(a: SubsystemStatus, b: SubsystemStatus): SubsystemStatus = {
-      SubsystemStatus(a.ok && b.ok, a.messages ++ b.messages)
+      SubsystemStatus(a.ok && b.ok, a.messages |+| b.messages)
     }
     def empty: SubsystemStatus = OkStatus
   }
