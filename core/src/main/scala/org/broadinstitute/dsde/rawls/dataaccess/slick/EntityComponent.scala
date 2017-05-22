@@ -61,9 +61,13 @@ trait EntityComponent {
       implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<, r.<<) }
 
       def action(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
-        val baseSelect = sql"select id, name, entity_type, workspace_id, record_version, deleted, deleted_date from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
-        val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
-        concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
+        if( entities.isEmpty ) {
+          DBIO.successful(Seq.empty[EntityRecord])
+        } else {
+          val baseSelect = sql"select id, name, entity_type, workspace_id, record_version, deleted, deleted_date from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
+          val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
+          concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
+        }
       }
     }
 
@@ -107,9 +111,14 @@ trait EntityComponent {
       }
 
       def activeActionForRefs(workspaceContext: SlickWorkspaceContext, entityRefs: Set[AttributeEntityReference]): ReadAction[Seq[EntityAndAttributesResult]] = {
-        val baseSelect = sql"""#$baseEntityAndAttributeSql where e.deleted = false and e.workspace_id = ${workspaceContext.workspaceId} and (e.entity_type, e.name) in ("""
-        val entityTypeNameTuples = reduceSqlActionsWithDelim(entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.toSeq)
-        concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityAndAttributesResult]
+        if( entityRefs.isEmpty ) {
+          DBIO.successful(Seq.empty[EntityAndAttributesResult])
+        } else {
+          val baseSelect = sql"""#$baseEntityAndAttributeSql where e.deleted = false and e.workspace_id = ${workspaceContext.workspaceId} and (e.entity_type, e.name) in ("""
+          val entityTypeNameTuples = reduceSqlActionsWithDelim(entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.toSeq)
+          concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityAndAttributesResult]
+        }
+
       }
 
       def activeActionForWorkspace(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[EntityAndAttributesResult]] = {
@@ -189,9 +198,13 @@ trait EntityComponent {
       }
 
       def actionForIds(entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
-        val baseSelect = sql"""#$baseEntityAndAttributeSql where e.id in ("""
-        val entityIdSql = reduceSqlActionsWithDelim(entityIds.map { id => sql"$id" }.toSeq)
-        concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
+        if( entityIds.isEmpty ) {
+          DBIO.successful(Seq.empty[EntityAndAttributesResult])
+        } else {
+          val baseSelect = sql"""#$baseEntityAndAttributeSql where e.id in ("""
+          val entityIdSql = reduceSqlActionsWithDelim(entityIds.map { id => sql"$id" }.toSeq)
+          concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
+        }
       }
 
       def actionForWorkspace(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[EntityAndAttributesResult]] = {
