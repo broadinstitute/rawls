@@ -164,17 +164,21 @@ object Boot extends App with LazyLogging {
       ))
     }
 
-    val healthMonitor = system.actorOf(HealthMonitor.props(
-      slickDataSource,
-      gcsDAO,
-      pubSubDAO,
-      userDirDAO,
-      methodRepoDAO,
-      Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
-      Seq(gcsConfig.getString("notifications.topicName"), gcsConfig.getString("groupMonitor.topicName")),
-      Seq(gcsDAO.tokenBucketName)
-    ).withDispatcher("health-monitor-dispatcher"), "health-monitor")
+    val healthMonitor = system.actorOf(
+      HealthMonitor.props(
+        slickDataSource,
+        gcsDAO,
+        pubSubDAO,
+        userDirDAO,
+        methodRepoDAO,
+        groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
+        topicsToCheck = Seq(gcsConfig.getString("notifications.topicName"), gcsConfig.getString("groupMonitor.topicName")),
+        bucketsToCheck = Seq(gcsDAO.tokenBucketName)
+      ).withDispatcher("health-monitor-dispatcher"),
+      "health-monitor"
+    )
     system.scheduler.schedule(1 minute, 1 minute, healthMonitor, HealthMonitor.CheckAll)
+
     val statusServiceConstructor: () => StatusService = StatusService.constructor(healthMonitor)
 
     val service = system.actorOf(RawlsApiServiceActor.props(

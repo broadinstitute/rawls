@@ -2,16 +2,15 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsUserSubjectId, StatusCheckResponse, SubsystemStatus}
-import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.StatusCheckResponseFormat
-import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
+import org.broadinstitute.dsde.rawls.model.Subsystems._
+import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Seconds, Span}
-import spray.http.StatusCodes
 import spray.http.HttpMethods._
+import spray.http.StatusCodes
 
 import scala.concurrent.ExecutionContext
 
