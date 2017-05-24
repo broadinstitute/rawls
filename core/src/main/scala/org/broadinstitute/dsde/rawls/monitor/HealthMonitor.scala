@@ -44,6 +44,48 @@ object HealthMonitor {
     Props(new HealthMonitor(slickDataSource, googleServicesDAO, googlePubSubDAO, userDirectoryDAO, methodRepoDAO, groupsToCheck, topicsToCheck, bucketsToCheck, futureTimeout, staleThreshold))
 }
 
+/**
+  * This actor periodically checks the health of each Rawls subsystem and reports on the results.
+  * It is used for Rawls system monitoring.
+  *
+  * For a list of the Rawls subsystems, see the [[Subsystem]] enum.
+  *
+  * The actor lifecyle is as follows:
+  * 1. Periodically receives a [[CheckAll]] message from the Akka scheduler. Receipt of this message
+  * triggers independent, asynchronous checks of each Rawls subsystem. The results of these futures
+  * are piped to self via...
+  *
+  * 2. the [[Store]] message. This updates the actor state for the given subsystem status. Note the current
+  * timestamp is also stored to ensure the returned statuses are current (see staleThreshold param).
+  *
+  * 3. [[GetCurrentStatus]] looks up the current actor state and sends it back to the caller wrapped in
+  * a [[StatusCheckResponse]] case class. This message is purely for retrieving state; it does not
+  * trigger any asynchronous operations.
+  *
+  * Note we structure status checks in this asynchronous way for a couple of reasons:
+  * - The /status endpoint is unauthenticated - we don't want each call to /status to trigger DB queries,
+  * Google calls, etc. It opens us up to DDoS.
+  *
+  * - The /status endpoint should be reliable, and decoupled from the status checks themselves. For example,
+  * if there is a problem with the DB that is causing hanging queries, that behavior shouldn't leak out to
+  * the /status API call. Instead, the call to /status will return quickly and report there is a problem
+  * with the DB (but not other subsystems because the checks are independent).
+  *
+  * @param slickDataSource the slick data source for DB operations
+  * @param googleServicesDAO the GCS DAO for Google API calls
+  * @param googlePubSubDAO the GPS DAO for Google PubSub API calls
+  * @param userDirectoryDAO the user DAO for LDAP calls
+  * @param methodRepoDAO the method repo DAO for Agora calls
+  * @param groupsToCheck Set of Google groups to check for existence
+  * @param topicsToCheck Set of Google PubSub topics to check for existence
+  * @param bucketsToCheck Set of Google bucket IDs to check for existence
+  * @param futureTimeout amount of time after which subsystem check futures will time out (default 1 minute)
+  * @param staleThreshold amount of time after which statuses are considered "stale". If a status is stale
+  *                       then it won't be returned to the caller; instead a failing status with an "Unknown"
+  *                       message will be returned. This shouldn't normally happen in practice if we have
+  *                       reasonable future timeouts; however it is still a defensive check in case something
+  *                       unexpected goes wrong. Default 15 minutes.
+  */
 class HealthMonitor private (val slickDataSource: SlickDataSource, val googleServicesDAO: GoogleServicesDAO, val googlePubSubDAO: GooglePubSubDAO, val userDirectoryDAO: UserDirectoryDAO, val methodRepoDAO: MethodRepoDAO,
                              val groupsToCheck: Seq[String], val topicsToCheck: Seq[String], val bucketsToCheck: Seq[String],
                              val futureTimeout: FiniteDuration, val staleThreshold: FiniteDuration) extends Actor with LazyLogging {
@@ -103,6 +145,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     * We don't care about the result, besides checking that the query succeeds.
     */
   private def checkDB: Future[SubsystemStatus] = {
+    // Note: this uses the slick thread pool, not this actor's dispatcher.
     logger.debug("Checking Database...")
     slickDataSource.inTransaction(_.sqlDBStatus).map(_ => OkStatus)
   }
