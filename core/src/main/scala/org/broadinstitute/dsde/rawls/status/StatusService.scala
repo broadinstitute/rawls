@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.status
 import akka.actor.{Actor, ActorRef, Props}
 import akka.pattern._
 import akka.util.Timeout
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.StatusCheckResponseFormat
+import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.StatusCheckResponse
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.GetCurrentStatus
 import org.broadinstitute.dsde.rawls.status.StatusService.GetStatus

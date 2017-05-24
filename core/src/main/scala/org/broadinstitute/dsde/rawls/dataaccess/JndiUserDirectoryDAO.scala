@@ -49,10 +49,23 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
   }
 
   override def listUsers(implicit executionContext: ExecutionContext): Future[List[RawlsUserSubjectId]] = withContext { ctx =>
+    // LDAP craziness bears some explanation:
+
+    // Strip out the cn (common name) from the userDnFormat, leaving something like this (for example):
+    // ou=people,dc=dsde-dev,dc=broadinstitute,dc=org
+    // This defines a target context (base object) for the search.
     val name = userDnFormat.replaceAll("cn=.*?,", "")
+
+    // Define a filter which is a logical AND of all the configured user object classes.
+    // The resulting filter looks something like this:
+    // (&(objectclass=inetOrgPerson)(objectclass=organizationalPerson)(objectclass=person)(objectclass=top))
     val filter = s"(&${userObjectClasses.map(oc => s"(objectclass=$oc)").mkString})"
+
+    // Define SUBTREE_SCOPE to recursively search all subtrees rooted at the named object.
     val controls = new SearchControls()
     controls.setSearchScope(SearchControls.SUBTREE_SCOPE)
+
+    // Run the search and map results to RawlsUserSubjectId
     val results = ctx.search(name, filter, controls)
     results.toList.map(r => RawlsUserSubjectId(r.getName))
   }

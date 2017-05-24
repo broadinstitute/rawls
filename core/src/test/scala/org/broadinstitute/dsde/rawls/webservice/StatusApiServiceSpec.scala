@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.StatusCheckResponseFormat
+import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.CheckAll

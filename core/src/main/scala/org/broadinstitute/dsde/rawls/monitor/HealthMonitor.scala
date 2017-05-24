@@ -30,12 +30,13 @@ object HealthMonitor {
 
   // Actor API:
 
+  sealed trait HealthMonitorMessage
   /** Triggers subsystem checking */
-  case object CheckAll
+  case object CheckAll extends HealthMonitorMessage
   /** Stores status for a particular subsystem */
-  case class Store(subsystem: Subsystem, status: SubsystemStatus)
+  case class Store(subsystem: Subsystem, status: SubsystemStatus) extends HealthMonitorMessage
   /** Retrieves current status and sends back to caller */
-  case object GetCurrentStatus
+  case object GetCurrentStatus extends HealthMonitorMessage
 
   def props(slickDataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, googlePubSubDAO: GooglePubSubDAO, userDirectoryDAO: UserDirectoryDAO, methodRepoDAO: MethodRepoDAO,
             groupsToCheck: Seq[String], topicsToCheck: Seq[String], bucketsToCheck: Seq[String],
@@ -55,7 +56,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     * Contains each subsystem status along with a timestamp of when the entry was made.
     * Initialized with unknown status.
     */
-  var data: Map[Subsystem, (SubsystemStatus, Long)] = {
+  private var data: Map[Subsystem, (SubsystemStatus, Long)] = {
     val now = System.currentTimeMillis
     AllSubsystems.map(_ -> (UnknownStatus, now)).toMap
   }
@@ -77,7 +78,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
       (GoogleGroups, checkGoogleGroups),
       (GooglePubSub, checkGooglePubsub),
       (LDAP, checkLDAP)
-    ).foreach(processSubsystemResult _ tupled)
+    ).foreach(processSubsystemResult)
   }
 
   /**
@@ -184,12 +185,13 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     }
   }
 
-  private def processSubsystemResult(subSystem: Subsystem, result: Future[SubsystemStatus]): Unit = {
-    result.withTimeout(futureTimeout, s"Timed out after ${futureTimeout.toString} waiting for a response from ${subSystem.toString}")
+  private def processSubsystemResult(subsystemAndResult: (Subsystem, Future[SubsystemStatus])): Unit = {
+    val (subsystem, result) = subsystemAndResult
+    result.withTimeout(futureTimeout, s"Timed out after ${futureTimeout.toString} waiting for a response from ${subsystem.toString}")
     .recover { case NonFatal(ex) =>
       failedStatus(ex.getMessage)
     } map {
-      Store(subSystem, _)
+      Store(subsystem, _)
     } pipeTo self
   }
 

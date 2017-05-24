@@ -228,16 +228,6 @@ case class SubmissionWorkflowStatusResponse(
   workflowStatus: String,
   count: Int)
 
-case class SubsystemStatus(
-  ok: Boolean,
-  messages: Option[List[String]]
-)
-
-case class StatusCheckResponse(
-  ok: Boolean,
-  systems: Map[Subsystem, SubsystemStatus]
-)
-
 class ExecutionJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 
@@ -248,16 +238,6 @@ class ExecutionJsonSupport extends JsonSupport {
   type StatusCountsByUser = Map[String, StatusCounts]
 
   implicit override val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
-
-  def rawlsEnumerationFormat[T <: RawlsEnumeration[T]](construct: String => T): RootJsonFormat[T] = {
-    new RootJsonFormat[T] {
-      override def write(obj: T): JsValue = JsString(obj.toString)
-      override def read(json: JsValue): T = json match {
-        case JsString(name) => construct(name)
-        case x => throw new DeserializationException("invalid value: " + x)
-      }
-    }
-  }
 
   implicit val WorkflowStatusFormat = rawlsEnumerationFormat(WorkflowStatuses.withName)
 
@@ -355,12 +335,6 @@ class ExecutionJsonSupport extends JsonSupport {
       }
     }
   }
-
-  implicit val SubsystemFormat = rawlsEnumerationFormat(Subsystems.withName)
-
-  implicit val SubsystemStatusFormat = jsonFormat2(SubsystemStatus)
-
-  implicit val StatusCheckResponseFormat = jsonFormat2(StatusCheckResponse)
 }
 
 object WorkflowStatuses {
@@ -435,42 +409,6 @@ object SubmissionStatuses {
   case object Aborting extends SubmissionStatus
   case object Aborted extends SubmissionStatus
   case object Done extends SubmissionStatus
-}
-
-object Subsystems {
-  val AllSubsystems = Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub, LDAP)
-  val GoogleSubsystems = Set(GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub)
-
-  sealed trait Subsystem extends RawlsEnumeration[Subsystem] {
-    override def toString = getClass.getSimpleName.stripSuffix("$")
-    override def withName(name: String) = Subsystems.withName(name)
-    def isGoogle = GoogleSubsystems.contains(this)
-  }
-
-  def withName(name: String): Subsystem = {
-    name match {
-      case "Agora" => Agora
-      case "Cromwell" => Cromwell
-      case "Database" => Database
-      case "GoogleBilling" => GoogleBilling
-      case "GoogleBuckets" => GoogleBuckets
-      case "GoogleGenomics" => GoogleGenomics
-      case "GoogleGroups" => GoogleGroups
-      case "GooglePubSub" => GooglePubSub
-      case "LDAP" => LDAP
-      case _ => throw new RawlsException(s"invalid Subsystem [$name]")
-    }
-  }
-
-  case object Agora extends Subsystem
-  case object Cromwell extends Subsystem
-  case object Database extends Subsystem
-  case object GoogleBilling extends Subsystem
-  case object GoogleBuckets extends Subsystem
-  case object GoogleGenomics extends Subsystem
-  case object GoogleGroups extends Subsystem
-  case object GooglePubSub extends Subsystem
-  case object LDAP extends Subsystem
 }
 
 object ExecutionJsonSupport extends ExecutionJsonSupport
