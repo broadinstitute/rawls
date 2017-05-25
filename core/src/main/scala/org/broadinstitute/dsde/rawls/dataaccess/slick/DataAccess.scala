@@ -63,4 +63,8 @@ trait DataAccess
       TableQuery[ExprEvalScratch].delete
   }
 
+  def sqlDBStatus() = {
+    sql"select version()".as[String]
+  }
+
 }

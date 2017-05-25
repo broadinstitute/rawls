@@ -191,4 +191,14 @@ class JsonSupport {
       }
     }
   }
+
+  def rawlsEnumerationFormat[T <: RawlsEnumeration[T]](construct: String => T): RootJsonFormat[T] = {
+    new RootJsonFormat[T] {
+      override def write(obj: T): JsValue = JsString(obj.toString)
+      override def read(json: JsValue): T = json match {
+        case JsString(name) => construct(name)
+        case x => throw new DeserializationException("invalid value: " + x)
+      }
+    }
+  }
 }

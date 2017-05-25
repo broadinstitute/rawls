@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.mock
 import java.util.concurrent.TimeUnit
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
 import org.mockserver.model.{Delay, Header, Parameter, ParameterBody}
@@ -274,6 +274,17 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       response()
         .withHeaders(jsonHeader)
         .withBody(arrayMethod.toJson.prettyPrint)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/status")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(AgoraStatus(true, Seq.empty).toJson.prettyPrint)
         .withStatusCode(StatusCodes.OK.intValue)
     )
 

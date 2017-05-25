@@ -1,25 +1,26 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import akka.actor.{Props, ActorContext, ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.{AgoraEntityType, MethodConfiguration, UserInfo, AgoraEntity}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus, MethodConfiguration, UserInfo}
 import org.broadinstitute.dsde.rawls.util.Retry
-import scala.concurrent.{Future, Await}
-import scala.concurrent.duration.Duration
-import scala.util.{Success,Failure,Try}
-import spray.httpx.UnsuccessfulResponseException
 import spray.client.pipelining._
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
+import spray.httpx.UnsuccessfulResponseException
 import spray.json._
-import spray.json.DefaultJsonProtocol._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.control.NonFatal
 
 /**
  * @author tsharpe
  */
-class HttpMethodRepoDAO( methodRepoServiceURL: String)( implicit val system: ActorSystem ) extends MethodRepoDAO with DsdeHttpDAO with Retry with LazyLogging {
+class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "")(implicit val system: ActorSystem) extends MethodRepoDAO with DsdeHttpDAO with Retry with LazyLogging {
+
+  private val methodRepoServiceURL = baseMethodRepoServiceURL + apiPath
 
   private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
     import system.dispatcher
@@ -60,4 +61,14 @@ class HttpMethodRepoDAO( methodRepoServiceURL: String)( implicit val system: Act
     )
     postAgoraEntity(s"${methodRepoServiceURL}/configurations", agoraEntity, userInfo)
   }
+
+  override def getStatus(implicit executionContext: ExecutionContext): Future[AgoraStatus] = {
+    val url = s"${baseMethodRepoServiceURL}/status"
+    val pipeline = sendReceive ~> unmarshal[AgoraStatus]
+    // Don't retry on the status check
+    pipeline(Get(url)) recover {
+      case NonFatal(e) => AgoraStatus(false, Seq(e.getMessage))
+    }
+  }
+
 }

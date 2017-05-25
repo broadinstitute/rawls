@@ -5,6 +5,7 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
+import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.parboiled.common.FileUtils
@@ -19,14 +20,15 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
 object RawlsApiServiceActor {
-  def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, statisticsServiceConstructor: UserInfo => StatisticsService, appVersion: ApplicationVersion, googleClientId: String, submissionTimeout: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {
-    Props(new RawlsApiServiceActor(workspaceServiceConstructor, userServiceConstructor, genomicsServiceConstructor, statisticsServiceConstructor, appVersion, googleClientId, submissionTimeout))
+  def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, statisticsServiceConstructor: UserInfo => StatisticsService, statusServiceConstructor: () => StatusService, appVersion: ApplicationVersion, googleClientId: String, submissionTimeout: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {
+    Props(new RawlsApiServiceActor(workspaceServiceConstructor, userServiceConstructor, genomicsServiceConstructor, statisticsServiceConstructor, statusServiceConstructor, appVersion, googleClientId, submissionTimeout))
   }
 }
 
-class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService, val userServiceConstructor: UserInfo => UserService, val genomicsServiceConstructor: UserInfo => GenomicsService, val statisticsServiceConstructor: UserInfo => StatisticsService, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration)(implicit val executionContext: ExecutionContext) extends Actor
+class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService, val userServiceConstructor: UserInfo => UserService, val genomicsServiceConstructor: UserInfo => GenomicsService, val statisticsServiceConstructor: UserInfo => StatisticsService, val statusServiceConstructor: () => StatusService, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration)(implicit val executionContext: ExecutionContext) extends Actor
   with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService
-  with AdminApiService with UserApiService with StandardUserInfoDirectives with BillingApiService with NotificationsApiService {
+  with AdminApiService with UserApiService with StandardUserInfoDirectives with BillingApiService with NotificationsApiService
+  with StatusApiService {
 
   def actorRefFactory = context
   def apiRoutes = options{ complete(OK) } ~ baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ notificationsRoutes
@@ -35,6 +37,7 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
   def receive = runRoute(
     swaggerRoute ~
     versionRoute ~
+    statusRoute ~
     pathPrefix("api") { apiRoutes } ~
     pathPrefix("register") { registerRoutes }
   )

@@ -125,6 +125,7 @@ object Dependencies {
     logbackClassic,
     akkaTestkit,
     sprayTestkit,
-    mockserverNetty
+    mockserverNetty,
+    mockito
   )
 }

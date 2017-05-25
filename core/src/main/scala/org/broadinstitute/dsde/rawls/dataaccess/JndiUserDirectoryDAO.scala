@@ -4,13 +4,13 @@ import java.util
 import javax.naming._
 import javax.naming.directory._
 
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUser, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import spray.http.StatusCodes
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Success, Try}
 import scala.collection.JavaConversions._
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 /**
  * Created by dvoet on 11/5/15.
@@ -48,6 +48,28 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
     members.contains(new Person(user).name)
   }
 
+  override def listUsers(implicit executionContext: ExecutionContext): Future[List[RawlsUserSubjectId]] = withContext { ctx =>
+    // LDAP craziness bears some explanation:
+
+    // Strip out the cn (common name) from the userDnFormat, leaving something like this (for example):
+    // ou=people,dc=dsde-dev,dc=broadinstitute,dc=org
+    // This defines a target context (base object) for the search.
+    val name = userDnFormat.replaceAll("cn=.*?,", "")
+
+    // Define a filter which is a logical AND of all the configured user object classes.
+    // The resulting filter looks something like this:
+    // (&(objectclass=inetOrgPerson)(objectclass=organizationalPerson)(objectclass=person)(objectclass=top))
+    val filter = s"(&${userObjectClasses.map(oc => s"(objectclass=$oc)").mkString})"
+
+    // Define SUBTREE_SCOPE to recursively search all subtrees rooted at the named object.
+    val controls = new SearchControls()
+    controls.setSearchScope(SearchControls.SUBTREE_SCOPE)
+
+    // Run the search and map results to RawlsUserSubjectId
+    val results = ctx.search(name, filter, controls)
+    results.toList.map(r => RawlsUserSubjectId(r.getName))
+  }
+
   private def getContext(): InitialDirContext = {
     val env = new util.Hashtable[String, String]()
     env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory")
@@ -58,7 +80,7 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
     new InitialDirContext(env)
   }
 
-  private def withContext[T](op: InitialDirContext => T): Future[T] = Future {
+  private def withContext[T](op: InitialDirContext => T)(implicit executionContext: ExecutionContext): Future[T] = Future {
     val ctx = getContext()
     val t = Try(op(ctx))
     ctx.close()

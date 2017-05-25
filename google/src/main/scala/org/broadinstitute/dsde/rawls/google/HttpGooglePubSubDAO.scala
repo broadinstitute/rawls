@@ -49,6 +49,14 @@ class HttpGooglePubSubDAO(clientEmail: String,
     }
   }
 
+  override def getTopic(topicName: String)(implicit executionContext: ExecutionContext): Future[Option[Topic]] = {
+    retryWithRecoverWhen500orGoogleError(() => {
+      Option(executeGoogleRequest(getPubSubDirectory.projects().topics().get(topicToFullPath(topicName))))
+    }) {
+      case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
+    }
+  }
+
   override def createSubscription(topicName: String, subscriptionName: String) = {
     retryWithRecoverWhen500orGoogleError(() => {
       val subscription = new Subscription().setTopic(topicToFullPath(topicName))

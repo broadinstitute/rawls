@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.genomics.model.Operation
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -10,7 +11,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import spray.json.JsObject
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
@@ -83,7 +84,18 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean]
 
-  def getGoogleGroup(groupName: String): Future[Option[Group]]
+  /**
+    * Gets a Google group.
+    *
+    * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
+    * is because this method is used for health monitoring, and we want health checks to use a
+    * different execution context (thread pool) than user-facing operations.
+    *
+    * @param groupName the group name
+    * @param executionContext the execution context to use for aysnc operations
+    * @return optional Google group
+    */
+  def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]]
 
   /**
     * Returns the most recent daily storage usage information for a bucket in bytes. The information comes from daily
@@ -102,7 +114,18 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def getBucketUsage(projectName: RawlsBillingProjectName, bucketName: String, maxResults: Option[Long] = None): Future[BigInt]
 
-  def getBucket(bucketName: String): Future[Option[Bucket]]
+  /**
+    * Gets a Google bucket.
+    *
+    * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
+    * is because this method is used for health monitoring, and we want health checks to use a
+    * different execution context (thread pool) than user-facing operations.
+    *
+    * @param bucketName the bucket name
+    * @param executionContext the execution context to use for aysnc operations
+    * @return optional Google bucket
+    */
+  def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]]
 
   def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
 
@@ -122,6 +145,18 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]]
 
+  /**
+    * Lists Google billing accounts using the billing service account.
+    *
+    * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
+    * is because this method is used for health monitoring, and we want health checks to use a
+    * different execution context (thread pool) than user-facing operations.
+    *
+    * @param executionContext the execution context to use for aysnc operations
+    * @return sequence of RawlsBillingAccounts
+    */
+  def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
+
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
   def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]
   def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[DateTime]]
@@ -129,6 +164,18 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit]
 
   def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
+
+  /**
+    * Lists operations using the Google genomics service account.
+    *
+    * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
+    * is because this method is used for health monitoring, and we want health checks to use a
+    * different execution context (thread pool) than user-facing operations.
+    *
+    * @param executionContext the execution context to use for aysnc operations
+    * @return sequence of Google operations
+    */
+  def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]]
 
   def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
   def toUserFromProxy(proxy: String): String

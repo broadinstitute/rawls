@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.google
 
 import com.google.api.client.auth.oauth2.Credential
+import com.google.api.services.pubsub.model.Topic
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
 
@@ -30,6 +31,8 @@ trait GooglePubSubDAO {
   def createTopic(topicName: String): Future[Boolean]
 
   def deleteTopic(topicName: String): Future[Boolean]
+
+  def getTopic(topicName: String)(implicit executionContext: ExecutionContext): Future[Option[Topic]]
 
   def createSubscription(topicName: String, subscriptionName: String): Future[Boolean]
 

@@ -18,6 +18,7 @@ import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.model.UsageExportLocation
 import com.google.api.services.compute.{Compute, ComputeScopes}
+import com.google.api.services.genomics.model.Operation
 import com.google.api.services.genomics.{Genomics, GenomicsScopes}
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
@@ -381,7 +382,7 @@ class HttpGoogleServicesDAO(
     } map { _.isDefined }
   }
 
-  override def getGoogleGroup(groupName: String): Future[Option[Group]] = {
+  override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] = {
     val getter = getGroupDirectory.groups().get(groupName)
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
       case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
@@ -440,7 +441,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getBucket(bucketName: String): Future[Option[Bucket]] = {
+  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
     val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
       case e: HttpResponseException => None
@@ -652,7 +653,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  protected def listBillingAccounts(credential: Credential): Future[Seq[BillingAccount]] = {
+  protected def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[Seq[BillingAccount]] = {
     val fetcher = getCloudBillingManager(credential).billingAccounts().list()
     retryWithRecoverWhen500orGoogleError(() => {
       val list = blocking {
@@ -683,6 +684,13 @@ class HttpGoogleServicesDAO(
           RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount, acct.getDisplayName)
         }
       })
+    }
+  }
+
+  override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {
+    val billingSvcCred = getBillingServiceAccountCredential
+    listBillingAccounts(billingSvcCred) map { accountList =>
+      accountList.map(acct => RawlsBillingAccount(RawlsBillingAccountName(acct.getName), true, acct.getDisplayName))
     }
   }
 
@@ -763,6 +771,17 @@ class HttpGoogleServicesDAO(
       // Here we use `None` to represent a 404 from Google.
       case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
     }
+  }
+
+  override def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]] = {
+    val opId = "operations"
+    val filter = s"projectId = $serviceProject"
+    val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
+    val operationRequest = genomicsApi.operations().list(opId).setFilter(filter)
+    retryWhen500orGoogleError(() => {
+      val list = executeGoogleRequest(operationRequest)
+      list.getOperations
+    })
   }
 
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] = {

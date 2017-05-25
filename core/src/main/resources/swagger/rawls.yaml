@@ -24,6 +24,20 @@ paths:
         - version
       summary: get version information of this application
       operationId: version
+  '/status':
+    get:
+      responses:
+        '200':
+          description: All systems OK
+        '500':
+          description: Problem with one or more systems. See response for details.
+          schema:
+            $ref: '#/definitions/SystemStatus'
+      description: status check for underlying systems
+      tags:
+        - status
+      summary: status check for underlying systems
+      operationId: status
   '/api/version/executionEngine':
     get:
       responses:
@@ -5504,3 +5518,52 @@ definitions:
         type: string
       description:
         type: string
+
+  SystemStatus:
+    description: status of each system Rawls depends on
+    type: object
+    required:
+      - ok
+      - systems
+    properties:
+      ok:
+        type: boolean
+        description: whether any system(s) need attention
+        example: false
+      systems:
+        type: object
+        description: Map[String, SubsystemStatus]
+        example:
+          Agora:
+            ok: true
+          Cromwell:
+            ok: true
+          Database:
+            ok: true
+          GoogleBilling:
+            ok: false
+            messages:
+              - "Google Billing is misbehaving!"
+          GoogleBuckets:
+            ok: true
+          GoogleGenomics:
+            ok: true
+          GoogleGroups:
+            ok: true
+          GooglePubSub:
+            ok: true
+          LDAP:
+            ok: false
+            messages:
+              - "LDAP is down :("
+
+  SubsystemStatus:
+    description: status of a subsystem Rawls depends on
+    properties:
+      ok:
+        type: boolean
+        description: whether this system needs attention
+      messages:
+        type: array
+        items:
+          type: string

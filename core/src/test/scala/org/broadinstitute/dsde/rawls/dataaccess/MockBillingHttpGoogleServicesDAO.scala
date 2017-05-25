@@ -72,7 +72,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     credential
   }
 
-  protected override def listBillingAccounts(credential: Credential): Future[Seq[BillingAccount]] = {
+  protected override def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[Seq[BillingAccount]] = {
     val firecloudHasThisOne = new BillingAccount()
       .setDisplayName("testBillingAccount")
       .setName("billingAccounts/firecloudHasThisOne")
