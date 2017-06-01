@@ -2,29 +2,28 @@ package org.broadinstitute.dsde.rawls.metrics
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.Actor
-
-import scala.util.Try
-import scala.concurrent.Future
 import com.codahale.metrics._
-import com.codahale.metrics.health.HealthCheck
+import com.codahale.metrics.health.SharedHealthCheckRegistries
 import com.readytalk.metrics.{StatsD, StatsDReporter}
-import nl.grons.metrics.scala
 import nl.grons.metrics.scala.{DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.metrics.MetricsSpec.TestInstrumented
-import org.mockito.{ArgumentCaptor, ArgumentMatcher}
 import org.mockito.ArgumentMatchers.{eq => argEq, _}
 import org.mockito.Mockito.{inOrder => mockitoInOrder, _}
+import org.mockito.{ArgumentMatcher, InOrder}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
 
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.util.Try
+
 /**
   * Created by rtitle on 5/31/17.
   */
 class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventually with MockitoSugar {
-
   var statsD: StatsD = _
   var reporter: StatsDReporter = _
   var test: TestInstrumented = _
@@ -39,124 +38,233 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .build(statsD)
     reporter.start(1, TimeUnit.SECONDS)
-    Thread.sleep(5000)
   }
 
   after {
     reporter.stop()
     SharedMetricRegistries.clear()
+    SharedHealthCheckRegistries.clear()
   }
 
-  "DropWizard Metrics" should "increment counters in statsd" in {
-    for (_ <- 0 until 100) {
-      test.increment
-    }
+  "DropWizard metrics" should "increment counters in statsd" in {
+    for (_ <- 0 until 100) test.increment
 
-    eventually {
-      val order = mockitoInOrder(statsD)
-      order.verify(statsD).connect()
-      order.verify(statsD).send(argEq("test.testCounter"), argEq("100"))
-      order.verify(statsD).close()
+    // counter value should be 100
+    verifyStatsD { order =>
+      order.verify(statsD).send(argEq("test.counter"), argEq("100"))
     }
   }
 
   it should "update gauges in statsd" in {
-    test.gauge
     test.set(42)
 
-    eventually {
-      val order = mockitoInOrder(statsD)
-      order.verify(statsD).connect()
-      order.verify(statsD).send(argEq("test.testGauge"), argEq("42"))
-      order.verify(statsD).close()
+    // Gauge value should be 42
+    verifyStatsD { order =>
+      order.verify(statsD).send(argEq("test.gauge"), argEq("42"))
     }
 
     test.set(88)
     test.set(99)
 
+    // Gauge should take the most recent value
+    verifyStatsD { order =>
+      order.verify(statsD).send(argEq("test.gauge"), argEq("99"))
+    }
+  }
+
+  it should "update cached gauges in statsd" in {
+    test.set(42)
+
+    // Gauge value should be 42
+    verifyStatsD { order =>
+      order.verify(statsD).send(argEq("test.gauge"), argEq("42"))
+    }
+
+    test.set(43)
+
+    // The gauge value should not be updated immediately
+    verifyStatsD { order =>
+      order.verify(statsD).send(argEq("test.gauge"), argEq("42"))
+    }
+
+    // Eventually gauge value should be 43
+    verifyStatsD { order =>
+      order.verify(statsD).send(argEq("test.gauge"), argEq("43"))
+    }
+  }
+
+  it should "update timers in statsd" in {
+    for (_ <- 0 until 10) test.slowReset
+
+    // Timer should have been updated
+    verifyStatsD { order =>
+      verifyTimer(order, "test.timer")
+      verifyMeter(order, "test.timer", 10)
+    }
+  }
+
+  it should "update timed futures in statsd" in {
+    for (_ <- 0 until 10) test.slowResetFuture
+
+    // Timer should have been updated
+    verifyStatsD { order =>
+      verifyTimer(order, "test.timer")
+      verifyMeter(order, "test.timer", 10)
+    }
+  }
+
+  it should "update histograms in statsd" in {
+    for (_ <- 0 until 100) test.increment
+
+    // Histogram should have been updated
+    verifyStatsD { order =>
+      verifyHistogram(order, "test.histogram", 100)
+    }
+  }
+
+  it should "update meters in statsd" in {
+    for (_ <- 0 until 100) test.increment
+
+    // Meter should have been updated
+    verifyStatsD { order =>
+      verifyMeter(order, "test.meter", 100)
+    }
+  }
+
+  "DropWizard health checks" should "reflect current health" in {
+    val registry = SharedHealthCheckRegistries.getOrCreate("default")
+    test.set(50)
+
+    val results = registry.runHealthChecks()
+
+    // It should be healthy
+    results should have size 1
+    results should contain key "test.health"
+    val result = results.get("test.health")
+    result.isHealthy should be (true)
+    result.getDetails should be (null)
+    result.getError should be (null)
+    result.getMessage should be (null)
+    result.getTimestamp should not be null
+
+    test.set(0)
+
+    // It should be unhealthy
+    val results2 = registry.runHealthChecks()
+    results2 should have size 1
+    results2 should contain key "test.health"
+    val result2 = results2.get("test.health")
+    result2.isHealthy should be (false)
+    result2.getDetails should be (null)
+    result2.getError should be (null)
+    result2.getMessage should be ("Ouch")
+    result2.getTimestamp should not be null
+  }
+
+  // Helper functions
+
+  private def verifyStatsD(inner: InOrder => Unit) = {
     eventually {
       val order = mockitoInOrder(statsD)
       order.verify(statsD).connect()
-      order.verify(statsD).send(argEq("test.testGauge"), argEq("99"))
+      inner(order)
       order.verify(statsD).close()
     }
   }
 
-  List(test.slowReset _, test.slowResetFuture _).foreach { fn =>
-    it should "update timers in statsd" in {
-      fn.apply()
-
-      eventually {
-        val order = mockitoInOrder(statsD)
-        order.verify(statsD, atLeastOnce).connect()
-        verify(statsD, atLeastOnce).send(argEq("test.testTimer.max"), argThat(nonZeroString))
-        verify(statsD, atLeastOnce).send(argEq("test.testTimer.mean"), argThat(nonZeroString))
-        verify(statsD, atLeastOnce).send(argEq("test.testTimer.min"), argThat(nonZeroString))
-        // stddev should be zero for 1 sample
-        verify(statsD, atLeastOnce).send(argEq("test.testTimer.stddev"), argThat(zeroString))
-        verify(statsD, atLeastOnce).send(argEq("test.testTimer.p50"), argThat(nonZeroString))
-        verify(statsD, atLeastOnce).send(argEq("test.testTimer.p75"), argThat(nonZeroString))
-        verify(statsD, atLeastOnce).send(argEq("test.testTimer.p95"), argThat(nonZeroString))
-        verify(statsD, atLeastOnce).send(argEq("test.testTimer.p98"), argThat(nonZeroString))
-        verify(statsD, atLeastOnce).send(argEq("test.testTimer.p99"), argThat(nonZeroString))
-        verify(statsD, atLeastOnce).send(argEq("test.testTimer.p999"), argThat(nonZeroString))
-        verify(statsD, atLeastOnce).send(argEq("test.testTimer.samples"), argEq("1"))
-        verify(statsD, atLeastOnce).close()
-      }
-    }
+  private def verifyTimer(order: InOrder, prefix: String): Unit = {
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.max"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.mean"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.min"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.stddev"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.p50"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.p75"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.p95"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.p98"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.p99"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.p999"), argThat(nonZeroString))
   }
 
-  def nonZeroString: ArgumentMatcher[String] = new ArgumentMatcher[String] {
+  private def verifyHistogram(order: InOrder, prefix: String, samples: Int): Unit = {
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.samples"), argEq(samples.toString))
+    verifyTimer(order, prefix)
+  }
+
+  private def verifyMeter(order: InOrder, prefix: String, samples: Int): Unit = {
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.samples"), argEq(samples.toString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.m1_rate"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.m5_rate"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.m15_rate"), argThat(nonZeroString))
+    order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.mean_rate"), argThat(nonZeroString))
+  }
+
+  private def nonZeroString: ArgumentMatcher[String] = new ArgumentMatcher[String] {
     override def matches(argument: String): Boolean =
       Try(argument.toDouble).toOption.exists(_ != 0)
   }
 
-  def zeroString: ArgumentMatcher[String] = new ArgumentMatcher[String] {
+  private def zeroString: ArgumentMatcher[String] = new ArgumentMatcher[String] {
     override def matches(argument: String): Boolean =
       Try(argument.toDouble).toOption.exists(_ == 0)
   }
-
 }
 
 object MetricsSpec {
 
+  /**
+    * Test class to exercise DropWizard metrics functionality.
+    */
   class TestInstrumented extends DefaultInstrumented {
     private var n: Int = _
 
-    lazy val counter = metrics.counter("testCounter")
-    lazy val gauge = metrics.gauge("testGauge")(get)
-    lazy val timer = metrics.timer("testTimer")
+    // Define a counter and a timer metric
+    lazy val counter = metrics.counter("counter")
+    lazy val timer = metrics.timer("timer")
+    lazy val histogram = metrics.histogram("histogram")
+    lazy val meter = metrics.meter("meter")
 
+    // Override the metric base name (it defaults to the fully qualified class name)
     override lazy val metricBaseName = MetricName("test")
 
+    // Non-instrumented methods:
     def set(v: Int): Unit = n = v
     def get: Int = n
-
-    def increment: Unit = {
-      counter += 1
-      n = n + 1
-    }
-
     private def slowResetInternal: Unit = {
       Thread.sleep(100)
       n = 0
     }
 
+    // A health check for the value of n
+    healthCheck("health", unhealthyMessage = "Ouch") {
+      n > 0
+    }
+
+    // A gauge of the value of n
+    metrics.gauge("gauge")(get)
+
+    // A cached gauge of the value of n with a 2 second TTL
+    metrics.cachedGauge("cachedGauge", 2 seconds)(get)
+
+    // Increments the value of n; updates the counter, histogram, and meter
+    def increment: Unit = {
+      n = n + 1
+      counter += 1
+      histogram += n
+      meter.mark()
+    }
+
+    // Updates a timer
     def slowReset: Unit = {
       timer.time {
         slowResetInternal
       }
     }
 
+    // Updates a timer using a Future
     def slowResetFuture: Future[Unit] = {
       timer.timeFuture {
         Future(slowResetInternal)
       }
     }
-
-    def isAlive: HealthCheck =
-      healthCheck("testHealth") {
-        n > 0
-      }
   }
 }
