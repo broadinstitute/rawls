@@ -38,9 +38,9 @@ object Dependencies {
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev17-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
 
+  // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
   val metricsScala: ModuleID =       "nl.grons"              %% "metrics-scala"    % "3.5.6"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
-  val dropWizardMetrics: ModuleID =  "io.dropwizard.metrics" % "metrics-core"      % "3.2.2"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.1.0"
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.4.3"
@@ -129,7 +129,6 @@ object Dependencies {
     logbackClassic,
     metricsScala,
     metricsStatsd,
-    dropWizardMetrics,
     akkaTestkit,
     sprayTestkit,
     mockserverNetty,
