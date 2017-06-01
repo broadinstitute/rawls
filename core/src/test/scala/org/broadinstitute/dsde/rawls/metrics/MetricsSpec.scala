@@ -28,7 +28,7 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
   var reporter: StatsDReporter = _
   var test: TestInstrumented = _
 
-  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(5, Seconds)))
+  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
   before {
     test = new TestInstrumented
