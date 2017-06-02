@@ -1,18 +1,22 @@
 package org.broadinstitute.dsde.rawls
 
 import java.io.StringReader
+import java.net.InetAddress
+import java.util.concurrent.TimeUnit
 import javax.naming.directory.AttributeInUseException
 
-import _root_.slick.backend.DatabaseConfig
-import _root_.slick.driver.JdbcDriver
 import akka.actor.ActorSystem
 import akka.io.IO
 import akka.pattern.ask
 import akka.util.Timeout
+import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.typesafe.config.{ConfigFactory, ConfigRenderOptions}
+import com.readytalk.metrics.StatsDReporter
+import com.typesafe.config.{ConfigFactory, ConfigObject, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
+import slick.backend.DatabaseConfig
+import slick.driver.JdbcDriver
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
@@ -22,6 +26,8 @@ import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
+import org.broadinstitute.dsde.rawls.util._
+import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
@@ -52,6 +58,32 @@ object Boot extends App with LazyLogging {
 
     if(initWithLiquibase) {
       slickDataSource.initWithLiquibase(liquibaseChangeLog, changelogParams)
+    }
+
+    val metricsConf = conf.getConfig("metrics")
+    val metricsPrefix = {
+      val basePrefix = metricsConf.getString("prefix")
+      metricsConf.getBooleanOption("includeHostname") match {
+        case Some(true) =>
+          val hostname = InetAddress.getLocalHost().getHostName()
+          basePrefix + "." + hostname
+        case _ => basePrefix
+      }
+    }
+
+    metricsConf.getObjectOption("reporters") match {
+      case Some(configObject) =>
+        configObject.entrySet.map(_.toTuple).foreach {
+          case ("statsd", conf: ConfigObject) =>
+            val statsDConf = conf.toConfig
+            startStatsDReporter(
+              statsDConf.getString("host"),
+              statsDConf.getInt("port"),
+              statsDConf.getDuration("period"))
+          case (other, _) =>
+            logger.warn(s"Unknown metrics backend: $other")
+        }
+      case None => logger.info("No metrics reporters defined")
     }
 
     val jsonFactory = JacksonFactory.getDefaultInstance
@@ -237,6 +269,15 @@ object Boot extends App with LazyLogging {
       // so this is a problem only the first time rawls is started with a new service account
       case t: Throwable => logger.warn("error enabling service account", t)
     }
+  }
+
+  def startStatsDReporter(host: String, port: Int, period: java.time.Duration): Unit = {
+    logger.info(s"Starting statsd reporter writing to [$host:$port] with period [${period.getSeconds} seconds]")
+    val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
+      .convertRatesTo(TimeUnit.SECONDS)
+      .convertDurationsTo(TimeUnit.MILLISECONDS)
+      .build(host, port)
+    reporter.start(period.getSeconds, period.getSeconds, TimeUnit.SECONDS)
   }
 
   startup()
