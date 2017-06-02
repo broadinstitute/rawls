@@ -27,6 +27,7 @@ import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util._
+import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
@@ -62,25 +63,27 @@ object Boot extends App with LazyLogging {
     val metricsConf = conf.getConfig("metrics")
     val metricsPrefix = {
       val basePrefix = metricsConf.getString("prefix")
-      if (metricsConf.hasPath("includeHostname") && metricsConf.getBoolean("includeHostname")) {
-        val hostname = InetAddress.getLocalHost().getHostName()
-        basePrefix + "." + hostname
-      } else {
-        basePrefix
+      metricsConf.getBooleanOption("includeHostname") match {
+        case Some(true) =>
+          val hostname = InetAddress.getLocalHost().getHostName()
+          basePrefix + "." + hostname
+        case _ => basePrefix
       }
     }
 
-    if (metricsConf.hasPath("reporters") && !metricsConf.getIsNull("reporters")) {
-      metricsConf.getObject("reporters").entrySet.map(_.toTuple).foreach {
-        case ("statsd", conf: ConfigObject) =>
-          val statsDConf = conf.toConfig
-          startStatsDReporter(
-            statsDConf.getString("host"),
-            statsDConf.getInt("port"),
-            statsDConf.getDuration("period"))
-         case (other, _) =>
-           logger.warn(s"Unknown metrics backend: $other")
-      }
+    metricsConf.getObjectOption("reporters") match {
+      case Some(configObject) =>
+        configObject.entrySet.map(_.toTuple).foreach {
+          case ("statsd", conf: ConfigObject) =>
+            val statsDConf = conf.toConfig
+            startStatsDReporter(
+              statsDConf.getString("host"),
+              statsDConf.getInt("port"),
+              statsDConf.getDuration("period"))
+          case (other, _) =>
+            logger.warn(s"Unknown metrics backend: $other")
+        }
+      case None => logger.info("No metrics reporters defined")
     }
 
     val jsonFactory = JacksonFactory.getDefaultInstance
