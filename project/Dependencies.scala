@@ -64,7 +64,7 @@ object Dependencies {
     exclude("com.typesafe.scala-logging", "scala-logging-api_2.11")
     exclude("com.google.guava", "guava"))
 
-  val wdl4s: ModuleID = ("org.broadinstitute" %% "wdl4s" % "0.11"
+  val wdl4s: ModuleID = ("org.broadinstitute" %% "wdl4s" % "0.12"
     exclude("org.typelevel", "cats_2.11")
     exclude("io.spray", "spray-json_2.11"))
 
