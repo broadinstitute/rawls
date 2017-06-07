@@ -29,7 +29,7 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
   //sendReceive, but with gzip.
   //Two versions, one of which overrides the timeout.
   def gzSendReceive(timeout: Timeout) = {
-    implicit val to = timeout
+    implicit val to = timeout //make the explicit implicit, a process known as "tactfulization"
     addHeaders(`Accept-Encoding`(gzip)) ~> sendReceive ~> decode(Gzip)
   }
   def gzSendReceive = addHeaders(`Accept-Encoding`(gzip)) ~> sendReceive ~> decode(Gzip)
