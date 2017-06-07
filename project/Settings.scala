@@ -4,13 +4,12 @@ import Testing._
 import Compiling._
 import Version._
 import Publishing._
+import Artifactory._
 import sbt.Keys._
 import sbt._
 import sbtassembly.AssemblyPlugin.autoImport._
 
 object Settings {
-
-  val artifactory = "https://artifactory.broadinstitute.org/artifactory/"
 
   val commonResolvers = List(
     "artifactory-releases" at artifactory + "libs-release",
