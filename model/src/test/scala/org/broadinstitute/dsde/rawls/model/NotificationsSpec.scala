@@ -12,12 +12,12 @@ class NotificationsSpec extends FlatSpec with Matchers {
   }
 
   val testsNotificationsByType = Map(
-    "ActivationNotification" -> Notifications.ActivationNotification("asdf"),
-    "WorkspaceAddedNotification" -> Notifications.WorkspaceAddedNotification("asdf", "user", WorkspaceName("namespace", "name"), "foo@bar.com"),
-    "WorkspaceRemovedNotification" -> Notifications.WorkspaceRemovedNotification("asdf", "user", WorkspaceName("namespace", "name"), "foo@bar.com"),
-    "WorkspaceInvitedNotification" -> Notifications.WorkspaceInvitedNotification("asdf", "foo@bar.com"),
-    "WorkspaceChangedNotification" -> Notifications.WorkspaceChangedNotification("user", WorkspaceName("namespace", "name")),
-    "GroupAccessRequestNotification" -> Notifications.GroupAccessRequestNotification("user", "my-group", Set("GROUP_foo-owners@dev.test.firecloud.org"), "foo@bar.com")
+    "ActivationNotification" -> Notifications.ActivationNotification(RawlsUserSubjectId("123456789876543212346")),
+    "WorkspaceAddedNotification" -> Notifications.WorkspaceAddedNotification(RawlsUserSubjectId("123456789876543212346"), "READER", WorkspaceName("namespace", "name"), RawlsUserSubjectId("123456789876543212347")),
+    "WorkspaceRemovedNotification" -> Notifications.WorkspaceRemovedNotification(RawlsUserSubjectId("123456789876543212346"), "READER", WorkspaceName("namespace", "name"), RawlsUserSubjectId("123456789876543212347")),
+    "WorkspaceInvitedNotification" -> Notifications.WorkspaceInvitedNotification(RawlsUserEmail("foo@bar.com"), RawlsUserSubjectId("123456789876543212347")),
+    "WorkspaceChangedNotification" -> Notifications.WorkspaceChangedNotification(RawlsUserSubjectId("123456789876543212346"), WorkspaceName("namespace", "name")),
+    "GroupAccessRequestNotification" -> Notifications.GroupAccessRequestNotification(RawlsUserSubjectId("123456789876543212346"), "my-group", Set("GROUP_foo-owners@dev.test.firecloud.org"), RawlsUserSubjectId("123456789876543212347"))
   )
 
   Notifications.allNotificationTypes.foreach { case (notificationTypeString, notificationType) =>

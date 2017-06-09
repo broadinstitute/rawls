@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.model
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 import scala.reflect.runtime.universe._
+import UserModelJsonSupport.{RawlsUserEmailFormat, RawlsUserSubjectIdFormat}
 import WorkspaceJsonSupport.WorkspaceNameFormat
 
 /**
@@ -38,7 +39,7 @@ object Notifications {
   }
 
   sealed trait UserNotification extends Notification {
-    val recipientUserId: String
+    val recipientUserId: RawlsUserSubjectId
   }
   object UserNotification {
     def unapply(userNotification: UserNotification) = Option(userNotification.recipientUserId)
@@ -66,39 +67,39 @@ object Notifications {
     notificationType
   }
 
-  case class ActivationNotification(recipientUserId: String) extends UserNotification
+  case class ActivationNotification(recipientUserId: RawlsUserSubjectId) extends UserNotification
   val ActivationNotificationType = register(new NotificationType[ActivationNotification] {
     override val format = jsonFormat1(ActivationNotification.apply)
     override val description = "Account Activation"
     override val alwaysOn = true
   })
 
-  case class WorkspaceAddedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerId: String) extends UserNotification
+  case class WorkspaceAddedNotification(recipientUserId: RawlsUserSubjectId, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerId: RawlsUserSubjectId) extends UserNotification
   val WorkspaceAddedNotificationType = register(new NotificationType[WorkspaceAddedNotification] {
     override val format = jsonFormat4(WorkspaceAddedNotification.apply)
     override val description = "Workspace Access Added or Changed"
   })
 
-  case class WorkspaceRemovedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerId: String) extends UserNotification
+  case class WorkspaceRemovedNotification(recipientUserId: RawlsUserSubjectId, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerId: RawlsUserSubjectId) extends UserNotification
   val WorkspaceRemovedNotificationType = register(new NotificationType[WorkspaceRemovedNotification] {
     override val format = jsonFormat4(WorkspaceRemovedNotification.apply)
     override val description = "Workspace Access Removed"
   })
 
-  case class WorkspaceInvitedNotification(recipientUserEmail: String, requesterId: String) extends Notification
+  case class WorkspaceInvitedNotification(recipientUserEmail: RawlsUserEmail, requesterId: RawlsUserSubjectId) extends Notification
   val WorkspaceInvitedNotificationType = register(new NotificationType[WorkspaceInvitedNotification] {
     override val format = jsonFormat2(WorkspaceInvitedNotification.apply)
     override val description = "Invitation"
     override val alwaysOn = true
   })
 
-  case class WorkspaceChangedNotification(recipientUserId: String, workspaceName: WorkspaceName) extends WorkspaceNotification
+  case class WorkspaceChangedNotification(recipientUserId: RawlsUserSubjectId, workspaceName: WorkspaceName) extends WorkspaceNotification
   val WorkspaceChangedNotificationType = register(new WorkspaceNotificationType[WorkspaceChangedNotification] {
     override val format = jsonFormat2(WorkspaceChangedNotification.apply)
     override val description = "Workspace changed"
   })
 
-  case class GroupAccessRequestNotification(recipientUserId: String, groupName: String, replyToIds: Set[String], requesterId: String) extends Notification
+  case class GroupAccessRequestNotification(recipientUserId: RawlsUserSubjectId, groupName: String, replyToIds: Set[String], requesterId: RawlsUserSubjectId) extends Notification
   val GroupAccessRequestNotificationType = register(new NotificationType[GroupAccessRequestNotification] {
     override val format = jsonFormat4(GroupAccessRequestNotification)
     override val description = "Group Access Requested"
