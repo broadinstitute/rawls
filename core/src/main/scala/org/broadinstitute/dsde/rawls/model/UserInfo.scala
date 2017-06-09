@@ -6,7 +6,7 @@ import spray.http.OAuth2BearerToken
 /**
  * Created by dvoet on 7/21/15.
  */
-case class UserInfo(userEmail: String, accessToken: OAuth2BearerToken, accessTokenExpiresIn: Long, userSubjectId: String)
+case class UserInfo(userEmail: RawlsUserEmail, accessToken: OAuth2BearerToken, accessTokenExpiresIn: Long, userSubjectId: RawlsUserSubjectId)
 
 object UserInfo {
   def buildFromTokens(credential: Credential): UserInfo = {
@@ -14,6 +14,6 @@ object UserInfo {
     if (expiresInSeconds <= 5*60) {
       credential.refreshToken()
     }
-    UserInfo("", OAuth2BearerToken(credential.getAccessToken), Option(credential.getExpiresInSeconds).map(_.toLong).getOrElse(0), "")
+    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(credential.getAccessToken), Option(credential.getExpiresInSeconds).map(_.toLong).getOrElse(0), RawlsUserSubjectId(""))
   }
 }

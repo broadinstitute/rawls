@@ -44,7 +44,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
 
   def makeRawlsUser(level: WorkspaceAccessLevel, curator:Boolean=false, catalog:Boolean=false, canShare:Boolean=false) = {
     val email = makeEmail(curator, catalog, canShare, level)
-    RawlsUser(UserInfo(email, OAuth2BearerToken("token"), 123, email))
+    RawlsUser(UserInfo(RawlsUserEmail(email), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(email)))
   }
 
   class LibraryPermissionTestData extends TestData {
@@ -115,7 +115,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
     def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
-      provide(UserInfo(user, OAuth2BearerToken("token"), 123, user))
+      provide(UserInfo(RawlsUserEmail(user), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(user)))
     }
   }
 

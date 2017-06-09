@@ -73,14 +73,14 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
       get {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.IsAdmin(RawlsUserEmail(userInfo.userEmail)))
+          UserService.IsAdmin(userInfo.userEmail))
       }
     } ~
     path("user" / "role" / "curator") {
       get {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.IsLibraryCurator(RawlsUserEmail(userInfo.userEmail)))
+          UserService.IsLibraryCurator(userInfo.userEmail))
       }
     } ~
     path("user" / "billingAccounts") {
@@ -94,7 +94,7 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
       get {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.ListGroupsForUser(RawlsUserEmail(userInfo.userEmail)))
+          UserService.ListGroupsForUser(userInfo.userEmail))
       }
     } ~
     path("user" / "group" / Segment) { groupName =>

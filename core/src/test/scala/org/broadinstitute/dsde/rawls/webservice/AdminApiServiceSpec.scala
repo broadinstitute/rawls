@@ -1134,7 +1134,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val testUserEmail = "testUser"
     val testUserStatusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
     withWorkspaceContext(constantData.workspace) { ctx =>
-      val testUser = RawlsUser(UserInfo(testUserEmail, OAuth2BearerToken("token"), 123, "0001"))
+      val testUser = RawlsUser(UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("0001")))
       runAndWait(rawlsUserQuery.save(testUser))
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))

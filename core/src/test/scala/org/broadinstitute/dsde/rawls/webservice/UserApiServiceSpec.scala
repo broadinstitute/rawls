@@ -26,7 +26,7 @@ import scala.util.{Failure, Try}
  */
 class UserApiServiceSpec extends ApiServiceSpec {
   case class TestApiService(dataSource: SlickDataSource, user: RawlsUser, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
-    override def userInfo =  UserInfo(user.userEmail.value, OAuth2BearerToken("token"), 0, user.userSubjectId.value)
+    override def userInfo =  UserInfo(user.userEmail, OAuth2BearerToken("token"), 0, user.userSubjectId)
   }
 
   def withApiServices[T](dataSource: SlickDataSource, user: RawlsUser = RawlsUser(userInfo))(testCode: TestApiService => T): T = {
@@ -943,7 +943,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           val usersGroupShort = RawlsGroupShort(RawlsGroupName(testGroupName), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(testGroupName))))
           val ownersGroupShort = RawlsGroupShort(RawlsGroupName(testGroupName + "-owners"), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(testGroupName + "-owners"))))
           import UserModelJsonSupport.ManagedGroupWithMembersFormat
-          assertResult(ManagedGroupWithMembers(usersGroupShort, ownersGroupShort, Seq(ownersGroupShort.groupEmail.value), Seq(services.userInfo.userEmail))) {
+          assertResult(ManagedGroupWithMembers(usersGroupShort, ownersGroupShort, Seq(ownersGroupShort.groupEmail.value), Seq(services.userInfo.userEmail.value))) {
             responseAs[ManagedGroupWithMembers]
           }
         }
@@ -980,8 +980,8 @@ class UserApiServiceSpec extends ApiServiceSpec {
     import driver.api._
 
     val userOwner = RawlsUser(userInfo)
-    val userUser = RawlsUser(UserInfo("user", OAuth2BearerToken("token"), 123, "123456789876543212346"))
-    val userNoAccess = RawlsUser(UserInfo("no-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
+    val userUser = RawlsUser(UserInfo(RawlsUserEmail("user"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
+    val userNoAccess = RawlsUser(UserInfo(RawlsUserEmail("no-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
 
     override def save() = {
       DBIO.seq(

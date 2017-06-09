@@ -67,8 +67,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   val testWorkspace = WorkspaceName(testProject, "someName")
   val testRealm = RawlsGroupRef(RawlsGroupName("test-realm"))
 
-  val testCreator = UserInfo(gcsDAO.clientSecrets.getDetails.get("client_email").toString, OAuth2BearerToken("testtoken"), 123, "123456789876543212345")
-  val testCollaborator = UserInfo("fake_user_42@broadinstitute.org", OAuth2BearerToken("testtoken"), 123, "123456789876543212345aaa")
+  val testCreator = UserInfo(RawlsUserEmail(gcsDAO.clientSecrets.getDetails.get("client_email").toString), OAuth2BearerToken("testtoken"), 123, RawlsUserSubjectId("123456789876543212345"))
+  val testCollaborator = UserInfo(RawlsUserEmail("fake_user_42@broadinstitute.org"), OAuth2BearerToken("testtoken"), 123, RawlsUserSubjectId("123456789876543212345aaa"))
 
   private def deleteWorkspaceGroupsAndBucket(workspaceId: String) = {
     val bucketName = s"fc-$workspaceId"
@@ -172,7 +172,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
     val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGoogleGroup), "", Ready, None, None)
 
-    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(ManagedGroupRef(testRealm.groupName)), Option(Set(RawlsUserRef(RawlsUserSubjectId(testCreator.userSubjectId))))), Duration.Inf)
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(ManagedGroupRef(testRealm.groupName)), Option(Set(RawlsUserRef(testCreator.userSubjectId)))), Duration.Inf)
 
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 
@@ -279,10 +279,10 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val projectOwnerGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
     val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGroup), "", Ready, None, None)
     val random = scala.util.Random
-    val testUser = testCreator.copy(userSubjectId = random.nextLong().toString)
+    val testUser = testCreator.copy(userSubjectId = RawlsUserSubjectId(random.nextLong().toString))
     val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testUser, project, testWorkspaceId, testWorkspace, None, None), Duration.Inf)
 
-    val user = RawlsUser(UserInfo("foo@bar.com", null, 0, testUser.userSubjectId))
+    val user = RawlsUser(UserInfo(RawlsUserEmail("foo@bar.com"), null, 0, testUser.userSubjectId))
 
     Await.result(gcsDAO.createProxyGroup(user), Duration.Inf)
     assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf)) //quickest way to remove access to a workspace bucket
@@ -294,7 +294,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   }
 
   it should "crud tokens" in {
-    val userInfo = UserInfo(null, null, 0, UUID.randomUUID().toString)
+    val userInfo = UserInfo(null, null, 0, RawlsUserSubjectId(UUID.randomUUID().toString))
     val rawlsUser = RawlsUser(userInfo)
     assertResult(None) { Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf) }
     assertResult(None) { Await.result(gcsDAO.getTokenDate(rawlsUser), Duration.Inf) }
@@ -326,7 +326,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   }
 
   it should "crud proxy groups" in {
-    val user = RawlsUser(UserInfo("foo@bar.com", null, 0, UUID.randomUUID().toString))
+    val user = RawlsUser(UserInfo(RawlsUserEmail("foo@bar.com"), null, 0, RawlsUserSubjectId(UUID.randomUUID().toString)))
     Await.result(gcsDAO.createProxyGroup(user), Duration.Inf)
     assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf))
     Await.result(gcsDAO.addUserToProxyGroup(user), Duration.Inf)
@@ -357,7 +357,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       gcsConfig.getInt("bucketLogsMaxAge")
       )
 
-    val userInfo = UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345")
+    val userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))
     val user = RawlsUser(userInfo)
     Await.result(mockGcsDAO.createProxyGroup(user), Duration.Inf)
 

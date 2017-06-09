@@ -15,6 +15,6 @@ trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
   val user: RawlsUser
   def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
     // just return the cookie text as the common name
-    provide(UserInfo(user.userEmail.value, OAuth2BearerToken("token"), 123, user.userSubjectId.value))
+    provide(UserInfo(user.userEmail, OAuth2BearerToken("token"), 123, user.userSubjectId))
   }
 }

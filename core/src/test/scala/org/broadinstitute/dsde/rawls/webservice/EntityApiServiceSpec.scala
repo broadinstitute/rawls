@@ -1646,7 +1646,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   class PaginationTestData extends TestData {
-    val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val userOwner = RawlsUser(UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345")))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set())

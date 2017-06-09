@@ -17,7 +17,7 @@ object RawlsUser {
   implicit def toRef(u: RawlsUser): RawlsUserRef = RawlsUserRef(u.userSubjectId)
 
   def apply(userInfo: UserInfo): RawlsUser =
-    RawlsUser(RawlsUserSubjectId(userInfo.userSubjectId), RawlsUserEmail(userInfo.userEmail))
+    RawlsUser(userInfo.userSubjectId, userInfo.userEmail)
 }
 
 case class RawlsGroup(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]) {
