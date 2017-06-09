@@ -661,7 +661,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             else {
               dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
                 users.foreach { user =>
-                  notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId, groupRef.membersGroupName.value, users.map(_.userSubjectId.value) + userInfo.userSubjectId.value, userInfo.userSubjectId))
+                  notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId, groupRef.membersGroupName.value, users.map(_.userSubjectId) + userInfo.userSubjectId, userInfo.userSubjectId))
                 }
                 RequestComplete(StatusCodes.NoContent)
               }
