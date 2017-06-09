@@ -73,19 +73,19 @@ object Notifications {
     override val alwaysOn = true
   })
 
-  case class WorkspaceAddedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerEmail: String) extends UserNotification
+  case class WorkspaceAddedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerId: String) extends UserNotification
   val WorkspaceAddedNotificationType = register(new NotificationType[WorkspaceAddedNotification] {
     override val format = jsonFormat4(WorkspaceAddedNotification.apply)
     override val description = "Workspace Access Added or Changed"
   })
 
-  case class WorkspaceRemovedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerEmail: String) extends UserNotification
+  case class WorkspaceRemovedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerId: String) extends UserNotification
   val WorkspaceRemovedNotificationType = register(new NotificationType[WorkspaceRemovedNotification] {
     override val format = jsonFormat4(WorkspaceRemovedNotification.apply)
     override val description = "Workspace Access Removed"
   })
 
-  case class WorkspaceInvitedNotification(recipientUserEmail: String, originEmail: String) extends Notification
+  case class WorkspaceInvitedNotification(recipientUserEmail: String, requesterId: String) extends Notification
   val WorkspaceInvitedNotificationType = register(new NotificationType[WorkspaceInvitedNotification] {
     override val format = jsonFormat2(WorkspaceInvitedNotification.apply)
     override val description = "Invitation"
@@ -98,7 +98,7 @@ object Notifications {
     override val description = "Workspace changed"
   })
 
-  case class GroupAccessRequestNotification(recipientUserId: String, groupName: String, replyTos: Set[String], originEmail: String) extends Notification
+  case class GroupAccessRequestNotification(recipientUserId: String, groupName: String, replyToIds: Set[String], originEmail: String) extends Notification
   val GroupAccessRequestNotificationType = register(new NotificationType[GroupAccessRequestNotification] {
     override val format = jsonFormat4(GroupAccessRequestNotification)
     override val description = "Group Access Requested"
