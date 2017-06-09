@@ -99,7 +99,7 @@ object Notifications {
     override val description = "Workspace changed"
   })
 
-  case class GroupAccessRequestNotification(recipientUserId: RawlsUserSubjectId, groupName: String, replyToIds: Set[String], requesterId: RawlsUserSubjectId) extends Notification
+  case class GroupAccessRequestNotification(recipientUserId: RawlsUserSubjectId, groupName: String, replyToIds: Set[RawlsUserSubjectId], requesterId: RawlsUserSubjectId) extends Notification
   val GroupAccessRequestNotificationType = register(new NotificationType[GroupAccessRequestNotification] {
     override val format = jsonFormat4(GroupAccessRequestNotification)
     override val description = "Group Access Requested"
