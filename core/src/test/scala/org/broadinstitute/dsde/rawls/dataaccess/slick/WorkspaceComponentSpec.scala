@@ -114,4 +114,38 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(workspaceQuery.delete(workspace.toWorkspaceName))
     }
   }
+
+  it should "list submission summary stats" in withDefaultTestDatabase {
+    implicit def toWorkspaceId(ws: Workspace): UUID = UUID.fromString(ws.workspaceId)
+
+    val wsIdNoSubmissions: UUID = testData.workspaceNoSubmissions
+    assertResult(Map(wsIdNoSubmissions -> WorkspaceSubmissionStats(None, None, 0))) {
+      runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdNoSubmissions)))
+    }
+
+    val wsIdSuccessfulSubmission: UUID = testData.workspaceSuccessfulSubmission
+    assertResult(Map(wsIdSuccessfulSubmission -> WorkspaceSubmissionStats(Some(testDate), None, 0))) {
+      runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdSuccessfulSubmission)))
+    }
+
+    val wsIdFailedSubmission: UUID = testData.workspaceFailedSubmission
+    assertResult(Map(wsIdFailedSubmission -> WorkspaceSubmissionStats(None, Some(testDate), 0))) {
+      runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdFailedSubmission)))
+    }
+
+    val wsIdSubmittedSubmission: UUID = testData.workspaceSubmittedSubmission
+    assertResult(Map(wsIdSubmittedSubmission -> WorkspaceSubmissionStats(None, None, 1))) {
+      runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdSubmittedSubmission)))
+    }
+
+    val wsIdMixedSubmission: UUID = testData.workspaceMixedSubmissions
+    assertResult(Map(wsIdMixedSubmission -> WorkspaceSubmissionStats(Some(testDate), Some(testDate), 1))) {
+      runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdMixedSubmission)))
+    }
+
+    val wsIdTerminatedSubmission: UUID = testData.workspaceTerminatedSubmissions
+    assertResult(Map(wsIdTerminatedSubmission -> WorkspaceSubmissionStats(Some(testDate), Some(testDate), 0))) {
+      runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdTerminatedSubmission)))
+    }
+  }
 }
