@@ -519,7 +519,7 @@ trait WorkspaceComponent {
       //   group by 1, 2, 3) v
       // where (status = 'Failure' or (status = 'Succeeded' and count = 1)
       // group by 1, 2
-      //
+
       val workflowStatusQuery = for {
         submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds)
         workflows <- workflowQuery if submissions.id === workflows.submissionId

@@ -121,9 +121,6 @@ trait DriverComponent {
     name + "_" + getSufficientlyRandomSuffix(recordCount)
   }
 
-  // Note: if we used shapeless we could abstract the following functions further by abstracting over the arity.
-  // But I'm not going to add shapeless just for this. :)
-
   /**
     * Converts a `Seq[(A, B)]` into a `Map[A, B]`, combining the values with a `Monoid[B]` in case of key conflicts.
     *
@@ -145,14 +142,20 @@ trait DriverComponent {
     * {{{
     * scala> case class Foo(i: Int)
     * defined class Foo
+    *
+    * scala> groupPairs(Seq(("a", Foo(1).some), ("b", Foo(2).some), ("c", Foo(3).some)))
+    * << does not compile as there is no Monoid instance for Foo >>
+    *
     * scala> groupPairsK(Seq(("a", Foo(1).some), ("b", Foo(2).some), ("c", Foo(3).some)))
     * res9: Map[String,Option[Foo]] = Map(b -> Some(Foo(2)), a -> Some(Foo(1)), c -> Some(Foo(3)))
     * }}}
-    *
     */
   def groupPairsK[F[_], A, B](pairs: Seq[(A, F[B])])(implicit M: MonoidK[F]): Map[A, F[B]] =
     groupPairs(pairs)(M.algebra[B])
 
+  // Same as above but with triples.
+  // Note: if we used shapeless we could generalize these functions for any arity.
+  // But I'm not going to add shapeless just for this. :)
   def groupTriples[A, B, C: Monoid](trips: Seq[(A, B, C)]): Map[A, Map[B, C]] =
     trips.toList.foldMap { case (a, b, c) => Map(a -> Map(b -> c)) }
 
