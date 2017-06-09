@@ -512,36 +512,29 @@ trait WorkspaceComponent {
       //
       // select workspaceId, status, max(submissionDate)
       // from (
-      //   select submission.workspaceId, workflow.status, submission.submissionDate, count(1)
+      //   select distinct submission.workspaceId, workflow.status, submission.submissionDate
       //   from submission
       //   join workflow on workflow.submissionId = submission.id
-      //   where submission.workspaceId in (:workspaceIds)
-      //   group by 1, 2, 3) v
-      // where (status = 'Failure' or (status = 'Succeeded' and count = 1)
+      //   where submission.workspaceId in (:workspaceIds)) v
       // group by 1, 2
+      // having (status = 'Failure' or (status = 'Succeeded' and count(v.*) = 1))
 
-      val workflowStatusQuery = for {
+      val workflowStatusQuery = (for {
         submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds)
         workflows <- workflowQuery if submissions.id === workflows.submissionId
-      } yield (submissions.workspaceId, workflows.status, submissions.submissionDate)
+      } yield (submissions.workspaceId, workflows.status, submissions.submissionDate)).distinct
 
-      val groupedWorkflowStatusQuery = workflowStatusQuery.groupBy { case (wsId, status, submissionDate) =>
-        (wsId, status, submissionDate)
-      }.map { case ((wsId, status, submissionDate), records) =>
-        (wsId, status, submissionDate, records.map(_._3).length)
+      val submissionMaxDateQuery = workflowStatusQuery.groupBy { case (workspaceId, status, submissionDate) =>
+        (workspaceId, status)
+      }.map { case ((workspaceId, status), recs) =>
+        (workspaceId, status, recs.map(_._3).max, recs.length)
       }
 
       // Note: a submission is successful if it contains _only_ successful workflows.
       // A submission is a failure if it contains _any_ failed workflows.
-      val filteredWorkflowStatusQuery = groupedWorkflowStatusQuery.filter { case (_, status, _, count) =>
+      val filteredSubmissionMaxDateQuery = submissionMaxDateQuery.filter { case (_, status, _, count) =>
         status === WorkflowStatuses.Failed.toString || (status === WorkflowStatuses.Succeeded.toString && count === 1)
-      }
-
-      val submissionDateQuery = filteredWorkflowStatusQuery.groupBy { case (workspaceId, status, submissionDate, _) =>
-        (workspaceId, status)
-      }.map { case ((workspaceId, status), recs) =>
-        (workspaceId, status, recs.map(_._3).max)
-      }
+      }.map { case (workspaceId, status, max, _) => (workspaceId, status, max)}
 
       // running submission query: select workspaceId, count(1) ... where submissions.status === Submitted group by workspaceId
       val runningSubmissionsQuery = (for {
@@ -549,7 +542,7 @@ trait WorkspaceComponent {
       } yield submissions).groupBy(_.workspaceId).map { case (wfId, submissions) => (wfId, submissions.length)}
 
       for {
-        submissionDates <- submissionDateQuery.result
+        submissionDates <- filteredSubmissionMaxDateQuery.result
         runningSubmissions <- runningSubmissionsQuery.result
       } yield {
         val submissionDatesByWorkspaceByStatus = groupTriplesK(submissionDates)
