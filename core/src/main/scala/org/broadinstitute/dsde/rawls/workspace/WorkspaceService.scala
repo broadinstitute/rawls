@@ -609,7 +609,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         // only send invites for those that do not already exist
         val newInviteEmails = invites.map(_.email) diff existingInvites.map((_.email))
-        val inviteNotifications = newInviteEmails.map(Notifications.WorkspaceInvitedNotification(_, userInfo.userEmail))
+        val inviteNotifications = newInviteEmails.map(Notifications.WorkspaceInvitedNotification(_, userInfo.userSubjectId))
         notificationDAO.fireAndForgetNotifications(inviteNotifications)
 
         saveWorkspaceInvites(invites, workspaceName)
@@ -622,8 +622,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // fire and forget notifications
       val notificationMessages = actualChangesToMake collect {
         // note that we don't send messages to groups
-        case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId.value, NoAccess.toString, workspaceName, userInfo.userEmail)
-        case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId.value, access.toString, workspaceName, userInfo.userEmail)
+        case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId.value, NoAccess.toString, workspaceName, userInfo.userSubjectId)
+        case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId.value, access.toString, workspaceName, userInfo.userSubjectId)
       }
       notificationDAO.fireAndForgetNotifications(notificationMessages)
 

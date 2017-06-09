@@ -57,7 +57,7 @@ class NotificationSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
       }
 
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceInvitedNotification("obama@whitehouse.gov", userInfo.userEmail)).compactPrint}"), 10 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceInvitedNotification("obama@whitehouse.gov", userInfo.userSubjectId)).compactPrint}"), 10 seconds)
   }
 
   it should "be sent for add and remove from workspace" in withTestDataApiServices { services =>
@@ -71,7 +71,7 @@ class NotificationSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
       }
 
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceAddedNotification(user.userSubjectId.value, WorkspaceAccessLevels.Write.toString, testData.workspace.toWorkspaceName, userInfo.userEmail)).compactPrint}"), 10 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceAddedNotification(user.userSubjectId.value, WorkspaceAccessLevels.Write.toString, testData.workspace.toWorkspaceName, userInfo.userSubjectId)).compactPrint}"), 10 seconds)
 
     //remove ACL
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.NoAccess, None)))) ~>
@@ -80,7 +80,7 @@ class NotificationSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
       }
 
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceRemovedNotification(user.userSubjectId.value, WorkspaceAccessLevels.NoAccess.toString, testData.workspace.toWorkspaceName, userInfo.userEmail)).compactPrint}"), 10 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceRemovedNotification(user.userSubjectId.value, WorkspaceAccessLevels.NoAccess.toString, testData.workspace.toWorkspaceName, userInfo.userSubjectId)).compactPrint}"), 10 seconds)
   }
 
   it should "be sent for activation" in withEmptyTestDatabase { dataSource: SlickDataSource => withApiServices(dataSource) { services =>
