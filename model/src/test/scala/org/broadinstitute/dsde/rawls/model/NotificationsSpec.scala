@@ -34,6 +34,4 @@ class NotificationsSpec extends FlatSpec with Matchers {
       }
     }
   }
-
-
 }

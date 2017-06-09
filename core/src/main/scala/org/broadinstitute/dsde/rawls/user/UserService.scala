@@ -208,7 +208,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         toFutureTry(userDirectoryDAO.createUser(user.userSubjectId) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
 
       )).flatMap{ _ => Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user))))})(_ => {
-      notificationDAO.fireAndForgetNotification(ActivationNotification(user.userSubjectId.value))
+      notificationDAO.fireAndForgetNotification(ActivationNotification(user.userSubjectId))
       RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}") }, handleException("Errors creating user")
     )
   }
@@ -661,7 +661,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             else {
               dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
                 users.foreach { user =>
-                  notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId.value, groupRef.membersGroupName.value, users.map(_.userSubjectId.value) + userInfo.userSubjectId, userInfo.userSubjectId))
+                  notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId, groupRef.membersGroupName.value, users.map(_.userSubjectId.value) + userInfo.userSubjectId, RawlsUserSubjectId(userInfo.userSubjectId)))
                 }
                 RequestComplete(StatusCodes.NoContent)
               }

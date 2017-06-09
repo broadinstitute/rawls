@@ -609,7 +609,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         // only send invites for those that do not already exist
         val newInviteEmails = invites.map(_.email) diff existingInvites.map((_.email))
-        val inviteNotifications = newInviteEmails.map(Notifications.WorkspaceInvitedNotification(_, userInfo.userSubjectId))
+        val inviteNotifications = newInviteEmails.map(em => Notifications.WorkspaceInvitedNotification(RawlsUserEmail(em), RawlsUserSubjectId(userInfo.userSubjectId)))
         notificationDAO.fireAndForgetNotifications(inviteNotifications)
 
         saveWorkspaceInvites(invites, workspaceName)
@@ -622,8 +622,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // fire and forget notifications
       val notificationMessages = actualChangesToMake collect {
         // note that we don't send messages to groups
-        case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId.value, NoAccess.toString, workspaceName, userInfo.userSubjectId)
-        case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId.value, access.toString, workspaceName, userInfo.userSubjectId)
+        case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId, NoAccess.toString, workspaceName, RawlsUserSubjectId(userInfo.userSubjectId))
+        case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId, access.toString, workspaceName, RawlsUserSubjectId(userInfo.userSubjectId))
       }
       notificationDAO.fireAndForgetNotifications(notificationMessages)
 
@@ -655,7 +655,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
     getUsers.map { groups =>
-      val userIds = groups.flatten.map(user => user.userSubjectId.value).toSet
+      val userIds = groups.flatten.map(user => user.userSubjectId).toSet
       val notificationMessages = userIds.map { userId => Notifications.WorkspaceChangedNotification(userId, workspaceName) }
       val numMessages = notificationMessages.size.toString
       notificationDAO.fireAndForgetNotifications(notificationMessages)
