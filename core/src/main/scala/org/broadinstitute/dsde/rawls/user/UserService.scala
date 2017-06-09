@@ -702,8 +702,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
         if (role == ManagedRoles.Admin &&
-          (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail) ||
-            removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId))) {
+          (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail.value) ||
+            removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId.value))) {
 
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
         }
@@ -726,8 +726,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
         if (role == ManagedRoles.Admin &&
-          !memberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail) &&
-            !memberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId)) {
+          !memberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail.value) &&
+            !memberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId.value)) {
 
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
         }
