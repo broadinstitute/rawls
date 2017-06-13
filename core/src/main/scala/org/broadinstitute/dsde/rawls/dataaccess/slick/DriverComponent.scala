@@ -5,8 +5,6 @@ import java.sql.Timestamp
 import java.util.UUID
 
 import akka.util.ByteString
-import cats._
-import cats.implicits._
 import org.apache.commons.codec.binary.Base64
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -119,48 +117,6 @@ trait DriverComponent {
 
   def renameForHiding(recordCount: Long, name: String): String = {
     name + "_" + getSufficientlyRandomSuffix(recordCount)
-  }
-
-  /**
-    * Converts a `Seq[(A, B)]` into a `Map[A, B]`, combining the values with a `Monoid[B]` in case of key conflicts.
-    *
-    * For example:
-    * {{{
-    * scala> groupPairs(Seq(("a", 1), ("b", 2), ("a", 3)))
-    * res0: Map[String,Int] = Map(b -> 2, a -> 4)
-    * }}}
-    * */
-  def groupPairs[A, B: Monoid](pairs: Seq[(A, B)]): Map[A, B] =
-    pairs.toList.foldMap { case (a, b) => Map(a -> b) }
-
-  /**
-    * Converts a `Seq[(A, F[B])]` into a `Map[A, F[B]]`, combining the values with the _universal_ monoid for type F.
-    * This can be useful for when using groupBy with slick aggregate functions such as max, min, avg, etc which return
-    * an Option.
-    *
-    * For example:
-    * {{{
-    * scala> case class Foo(i: Int)
-    * defined class Foo
-    *
-    * scala> groupPairs(Seq(("a", Foo(1).some), ("b", Foo(2).some), ("c", Foo(3).some)))
-    * << does not compile as there is no Monoid instance for Foo >>
-    *
-    * scala> groupPairsK(Seq(("a", Foo(1).some), ("b", Foo(2).some), ("c", Foo(3).some)))
-    * res9: Map[String,Option[Foo]] = Map(b -> Some(Foo(2)), a -> Some(Foo(1)), c -> Some(Foo(3)))
-    * }}}
-    */
-  def groupPairsK[F[_], A, B](pairs: Seq[(A, F[B])])(implicit M: MonoidK[F]): Map[A, F[B]] =
-    groupPairs(pairs)(M.algebra[B])
-
-  // Same as above but with triples.
-  // Note: if we used shapeless we could generalize these functions for any arity.
-  // But I'm not going to add shapeless just for this. :)
-  def groupTriples[A, B, C: Monoid](trips: Seq[(A, B, C)]): Map[A, Map[B, C]] =
-    trips.toList.foldMap { case (a, b, c) => Map(a -> Map(b -> c)) }
-
-  def groupTriplesK[F[_], A, B, C](trips: Seq[(A, B, F[C])])(implicit M: MonoidK[F]): Map[A, Map[B, F[C]]] = {
-    groupTriples(trips)(M.algebra[C])
   }
 }
 

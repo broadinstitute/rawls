@@ -1,5 +1,8 @@
 package org.broadinstitute.dsde.rawls.util
 
+import cats._
+import cats.implicits._
+
 object CollectionUtils {
 
   //A saner group by than Scala's.
@@ -10,4 +13,20 @@ object CollectionUtils {
   def groupByTuplesFlatten[A, B]( tupleSeq: Seq[(A, Seq[B])] ): Map[A, Seq[B]] = {
     tupleSeq groupBy { case (a,b) => a } map { case (k, v) => k -> v.flatMap(_._2) }
   }
+
+  /**
+    * Converts a `Seq[(A, B)]` into a `Map[A, B]`, combining the values with a `Monoid[B]` in case of key conflicts.
+    *
+    * For example:
+    * {{{
+    * scala> groupPairs(Seq(("a", 1), ("b", 2), ("a", 3)))
+    * res0: Map[String,Int] = Map(b -> 2, a -> 4)
+    * }}}
+    * */
+  def groupPairs[A, B: Monoid](pairs: List[(A, B)]): Map[A, B] =
+    pairs.foldMap { case (a, b) => Map(a -> b) }
+
+  // Same as above but with triples
+  def groupTriples[A, B, C: Monoid](trips: List[(A, B, C)]): Map[A, Map[B, C]] =
+    trips.foldMap { case (a, b, c) => Map(a -> Map(b -> c)) }
 }

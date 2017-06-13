@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 
+import cats.{Monoid, MonoidK}
 import cats.instances.int._
 import cats.instances.option._
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -10,6 +11,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.joda.time.DateTime
 /**
  * Created by dvoet on 2/4/16.
@@ -545,8 +547,8 @@ trait WorkspaceComponent {
         submissionDates <- filteredSubmissionMaxDateQuery.result
         runningSubmissions <- runningSubmissionsQuery.result
       } yield {
-        val submissionDatesByWorkspaceByStatus = groupTriplesK(submissionDates)
-        val runningSubmissionCountByWorkspace = groupPairs(runningSubmissions)
+        val submissionDatesByWorkspaceByStatus: Map[UUID, Map[String, Option[Timestamp]]] = groupByWorkspaceIdThenStatus(submissionDates)
+        val runningSubmissionCountByWorkspace: Map[UUID, Int] = groupByWorkspaceId(runningSubmissions)
 
         workspaceIds.map { wsId =>
           val (lastFailedDate, lastSuccessDate) = submissionDatesByWorkspaceByStatus.get(wsId) match {
@@ -751,6 +753,25 @@ trait WorkspaceComponent {
       val (realmAclRecs, accessGroupRecs) = workspaceAccessRecords.partition(_.isRealmAcl)
       WorkspaceGroups(toGroupMap(realmAclRecs), toGroupMap(accessGroupRecs))
     }
+  }
+
+  private def groupByWorkspaceId(runningSubmissions: Seq[(UUID, Int)]): Map[UUID, Int] = {
+    CollectionUtils.groupPairs(runningSubmissions.toList)
+  }
+
+  private def groupByWorkspaceIdThenStatus(workflowDates: Seq[(UUID, String, Option[Timestamp])]): Map[UUID, Map[String, Option[Timestamp]]] = {
+    // There is no Monoid instance for Option[Timestamp] so we need to bring one into scope.
+    // However a Monoid for Timestamp doesn't really make sense -- what would it do, add them together?
+    // We can take advantage of the _universal_ monoid for Option which combines Option values using
+    // Option.orElse. It's called universal because it works no matter the type inside the Option.
+    // This is fine in this case because there are guaranteed no key conflicts due to the SQL query
+    // structure (group by, etc).
+    //
+    // TL/DR: The following line brings into scope a Monoid[Option[Timestamp]] which combines values
+    // using Option.orElse.
+
+    implicit val optionTimestampMonoid: Monoid[Option[Timestamp]] = MonoidK[Option].algebra[Timestamp]
+    CollectionUtils.groupTriples(workflowDates.toList)
   }
 }
 
