@@ -3,9 +3,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 
-import cats.{Monoid, MonoidK}
 import cats.instances.int._
 import cats.instances.option._
+import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -509,34 +509,46 @@ trait WorkspaceComponent {
      * @return WorkspaceSubmissionStats keyed by workspace id
      */
     def listSubmissionSummaryStats(workspaceIds: Seq[UUID]): ReadAction[Map[UUID, WorkspaceSubmissionStats]] = {
-
       // submission date query:
       //
-      // select workspaceId, status, max(submissionDate)
+      // select workspaceId, status, max(subEndDate)
       // from (
-      //   select distinct submission.workspaceId, workflow.status, submission.submissionDate
+      //   select submission.id, submission.workspaceId, workflow.status, max(workflow.statusLastChangedDate) as subEndDate, count(1)
       //   from submission
       //   join workflow on workflow.submissionId = submission.id
-      //   where submission.workspaceId in (:workspaceIds)) v
+      //   where submission.workspaceId in (:workspaceIds)
+      //   group by 1, 2, 3) v
+      // where (status = 'Failure' or (status = 'Succeeded' and v.count = 1))
       // group by 1, 2
-      // having (status = 'Failure' or (status = 'Succeeded' and count(v.*) = 1))
+      //
+      // Explanation:
+      // - inner query returns the most recent workflow status change date, per workflow status and submission
+      // - outer query returns the most recent workflow status change date where:
+      // -- the status is Failure; or
+      // -- the status is Succeeded and that is the only status in the submission
 
-      val workflowStatusQuery = (for {
+      val workflowStatusQuery = for {
         submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds)
         workflows <- workflowQuery if submissions.id === workflows.submissionId
-      } yield (submissions.workspaceId, workflows.status, submissions.submissionDate)).distinct
+      } yield (submissions.id, submissions.workspaceId, workflows.status, workflows.statusLastChangedDate)
 
-      val submissionMaxDateQuery = workflowStatusQuery.groupBy { case (workspaceId, status, submissionDate) =>
-        (workspaceId, status)
-      }.map { case ((workspaceId, status), recs) =>
-        (workspaceId, status, recs.map(_._3).max, recs.length)
+      val groupedWorkflowStatusQuery = workflowStatusQuery.groupBy { case (submissionId, workspaceId, status, _) =>
+        (submissionId, workspaceId, status)
+      }.map { case ((submissionId, workspaceId, status), recs) =>
+        (submissionId, workspaceId, status, recs.map(_._4).max, recs.length)
       }
 
       // Note: a submission is successful if it contains _only_ successful workflows.
       // A submission is a failure if it contains _any_ failed workflows.
-      val filteredSubmissionMaxDateQuery = submissionMaxDateQuery.filter { case (_, status, _, count) =>
+      val filteredGroupedWorkflowStatusQuery = groupedWorkflowStatusQuery.filter { case (_, _, status, _, count) =>
         status === WorkflowStatuses.Failed.toString || (status === WorkflowStatuses.Succeeded.toString && count === 1)
-      }.map { case (workspaceId, status, max, _) => (workspaceId, status, max)}
+      }
+
+      val submissionMaxDateQuery = filteredGroupedWorkflowStatusQuery.groupBy { case (_, workspaceId, status, _, _) =>
+        (workspaceId, status)
+      }.map { case ((workspaceId, status), recs) =>
+        (workspaceId, status, recs.map(_._4).max)
+      }
 
       // running submission query: select workspaceId, count(1) ... where submissions.status === Submitted group by workspaceId
       val runningSubmissionsQuery = (for {
@@ -544,9 +556,10 @@ trait WorkspaceComponent {
       } yield submissions).groupBy(_.workspaceId).map { case (wfId, submissions) => (wfId, submissions.length)}
 
       for {
-        submissionDates <- filteredSubmissionMaxDateQuery.result
+        submissionDates <- submissionMaxDateQuery.result
         runningSubmissions <- runningSubmissionsQuery.result
       } yield {
+        println("submission dates: " + submissionDates)
         val submissionDatesByWorkspaceByStatus: Map[UUID, Map[String, Option[Timestamp]]] = groupByWorkspaceIdThenStatus(submissionDates)
         val runningSubmissionCountByWorkspace: Map[UUID, Int] = groupByWorkspaceId(runningSubmissions)
 
