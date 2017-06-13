@@ -25,10 +25,10 @@ object CollectionUtils {
     * res0: Map[String,Int] = Map(b -> 2, a -> 4)
     * }}}
     * */
-  def groupPairs[A, B: Monoid](pairs: List[(A, B)]): Map[A, B] =
-    pairs.foldMap { case (a, b) => Map(a -> b) }
+  def groupPairs[A, B: Monoid](pairs: Seq[(A, B)]): Map[A, B] =
+    pairs.toList.foldMap { case (a, b) => Map(a -> b) }
 
   // Same as above but with triples
-  def groupTriples[A, B, C: Monoid](trips: List[(A, B, C)]): Map[A, Map[B, C]] =
-    trips.foldMap { case (a, b, c) => Map(a -> Map(b -> c)) }
+  def groupTriples[A, B, C: Monoid](trips: Seq[(A, B, C)]): Map[A, Map[B, C]] =
+    trips.toList.foldMap { case (a, b, c) => Map(a -> Map(b -> c)) }
 }
