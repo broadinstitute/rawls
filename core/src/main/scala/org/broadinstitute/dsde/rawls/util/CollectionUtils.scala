@@ -1,7 +1,9 @@
 package org.broadinstitute.dsde.rawls.util
 
-import cats._
-import cats.implicits._
+import cats.Monoid
+import cats.instances.list._
+import cats.instances.map._
+import cats.syntax.foldable._
 
 object CollectionUtils {
 
