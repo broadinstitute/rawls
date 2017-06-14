@@ -118,41 +118,46 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   it should "list submission summary stats" in withDefaultTestDatabase {
     implicit def toWorkspaceId(ws: Workspace): UUID = UUID.fromString(ws.workspaceId)
 
-    // no submissions
+    // no submissions: 0 successful, 0 failed, 0 running
     val wsIdNoSubmissions: UUID = testData.workspaceNoSubmissions
     assertResult(Map(wsIdNoSubmissions -> WorkspaceSubmissionStats(None, None, 0))) {
       runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdNoSubmissions)))
     }
 
-    // 1 successful submission, 0 failed, 0 running
+    // successful submission: 1 successful, 0 failed, 0 running
     val wsIdSuccessfulSubmission: UUID = testData.workspaceSuccessfulSubmission
     assertResult(Map(wsIdSuccessfulSubmission -> WorkspaceSubmissionStats(Some(testDate), None, 0))) {
       runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdSuccessfulSubmission)))
     }
 
-    // 0 successful submissions, 1 failed, 0 running
+    // failed submission: 0 successful, 1 failed, 0 running
     val wsIdFailedSubmission: UUID = testData.workspaceFailedSubmission
     assertResult(Map(wsIdFailedSubmission -> WorkspaceSubmissionStats(None, Some(testDate), 0))) {
       runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdFailedSubmission)))
     }
 
-    // 0 successful submissions, 0 failed, 1 running
+    // submitted submissions: 0 successful, 0 failed, 1 running
     val wsIdSubmittedSubmission: UUID = testData.workspaceSubmittedSubmission
     assertResult(Map(wsIdSubmittedSubmission -> WorkspaceSubmissionStats(None, None, 1))) {
       runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdSubmittedSubmission)))
     }
 
-    // 0 successful submissions, 1 failed, 1 running
-
+    // mixed submissions: 0 successful, 1 failed, 1 running
     val wsIdMixedSubmission: UUID = testData.workspaceMixedSubmissions
     assertResult(Map(wsIdMixedSubmission -> WorkspaceSubmissionStats(None, Some(testDate), 1))) {
       runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdMixedSubmission)))
     }
 
-    // 1 successful submissions, 1 failed, 0 running
+    // terminated submissions: 1 successful, 1 failed, 0 running
     val wsIdTerminatedSubmission: UUID = testData.workspaceTerminatedSubmissions
     assertResult(Map(wsIdTerminatedSubmission -> WorkspaceSubmissionStats(Some(testDate), Some(testDate), 0))) {
       runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdTerminatedSubmission)))
+    }
+
+    // interleaved submissions: 1 successful, 1 failed, 0 running
+    val wsIdInterleavedSubmissions: UUID = testData.workspaceInterleavedSubmissions
+    assertResult(Map(wsIdInterleavedSubmissions -> WorkspaceSubmissionStats(Option(testData.t4), Option(testData.t3), 0))) {
+      runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdInterleavedSubmissions)))
     }
   }
 }
