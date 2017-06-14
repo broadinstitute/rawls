@@ -1039,10 +1039,9 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
-  def toProxyFromUser(rawlsUser: RawlsUser) = toProxyFromUserSubjectIdString(rawlsUser.userSubjectId.value)
-  def toProxyFromUser(userInfo: UserInfo) = toProxyFromUserSubjectIdString(userInfo.userSubjectId.value)
-  def toProxyFromUser(subjectId: RawlsUserSubjectId) = toProxyFromUserSubjectIdString(subjectId.value)
-  def toProxyFromUserSubjectIdString(subjectId: String) = s"PROXY_${subjectId}@${appsDomain}"
+  def toProxyFromUser(rawlsUser: RawlsUser): String = toProxyFromUser(rawlsUser.userSubjectId)
+  def toProxyFromUser(userInfo: UserInfo): String = toProxyFromUser(userInfo.userSubjectId)
+  def toProxyFromUser(subjectId: RawlsUserSubjectId): String = s"PROXY_${subjectId.value}@${appsDomain}"
   def toUserFromProxy(proxy: String) = executeGoogleRequest(getGroupDirectory.groups().get(proxy)).getName
   def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
 
