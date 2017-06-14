@@ -208,7 +208,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         toFutureTry(userDirectoryDAO.createUser(user.userSubjectId) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
 
       )).flatMap{ _ => Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user))))})(_ => {
-      notificationDAO.fireAndForgetNotification(ActivationNotification(user.userSubjectId.value))
+      notificationDAO.fireAndForgetNotification(ActivationNotification(user.userSubjectId))
       RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}") }, handleException("Errors creating user")
     )
   }
@@ -270,7 +270,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def getUserStatus(): Future[PerRequestMessage] = {
-    getUserStatus(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId)))
+    getUserStatus(RawlsUserRef(userInfo.userSubjectId))
   }
 
   private def loadUser(userRef: RawlsUserRef): Future[RawlsUser] = dataSource.inTransaction { dataAccess => withUser(userRef, dataAccess)(DBIO.successful) }
@@ -387,7 +387,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def isAdmin(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
-    toFutureTry(tryIsFCAdmin(userEmail.value)) map {
+    toFutureTry(tryIsFCAdmin(userEmail)) map {
       case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
       case Success(b) => b match {
         case true => RequestComplete(StatusCodes.OK)
@@ -588,7 +588,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- updateGroupMembership(managedGroup.adminsGroup, addUsers = Set(RawlsUser(userInfo)))
       _ <- updateGroupMembership(managedGroup.membersGroup, addSubGroups = Set(managedGroup.adminsGroup))
     } yield {
-      RequestComplete(StatusCodes.Created, ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort, managedGroup.adminsGroup.toRawlsGroupShort, Seq(managedGroup.adminsGroup.groupEmail.value), Seq(userInfo.userEmail)))
+      RequestComplete(StatusCodes.Created, ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort, managedGroup.adminsGroup.toRawlsGroupShort, Seq(managedGroup.adminsGroup.groupEmail.value), Seq(userInfo.userEmail.value)))
     }
   }
 
@@ -635,7 +635,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def listManagedGroupsForUser(): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       for {
-        groupsWithAccess <- dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId)))
+        groupsWithAccess <- dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUserRef(userInfo.userSubjectId))
         emailsByGroup <- dataAccess.rawlsGroupQuery.loadEmails(groupsWithAccess.map(_.managedGroupRef.toMembersGroupRef).toSeq)
       } yield {
         val response = groupsWithAccess.groupBy(_.managedGroupRef).map { case (groupRef, accessEntries) =>
@@ -661,7 +661,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             else {
               dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
                 users.foreach { user =>
-                  notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId.value, groupRef.membersGroupName.value, users.map(_.userSubjectId.value) + userInfo.userSubjectId, userInfo.userSubjectId))
+                  notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId, groupRef.membersGroupName.value, users.map(_.userSubjectId) + userInfo.userSubjectId, userInfo.userSubjectId))
                 }
                 RequestComplete(StatusCodes.NoContent)
               }
@@ -702,8 +702,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
         if (role == ManagedRoles.Admin &&
-          (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail) ||
-            removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId))) {
+          (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail.value) ||
+            removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId.value))) {
 
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
         }
@@ -726,8 +726,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
         if (role == ManagedRoles.Admin &&
-          !memberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail) &&
-            !memberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId)) {
+          !memberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail.value) &&
+            !memberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId.value)) {
 
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
         }

@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.openam
 
-import org.broadinstitute.dsde.rawls.model.UserInfo
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import spray.http.{HttpHeader, OAuth2BearerToken}
 import spray.routing.Directive1
@@ -16,7 +16,7 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
         userEmail <- emailHeaderDirective;
         accessTokenExpiresIn <- accessTokenExpiresInHeaderDirective;
         userSubjectId <- userSubjectIdDirective
-    ) yield UserInfo(userEmail, OAuth2BearerToken(accessToken), accessTokenExpiresIn.toLong, userSubjectId)
+    ) yield UserInfo(RawlsUserEmail(userEmail), OAuth2BearerToken(accessToken), accessTokenExpiresIn.toLong, RawlsUserSubjectId(userSubjectId))
   }
 
   private def accessTokenHeaderDirective: Directive1[String] = headerValueByName("OIDC_access_token")

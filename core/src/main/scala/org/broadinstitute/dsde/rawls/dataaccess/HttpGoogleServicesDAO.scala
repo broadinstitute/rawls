@@ -696,7 +696,7 @@ class HttpGoogleServicesDAO(
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     retryWhen500orGoogleError(() => {
-      val so = new StorageObject().setName(userInfo.userSubjectId)
+      val so = new StorageObject().setName(userInfo.userSubjectId.value)
       val encryptedToken = Aes256Cbc.encrypt(refreshToken.getBytes, tokenSecretKey).get
       so.setMetadata(Map("iv" -> encryptedToken.base64Iv))
       val media = new InputStreamContent("text/plain", new ByteArrayInputStream(encryptedToken.base64CipherText.getBytes))
@@ -1039,10 +1039,9 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
-  def toProxyFromUser(rawlsUser: RawlsUser) = toProxyFromUserSubjectId(rawlsUser.userSubjectId.value)
-  def toProxyFromUser(userInfo: UserInfo) = toProxyFromUserSubjectId(userInfo.userSubjectId)
-  def toProxyFromUser(subjectId: RawlsUserSubjectId) = toProxyFromUserSubjectId(subjectId.value)
-  def toProxyFromUserSubjectId(subjectId: String) = s"PROXY_${subjectId}@${appsDomain}"
+  def toProxyFromUser(rawlsUser: RawlsUser): String = toProxyFromUser(rawlsUser.userSubjectId)
+  def toProxyFromUser(userInfo: UserInfo): String = toProxyFromUser(userInfo.userSubjectId)
+  def toProxyFromUser(subjectId: RawlsUserSubjectId): String = s"PROXY_${subjectId.value}@${appsDomain}"
   def toUserFromProxy(proxy: String) = executeGoogleRequest(getGroupDirectory.groups().get(proxy)).getName
   def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
 
@@ -1081,7 +1080,7 @@ class HttpGoogleServicesDAO(
   def getServiceAccountUserInfo(): Future[UserInfo] = {
     val creds = getBucketServiceAccountCredential
     getRawlsUserForCreds(creds).map { rawlsUser =>
-      UserInfo(rawlsUser.userEmail.value, OAuth2BearerToken(creds.getAccessToken), creds.getExpiresInSeconds, rawlsUser.userSubjectId.value)
+      UserInfo(rawlsUser.userEmail, OAuth2BearerToken(creds.getAccessToken), creds.getExpiresInSeconds, rawlsUser.userSubjectId)
     }
   }
 

@@ -1,10 +1,11 @@
 package org.broadinstitute.dsde.rawls.util
 
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
-import org.broadinstitute.dsde.rawls.model.{UserInfo, ErrorReport}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUserEmail, UserInfo}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 import spray.http.StatusCodes
+
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -15,8 +16,8 @@ trait RoleSupport {
   protected val userInfo: UserInfo
   implicit protected val executionContext: ExecutionContext
 
-  def tryIsFCAdmin(userEmail: String): Future[Boolean] = {
-    gcsDAO.isAdmin(userEmail) recoverWith { case t => throw new RawlsException("Unable to query for admin status.", t) }
+  def tryIsFCAdmin(userEmail: RawlsUserEmail): Future[Boolean] = {
+    gcsDAO.isAdmin(userEmail.value) recoverWith { case t => throw new RawlsException("Unable to query for admin status.", t) }
   }
 
   def asFCAdmin(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
@@ -25,8 +26,8 @@ trait RoleSupport {
     }
   }
   
-  def tryIsCurator(userEmail: String): Future[Boolean] = {
-    gcsDAO.isLibraryCurator(userEmail) recoverWith { case t => throw new RawlsException("Unable to query for library curator status.", t) }
+  def tryIsCurator(userEmail: RawlsUserEmail): Future[Boolean] = {
+    gcsDAO.isLibraryCurator(userEmail.value) recoverWith { case t => throw new RawlsException("Unable to query for library curator status.", t) }
   }
 
   def asCurator(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {

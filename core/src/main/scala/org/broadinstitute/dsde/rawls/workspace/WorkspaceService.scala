@@ -564,7 +564,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     def saveWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName): Future[Seq[WorkspaceACLUpdate]] = {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          DBIO.sequence(invites.map(invite => dataAccess.workspaceQuery.saveInvite(workspaceContext.workspaceId, userInfo.userSubjectId, invite)))
+          DBIO.sequence(invites.map(invite => dataAccess.workspaceQuery.saveInvite(workspaceContext.workspaceId, userInfo.userSubjectId.value, invite)))
         }
       }
     }
@@ -609,7 +609,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         // only send invites for those that do not already exist
         val newInviteEmails = invites.map(_.email) diff existingInvites.map((_.email))
-        val inviteNotifications = newInviteEmails.map(Notifications.WorkspaceInvitedNotification(_, userInfo.userSubjectId))
+        val inviteNotifications = newInviteEmails.map(em => Notifications.WorkspaceInvitedNotification(RawlsUserEmail(em), userInfo.userSubjectId))
         notificationDAO.fireAndForgetNotifications(inviteNotifications)
 
         saveWorkspaceInvites(invites, workspaceName)
@@ -622,8 +622,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // fire and forget notifications
       val notificationMessages = actualChangesToMake collect {
         // note that we don't send messages to groups
-        case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId.value, NoAccess.toString, workspaceName, userInfo.userSubjectId)
-        case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId.value, access.toString, workspaceName, userInfo.userSubjectId)
+        case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId, NoAccess.toString, workspaceName, userInfo.userSubjectId)
+        case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId, access.toString, workspaceName, userInfo.userSubjectId)
       }
       notificationDAO.fireAndForgetNotifications(notificationMessages)
 
@@ -655,7 +655,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
     getUsers.map { groups =>
-      val userIds = groups.flatten.map(user => user.userSubjectId.value).toSet
+      val userIds = groups.flatten.map(user => user.userSubjectId).toSet
       val notificationMessages = userIds.map { userId => Notifications.WorkspaceChangedNotification(userId, workspaceName) }
       val numMessages = notificationMessages.size.toString
       notificationDAO.fireAndForgetNotifications(notificationMessages)
@@ -1425,7 +1425,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         )
 
         dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
-          RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, successes))
+          RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, successes))
         }
     }
 
@@ -1890,7 +1890,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         bucketName = googleWorkspaceInfo.bucketName,
         createdDate = currentDate,
         lastModified = currentDate,
-        createdBy = userInfo.userEmail,
+        createdBy = userInfo.userEmail.value,
         attributes = workspaceRequest.attributes,
         accessLevels = accessGroups,
         authDomainACLs = intersectionGroups getOrElse accessGroups
@@ -1994,7 +1994,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def requireSharePermission[T](workspace: Workspace, dataAccess: DataAccess)(codeBlock: (WorkspaceAccessLevel) => ReadWriteAction[T]): ReadWriteAction[T] = {
     getMaximumAccessLevel(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { userLevel =>
       if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock(userLevel)
-      else dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), SlickWorkspaceContext(workspace)) flatMap { canShare =>
+      else dataAccess.workspaceQuery.getUserSharePermissions(userInfo.userSubjectId, SlickWorkspaceContext(workspace)) flatMap { canShare =>
         if (canShare) codeBlock(userLevel)
         else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
         else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
@@ -2004,11 +2004,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def getUserSharePermissions(workspaceContext: SlickWorkspaceContext, userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess): ReadAction[Boolean] = {
     if (userAccessLevel >= WorkspaceAccessLevels.Owner) DBIO.successful(true)
-    else dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), workspaceContext)
+    else dataAccess.workspaceQuery.getUserSharePermissions(userInfo.userSubjectId, workspaceContext)
   }
 
   def getUserCatalogPermissions(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[Boolean] = {
-    dataAccess.workspaceQuery.getUserCatalogPermissions(RawlsUserSubjectId(userInfo.userSubjectId), workspaceContext)
+    dataAccess.workspaceQuery.getUserCatalogPermissions(userInfo.userSubjectId, workspaceContext)
   }
 
   private def withEntity[T](workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[T]): ReadWriteAction[T] = {
