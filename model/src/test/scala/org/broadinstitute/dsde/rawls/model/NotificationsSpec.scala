@@ -15,7 +15,7 @@ class NotificationsSpec extends FlatSpec with Matchers {
     "ActivationNotification" -> Notifications.ActivationNotification("asdf"),
     "WorkspaceAddedNotification" -> Notifications.WorkspaceAddedNotification("asdf", "user", WorkspaceName("namespace", "name"), "foo@bar.com"),
     "WorkspaceRemovedNotification" -> Notifications.WorkspaceRemovedNotification("asdf", "user", WorkspaceName("namespace", "name"), "foo@bar.com"),
-    "WorkspaceInvitedNotification" -> Notifications.WorkspaceInvitedNotification("asdf", "foo@bar.com"),
+    "WorkspaceInvitedNotification" -> Notifications.WorkspaceInvitedNotification("asdf", "foo@bar.com", WorkspaceName("namespace", "name")),
     "WorkspaceChangedNotification" -> Notifications.WorkspaceChangedNotification("user", WorkspaceName("namespace", "name")),
     "GroupAccessRequestNotification" -> Notifications.GroupAccessRequestNotification("user", "my-group", Set("GROUP_foo-owners@dev.test.firecloud.org"), "foo@bar.com")
   )
