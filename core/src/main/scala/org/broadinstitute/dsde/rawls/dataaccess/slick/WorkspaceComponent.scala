@@ -529,7 +529,7 @@ trait WorkspaceComponent {
       // -- Failed if the submission contains failed workflows
       // -- Succeeded if the submission does not contain failed workflows
 
-      val innerQuery = (
+      val innerSubmissionDateQuery = (
         for {
           submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds)
           workflows <- workflowQuery if submissions.id === workflows.submissionId
@@ -544,7 +544,7 @@ trait WorkspaceComponent {
         (submissionId, workspaceId, recs.map(_._3).max, recs.map(_._4).max)
       }
 
-      val outerQuery = innerQuery.map { case (_, workspaceId, numFailures, maxDate) =>
+      val outerSubmissionDateQuery = innerSubmissionDateQuery.map { case (_, workspaceId, numFailures, maxDate) =>
         (workspaceId, Case If (numFailures > 0) Then WorkflowStatuses.Failed.toString Else WorkflowStatuses.Succeeded.toString, maxDate)
       }.groupBy { case (workspaceId, status, _) =>
         (workspaceId, status)
@@ -558,7 +558,7 @@ trait WorkspaceComponent {
       } yield submissions).groupBy(_.workspaceId).map { case (wfId, submissions) => (wfId, submissions.length)}
 
       for {
-        submissionDates <- outerQuery.result
+        submissionDates <- outerSubmissionDateQuery.result
         runningSubmissions <- runningSubmissionsQuery.result
       } yield {
         val submissionDatesByWorkspaceByStatus: Map[UUID, Map[String, Option[Timestamp]]] = groupByWorkspaceIdThenStatus(submissionDates)
