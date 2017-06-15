@@ -86,9 +86,9 @@ object Notifications {
     override val description = "Workspace Access Removed"
   })
 
-  case class WorkspaceInvitedNotification(recipientUserEmail: RawlsUserEmail, requesterId: RawlsUserSubjectId) extends Notification
+  case class WorkspaceInvitedNotification(recipientUserEmail: RawlsUserEmail, requesterId: RawlsUserSubjectId, workspaceName: WorkspaceName) extends Notification
   val WorkspaceInvitedNotificationType = register(new NotificationType[WorkspaceInvitedNotification] {
-    override val format = jsonFormat2(WorkspaceInvitedNotification.apply)
+    override val format = jsonFormat3(WorkspaceInvitedNotification.apply)
     override val description = "Invitation"
     override val alwaysOn = true
   })

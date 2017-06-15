@@ -15,7 +15,7 @@ class NotificationsSpec extends FlatSpec with Matchers {
     "ActivationNotification" -> Notifications.ActivationNotification(RawlsUserSubjectId("123456789876543212346")),
     "WorkspaceAddedNotification" -> Notifications.WorkspaceAddedNotification(RawlsUserSubjectId("123456789876543212346"), "READER", WorkspaceName("namespace", "name"), RawlsUserSubjectId("123456789876543212347")),
     "WorkspaceRemovedNotification" -> Notifications.WorkspaceRemovedNotification(RawlsUserSubjectId("123456789876543212346"), "READER", WorkspaceName("namespace", "name"), RawlsUserSubjectId("123456789876543212347")),
-    "WorkspaceInvitedNotification" -> Notifications.WorkspaceInvitedNotification(RawlsUserEmail("foo@bar.com"), RawlsUserSubjectId("123456789876543212347")),
+    "WorkspaceInvitedNotification" -> Notifications.WorkspaceInvitedNotification(RawlsUserEmail("foo@bar.com"), RawlsUserSubjectId("123456789876543212347"), WorkspaceName("namespace", "name")),
     "WorkspaceChangedNotification" -> Notifications.WorkspaceChangedNotification(RawlsUserSubjectId("123456789876543212346"), WorkspaceName("namespace", "name")),
     "GroupAccessRequestNotification" -> Notifications.GroupAccessRequestNotification(RawlsUserSubjectId("123456789876543212346"), "my-group", Set(RawlsUserSubjectId("223456789876543212346")), RawlsUserSubjectId("123456789876543212347"))
   )

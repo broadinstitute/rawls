@@ -609,7 +609,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         // only send invites for those that do not already exist
         val newInviteEmails = invites.map(_.email) diff existingInvites.map((_.email))
-        val inviteNotifications = newInviteEmails.map(em => Notifications.WorkspaceInvitedNotification(RawlsUserEmail(em), userInfo.userSubjectId))
+        val inviteNotifications = newInviteEmails.map(em => Notifications.WorkspaceInvitedNotification(RawlsUserEmail(em), userInfo.userSubjectId, workspaceName))
         notificationDAO.fireAndForgetNotifications(inviteNotifications)
 
         saveWorkspaceInvites(invites, workspaceName)
