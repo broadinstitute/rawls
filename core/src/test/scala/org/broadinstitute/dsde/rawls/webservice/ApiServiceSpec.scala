@@ -90,7 +90,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       slickDataSource,
-      5 seconds
+      5 seconds,
+      rawlsMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"))
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(

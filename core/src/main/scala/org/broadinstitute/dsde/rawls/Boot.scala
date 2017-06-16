@@ -149,7 +149,8 @@ object Boot extends App with LazyLogging {
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
       slickDataSource,
-      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval"))
+      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
+      rawlsMetricBaseName = "firecloud"
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))

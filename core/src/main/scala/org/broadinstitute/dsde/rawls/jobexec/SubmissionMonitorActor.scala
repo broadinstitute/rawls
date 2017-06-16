@@ -17,6 +17,13 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
+import nl.grons.metrics.scala.{Counter, MetricName}
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+
+import scala.collection.immutable
+
 /**
  * Created by dvoet on 6/26/15.
  */
@@ -26,8 +33,9 @@ object SubmissionMonitorActor {
             datasource: SlickDataSource,
             executionServiceCluster: ExecutionServiceCluster,
             credential: Credential,
-            submissionPollInterval: FiniteDuration): Props = {
-    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval))
+            submissionPollInterval: FiniteDuration,
+            rawlsMetricBaseName: String): Props = {
+    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, rawlsMetricBaseName))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -60,8 +68,8 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val datasource: SlickDataSource,
                              val executionServiceCluster: ExecutionServiceCluster,
                              val credential: Credential,
-                             val submissionPollInterval: FiniteDuration) extends Actor with SubmissionMonitor with LazyLogging {
-
+                             val submissionPollInterval: FiniteDuration,
+                             override val rawlsMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
   import context._
 
   scheduleNextMonitorPass
@@ -87,13 +95,27 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
 
 }
 
-trait SubmissionMonitor extends FutureSupport with LazyLogging {
+trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrumented {
   val workspaceName: WorkspaceName
   val submissionId: UUID
   val datasource: SlickDataSource
   val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
   val submissionPollInterval: Duration
+
+  def workflowStatusCounter(status: WorkflowStatus): Counter =
+    ExpandedMetricBuilder
+      .expand(Workspace, workspaceName)
+      .expand(Submission, submissionId)
+      .expand(WorkflowStatus, status)
+      .asCounter()
+
+  def submissionStatusCounter(status: SubmissionStatus): Counter = {
+    ExpandedMetricBuilder
+      .expand(Workspace, workspaceName)
+      .expand(SubmissionStatus, status)
+      .asCounter()
+  }
 
   import datasource.dataAccess.driver.api._
 
@@ -111,6 +133,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     def abortQueuedWorkflows(submissionId: UUID) = {
       datasource.inTransaction { dataAccess =>
         dataAccess.workflowQuery.batchUpdateWorkflowsOfStatus(submissionId, WorkflowStatuses.Queued, WorkflowStatuses.Aborted)
+      }.andThen { case _ =>
+        workflowStatusCounter(WorkflowStatuses.Aborted) += 1
       }
     }
 
@@ -212,10 +236,11 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
       // to minimize database updates do 1 update per status
       DBIO.seq(updatedRecs.groupBy(_.status).map { case (status, recs) =>
-        dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
+        val workflowStatus = WorkflowStatuses.withName(status)
+        dataAccess.workflowQuery.batchUpdateStatus(recs, workflowStatus).map(n => workflowStatusCounter(workflowStatus) += n)
       }.toSeq: _*) andThen
         DBIO.successful(workflowsWithOutputs)
-    }
+      }
 
     //Then in a new transaction, update the submission status.
     //If this transaction throws an exception, it'll roll back, but the workflows will still be in their terminal state.
@@ -253,7 +278,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
           }
         } flatMap { newStatus =>
           logger.debug(s"submission $submissionId terminating to status $newStatus")
-          dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
+          dataAccess.submissionQuery.updateStatus(submissionId, newStatus).map(n => submissionStatusCounter(newStatus) += n)
         } map(_ => true)
       } else {
         DBIO.successful(false)
@@ -348,9 +373,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     (updatedEntity, updatedWorkspace)
   }
 
-  def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess) = {
+  def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess)(implicit executionContext: ExecutionContext) = {
     DBIO.sequence(errors.map { case (workflowRecord, errorMessages) =>
-      dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
+      dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed).map(n => workflowStatusCounter(WorkflowStatuses.Failed) += n) andThen
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })
   }
