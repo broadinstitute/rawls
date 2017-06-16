@@ -770,7 +770,7 @@ trait WorkspaceComponent {
   }
 
   private def groupByWorkspaceId(runningSubmissions: Seq[(UUID, Int)]): Map[UUID, Int] = {
-    CollectionUtils.groupPairs(runningSubmissions.toList)
+    CollectionUtils.groupPairs(runningSubmissions)
   }
 
   private def groupByWorkspaceIdThenStatus(workflowDates: Seq[(UUID, String, Option[Timestamp])]): Map[UUID, Map[String, Option[Timestamp]]] = {
