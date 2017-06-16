@@ -541,7 +541,7 @@ trait WorkspaceComponent {
       }.groupBy { case (submissionId, workspaceId, _, _) =>
         (submissionId, workspaceId)
       }.map { case ((submissionId, workspaceId), recs) =>
-        (submissionId, workspaceId, recs.map(_._3).count, recs.map(_._4).max)
+        (submissionId, workspaceId, recs.map(_._3).sum, recs.map(_._4).max)
       }
 
       val outerSubmissionDateQuery = innerSubmissionDateQuery.map { case (_, workspaceId, numFailures, maxDate) =>
