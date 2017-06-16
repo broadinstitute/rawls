@@ -4,14 +4,13 @@ import java.nio.ByteOrder
 import java.sql.Timestamp
 import java.util.UUID
 
-import akka.util.{ByteString, ByteStringBuilder}
+import akka.util.ByteString
+import org.apache.commons.codec.binary.Base64
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.joda.time.DateTime
 import slick.driver.JdbcDriver
 import slick.jdbc.{GetResult, PositionedParameters, SQLActionBuilder, SetParameter}
 import spray.http.StatusCodes
-import org.apache.commons.codec.binary.Base64
 
 import scala.concurrent.ExecutionContext
 

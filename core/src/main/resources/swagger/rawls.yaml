@@ -5051,11 +5051,11 @@ definitions:
       lastSuccessDate:
         type: string
         format: date-time
-        description: The date of the last successful workflow
+        description: The date of the last successful submission
       lastFailureDate:
         type: string
         format: date-time
-        description: The date of the last failed workflow
+        description: The date of the last failed submission
       runningSubmissionsCount:
         type: integer
         description: Count of all the running submissions
