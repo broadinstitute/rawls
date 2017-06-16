@@ -774,18 +774,22 @@ trait WorkspaceComponent {
   }
 
   private def groupByWorkspaceIdThenStatus(workflowDates: Seq[(UUID, String, Option[Timestamp])]): Map[UUID, Map[String, Option[Timestamp]]] = {
-    // There is no Monoid instance for Option[Timestamp] so we need to bring one into scope.
-    // However a Monoid for Timestamp doesn't really make sense -- what would it do, add them together?
-    // We can take advantage of the _universal_ monoid for Option which combines Option values using
-    // Option.orElse. It's called universal because it works no matter the type inside the Option.
-    // This is fine in this case because there are guaranteed no key conflicts due to the SQL query
-    // structure (group by, etc).
+    // The function groupTriples, called below, transforms a Seq((T1, T2, T3)) to a Map(T1 -> Map(T2 -> T3)).
+    // It does this by calling foldMap, which in turn requires a monoid for T3. In our case, T3 is an Option[Timestamp],
+    // so we need to provide an implicit monoid for Option[Timestamp].
     //
-    // TL/DR: The following line brings into scope a Monoid[Option[Timestamp]] which combines values
-    // using Option.orElse.
+    // There isn't really a sane monoid implementation for Timestamp (what would you do, add them?). Thankfully
+    // it turns out that the UUID/String pairs in workflowDates are always unique, so it doesn't matter what the
+    // monoid does because it'll never be used to combine two Option[Timestamp]s. It just needs to be provided in
+    // order to make the compiler happy.
+    //
+    // To do this, we use the universal monoid for Option, MonoidK[Option]. Note that the inner Option takes no type
+    // parameter: MonoidK doesn't care about the type inside Option, it just calls orElse on the Option for its "combine"
+    // operator. Finally, the call to algebra[Timestamp] turns a MonoidK[Option] into a Monoid[Option[Timestamp]] by
+    // leaving the monoid implementation alone (so it still calls orElse) and poking the Timestamp type into the Option.
 
     implicit val optionTimestampMonoid: Monoid[Option[Timestamp]] = MonoidK[Option].algebra[Timestamp]
-    CollectionUtils.groupTriples(workflowDates.toList)
+    CollectionUtils.groupTriples(workflowDates)
   }
 }
 
