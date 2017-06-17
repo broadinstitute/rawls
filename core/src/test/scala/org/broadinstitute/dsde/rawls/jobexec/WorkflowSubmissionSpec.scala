@@ -296,43 +296,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     workflowSubmissionActor ! PoisonPill
   }
 
-  it should "submit workflows with failure modes" in withDefaultTestDatabase {
-    val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
-
-    val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(3, testData.submissionWorkflowFailureMode.submissionId)
-    workflowRecs.size should be (1)
-
-    val workflowSubmissionActor = system.actorOf(WorkflowSubmissionActor.props(
-      slickDataSource,
-      new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
-      mockGoogleServicesDAO,
-      MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource),
-      3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None)
-    )
-
-    awaitCond({
-      val result = runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result)
-      result.size should be (1)
-      result.forall(_ != WorkflowStatuses.Queued.toString)
-    }, 10 seconds)
-    workflowSubmissionActor ! PoisonPill
-  }
-
-  it should "pass workflow failure modes to cromwell" in withDefaultTestDatabase {
-    val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
-    val workflowIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(testData.submissionWorkflowFailureMode.submissionId)).result.map(_.map(_.id)))
-    Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
-
-    mockServer.mockServer.verify(
-      HttpRequest.request()
-        .withMethod("POST")
-        .withPath("/workflows/v1/batch")
-        .withBody(mockServerContains("workflow_failure_mode"))
-        .withBody(mockServerContains("ContinueWhilePossible")),
-      VerificationTimes.exactly(2) // 2 whatevers in the submission
-    )
-  }
-
   it should "continue submitting workflow on exec svc error" in withDefaultTestDatabase {
     val credential: Credential =  mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
@@ -413,5 +376,20 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       )
 
     }
+  }
+
+  it should "pass workflow failure modes to cromwell" in withDefaultTestDatabase {
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
+    val workflowIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(testData.submissionWorkflowFailureMode.submissionId)).result.map(_.map(_.id)))
+    Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), 10 seconds)
+
+    mockServer.mockServer.verify(
+      HttpRequest.request()
+        .withMethod("POST")
+        .withPath("/workflows/v1/batch")
+        .withBody(mockServerContains("workflow_failure_mode"))
+        .withBody(mockServerContains("ContinueWhilePossible")),
+      VerificationTimes.once()
+    )
   }
 }
