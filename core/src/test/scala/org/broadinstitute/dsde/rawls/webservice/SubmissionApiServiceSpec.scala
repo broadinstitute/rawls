@@ -44,7 +44,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   "SubmissionApi" should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde","not there","Pattern","pattern1", None, false, None))) ~>
+    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde","not there","Pattern","pattern1", None, false))) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -55,14 +55,14 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
-    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None, false, None))) ~>
+    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None, false))) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
   private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
                                          submissionEntity: Entity, submissionExpression: Option[String],
-                                         services: TestApiService, workflowFailureMode: Option[WorkflowFailureMode]): SubmissionStatusResponse = {
+                                         services: TestApiService, workflowFailureMode: Option[WorkflowFailureMode] = None): SubmissionStatusResponse = {
     Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -97,7 +97,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
 
-    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, None)
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services)
 
     assertResult(1) {
       submission.workflows.size
@@ -108,7 +108,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
 
-    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services, None)
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
     assertResult(3) {
       submission.workflows.size
@@ -120,7 +120,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
 
-    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services, None)
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
     Get(s"${testData.wsName.path}") ~>
       sealRoute(services.workspaceRoutes) ~>
