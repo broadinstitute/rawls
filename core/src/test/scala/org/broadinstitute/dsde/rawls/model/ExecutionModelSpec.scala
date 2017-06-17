@@ -66,4 +66,37 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
     testJson.convertTo[WorkflowQueueStatusByUserResponse] should equal (testResponse)
   }
 
+  "ExecutionServiceWorkflowOptions" should "serialize/deserialize to/from JSON" in {
+    val test = ExecutionServiceWorkflowOptions(
+      "jes_gcs_root",
+      "google_project",
+      "account_name",
+      "refresh_token",
+      "auth_bucket",
+      "final_workflow_log_dir",
+      None,
+      true,
+      Some(WorkflowFailureModes.ContinueWhilePossible)
+    )
+
+    val expectedJson =
+      """
+        |{
+        |  "jes_gcs_root": "jes_gcs_root",
+        |  "google_project": "google_project",
+        |  "account_name": "account_name",
+        |  "refresh_token": "refresh_token",
+        |  "auth_bucket": "auth_bucket",
+        |  "final_workflow_log_dir": "final_workflow_log_dir",
+        |  "read_from_cache": true,
+        |  "workflow_failure_mode": "ContinueWhilePossible"
+        |}
+      """.stripMargin.parseJson
+
+    // Verify round trip JSON serialization/deserialization
+    val testJson = test.toJson
+    testJson should equal (expectedJson)
+    testJson.convertTo[ExecutionServiceWorkflowOptions] should equal (test)
+  }
+
 }

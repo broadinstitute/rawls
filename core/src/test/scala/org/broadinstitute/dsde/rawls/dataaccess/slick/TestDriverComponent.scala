@@ -11,6 +11,7 @@ import slick.driver.MySQLDriver.api._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.Owner
+import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.rawls.model._
@@ -79,7 +80,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, rawlsUserRef: RawlsUserRef
                            , workflowEntities: Seq[Entity], inputResolutions: Map[Entity, Seq[SubmissionValidationValue]]
                            , failedWorkflowEntities: Seq[Entity], failedInputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
-                           status: WorkflowStatus = WorkflowStatuses.Submitted, useCallCache: Boolean = false): Submission = {
+                           status: WorkflowStatus = WorkflowStatuses.Submitted, useCallCache: Boolean = false, workflowFailureMode: Option[WorkflowFailureMode] = None): Submission = {
 
     val workflows = workflowEntities map { ref =>
       val uuid = if(status == WorkflowStatuses.Queued) None else Option(UUID.randomUUID.toString)
@@ -87,7 +88,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     }
 
     Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, submissionEntity.toReference,
-      workflows, SubmissionStatuses.Submitted, useCallCache)
+      workflows, SubmissionStatuses.Submitted, useCallCache, workflowFailureMode)
   }
 
   def generateBillingGroups(projectName: RawlsBillingProjectName, users: Map[ProjectRoles.ProjectRole, Set[RawlsUserRef]], subGroups: Map[ProjectRoles.ProjectRole, Set[RawlsGroupRef]]): Map[ProjectRoles.ProjectRole, RawlsGroup] = {
@@ -211,6 +212,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val wsName8 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSuccessfulSubmission")
     val wsName9 = WorkspaceName("myNamespace", "myWorkspaceToTestGrantPermissions")
     val wsInterleaved = WorkspaceName("myNamespace", "myWorkspaceToTestInterleavedSubmissions")
+    val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWorkspaceToTestWorkflowFailureMode")
     val workspaceToTestGrantId = UUID.randomUUID()
 
     val nestedProjectGroup = makeRawlsGroup("nested project group", Set(userOwner))
@@ -300,6 +302,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     // Workspace with a successful submission that had another submission run and fail while it was running
     val (workspaceInterleavedSubmissions, workspaceInterleavedSubmissionsGroups) = makeWorkspace(billingProject, wsInterleaved.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+
+    // Workspace with a custom workflow failure mode
+    val (workspaceWorkflowFailureMode, workspaceWorkflowFailureModeGroups) = makeWorkspace(billingProject, wsWorkflowFailureMode.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Standard workspace to test grant permissions
     val (workspaceToTestGrant, workspaceToTestGrantGroups) = makeWorkspaceToTestGrant(billingProject, wsName9.name, None, workspaceToTestGrantId.toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
@@ -495,6 +500,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val innerSubmission = Submission(UUID.randomUUID().toString(), t2, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowFailed1"), WorkflowStatuses.Failed, t3, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
 
+    // a submission with a submitted workflow and a custom workflow failure mode
+    val submissionWorkflowFailureMode = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("workflowFailureMode"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Submitted, false,
+      Some(WorkflowFailureModes.ContinueWhilePossible))
+
     def createWorkspaceGoogleGroups(gcsDAO: GoogleServicesDAO): Unit = {
       val groups = billingProject.groups.values ++
         testProject1.groups.values ++
@@ -510,6 +520,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         workspaceMixedSubmissionsGroups ++
         workspaceTerminatedSubmissionsGroups ++
         workspaceInterleavedSubmissionsGroups ++
+        workspaceWorkflowFailureModeGroups ++
         controlledWorkspaceGroups ++
         Seq(realm.membersGroup, realm.adminsGroup, realm2.membersGroup, realm2.adminsGroup)
 
@@ -530,6 +541,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       workspaceMixedSubmissions,
       workspaceTerminatedSubmissions,
       workspaceInterleavedSubmissions,
+      workspaceWorkflowFailureMode,
       workspaceToTestGrant)
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
 
@@ -566,6 +578,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         DBIO.sequence(workspaceMixedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceTerminatedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceInterleavedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceWorkflowFailureModeGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceToTestGrantGroups.map(rawlsGroupQuery.save).toSeq),
         managedGroupQuery.createManagedGroup(realm),
         managedGroupQuery.createManagedGroup(realm2),
@@ -673,6 +686,16 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
             submissionQuery.create(context, outerSubmission),
             submissionQuery.create(context, innerSubmission),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        }),
+        withWorkspaceContext(workspaceWorkflowFailureMode)({ context =>
+          DBIO.seq(
+            entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
+
+            methodConfigurationQuery.create(context, methodConfig),
+
+            submissionQuery.create(context, submissionWorkflowFailureMode),
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
         })

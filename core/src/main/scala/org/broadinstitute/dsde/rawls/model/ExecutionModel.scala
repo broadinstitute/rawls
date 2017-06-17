@@ -73,7 +73,7 @@ case class ExecutionServiceWorkflowOptions(
   final_workflow_log_dir: String,
   default_runtime_attributes: Option[JsValue],
   read_from_cache: Boolean,
-  workflowFailureMode: Option[WorkflowFailureMode] = None
+  workflow_failure_mode: Option[WorkflowFailureMode] = None
 )
 
 // Status of a successfully started workflow

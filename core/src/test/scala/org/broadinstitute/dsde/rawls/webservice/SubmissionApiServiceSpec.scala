@@ -142,7 +142,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "fail when passing an unknown workflow_failure_mode" in withTestDataApiServices { services =>
+  it should "return 400 Bad Request when passing an unknown workflow_failure_mode" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
@@ -150,10 +150,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, testData.sample1.entityType, testData.sample1.name, None, false, Some(WorkflowFailureModes.ContinueWhilePossible))
     val jsonStr = submissionRq.toJson.toString.replace("ContinueWhilePossible", "Bogus")
 
-    Post(s"${wsName.path}/submissions", jsonStr) ~>
+    Post(s"${wsName.path}/submissions", httpJsonStr(jsonStr)) ~>
       sealRoute(services.submissionRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.BadRequest) {
           status
         }
       }
