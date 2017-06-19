@@ -377,4 +377,19 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     }
   }
+
+  it should "pass workflow failure modes to cromwell" in withDefaultTestDatabase {
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
+    val workflowIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(testData.submissionWorkflowFailureMode.submissionId)).result.map(_.map(_.id)))
+    Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), 10 seconds)
+
+    mockServer.mockServer.verify(
+      HttpRequest.request()
+        .withMethod("POST")
+        .withPath("/workflows/v1/batch")
+        .withBody(mockServerContains("workflow_failure_mode"))
+        .withBody(mockServerContains("ContinueWhilePossible")),
+      VerificationTimes.once()
+    )
+  }
 }

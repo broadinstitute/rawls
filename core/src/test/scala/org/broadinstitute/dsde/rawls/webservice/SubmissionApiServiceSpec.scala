@@ -1,19 +1,21 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecord, WorkflowAuditStatusRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowAuditStatusRecord
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, WorkflowQueueStatusResponseFormat, WorkflowOutputsFormat, ExecutionServiceVersionFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ExecutionServiceVersionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import spray.http._
-import spray.json.{JsString, JsArray}
-import spray.json.DefaultJsonProtocol._
-import scala.concurrent.ExecutionContext
-import java.util.UUID
-
 import org.joda.time.DateTime
+import spray.http._
+import spray.json.DefaultJsonProtocol._
+import spray.json._
+
+import scala.concurrent.ExecutionContext
 
 /**
  * Created by dvoet on 4/24/15.
@@ -60,7 +62,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
                                          submissionEntity: Entity, submissionExpression: Option[String],
-                                         services: TestApiService): SubmissionStatusResponse = {
+                                         services: TestApiService, workflowFailureMode: Option[WorkflowFailureMode] = None): SubmissionStatusResponse = {
     Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -69,7 +71,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression, false)
+    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression, false, workflowFailureMode)
     Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
       sealRoute(services.submissionRoutes) ~>
       check {
@@ -128,6 +130,34 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   }
 
+  it should "return 201 Created when creating submission with a workflow_failure_mode" in withTestDataApiServices { services =>
+    val wsName = testData.wsName
+    val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible))
+
+    assertResult(1) {
+      submission.workflows.size
+    }
+  }
+
+  it should "return 400 Bad Request when passing an unknown workflow_failure_mode" in withTestDataApiServices { services =>
+    val wsName = testData.wsName
+    val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+
+    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, testData.sample1.entityType, testData.sample1.name, None, false, Some(WorkflowFailureModes.ContinueWhilePossible))
+    val jsonStr = submissionRq.toJson.toString.replace("ContinueWhilePossible", "Bogus")
+
+    Post(s"${wsName.path}/submissions", httpJsonStr(jsonStr)) ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
   val z1 = Entity("z1", "Sample", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3), AttributeName.withDefaultNS("splat") -> attributeList))
@@ -225,7 +255,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     // also insert a dummy audit record with a different workflow id to attempt to confuse the code
     runAndWait( workflowAuditStatusQuery.save( WorkflowAuditStatusRecord(0, 42, WorkflowStatuses.Queued.toString, new java.sql.Timestamp(queuedTime-6000)) ) )
 
-    val existingSubmittedWorkflowCount = 15
+    val existingSubmittedWorkflowCount = 16
     val existingWorkflowCounts = Map("Submitted" -> existingSubmittedWorkflowCount)
 
     val resp = getQueueStatus(services.submissionRoutes)

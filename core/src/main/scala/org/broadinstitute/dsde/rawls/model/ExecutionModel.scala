@@ -5,8 +5,8 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
-import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserRefFormat
+import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
 import spray.json._
@@ -25,7 +25,8 @@ case class SubmissionRequest(
   entityType: String,
   entityName: String,
   expression: Option[String],
-  useCallCache: Boolean
+  useCallCache: Boolean,
+  workflowFailureMode: Option[WorkflowFailureMode] = None
 )
 
 // Cromwell's response to workflow submission
@@ -71,7 +72,8 @@ case class ExecutionServiceWorkflowOptions(
   auth_bucket: String,
   final_workflow_log_dir: String,
   default_runtime_attributes: Option[JsValue],
-  read_from_cache: Boolean
+  read_from_cache: Boolean,
+  workflow_failure_mode: Option[WorkflowFailureMode] = None
 )
 
 // Status of a successfully started workflow
@@ -104,7 +106,8 @@ case class Submission(
   submissionEntity: AttributeEntityReference,
   workflows: Seq[Workflow],
   status: SubmissionStatus,
-  useCallCache: Boolean
+  useCallCache: Boolean,
+  workflowFailureMode: Option[WorkflowFailureMode] = None
 )
 
 case class SubmissionStatusResponse(
@@ -243,6 +246,8 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionStatusFormat = rawlsEnumerationFormat(SubmissionStatuses.withName)
 
+  implicit val WorkflowFailureModeFormat = rawlsEnumerationFormat(WorkflowFailureModes.withName)
+
   implicit object ExecutionOutputFormat extends RootJsonFormat[OutputType] {
     override def write(obj: OutputType): JsValue = obj match {
       case Left(attribute) => attributeFormat.write(attribute)
@@ -258,7 +263,7 @@ class ExecutionJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val SubmissionRequestFormat = jsonFormat6(SubmissionRequest)
+  implicit val SubmissionRequestFormat = jsonFormat7(SubmissionRequest)
 
   implicit val ExecutionEventFormat = jsonFormat3(ExecutionEvent)
 
@@ -276,7 +281,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat8(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat9(ExecutionServiceWorkflowOptions)
 
   implicit val TaskOutputFormat = jsonFormat2(TaskOutput)
 
@@ -294,7 +299,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowFormat = jsonFormat6(Workflow)
 
-  implicit val SubmissionFormat = jsonFormat9(Submission)
+  implicit val SubmissionFormat = jsonFormat10(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
@@ -409,6 +414,28 @@ object SubmissionStatuses {
   case object Aborting extends SubmissionStatus
   case object Aborted extends SubmissionStatus
   case object Done extends SubmissionStatus
+}
+
+object WorkflowFailureModes {
+  sealed trait WorkflowFailureMode extends RawlsEnumeration[WorkflowFailureMode] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String) = WorkflowFailureModes.withName(name)
+  }
+
+  def withName(name: String): WorkflowFailureMode = {
+    name match {
+      case "ContinueWhilePossible" => ContinueWhilePossible
+      case "NoNewCalls" => NoNewCalls
+      case _ => throw new RawlsException(s"invalid WorkflowFailureMode [${name}]")
+    }
+  }
+
+  def withNameOpt(name: Option[String]): Option[WorkflowFailureMode] = {
+    name.flatMap(n => Try(withName(n)).toOption)
+  }
+
+  case object ContinueWhilePossible extends WorkflowFailureMode
+  case object NoNewCalls extends WorkflowFailureMode
 }
 
 object ExecutionJsonSupport extends ExecutionJsonSupport

@@ -4317,6 +4317,9 @@ definitions:
       useCallCache:
         type: boolean
         description: Whether or not to read from cache for this submission
+      workflowFailureMode:
+        type: string
+        description: What happens after a task fails. Choose from ContinueWhilePossible and NoNewCalls. Defaults to NoNewCalls if not specified. See Cromwell docs for more information.
 
   SubmissionValidationInput:
     description: 'method configuration input parameter, it''s name and the associated expression from the method config'

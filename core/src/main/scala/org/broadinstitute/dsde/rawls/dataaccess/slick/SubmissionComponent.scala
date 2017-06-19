@@ -22,7 +22,8 @@ case class SubmissionRecord(id: UUID,
                             methodConfigurationId: Long,
                             submissionEntityId: Long,
                             status: String,
-                            useCallCache: Boolean
+                            useCallCache: Boolean,
+                            workflowFailureMode: Option[String]
                            )
 
 case class SubmissionValidationRecord(id: Long,
@@ -53,8 +54,9 @@ trait SubmissionComponent {
     def submissionEntityId = column[Long]("ENTITY_ID")
     def status = column[String]("STATUS", O.Length(32))
     def useCallCache = column[Boolean]("USE_CALL_CACHE")
+    def workflowFailureMode = column[Option[String]]("WORKFLOW_FAILURE_MODE", O.Length(32))
 
-    def * = (id, workspaceId, submissionDate, submitterId, methodConfigurationId, submissionEntityId, status, useCallCache) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
+    def * = (id, workspaceId, submissionDate, submitterId, methodConfigurationId, submissionEntityId, status, useCallCache, workflowFailureMode) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def submitter = foreignKey("FK_SUB_SUBMITTER", submitterId, rawlsUserQuery)(_.userSubjectId)
@@ -348,7 +350,8 @@ trait SubmissionComponent {
         configId,
         entityId,
         submission.status.toString,
-        submission.useCallCache)
+        submission.useCallCache,
+        submission.workflowFailureMode.map(_.toString))
     }
 
     private def unmarshalSubmission(submissionRec: SubmissionRecord, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow]): Submission = {
@@ -361,7 +364,8 @@ trait SubmissionComponent {
         entity,
         workflows.toList.sortBy(wf => wf.workflowEntity.entityName),
         SubmissionStatuses.withName(submissionRec.status),
-        submissionRec.useCallCache)
+        submissionRec.useCallCache,
+        WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
     }
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow]): ActiveSubmission = {

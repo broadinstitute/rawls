@@ -193,6 +193,16 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     assert(submissionRunTimes == SummaryStatistics(0.0,0.0,0.0,0.0))
   }
 
+  it should "unmarhsal submission WorkflowFailureModes correctly" in withDefaultTestDatabase {
+    val workspaceContext = SlickWorkspaceContext(testData.workspaceWorkflowFailureMode)
+
+    assertResult(Some(testData.submissionWorkflowFailureMode)) {
+      runAndWait(submissionQuery.get(workspaceContext, testData.submissionWorkflowFailureMode.submissionId))
+    }
+
+    assert(runAndWait(submissionQuery.list(workspaceContext)).toSet.contains(testData.submissionWorkflowFailureMode))
+  }
+
   "WorkflowComponent" should "update the status of a workflow and increment record version" in withDefaultTestDatabase {
     val workflowRecBefore = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).head
 
