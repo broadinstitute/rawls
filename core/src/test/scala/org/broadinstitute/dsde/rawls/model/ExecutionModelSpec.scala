@@ -97,6 +97,25 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
     val testJson = test.toJson
     testJson should equal (expectedJson)
     testJson.convertTo[ExecutionServiceWorkflowOptions] should equal (test)
+
+    // Verify it works with no workflow_failure_mode
+    val noFailureMode = test.copy(workflow_failure_mode = None)
+    val expectedJsonNoFailureMode =
+      """
+        |{
+        |  "jes_gcs_root": "jes_gcs_root",
+        |  "google_project": "google_project",
+        |  "account_name": "account_name",
+        |  "refresh_token": "refresh_token",
+        |  "auth_bucket": "auth_bucket",
+        |  "final_workflow_log_dir": "final_workflow_log_dir",
+        |  "read_from_cache": true
+        |}
+      """.stripMargin.parseJson
+
+    val noFailureModeJson = noFailureMode.toJson
+    noFailureModeJson should equal (expectedJsonNoFailureMode)
+    noFailureModeJson.convertTo[ExecutionServiceWorkflowOptions] should equal (noFailureMode)
   }
 
 }
