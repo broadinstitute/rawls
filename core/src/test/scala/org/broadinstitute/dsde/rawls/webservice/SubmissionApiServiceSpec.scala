@@ -150,6 +150,14 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, testData.sample1.entityType, testData.sample1.name, None, false, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
     val jsonStr = submissionRq.toJson.toString.replace("ContinueWhilePossible", "Bogus")
 
+    Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
     Post(s"${wsName.path}/submissions", httpJsonStr(jsonStr)) ~>
       sealRoute(services.submissionRoutes) ~>
       check {
