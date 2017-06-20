@@ -2115,7 +2115,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def withWorkflowFailureMode(submissionRequest: SubmissionRequest)(op: Option[WorkflowFailureMode] => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     Try(submissionRequest.workflowFailureMode.map(WorkflowFailureModes.withName)) match {
       case Success(failureMode) => op(failureMode)
-      case Failure(e) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, e)))
+      case Failure(NonFatal(e)) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, e)))
     }
   }
 
