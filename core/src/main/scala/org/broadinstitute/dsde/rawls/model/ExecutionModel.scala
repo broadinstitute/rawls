@@ -26,7 +26,7 @@ case class SubmissionRequest(
   entityName: String,
   expression: Option[String],
   useCallCache: Boolean,
-  workflowFailureMode: Option[WorkflowFailureMode] = None
+  workflowFailureMode: Option[String] = None
 )
 
 // Cromwell's response to workflow submission
@@ -417,6 +417,8 @@ object SubmissionStatuses {
 }
 
 object WorkflowFailureModes {
+  val allWorkflowFailureModes = List(ContinueWhilePossible, NoNewCalls)
+
   sealed trait WorkflowFailureMode extends RawlsEnumeration[WorkflowFailureMode] {
     override def toString = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String) = WorkflowFailureModes.withName(name)
@@ -426,7 +428,7 @@ object WorkflowFailureModes {
     name match {
       case "ContinueWhilePossible" => ContinueWhilePossible
       case "NoNewCalls" => NoNewCalls
-      case _ => throw new RawlsException(s"invalid WorkflowFailureMode [${name}]")
+      case _ => throw new RawlsException(s"Invalid WorkflowFailureMode [${name}]. Possible values: ${allWorkflowFailureModes.mkString(", ")}")
     }
   }
 

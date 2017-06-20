@@ -62,7 +62,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
                                          submissionEntity: Entity, submissionExpression: Option[String],
-                                         services: TestApiService, workflowFailureMode: Option[WorkflowFailureMode] = None): SubmissionStatusResponse = {
+                                         services: TestApiService, workflowFailureMode: Option[String] = None): SubmissionStatusResponse = {
     Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -135,7 +135,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
 
-    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible))
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
 
     assertResult(1) {
       submission.workflows.size
@@ -147,7 +147,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
 
-    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, testData.sample1.entityType, testData.sample1.name, None, false, Some(WorkflowFailureModes.ContinueWhilePossible))
+    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, testData.sample1.entityType, testData.sample1.name, None, false, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
     val jsonStr = submissionRq.toJson.toString.replace("ContinueWhilePossible", "Bogus")
 
     Post(s"${wsName.path}/submissions", httpJsonStr(jsonStr)) ~>

@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionServiceValidationFormat, ExecutionServiceVersionFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat, WorkflowQueueStatusByUserResponseFormat}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
+import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -38,6 +39,7 @@ import spray.json._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 /**
  * Created by dvoet on 4/27/15.
@@ -1390,7 +1392,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] = {
     val submissionFuture: Future[PerRequestMessage] = withSubmissionParameters(workspaceName, submissionRequest) {
-      (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs]) =>
+      (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode]) =>
 
         val submissionId: String = UUID.randomUUID().toString
 
@@ -1422,7 +1424,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           workflows = workflows ++ workflowFailures,
           status = SubmissionStatuses.Submitted,
           useCallCache = submissionRequest.useCallCache,
-          workflowFailureMode = submissionRequest.workflowFailureMode
+          workflowFailureMode = workflowFailureMode
         )
 
         dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
@@ -1443,7 +1445,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] =
     withSubmissionParameters(workspaceName,submissionRequest) {
-      (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, succeeded: Seq[SubmissionValidationEntityInputs], failed: Seq[SubmissionValidationEntityInputs]) =>
+      (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, succeeded: Seq[SubmissionValidationEntityInputs], failed: Seq[SubmissionValidationEntityInputs], _) =>
         DBIO.successful(RequestComplete(StatusCodes.OK, SubmissionValidationReport(submissionRequest, header, succeeded, failed)))
     }
 
@@ -2109,23 +2111,32 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  /** Validates the workflow failure mode in the submission request. */
+  private def withWorkflowFailureMode(submissionRequest: SubmissionRequest)(op: Option[WorkflowFailureMode] => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    Try(submissionRequest.workflowFailureMode.map(WorkflowFailureModes.withName)) match {
+      case Success(failureMode) => op(failureMode)
+      case Failure(e) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, e)))
+    }
+  }
+
   private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
-   ( op: (DataAccess, SlickWorkspaceContext, String, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs]) => ReadWriteAction[PerRequestMessage]): Future[PerRequestMessage] = {
+   ( op: (DataAccess, SlickWorkspaceContext, String, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs], Option[WorkflowFailureMode]) => ReadWriteAction[PerRequestMessage]): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, dataAccess) { methodConfig =>
-          withMethodInputs(methodConfig, userInfo) { (wdl,methodInputs) =>
+          withMethodInputs(methodConfig, userInfo) { (wdl, methodInputs) =>
             withSubmissionEntityRecs(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntityRecs =>
-
-              //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-              MethodConfigResolver.resolveInputsForEntities(workspaceContext, methodInputs, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
-                valuesByEntity
-                  .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values) })
-                  .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
-                    case(succeeded, failed) =>
+              withWorkflowFailureMode(submissionRequest) { workflowFailureMode =>
+                //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
+                MethodConfigResolver.resolveInputsForEntities(workspaceContext, methodInputs, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
+                  valuesByEntity
+                    .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values) })
+                    .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
+                    case (succeeded, failed) =>
                       val methodConfigInputs = methodInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
                       val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
-                      op(dataAccess, workspaceContext, wdl, header, succeeded.toSeq, failed.toSeq)
+                      op(dataAccess, workspaceContext, wdl, header, succeeded.toSeq, failed.toSeq, workflowFailureMode)
+                  }
                 }
               }
             }
