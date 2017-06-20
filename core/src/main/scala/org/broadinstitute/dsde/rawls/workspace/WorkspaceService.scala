@@ -604,12 +604,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       existingInvites <- getExistingWorkspaceInvites(workspaceName)
       savedPermissions <- updateWorkspaceSharePermissions(actualShareChangesToMake)
       deletedInvites <- deleteWorkspaceInvites(emailsNotFound, existingInvites, workspaceName)
+      workspaceContext <- getWorkspaceContext(workspaceName)
       savedInvites <- if(inviteUsersNotFound) {
         val invites = emailsNotFound diff deletedInvites
 
         // only send invites for those that do not already exist
         val newInviteEmails = invites.map(_.email) diff existingInvites.map((_.email))
-        val inviteNotifications = newInviteEmails.map(em => Notifications.WorkspaceInvitedNotification(RawlsUserEmail(em), userInfo.userSubjectId, workspaceName))
+        val inviteNotifications = newInviteEmails.map(em => Notifications.WorkspaceInvitedNotification(RawlsUserEmail(em), userInfo.userSubjectId, workspaceName, workspaceContext.workspace.bucketName))
         notificationDAO.fireAndForgetNotifications(inviteNotifications)
 
         saveWorkspaceInvites(invites, workspaceName)
