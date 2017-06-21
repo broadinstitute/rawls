@@ -306,7 +306,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     // retrying this call will retry the failures, failures due to already added entries are ok
     loadUser(userRef) flatMap { user =>
       handleFutures(Future.sequence(Seq(
-        toFutureTry(gcsDAO.addUserToProxyGroup(user).recover { case e: HttpResponseException if e.getStatusCode == 409 => Unit }),
+        toFutureTry(gcsDAO.addUserToProxyGroup(user)),
         toFutureTry(userDirectoryDAO.enableUser(user.userSubjectId))
 
       )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors enabling user"))
@@ -359,11 +359,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
 
     val userDirectoryRemoval = for {
-//      _ <- userDirectoryDAO.disableUser(userRef.userSubjectId)   // may not be strictly necessary, but does not hurt
-      _ <- userDirectoryDAO.removeUser(userRef.userSubjectId)
+      _ <- userDirectoryDAO.disableUser(userRef.userSubjectId) recover { case _ => () }   // may not be strictly necessary, but does not hurt
+      _ <- userDirectoryDAO.removeUser(userRef.userSubjectId) recover { case _ => () }
     } yield ()
 
-    val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup).recover { case e: HttpResponseException if e.getStatusCode == 404 => Unit }
+    val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup) recover { case e: HttpResponseException if e.getStatusCode == 404 => Unit }
 
     for {
       _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion, deleteRefreshTokenInternal(userRef)))
