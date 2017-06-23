@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.mock
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus, ExecutionServiceStatus}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
 import org.mockserver.model.{Delay, Header, Parameter, ParameterBody}
@@ -11,7 +12,8 @@ import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse._
 import spray.http.StatusCodes
 import spray.json._
-
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceStatusFormat
+import DefaultJsonProtocol._
 import scala.concurrent.duration.FiniteDuration
 
 /**
@@ -33,7 +35,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
   val defaultWorkflowSubmissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-  def startServer = {
+  def startServer(numWorkflows: Int = 3) = {
 
     // copy method config endpoint
 
@@ -288,38 +290,52 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
-    val submissionBatchPath = "/workflows/v1/batch"
-
     // delay for two seconds when the test asks for it
-    mockServer.when(
-      request()
-        .withMethod("POST")
-        .withPath(submissionBatchPath)
-        .withBody(mockServerContains("two_second_delay"))
-    ).respond(
-      response()
-        .withHeaders(jsonHeader)
-        .withBody(
-          """[
-            {"id": "69d1d92f-3895-4a7b-880a-82535e9a096e", "status": "Submitted"},
-            {"id": "69d1d92f-3895-4a7b-880a-82535e9a096f", "status": "Submitted"},
-            {"status": "error", "message": "stuff happens"}
-            ]""")
-        .withStatusCode(StatusCodes.Created.intValue)
-        .withDelay(new Delay(TimeUnit.SECONDS, 2))
-    )
-
-    mockServer.when(
-      request()
-        .withMethod("POST")
-        .withPath(submissionBatchPath)
-    ).respond(
+    // Don't support this when using a lot of workflows since mockServerContains throws a StackOverflowError
+    // when called with too large a body.
+    if (numWorkflows < 10) {
+      mockServer.when(
+        request()
+          .withMethod("POST")
+          .withPath("/workflows/v1/batch")
+          .withBody(mockServerContains("two_second_delay"))
+      ).respond(
         response()
           .withHeaders(jsonHeader)
           .withBody(
-            """[{"id": "69d1d92f-3895-4a7b-880a-82535e9a096e", "status": "Submitted"},{"id": "69d1d92f-3895-4a7b-880a-82535e9a096f", "status": "Submitted"},{"status": "error", "message": "stuff happens"}]""")
+            """[
+              {"id": "69d1d92f-3895-4a7b-880a-82535e9a096e", "status": "Submitted"},
+              {"id": "69d1d92f-3895-4a7b-880a-82535e9a096f", "status": "Submitted"},
+              {"status": "error", "message": "stuff happens"}
+              ]""")
+          .withStatusCode(StatusCodes.Created.intValue)
+          .withDelay(new Delay(TimeUnit.SECONDS, 2))
+      )
+    }
+
+    mockServer.when(
+      request()
+        .withMethod("POST")
+        .withPath("/workflows/v1/batch")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody {
+            (1 to numWorkflows).map(_ => ExecutionServiceStatus(UUID.randomUUID().toString, "Submitted")).toList.toJson.toString
+          }
           .withStatusCode(StatusCodes.Created.intValue)
       )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/workflows/v1/.*/status")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(ExecutionServiceStatus("id", "Running").toJson.toString)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
 
     mockServer.when(
       request()

@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.scalatest.concurrent.Eventually
 import spray.http.{ContentTypes, HttpEntity, StatusCodes}
 import spray.httpx.SprayJsonSupport
 import spray.json._
@@ -25,7 +26,7 @@ import spray.testkit.ScalatestRouteTest
 import scala.concurrent.duration._
 
 // common trait to be inherited by API service tests
-trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with HttpService with ScalatestRouteTest with SprayJsonSupport with RawlsTestUtils {
+trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with HttpService with ScalatestRouteTest with SprayJsonSupport with RawlsTestUtils with Eventually {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
@@ -36,7 +37,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    mockServer.startServer
+    mockServer.startServer(20000)
   }
 
   override def afterAll(): Unit = {
@@ -87,7 +88,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
-      slickDataSource
+      slickDataSource,
+      5 seconds
     ).withDispatcher("submission-monitor-dispatcher"))
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(

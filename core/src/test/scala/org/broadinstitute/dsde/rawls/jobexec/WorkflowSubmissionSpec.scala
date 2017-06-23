@@ -20,6 +20,7 @@ import spray.json._
 import DefaultJsonProtocol._
 
 import scala.concurrent.Await
+import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration._
 import scala.util.matching.Regex
@@ -69,7 +70,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   override def beforeAll(): Unit = {
     super.beforeAll()
     Await.result( mockGoogleServicesDAO.storeToken(userInfo, UUID.randomUUID.toString), Duration.Inf )
-    mockServer.startServer
+    mockServer.startServer()
   }
 
   override def afterAll(): Unit = {
@@ -392,4 +393,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       VerificationTimes.once()
     )
   }
+
+  it should "not submit workflows whose submission is aborted"
 }
