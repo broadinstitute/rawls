@@ -894,36 +894,6 @@ paths:
             - email
             - profile
   '/api/admin/user/{userSubjectId}':
-       delete:
-         responses:
-           '204':
-             description: Successful Request
-           '400':
-             description: Cannot delete user with submissions
-           '403':
-             description: Only administrators can delete users
-           '500':
-             description: Rawls Internal Error
-             schema:
-               $ref: '#/definitions/ErrorReport'
-         description: "Deletes a user in the Rawls system.  This endpoint should only be used with test users who will never have submissions."
-         tags:
-           - admin
-           - users
-         summary: Delete user
-         operationId: delete
-         parameters:
-          - in: path
-            description: subject id of user
-            name: userSubjectId
-            required: true
-            type: string
-         security:
-           - authorization:
-              - openid
-              - email
-              - profile
-  '/api/admin/user/{userSubjectId}':
      get:
        responses:
          '200':
@@ -942,6 +912,35 @@ paths:
          - users
        summary: Get status of user
        operationId: adminStatus
+       parameters:
+        - in: path
+          description: subject id of user
+          name: userSubjectId
+          required: true
+          type: string
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+     delete:
+       responses:
+         '204':
+           description: Successful Request
+         '400':
+           description: Cannot delete user with submissions
+         '403':
+           description: Only administrators can delete users
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "Deletes a user in the Rawls system.  This endpoint should only be used with test users who will never have submissions."
+       tags:
+         - admin
+         - users
+       summary: Delete user
+       operationId: delete
        parameters:
         - in: path
           description: subject id of user
