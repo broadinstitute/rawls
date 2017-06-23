@@ -106,9 +106,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     fail("Unable to create and monitor submissions")
   }
 
-  private def abortSubmission(services: TestApiService, wsName: WorkspaceName, submissionId: String): Unit = {
+  private def abortSubmission(services: TestApiService, wsName: WorkspaceName, submissionId: String, validate: Boolean = true): Unit = {
     import driver.api._
-    implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
+    implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(30, Seconds)))
 
     // Abort the submission
     Delete(s"${wsName.path}/submissions/${submissionId}") ~>
@@ -125,12 +125,14 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
 
     // The workflow and submission should be aborted once the SubmissionMonitor runs
-    eventually {
-      val workflowStatuses = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(submissionId))).map(_.status).toSet
-      workflowStatuses should contain (WorkflowStatuses.Aborted.toString)
-
-      assertResult(SubmissionStatuses.Aborted.toString) {
-        runAndWait(submissionQuery.findById(UUID.fromString(submissionId)).result.head).status
+    if (validate) {
+      eventually {
+        assertResult(Set(SubmissionStatuses.Aborted.toString)) {
+          runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(submissionId))).map(_.status).toSet
+        }
+        assertResult(SubmissionStatuses.Aborted.toString) {
+          runAndWait(submissionQuery.findById(UUID.fromString(submissionId)).result.head).status
+        }
       }
     }
   }
@@ -243,7 +245,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         submission.workflows.size
       }
 
-      abortSubmission(services, wsName, submission.submissionId)
+      abortSubmission(services, wsName, submission.submissionId, false)
     }
   }
 
