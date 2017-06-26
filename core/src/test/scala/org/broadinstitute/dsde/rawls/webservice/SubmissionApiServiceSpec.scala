@@ -50,6 +50,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource) { services =>
         try {
+          // Simulate a large submission in the mock Cromwell server by making it return
+          // 10000 workflows for submission requests.
           mockServer.reset
           mockServer.startServer(10000)
           testCode(services)

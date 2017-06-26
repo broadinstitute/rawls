@@ -301,9 +301,9 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     )
 
     // delay for two seconds when the test asks for it
-    // Don't support this when using a lot of workflows since mockServerContains throws a StackOverflowError
-    // when called with too large a body.
-    if (numWorkflows < 10) {
+    // Don't support this when using a lot of workflows since the regex in mockServerContains
+    // throws a StackOverflowError when called with too large a body.
+    if (numWorkflows < 20) {
       mockServer.when(
         request()
           .withMethod("POST")
