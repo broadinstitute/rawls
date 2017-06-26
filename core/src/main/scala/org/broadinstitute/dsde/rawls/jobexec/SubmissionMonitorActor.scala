@@ -110,7 +110,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
     def abortQueuedWorkflows(submissionId: UUID) = {
       datasource.inTransaction { dataAccess =>
-        dataAccess.workflowQuery.batchUpdateWorkflowsOfStatus(submissionId, WorkflowStatuses.Queued, WorkflowStatuses.Aborted)
+        // Update workflows in batches of 10 to limit database deadlocks between
+        // this actor and WorkflowSubmissionActor. See GAWB-2243.
+        dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(submissionId, WorkflowStatuses.Queued).flatMap { workflows =>
+          val grouped = workflows.grouped(10).map { wfs =>
+            dataAccess.workflowQuery.batchUpdateStatus(wfs, WorkflowStatuses.Aborted)
+          }.toSeq
+          DBIO.fold(grouped, 0)(_ + _)
+        }
       }
     }
 

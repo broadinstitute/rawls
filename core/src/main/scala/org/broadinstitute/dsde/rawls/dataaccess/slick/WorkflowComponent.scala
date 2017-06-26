@@ -424,14 +424,18 @@ trait WorkflowComponent {
 
     def findQueuedWorkflows(excludedSubmitters: Seq[String]): WorkflowQueryType = {
       val queuedWorkflows = filter(_.status === WorkflowStatuses.Queued.toString)
-      val query = if (excludedSubmitters.isEmpty) {
-        queuedWorkflows
-      } else {
+      val filteredSubmissions = (
+        if (excludedSubmitters.nonEmpty) {
+          submissionQuery.filterNot(_.submitterId.inSetBind(excludedSubmitters))
+        } else submissionQuery
+      ).filterNot(_.status === "Aborting")
+
+      val query =
         for {
           workflows <- queuedWorkflows
-          submission <- submissionQuery if workflows.submissionId === submission.id && (!submission.submitterId.inSetBind(excludedSubmitters))
+          submission <- filteredSubmissions if submission.id === workflows.submissionId
         } yield workflows
-      }
+
       query.sortBy(_.id)
     }
 

@@ -3,11 +3,10 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{SubmissionRecord, WorkflowAuditStatusRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowAuditStatusRecord
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ExecutionServiceVersionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat}
-import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -17,8 +16,8 @@ import spray.http._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 /**
  * Created by dvoet on 4/24/15.
@@ -203,6 +202,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "create and abort a large submission" in withTestDataApiServices { services =>
+    mockServer.stubSubmissionBatch(10000)
+
     val wsName = testData.wsLargeSubmission
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
@@ -210,7 +211,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     // create a submission
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.largeSset, Option("this.hasSamples"), services)
 
-    assertResult(20000) {
+    assertResult(10000) {
       submission.workflows.size
     }
 
@@ -218,6 +219,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not deadlock when aborting a large submission" in withTestDataApiServices { services =>
+    mockServer.stubSubmissionBatch(10000)
+
     // Start workflow submission actor
     system.actorOf(WorkflowSubmissionActor.props(
       slickDataSource,
@@ -232,16 +235,15 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       100000,
       None))
 
-
     val wsName = testData.wsLargeSubmission
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
 
-    (1 to 100).map { i =>
-       println(s"iteration $i")
+    (1 to 30).map { i =>
+      logger.info(s"deadlock test: iteration $i")
       val submission = createAndMonitorSubmission(wsName, methodConf, testData.largeSset, Option("this.hasSamples"), services)
 
-      assertResult(20000) {
+      assertResult(10000) {
         submission.workflows.size
       }
 

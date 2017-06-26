@@ -357,7 +357,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Map(AttributeName.withDefaultNS("samples") -> AttributeValueEmptyList ))
 
     val (lotsOfSamples, largeSset) = {
-      val total = 20000
+      val total = 10000
       val entities = (1 to total).map(n => Entity(s"lotsOfSamples$n", s"Sample", Map.empty)).toSeq
       val sset = Entity("largeSset", "SampleSet", Map(AttributeName.withDefaultNS("hasSamples") -> AttributeEntityReferenceList(entities.map(_.toReference))))
       (entities, sset)
