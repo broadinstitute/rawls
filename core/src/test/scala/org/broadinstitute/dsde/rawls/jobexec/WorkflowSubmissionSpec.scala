@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, Work
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
@@ -195,8 +196,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
       }
 
-      import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
-      import spray.json._ // implicit format make convertTo work below
       val token = Await.result(workflowSubmission.googleServicesDAO.getToken(testData.submission1.submitter), Duration.Inf).get
       assertResult(
         Some(
