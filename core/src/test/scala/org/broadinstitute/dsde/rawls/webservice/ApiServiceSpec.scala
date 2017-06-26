@@ -38,7 +38,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    mockServer.startServer
+    mockServer.startServer()
   }
 
   override def afterAll(): Unit = {

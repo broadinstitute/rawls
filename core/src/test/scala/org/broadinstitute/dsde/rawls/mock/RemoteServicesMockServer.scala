@@ -35,9 +35,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
   val defaultWorkflowSubmissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-  def startServer = {
-    stubSubmissionBatch()
-
+  def startServer(numWorkflows: Int = 3) = {
     // copy method config endpoint
 
     val copyMethodConfigPath = "/configurations"
@@ -302,6 +300,42 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
+    // delay for two seconds when the test asks for it
+    // Don't support this when using a lot of workflows since mockServerContains throws a StackOverflowError
+    // when called with too large a body.
+    if (numWorkflows < 10) {
+      mockServer.when(
+        request()
+          .withMethod("POST")
+          .withPath("/workflows/v1/batch")
+          .withBody(mockServerContains("two_second_delay"))
+      ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """[
+              {"id": "69d1d92f-3895-4a7b-880a-82535e9a096e", "status": "Submitted"},
+              {"id": "69d1d92f-3895-4a7b-880a-82535e9a096f", "status": "Submitted"},
+              {"status": "error", "message": "stuff happens"}
+              ]""")
+          .withStatusCode(StatusCodes.Created.intValue)
+          .withDelay(new Delay(TimeUnit.SECONDS, 2))
+      )
+    }
+
+    mockServer.when(
+      request()
+        .withMethod("POST")
+        .withPath("/workflows/v1/batch")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody {
+          (1 to numWorkflows).map(_ => ExecutionServiceStatus(UUID.randomUUID().toString, "Submitted")).toList.toJson.toString
+        }
+        .withStatusCode(StatusCodes.Created.intValue)
+    )
+
     mockServer.when(
       request()
         .withMethod("POST")
@@ -541,76 +575,40 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
             """.stripMargin)
           .withStatusCode(StatusCodes.Created.intValue)
       )
-  }
-
-  mockServer.when(
-    request()
-      .withMethod("GET")
-      .withPath("/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/outputs")
-  ).respond(
-    response()
-      .withHeaders(jsonHeader)
-      .withStatusCode(StatusCodes.BadRequest.intValue)
-  )
-
-  mockServer.when(
-    request()
-      .withMethod("GET")
-      .withPath("/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/metadata")
-  ).respond(
-    response()
-      .withHeaders(jsonHeader)
-      .withStatusCode(StatusCodes.BadRequest.intValue)
-  )
-
-  mockServer.when(
-    request()
-      .withMethod("GET")
-      .withPath("/engine/v1/version")
-  ).respond(
-    response()
-      .withHeaders(jsonHeader)
-      .withStatusCode(StatusCodes.OK.intValue)
-      .withBody("""{"cromwell":"25"}""")
-  )
-
-  def stopServer = mockServer.stop()
-
-  def stubSubmissionBatch(numWorkflows: Int = 3) = {
-    // delay for two seconds when the test asks for it
-    // Don't support this when using a lot of workflows since mockServerContains throws a StackOverflowError
-    // when called with too large a body.
-    if (numWorkflows < 10) {
-      mockServer.when(
-        request()
-          .withMethod("POST")
-          .withPath("/workflows/v1/batch")
-          .withBody(mockServerContains("two_second_delay"))
-      ).respond(
-        response()
-          .withHeaders(jsonHeader)
-          .withBody(
-            """[
-              {"id": "69d1d92f-3895-4a7b-880a-82535e9a096e", "status": "Submitted"},
-              {"id": "69d1d92f-3895-4a7b-880a-82535e9a096f", "status": "Submitted"},
-              {"status": "error", "message": "stuff happens"}
-              ]""")
-          .withStatusCode(StatusCodes.Created.intValue)
-          .withDelay(new Delay(TimeUnit.SECONDS, 2))
-      )
-    }
 
     mockServer.when(
       request()
-        .withMethod("POST")
-        .withPath("/workflows/v1/batch")
+        .withMethod("GET")
+        .withPath("/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/outputs")
     ).respond(
       response()
         .withHeaders(jsonHeader)
-        .withBody {
-          (1 to numWorkflows).map(_ => ExecutionServiceStatus(UUID.randomUUID().toString, "Submitted")).toList.toJson.toString
-        }
-        .withStatusCode(StatusCodes.Created.intValue)
+        .withStatusCode(StatusCodes.BadRequest.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/metadata")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withStatusCode(StatusCodes.BadRequest.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/engine/v1/version")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withStatusCode(StatusCodes.OK.intValue)
+        .withBody("""{"cromwell":"25"}""")
     )
   }
+
+  def stopServer = mockServer.stop()
+
+  def reset = mockServer.reset()
 }

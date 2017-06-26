@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
+import akka.actor.{ActorRef, PoisonPill}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowAuditStatusRecord
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -42,6 +43,42 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   def withTestDataApiServices[T](testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
+    }
+  }
+
+  def withLargeSubmissionApiServices[T](testCode: TestApiService => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource) { services =>
+        try {
+          mockServer.reset
+          mockServer.startServer(10000)
+          testCode(services)
+        } finally {
+          mockServer.reset
+          mockServer.startServer()
+        }
+      }
+    }
+  }
+
+  def withWorkflowSubmissionActor[T](services: TestApiService)(testCode: ActorRef => T): T = {
+    val actor = system.actorOf(WorkflowSubmissionActor.props(
+      slickDataSource,
+      services.methodRepoDAO,
+      services.gcsDAO,
+      MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource),
+      10,
+      services.gcsDAO.getPreparedMockGoogleCredential(),
+      50 milliseconds,
+      100 milliseconds,
+      100000,
+      100000,
+      None))
+
+    try {
+      testCode(actor)
+    } finally {
+      actor ! PoisonPill
     }
   }
 
@@ -201,9 +238,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     abortSubmission(services, wsName, submission.submissionId)
   }
 
-  it should "create and abort a large submission" in withTestDataApiServices { services =>
-    mockServer.stubSubmissionBatch(10000)
-
+  it should "create and abort a large submission" in withLargeSubmissionApiServices { services =>
     val wsName = testData.wsLargeSubmission
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
@@ -218,36 +253,23 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     abortSubmission(services, wsName, submission.submissionId)
   }
 
-  it should "not deadlock when aborting a large submission" in withTestDataApiServices { services =>
-    mockServer.stubSubmissionBatch(10000)
+  it should "not deadlock when aborting a large submission" in withLargeSubmissionApiServices { services =>
+    withWorkflowSubmissionActor(services) { _ =>
+      val wsName = testData.wsLargeSubmission
+      val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+      val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+      val numIterations = 20
 
-    // Start workflow submission actor
-    system.actorOf(WorkflowSubmissionActor.props(
-      slickDataSource,
-      services.methodRepoDAO,
-      services.gcsDAO,
-      MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource),
-      10,
-      services.gcsDAO.getPreparedMockGoogleCredential(),
-      50 milliseconds,
-      100 milliseconds,
-      100000,
-      100000,
-      None))
+      (1 to numIterations).map { i =>
+        logger.info(s"deadlock test: iteration $i/$numIterations")
+        val submission = createAndMonitorSubmission(wsName, methodConf, testData.largeSset, Option("this.hasSamples"), services)
 
-    val wsName = testData.wsLargeSubmission
-    val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+        assertResult(10000) {
+          submission.workflows.size
+        }
 
-    (1 to 30).map { i =>
-      logger.info(s"deadlock test: iteration $i")
-      val submission = createAndMonitorSubmission(wsName, methodConf, testData.largeSset, Option("this.hasSamples"), services)
-
-      assertResult(10000) {
-        submission.workflows.size
+        abortSubmission(services, wsName, submission.submissionId, false)
       }
-
-      abortSubmission(services, wsName, submission.submissionId, false)
     }
   }
 
