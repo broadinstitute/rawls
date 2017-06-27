@@ -57,7 +57,7 @@ class NotificationSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
       }
 
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceInvitedNotification(RawlsUserEmail("obama@whitehouse.gov"), userInfo.userSubjectId, testData.workspace.toWorkspaceName)).compactPrint}"), 10 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceInvitedNotification(RawlsUserEmail("obama@whitehouse.gov"), userInfo.userSubjectId, testData.workspace.toWorkspaceName, testData.workspace.bucketName)).compactPrint}"), 10 seconds)
   }
 
   it should "be sent for add and remove from workspace" in withTestDataApiServices { services =>
