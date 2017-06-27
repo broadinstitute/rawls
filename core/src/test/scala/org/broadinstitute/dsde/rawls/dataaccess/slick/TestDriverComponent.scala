@@ -971,7 +971,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     } catch {
       case t: Throwable => t.printStackTrace; throw t
     } finally {
-      runAndWait(DBIO.seq(slickDataSource.dataAccess.truncateAll))
+      runAndWait(DBIO.seq(slickDataSource.dataAccess.truncateAll), 2 minutes)
     }
   }
 
