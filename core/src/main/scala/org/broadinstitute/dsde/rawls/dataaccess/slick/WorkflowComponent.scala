@@ -430,16 +430,17 @@ trait WorkflowComponent {
       val query = if (excludedSubmitters.isEmpty && excludedSubmissionStatuses.isEmpty) {
         queuedWorkflows
       } else {
-        val filteredSubmissions = if (excludedSubmitters.isEmpty) {
-          submissionQuery.filterNot(_.status.inSetBind(excludedSubmissionStatuses.map(_.toString)))
-        } else if (excludedSubmissionStatuses.isEmpty) {
+        val excludedSubmittersQuery = if (excludedSubmitters.nonEmpty) {
           submissionQuery.filterNot(_.submitterId.inSetBind(excludedSubmitters))
-        } else {
-          submissionQuery.filterNot(_.submitterId.inSetBind(excludedSubmitters)).filterNot(_.status.inSetBind(excludedSubmissionStatuses.map(_.toString)))
-        }
+        } else submissionQuery
+
+        val filteredSubmissionsQuery = if (excludedSubmissionStatuses.nonEmpty) {
+          excludedSubmittersQuery.filterNot(_.status.inSetBind(excludedSubmissionStatuses.map(_.toString)))
+        } else excludedSubmittersQuery
+
         for {
           workflows <- queuedWorkflows
-          submission <- filteredSubmissions if submission.id === workflows.submissionId
+          submission <- filteredSubmissionsQuery if submission.id === workflows.submissionId
         } yield workflows
       }
 

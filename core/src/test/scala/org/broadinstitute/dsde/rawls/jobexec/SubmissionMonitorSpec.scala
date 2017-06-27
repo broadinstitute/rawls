@@ -457,7 +457,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       dataSource,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
-      1 millisecond
+      1 millisecond,
+      10
     ))
   }
 
@@ -468,7 +469,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       dataSource,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
-      1 minutes
+      1 minutes,
+      10
     )
   }
 
@@ -506,4 +508,5 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val datasource: SlickDataSource,
                             val executionServiceCluster: ExecutionServiceCluster,
                             val credential: Credential,
-                            val submissionPollInterval: Duration) extends SubmissionMonitor
+                            val submissionPollInterval: Duration,
+                            val workflowAbortBatchSize: Int) extends SubmissionMonitor
