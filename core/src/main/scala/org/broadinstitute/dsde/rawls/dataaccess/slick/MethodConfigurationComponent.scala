@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 
-import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -91,7 +90,7 @@ trait MethodConfigurationComponent {
   protected val methodConfigurationOutputQuery = TableQuery[MethodConfigurationOutputTable]
   protected val methodConfigurationPrereqQuery = TableQuery[MethodConfigurationPrereqTable]
 
-  object methodConfigurationQuery extends TableQuery(new MethodConfigurationTable(_)) with LazyLogging {
+  object methodConfigurationQuery extends TableQuery(new MethodConfigurationTable(_)) {
 
     private type MethodConfigurationQueryType = driver.api.Query[MethodConfigurationTable, MethodConfigurationRecord, Seq]
     private type MethodConfigurationInputQueryType = driver.api.Query[MethodConfigurationInputTable, MethodConfigurationInputRecord, Seq]
@@ -112,9 +111,7 @@ trait MethodConfigurationComponent {
         case None =>
           val configInsert = (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) +=  marshalMethodConfig(workspaceContext.workspaceId, newMethodConfig))
           configInsert flatMap { configId =>
-            {logger.info("create CONFIG ID:   " + configId.toString)
-              logger.info("create NEW METHOD CONFIG:  " + newMethodConfig.toString)
-              saveMaps(newMethodConfig, configId)}
+            saveMaps(newMethodConfig, configId)
           }
         case Some(currentMethodConfigRec) =>
          save(workspaceContext, currentMethodConfigRec, newMethodConfig)
@@ -139,10 +136,8 @@ trait MethodConfigurationComponent {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
         hideMethodConfigurationAction(currentMethodConfigRec.id, currentMethodConfigRec.name) andThen
         (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfig(workspaceContext.workspaceId,
-          newMethodConfig.copy(methodConfigVersion=currentMethodConfigRec.methodConfigVersion + 1))) flatMap { configId =>
-       { logger.info("CONFIG ID:   " + configId.toString)
-         logger.info("NEW METHOD CONFIG:  " + newMethodConfig.toString)
-         saveMaps(newMethodConfig, configId)}
+          newMethodConfig.copy(methodConfigVersion=currentMethodConfigRec.methodConfigVersion + 1))) flatMap { configId => {
+        saveMaps(newMethodConfig, configId)}
       }
     }
 
