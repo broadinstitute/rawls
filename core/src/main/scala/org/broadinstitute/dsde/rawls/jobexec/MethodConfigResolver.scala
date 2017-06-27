@@ -1,21 +1,20 @@
 package org.broadinstitute.dsde.rawls.jobexec
-
+import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
-import org.broadinstitute.dsde.rawls.model._
 import spray.json._
-
-import scala.util.{Failure, Success, Try}
-import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
-
-import wdl4s.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
-import wdl4s.types.WdlArrayType
 import wdl4s.parser.WdlParser.SyntaxError
+import wdl4s.types.WdlArrayType
+import wdl4s.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
 
-object MethodConfigResolver {
+import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success, Try}
+
+object MethodConfigResolver extends LazyLogging {
   val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
   val multipleResultError  = "Expected single value for workflow input, but evaluated result set had multiple values"
   val missingMandatoryValueError  = "Mandatory workflow input is not specified in method config"
@@ -53,8 +52,18 @@ object MethodConfigResolver {
   case class MethodInput(workflowInput: WorkflowInput, expression: String)
 
   def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[Seq[MethodInput]] = parseWDL(wdl) map { workflow =>
+
+    def emptyAttribute(fqn: FullyQualifiedName): Boolean = {
+      methodConfig.inputs.get(fqn) match {
+          // The reason this is specifically an AttributeString rather than any other kind of attribute is because
+          //   MethodConfiguration also only uses AttributeString. Unsure if that's okay?
+        case Some(AttributeString(value)) => value == null || value.isEmpty
+        case _ => true
+      }
+    }
+
     val agoraInputs = workflow.inputs
-    val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => !methodConfig.inputs.contains(fqn) && !workflowInput.optional }.keys
+    val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => (!methodConfig.inputs.contains(fqn) || emptyAttribute(fqn)) && !workflowInput.optional }.keys
     val extraInputs = methodConfig.inputs.filter { case (name, expression) => !agoraInputs.contains(name) }.keys
     if (missingInputs.nonEmpty || extraInputs.nonEmpty) {
       val message =
