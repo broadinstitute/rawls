@@ -255,13 +255,15 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     abortSubmission(services, wsName, submission.submissionId)
   }
 
-  // Ignored as this test is prone to intermittent timeout-related failures.
   // To test for deadlocks one should run this test, log in to MySQL, run:
   //
   // mysql> show engine innodb status;
   //
   // and look for a section called "LAST DETECTED DEADLOCK".
-  it should "not deadlock when aborting a large submission" ignore withLargeSubmissionApiServices { services =>
+  it should "not deadlock when aborting a large submission" in withLargeSubmissionApiServices { services =>
+    // increase the timeout slightly for this test to prevent intermittent failures due to timeouts
+    implicit val routeTestTimeout = RouteTestTimeout(15.seconds)
+
     withWorkflowSubmissionActor(services) { _ =>
       val wsName = testData.wsLargeSubmission
       val mcName = MethodConfigurationName("no_input", "dsde", wsName)

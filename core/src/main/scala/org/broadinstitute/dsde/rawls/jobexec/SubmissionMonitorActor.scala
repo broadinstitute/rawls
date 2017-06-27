@@ -26,9 +26,8 @@ object SubmissionMonitorActor {
             datasource: SlickDataSource,
             executionServiceCluster: ExecutionServiceCluster,
             credential: Credential,
-            submissionPollInterval: FiniteDuration,
-            workflowAbortBatchSize: Int): Props = {
-    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, workflowAbortBatchSize))
+            submissionPollInterval: FiniteDuration): Props = {
+    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -61,8 +60,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val datasource: SlickDataSource,
                              val executionServiceCluster: ExecutionServiceCluster,
                              val credential: Credential,
-                             val submissionPollInterval: FiniteDuration,
-                             val workflowAbortBatchSize: Int) extends Actor with SubmissionMonitor with LazyLogging {
+                             val submissionPollInterval: FiniteDuration) extends Actor with SubmissionMonitor with LazyLogging {
 
   import context._
 
@@ -96,7 +94,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
   val submissionPollInterval: Duration
-  val workflowAbortBatchSize: Int
 
   import datasource.dataAccess.driver.api._
 
@@ -113,14 +110,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
     def abortQueuedWorkflows(submissionId: UUID) = {
       datasource.inTransaction { dataAccess =>
-        // Update workflows in batches to limit database contention between
-        // this actor and WorkflowSubmissionActor. See GAWB-2243.
-        dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(submissionId, WorkflowStatuses.Queued).flatMap { workflows =>
-          val grouped = workflows.grouped(workflowAbortBatchSize).map { wfs =>
-            dataAccess.workflowQuery.batchUpdateStatus(wfs, WorkflowStatuses.Aborted)
-          }.toSeq
-          DBIO.fold(grouped, 0)(_ + _)
-        }
+        dataAccess.workflowQuery.batchUpdateWorkflowsOfStatus(submissionId, WorkflowStatuses.Queued, WorkflowStatuses.Aborted)
       }
     }
 

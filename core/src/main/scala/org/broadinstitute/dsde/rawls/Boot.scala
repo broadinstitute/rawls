@@ -149,8 +149,7 @@ object Boot extends App with LazyLogging {
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
       slickDataSource,
-      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
-      submissionMonitorConfig.getInt("workflowAbortBatchSize")
+      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval"))
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
