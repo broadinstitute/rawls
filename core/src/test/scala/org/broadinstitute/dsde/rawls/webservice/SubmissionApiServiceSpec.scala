@@ -27,6 +27,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
+  // increase the route timeout slightly for this test as the "large submission" tests sometimes
+  // bump up against the default 5 second timeout.
+  implicit override val routeTestTimeout = RouteTestTimeout(30.seconds)
+
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
 
     val gcsDAO = new MockGoogleServicesDAO("test")
@@ -261,9 +265,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   //
   // and look for a section called "LAST DETECTED DEADLOCK".
   it should "not deadlock when aborting a large submission" in withLargeSubmissionApiServices { services =>
-    // increase the timeout slightly for this test to prevent intermittent failures due to timeouts
-    implicit val routeTestTimeout = RouteTestTimeout(15.seconds)
-
     withWorkflowSubmissionActor(services) { _ =>
       val wsName = testData.wsLargeSubmission
       val mcName = MethodConfigurationName("no_input", "dsde", wsName)
