@@ -51,16 +51,12 @@ object MethodConfigResolver {
   case class MethodInput(workflowInput: WorkflowInput, expression: String)
 
   def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[Seq[MethodInput]] = parseWDL(wdl) map { workflow =>
-
     def isAttributeEmpty(fqn: FullyQualifiedName): Boolean = {
       methodConfig.inputs.get(fqn) match {
-          // The reason this is specifically an AttributeString rather than any other kind of attribute is because
-          //   MethodConfiguration also only uses AttributeString. Unsure if that's okay?
-        case Some(AttributeString(value)) => value == null || value.isEmpty
-        case _ => true
+        case Some(AttributeString(value)) => value.isEmpty
+        case _ => throw new AssertionError(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} input ${fqn} value is unavailable")
       }
     }
-
     val agoraInputs = workflow.inputs
     val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => (!methodConfig.inputs.contains(fqn) || isAttributeEmpty(fqn)) && !workflowInput.optional }.keys
     val extraInputs = methodConfig.inputs.filter { case (name, expression) => !agoraInputs.contains(name) }.keys

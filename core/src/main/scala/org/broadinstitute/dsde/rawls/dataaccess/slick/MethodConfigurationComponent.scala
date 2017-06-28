@@ -136,9 +136,9 @@ trait MethodConfigurationComponent {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
         hideMethodConfigurationAction(currentMethodConfigRec.id, currentMethodConfigRec.name) andThen
         (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfig(workspaceContext.workspaceId,
-          newMethodConfig.copy(methodConfigVersion=currentMethodConfigRec.methodConfigVersion + 1))) flatMap { configId => {
-        saveMaps(newMethodConfig, configId)}
-      }
+          newMethodConfig.copy(methodConfigVersion=currentMethodConfigRec.methodConfigVersion + 1))) flatMap { configId =>
+            saveMaps(newMethodConfig, configId)
+          }
     }
 
 
