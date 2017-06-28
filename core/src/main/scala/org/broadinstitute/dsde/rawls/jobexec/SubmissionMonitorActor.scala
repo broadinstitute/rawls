@@ -6,16 +6,25 @@ import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
+import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
+
+import scala.concurrent.{ExecutionContext, Future}
+import akka.pattern._
+import java.util.UUID
 
 import nl.grons.metrics.scala.{Counter, MetricName}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -132,9 +141,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     def abortQueuedWorkflows(submissionId: UUID) = {
       datasource.inTransaction { dataAccess =>
-        dataAccess.workflowQuery.batchUpdateWorkflowsOfStatus(submissionId, WorkflowStatuses.Queued, WorkflowStatuses.Aborted)
-      }.andThen { case _ =>
-        workflowStatusCounter(WorkflowStatuses.Aborted) += 1
+        dataAccess.workflowQuery.batchUpdateWorkflowsOfStatus(submissionId, WorkflowStatuses.Queued, WorkflowStatuses.Aborted).map { n =>
+          workflowStatusCounter(WorkflowStatuses.Aborted) += n
+          n
+        }
       }
     }
 
@@ -237,10 +247,13 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       // to minimize database updates do 1 update per status
       DBIO.seq(updatedRecs.groupBy(_.status).map { case (status, recs) =>
         val workflowStatus = WorkflowStatuses.withName(status)
-        dataAccess.workflowQuery.batchUpdateStatus(recs, workflowStatus).map(n => workflowStatusCounter(workflowStatus) += n)
+        dataAccess.workflowQuery.batchUpdateStatus(recs, workflowStatus).map { n =>
+          workflowStatusCounter(workflowStatus) += n
+          n
+        }
       }.toSeq: _*) andThen
         DBIO.successful(workflowsWithOutputs)
-      }
+    }
 
     //Then in a new transaction, update the submission status.
     //If this transaction throws an exception, it'll roll back, but the workflows will still be in their terminal state.
@@ -278,7 +291,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           }
         } flatMap { newStatus =>
           logger.debug(s"submission $submissionId terminating to status $newStatus")
-          dataAccess.submissionQuery.updateStatus(submissionId, newStatus).map(n => submissionStatusCounter(newStatus) += n)
+          dataAccess.submissionQuery.updateStatus(submissionId, newStatus).map { n =>
+            submissionStatusCounter(newStatus) += n
+            n
+          }
         } map(_ => true)
       } else {
         DBIO.successful(false)
@@ -375,7 +391,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess)(implicit executionContext: ExecutionContext) = {
     DBIO.sequence(errors.map { case (workflowRecord, errorMessages) =>
-      dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed).map(n => workflowStatusCounter(WorkflowStatuses.Failed) += n) andThen
+      dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed).map { n =>
+        workflowStatusCounter(WorkflowStatuses.Failed) += n
+        n
+      } andThen
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })
   }

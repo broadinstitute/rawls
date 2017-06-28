@@ -27,7 +27,9 @@ case class WorkspaceRecord(
   isLocked: Boolean,
   realmGroupName: Option[String],
   recordVersion: Long
-)
+) {
+  def workspaceName: WorkspaceName = WorkspaceName(namespace, name)
+}
 
 case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLevel: String, isRealmAcl: Boolean)
 
