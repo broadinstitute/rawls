@@ -11,7 +11,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
-import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
 import spray.json._
 import spray.json.DefaultJsonProtocol._
@@ -114,7 +113,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
 
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
-    def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
+    def requireUserInfo(): Directive1[UserInfo] = {
       provide(UserInfo(RawlsUserEmail(user), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(user)))
     }
   }

@@ -1,17 +1,14 @@
 package org.broadinstitute.dsde.rawls.openam
 
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo}
-import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import spray.http.OAuth2BearerToken
 import spray.routing.Directive1
 import spray.routing.Directives._
 
-import scala.concurrent.ExecutionContext
-
 trait MockUserInfoDirectives extends UserInfoDirectives {
   protected def userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))
 
-  def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
+  def requireUserInfo(): Directive1[UserInfo] = {
     provide(userInfo)
   }
 }
