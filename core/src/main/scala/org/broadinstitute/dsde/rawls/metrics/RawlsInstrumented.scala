@@ -3,16 +3,18 @@ package org.broadinstitute.dsde.rawls.metrics
 import java.util.UUID
 
 import nl.grons.metrics.scala._
+import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses, WorkspaceName}
 
 /**
   * Created by rtitle on 6/15/17.
   */
 trait RawlsInstrumented extends DefaultInstrumented {
-  final val Workspace = "workspace"
-  final val Submission = "submission"
-  final val SubmissionStatus = "submissionStatus"
-  final val WorkflowStatus = "workflowStatus"
+  final val WorkspaceMetric = "workspace"
+  final val SubmissionMetric = "submission"
+  final val SubmissionStatusMetric = "submissionStatus"
+  final val WorkflowStatusMetric = "workflowStatus"
 
   val rawlsMetricBaseName: String
 
@@ -28,10 +30,9 @@ trait RawlsInstrumented extends DefaultInstrumented {
 
   implicit object UUIDExpansion extends Expansion[UUID]
 
-  implicit object WorkflowStatusExpansion extends Expansion[WorkflowStatuses.WorkflowStatus]
+  implicit def WorkflowStatusExpansion[A <: WorkflowStatus] = new Expansion[A] {}
 
-  implicit object SubmissionStatusExpansion extends Expansion[SubmissionStatuses.SubmissionStatus]
-
+  implicit def SubmissionStatusExpansion[A <: SubmissionStatus] = new Expansion[A] {}
 
   protected class ExpandedMetricBuilder[A] private (m: String = "") {
     def expand[A: Expansion](key: String, a: A) = {

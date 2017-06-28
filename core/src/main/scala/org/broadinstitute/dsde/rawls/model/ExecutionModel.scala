@@ -343,6 +343,7 @@ class ExecutionJsonSupport extends JsonSupport {
 }
 
 object WorkflowStatuses {
+  val allStatuses = Seq(Queued, Launching, Submitted, Running, Failed, Succeeded, Aborting, Aborted, Unknown)
   val queuedStatuses: Seq[WorkflowStatus] = Seq(Queued, Launching)
   val runningStatuses: Seq[WorkflowStatus] = Seq(Submitted, Running, Aborting)
   val terminalStatuses: Seq[WorkflowStatus] = Seq(Failed, Succeeded, Aborted, Unknown)

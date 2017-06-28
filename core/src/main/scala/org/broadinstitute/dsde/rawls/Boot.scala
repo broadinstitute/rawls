@@ -196,7 +196,8 @@ object Boot extends App with LazyLogging {
         util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
-        Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption
+        Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
+        rawlsMetricBaseName = "firecloud"
       ))
     }
 
@@ -231,7 +232,8 @@ object Boot extends App with LazyLogging {
         userServiceConstructor,
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser),
+        maxActiveWorkflowsPerUser,
+        rawlsMetricBaseName = "firecloud"),
       userServiceConstructor,
       genomicsServiceConstructor,
       statisticsServiceConstructor,

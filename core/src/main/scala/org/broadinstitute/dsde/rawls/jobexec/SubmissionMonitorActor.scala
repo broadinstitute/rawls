@@ -6,7 +6,7 @@ import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import nl.grons.metrics.scala.Counter
+import nl.grons.metrics.scala.{Counter, Gauge}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
@@ -17,8 +17,8 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 
-import scala.concurrent.duration.{Duration, FiniteDuration}
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
 
@@ -114,17 +114,16 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   def workflowStatusCounter(status: WorkflowStatus): Counter =
     ExpandedMetricBuilder
-      .expand(Workspace, workspaceName)
-      .expand(Submission, submissionId)
-      .expand(WorkflowStatus, status)
+      .expand(WorkspaceMetric, workspaceName)
+      .expand(SubmissionMetric, submissionId)
+      .expand(WorkflowStatusMetric, status)
       .asCounter()
 
-  def submissionStatusCounter(status: SubmissionStatus): Counter = {
+  def submissionStatusCounter(status: SubmissionStatus): Counter =
     ExpandedMetricBuilder
-      .expand(Workspace, workspaceName)
-      .expand(SubmissionStatus, status)
+      .expand(WorkspaceMetric, workspaceName)
+      .expand(SubmissionStatusMetric, status)
       .asCounter()
-  }
 
   import datasource.dataAccess.driver.api._
 

@@ -14,9 +14,10 @@ import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionServiceValidationFormat, ExecutionServiceVersionFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat, WorkflowQueueStatusByUserResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionServiceValidationFormat, ExecutionServiceVersionFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
@@ -120,11 +121,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, notificationDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, rawlsMetricBaseName: String)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, notificationDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, rawlsMetricBaseName)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val rawlsMetricBaseName: String)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
   import dataSource.dataAccess.driver.api._
 
   implicit val timeout = Timeout(5 minutes)
@@ -294,7 +295,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         //If a workflow is not done, automatically change its status to Aborted
         _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
-          case wf if !WorkflowStatuses.withName(wf.status).isDone => dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted)
+          case wf if !WorkflowStatuses.withName(wf.status).isDone => dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted).map { n =>
+            ExpandedMetricBuilder
+              .expand(WorkspaceMetric, workspaceName)
+              .expand(SubmissionMetric, wf.submissionId)
+              .expand(WorkflowStatusMetric, WorkflowStatuses.Aborted)
+              .asCounter() += n
+            n
+          }
         }}
 
         //Gather the Google groups to remove, but don't remove project owners group which is used by other workspaces
@@ -1428,7 +1436,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           workflowFailureMode = workflowFailureMode
         )
 
-        dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
+        dataAccess.submissionQuery.create(workspaceContext, submission) map { sub =>
+          ExpandedMetricBuilder
+            .expand(WorkspaceMetric, workspaceName)
+            .expand(SubmissionStatusMetric, SubmissionStatuses.Submitted)
+            .asCounter() += 1
+          ExpandedMetricBuilder
+            .expand(WorkspaceMetric, workspaceName)
+            .expand(SubmissionMetric, UUID.fromString(submissionId))
+            .expand(WorkflowStatusMetric, WorkflowStatuses.Queued)
+            .asCounter() += workflows.size
+          sub
+        } map { _ =>
           RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, successes))
         }
     }
@@ -1473,6 +1492,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def abortSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess): ReadWriteAction[PerRequestMessage] = {
     withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
       dataAccess.submissionQuery.updateStatus(UUID.fromString(submission.submissionId), SubmissionStatuses.Aborting) map { rows =>
+        ExpandedMetricBuilder
+          .expand(WorkspaceMetric, workspaceContext.workspace.toWorkspaceName)
+          .expand(SubmissionStatusMetric, SubmissionStatuses.Aborting)
+          .asCounter() += rows
+        rows
+      } map { rows =>
         if(rows == 1)
           RequestComplete(StatusCodes.NoContent)
         else

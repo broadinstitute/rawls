@@ -105,9 +105,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
   def workflowStatusCounter(workspaceName: WorkspaceName, submissionId: UUID, status: WorkflowStatus): Counter =
     ExpandedMetricBuilder
-      .expand(Workspace, workspaceName)
-      .expand(Submission, submissionId)
-      .expand(WorkflowStatus, status)
+      .expand(WorkspaceMetric, workspaceName)
+      .expand(SubmissionMetric, submissionId)
+      .expand(WorkflowStatusMetric, status)
       .asCounter()
 
   //Get a blob of unlaunched workflows, flip their status, and queue them for submission.
@@ -156,12 +156,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
             // they should also all have the same submission ID
             val submissionId = workflowRecs.head.submissionId
             val filteredWorkflowRecs = workflowRecs.filter(_.submissionId == submissionId)
-            val (submissionRec, workspaceRec) = for {
+            for {
               submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.headOption)
               workspaceRec <- submissionRec.map(sub => dataAccess.workspaceQuery.findByIdQuery(sub.workspaceId).result.map(_.headOption)).getOrElse(DBIO.successful(None))
-            } yield (submissionRec, workspaceRec)
-
-            (filteredWorkflowRecs, submissionRec, workspaceRec)
+            } yield (filteredWorkflowRecs, submissionRec, workspaceRec)
           }
       } yield reservedRecs
     }
