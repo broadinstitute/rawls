@@ -1,19 +1,17 @@
 package org.broadinstitute.dsde.rawls.jobexec
-
+import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
-import org.broadinstitute.dsde.rawls.model._
 import spray.json._
-
-import scala.util.{Failure, Success, Try}
-import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
-
-import wdl4s.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
-import wdl4s.types.WdlArrayType
 import wdl4s.parser.WdlParser.SyntaxError
+import wdl4s.types.WdlArrayType
+import wdl4s.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
+
+import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success, Try}
 
 object MethodConfigResolver {
   val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
@@ -53,8 +51,14 @@ object MethodConfigResolver {
   case class MethodInput(workflowInput: WorkflowInput, expression: String)
 
   def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[Seq[MethodInput]] = parseWDL(wdl) map { workflow =>
+    def isAttributeEmpty(fqn: FullyQualifiedName): Boolean = {
+      methodConfig.inputs.get(fqn) match {
+        case Some(AttributeString(value)) => value.isEmpty
+        case _ => throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} input ${fqn} value is unavailable")
+      }
+    }
     val agoraInputs = workflow.inputs
-    val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => !methodConfig.inputs.contains(fqn) && !workflowInput.optional }.keys
+    val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => (!methodConfig.inputs.contains(fqn) || isAttributeEmpty(fqn)) && !workflowInput.optional }.keys
     val extraInputs = methodConfig.inputs.filter { case (name, expression) => !agoraInputs.contains(name) }.keys
     if (missingInputs.nonEmpty || extraInputs.nonEmpty) {
       val message =
