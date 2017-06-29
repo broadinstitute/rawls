@@ -233,7 +233,7 @@ object Boot extends App with LazyLogging {
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
-        rawlsMetricBaseName = "firecloud"),
+        rawlsMetricBaseName = metricsPrefix),
       userServiceConstructor,
       genomicsServiceConstructor,
       statisticsServiceConstructor,

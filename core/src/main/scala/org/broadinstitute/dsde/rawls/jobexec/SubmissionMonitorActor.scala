@@ -51,6 +51,10 @@ object SubmissionMonitorActor {
   case class ExecutionServiceStatusResponse(statusResponse: Seq[Try[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]]]) extends SubmissionMonitorMessage
   case class StatusCheckComplete(terminateActor: Boolean) extends SubmissionMonitorMessage
 
+  /**
+    * A periodic count of all current workflow statuses for the submission.
+    * This is used for instrumentation.
+    */
   case object CheckCurrentWorkflowStatusCounts extends SubmissionMonitorMessage
   case class SaveCurrentWorkflowStatusCounts(workflowStatusCounts: Map[WorkflowStatus, Int]) extends SubmissionMonitorMessage
 }
@@ -74,8 +78,8 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              override val rawlsMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
   import context._
 
-  // Marked volatile because it is read by a separate statsd thread.
-  // It is only written by the actor.
+  // This field is marked volatile because it is read by a separate statsd thread.
+  // It is only written by this actor.
   @volatile
   private var currentWorkflowStatusCounts: Map[WorkflowStatus, Int] = Map.empty
 
@@ -103,7 +107,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       if (terminateActor) stop(self)
       else scheduleNextMonitorPass
     case CheckCurrentWorkflowStatusCounts =>
-      logger.debug(s"checkout current workflow status counts for submission $submissionId")
+      logger.debug(s"check current workflow status counts for submission $submissionId")
       checkCurrentWorkflowStatusCounts pipeTo self
     case SaveCurrentWorkflowStatusCounts(statusCounts) =>
       logger.debug(s"saving current workflow status counts for submission $submissionId")
@@ -428,14 +432,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   def checkCurrentWorkflowStatusCounts(implicit executionContext: ExecutionContext): Future[SaveCurrentWorkflowStatusCounts] = {
     datasource.inTransaction { dataAccess =>
-      dataAccess.workflowQuery.countWorkflowsForSubmissionByQueueStatus(submissionId)
-    }.map { workflowStatusCounts =>
-      SaveCurrentWorkflowStatusCounts(workflowStatusCounts.map { case (k, v) => WorkflowStatuses.withName(k) -> v })
+      dataAccess.workflowQuery.countWorkflowsForSubmissionByQueueStatus(submissionId).map { workflowStatusCounts =>
+        workflowStatusCounts.map { case (k, v) => WorkflowStatuses.withName(k) -> v }
+      }
     }.recover { case NonFatal(e) =>
       // Recover on errors since this just affects metrics and we don't want it to blow up the whole actor if it fails
       logger.error("Error occurred checking current workflow status counts", e)
-      SaveCurrentWorkflowStatusCounts(Map.empty)
-    }
+      Map.empty
+    }.map(SaveCurrentWorkflowStatusCounts.apply)
   }
 
   private def workflowStatusCounter(status: WorkflowStatus): Counter =

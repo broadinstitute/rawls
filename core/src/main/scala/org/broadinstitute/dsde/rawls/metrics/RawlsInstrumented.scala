@@ -11,8 +11,8 @@ import scala.annotation.implicitNotFound
 
 /**
   * Mixin trait for instrumentation.
-  * Extends metrics-scala [[DefaultInstrumented]] to provide additional utilties for generating
-  * metric names.
+  * Extends metrics-scala [[DefaultInstrumented]] and provide additional utilties for generating
+  * metric names for FireCloud.
   */
 trait RawlsInstrumented extends DefaultInstrumented {
   // Keys for expanded metric fragments
@@ -23,14 +23,14 @@ trait RawlsInstrumented extends DefaultInstrumented {
 
   /**
     * Base name for all metrics. This will be prepended to all generated metric names.
-    * For example: dev.firecloud.rawls
+    * Example: dev.firecloud.rawls
     */
   protected val rawlsMetricBaseName: String
   override lazy val metricBaseName = MetricName(rawlsMetricBaseName)
 
   /**
     * Typeclass for something that can be converted into a metric name fragment with a given key.
-    * Metric name fragments are combined via ExpandedMetricBuilder to generate a "expanded" metric name.
+    * Metric name fragments are combined via ExpandedMetricBuilder to generate an "expanded" metric name.
     * By default this just calls toString on the object of type A, but this can be overridden.
     */
   @implicitNotFound(msg = "Cannot expand instances of type ${A}")
