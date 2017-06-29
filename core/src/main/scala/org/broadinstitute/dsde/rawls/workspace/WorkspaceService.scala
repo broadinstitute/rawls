@@ -6,6 +6,7 @@ import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
 import com.typesafe.scalalogging.LazyLogging
+import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -19,7 +20,9 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionServiceValidationFormat, ExecutionServiceVersionFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
+import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -295,13 +298,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         //If a workflow is not done, automatically change its status to Aborted
         _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
-          case wf if !WorkflowStatuses.withName(wf.status).isDone => dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted).map { n =>
-            ExpandedMetricBuilder
-              .expand(WorkspaceMetric, workspaceName)
-              .expand(SubmissionMetric, wf.submissionId)
-              .expand(WorkflowStatusMetric, WorkflowStatuses.Aborted)
-              .asCounter() += n
-            n
+          case wf if !WorkflowStatuses.withName(wf.status).isDone => dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted).map { count =>
+            workflowStatusCounter(workspaceName, wf.submissionId, WorkflowStatuses.Aborted) += count
+            count
           }
         }}
 
@@ -1437,15 +1436,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         )
 
         dataAccess.submissionQuery.create(workspaceContext, submission) map { sub =>
-          ExpandedMetricBuilder
-            .expand(WorkspaceMetric, workspaceName)
-            .expand(SubmissionStatusMetric, SubmissionStatuses.Submitted)
-            .asCounter() += 1
-          ExpandedMetricBuilder
-            .expand(WorkspaceMetric, workspaceName)
-            .expand(SubmissionMetric, UUID.fromString(submissionId))
-            .expand(WorkflowStatusMetric, WorkflowStatuses.Queued)
-            .asCounter() += workflows.size
+          submissionStatusCounter(workspaceName, SubmissionStatuses.Submitted) += 1
+          workflowStatusCounter(workspaceName, UUID.fromString(submissionId), WorkflowStatuses.Queued) += workflows.size
           sub
         } map { _ =>
           RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, successes))
@@ -1492,10 +1484,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def abortSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess): ReadWriteAction[PerRequestMessage] = {
     withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
       dataAccess.submissionQuery.updateStatus(UUID.fromString(submission.submissionId), SubmissionStatuses.Aborting) map { rows =>
-        ExpandedMetricBuilder
-          .expand(WorkspaceMetric, workspaceContext.workspace.toWorkspaceName)
-          .expand(SubmissionStatusMetric, SubmissionStatuses.Aborting)
-          .asCounter() += rows
+        submissionStatusCounter(workspaceContext.workspace.toWorkspaceName, SubmissionStatuses.Aborting) += rows
         rows
       } map { rows =>
         if(rows == 1)
@@ -2171,6 +2160,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
   }
+
+  private def submissionStatusCounter(workspaceName: WorkspaceName, status: SubmissionStatus): Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetric, workspaceName)
+      .expand(SubmissionStatusMetric, status)
+      .asCounter()
+
+  private def workflowStatusCounter(workspaceName: WorkspaceName, submissionId: UUID, status: WorkflowStatus): Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetric, workspaceName)
+      .expand(SubmissionMetric, submissionId)
+      .expand(WorkflowStatusMetric, status)
+      .asCounter()
 }
 
 

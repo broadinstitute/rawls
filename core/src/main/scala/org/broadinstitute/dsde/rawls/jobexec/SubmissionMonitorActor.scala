@@ -6,7 +6,7 @@ import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import nl.grons.metrics.scala.{Counter, Gauge}
+import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
@@ -18,20 +18,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
-
 import scala.concurrent.{ExecutionContext, Future}
-import akka.pattern._
-import java.util.UUID
-
-import nl.grons.metrics.scala.{Counter, MetricName}
-import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
-import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-
-import scala.collection.immutable
+import scala.util.{Failure, Success, Try}
 
 /**
  * Created by dvoet on 6/26/15.
@@ -112,19 +100,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val credential: Credential
   val submissionPollInterval: Duration
 
-  def workflowStatusCounter(status: WorkflowStatus): Counter =
-    ExpandedMetricBuilder
-      .expand(WorkspaceMetric, workspaceName)
-      .expand(SubmissionMetric, submissionId)
-      .expand(WorkflowStatusMetric, status)
-      .asCounter()
-
-  def submissionStatusCounter(status: SubmissionStatus): Counter =
-    ExpandedMetricBuilder
-      .expand(WorkspaceMetric, workspaceName)
-      .expand(SubmissionStatusMetric, status)
-      .asCounter()
-
   import datasource.dataAccess.driver.api._
 
   /**
@@ -140,9 +115,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     def abortQueuedWorkflows(submissionId: UUID) = {
       datasource.inTransaction { dataAccess =>
-        dataAccess.workflowQuery.batchUpdateWorkflowsOfStatus(submissionId, WorkflowStatuses.Queued, WorkflowStatuses.Aborted).map { n =>
-          workflowStatusCounter(WorkflowStatuses.Aborted) += n
-          n
+        dataAccess.workflowQuery.batchUpdateWorkflowsOfStatus(submissionId, WorkflowStatuses.Queued, WorkflowStatuses.Aborted).map { count =>
+          workflowStatusCounter(WorkflowStatuses.Aborted) += count
+          count
         }
       }
     }
@@ -246,9 +221,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       // to minimize database updates do 1 update per status
       DBIO.seq(updatedRecs.groupBy(_.status).map { case (status, recs) =>
         val workflowStatus = WorkflowStatuses.withName(status)
-        dataAccess.workflowQuery.batchUpdateStatus(recs, workflowStatus).map { n =>
-          workflowStatusCounter(workflowStatus) += n
-          n
+        dataAccess.workflowQuery.batchUpdateStatus(recs, workflowStatus).map { count =>
+          workflowStatusCounter(workflowStatus) += count
+          count
         }
       }.toSeq: _*) andThen
         DBIO.successful(workflowsWithOutputs)
@@ -290,9 +265,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           }
         } flatMap { newStatus =>
           logger.debug(s"submission $submissionId terminating to status $newStatus")
-          dataAccess.submissionQuery.updateStatus(submissionId, newStatus).map { n =>
-            submissionStatusCounter(newStatus) += n
-            n
+          dataAccess.submissionQuery.updateStatus(submissionId, newStatus).map { count =>
+            submissionStatusCounter(newStatus) += count
+            count
           }
         } map(_ => true)
       } else {
@@ -397,4 +372,17 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })
   }
+
+  private def workflowStatusCounter(status: WorkflowStatus): Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetric, workspaceName)
+      .expand(SubmissionMetric, submissionId)
+      .expand(WorkflowStatusMetric, status)
+      .asCounter()
+
+  private def submissionStatusCounter(status: SubmissionStatus): Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetric, workspaceName)
+      .expand(SubmissionStatusMetric, status)
+      .asCounter()
 }

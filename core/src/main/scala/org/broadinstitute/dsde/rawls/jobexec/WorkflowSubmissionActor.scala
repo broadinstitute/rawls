@@ -103,13 +103,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
   import dataSource.dataAccess.driver.api._
 
-  def workflowStatusCounter(workspaceName: WorkspaceName, submissionId: UUID, status: WorkflowStatus): Counter =
-    ExpandedMetricBuilder
-      .expand(WorkspaceMetric, workspaceName)
-      .expand(SubmissionMetric, submissionId)
-      .expand(WorkflowStatusMetric, status)
-      .asCounter()
-
   //Get a blob of unlaunched workflows, flip their status, and queue them for submission.
   def getUnlaunchedWorkflowBatch()(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
     val workflowRecsToLaunch = dataSource.inTransaction { dataAccess =>
@@ -125,7 +118,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       dataSource.inTransaction { dataAccess =>
         dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching)
           .map { count =>
-            (workspaceRecOpt |@| submissionRecOpt).map((ws, sub) => workflowStatusCounter(ws.workspaceName, sub.id, WorkflowStatuses.Launching) += count)
+            (workspaceRecOpt |@| submissionRecOpt).map((ws, sub) => workflowStatusCounter(ws.toWorkspaceName, sub.id, WorkflowStatuses.Launching) += count)
             count
           }
       } map { _ =>
@@ -157,9 +150,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
             val submissionId = workflowRecs.head.submissionId
             val filteredWorkflowRecs = workflowRecs.filter(_.submissionId == submissionId)
             for {
-              submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.headOption)
-              workspaceRec <- submissionRec.map(sub => dataAccess.workspaceQuery.findByIdQuery(sub.workspaceId).result.map(_.headOption)).getOrElse(DBIO.successful(None))
-            } yield (filteredWorkflowRecs, submissionRec, workspaceRec)
+              submissionRecOpt <- dataAccess.submissionQuery.findById(submissionId).result.map(_.headOption)
+              workspaceRecOpt <- submissionRecOpt.map(sub => dataAccess.workspaceQuery.findByIdQuery(sub.workspaceId).result.map(_.headOption)).getOrElse(DBIO.successful(None))
+            } yield (filteredWorkflowRecs, submissionRecOpt, workspaceRecOpt)
           }
       } yield reservedRecs
     }
@@ -197,7 +190,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
   }
 
-  def reifyWorkflowRecords(workflowRecs: Seq[WorkflowRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): DBIOAction[Seq[Workflow], NoStream, Effect.Read] = {
+  def reifyWorkflowRecords(workflowRecs: Seq[WorkflowRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext) = {
     DBIO.sequence(workflowRecs map { wfRec =>
       dataAccess.workflowQuery.loadWorkflow(wfRec) map( _.getOrElse(
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Failed to load workflow id ${wfRec.id}"))
@@ -302,4 +295,11 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         } map { _ => throw t }
     }
   }
+
+  private def workflowStatusCounter(workspaceName: WorkspaceName, submissionId: UUID, status: WorkflowStatus): Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetric, workspaceName)
+      .expand(SubmissionMetric, submissionId)
+      .expand(WorkflowStatusMetric, status)
+      .asCounter()
 }

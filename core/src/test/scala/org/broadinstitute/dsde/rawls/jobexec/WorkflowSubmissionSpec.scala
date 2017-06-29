@@ -17,9 +17,7 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionService
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
-import org.mockito.ArgumentCaptor
-import org.mockito.Mockito.{inOrder => mockitoInOrder}
-import org.mockito.Mockito.atLeastOnce
+import org.mockito.Mockito.{atLeastOnce, inOrder => mockitoInOrder}
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
@@ -32,9 +30,7 @@ import spray.json._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Await
-import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.duration._
-import scala.util.matching.Regex
+import scala.concurrent.duration.{FiniteDuration, _}
 
 /**
  * Created by dvoet on 5/17/16.

@@ -5,7 +5,7 @@ import java.util.UUID
 import nl.grons.metrics.scala._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.WorkspaceName
 
 /**
   * Created by rtitle on 6/15/17.
@@ -37,8 +37,7 @@ trait RawlsInstrumented extends DefaultInstrumented {
   protected class ExpandedMetricBuilder[A] private (m: String = "") {
     def expand[A: Expansion](key: String, a: A) = {
       new ExpandedMetricBuilder(
-        (if (m == "") m else m + ".") +
-        implicitly[Expansion[A]].makeName(key, a))
+        (if (m == "") m else m + ".") + implicitly[Expansion[A]].makeName(key, a))
     }
 
     def asCounter(name: Option[String] = None): Counter =
