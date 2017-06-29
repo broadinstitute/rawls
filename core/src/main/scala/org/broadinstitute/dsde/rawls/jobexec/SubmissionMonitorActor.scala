@@ -74,7 +74,8 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              override val rawlsMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
   import context._
 
-  // Marked volatile because it is accessed by statsd in a separate thread
+  // Marked volatile because it is read by a separate statsd thread.
+  // It is only written by the actor.
   @volatile
   private var currentWorkflowStatusCounts: Map[WorkflowStatus, Int] = Map.empty
 
@@ -417,9 +418,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess)(implicit executionContext: ExecutionContext) = {
     DBIO.sequence(errors.map { case (workflowRecord, errorMessages) =>
-      dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed).map { n =>
-        workflowStatusCounter(WorkflowStatuses.Failed) += n
-        n
+      dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed).map { count =>
+        workflowStatusCounter(WorkflowStatuses.Failed) += count
+        count
       } andThen
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })
@@ -428,10 +429,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   def checkCurrentWorkflowStatusCounts(implicit executionContext: ExecutionContext): Future[SaveCurrentWorkflowStatusCounts] = {
     datasource.inTransaction { dataAccess =>
       dataAccess.workflowQuery.countWorkflowsForSubmissionByQueueStatus(submissionId)
-    }.map { m =>
-      SaveCurrentWorkflowStatusCounts(m.map { case (k, v) => WorkflowStatuses.withName(k) -> v })
+    }.map { workflowStatusCounts =>
+      SaveCurrentWorkflowStatusCounts(workflowStatusCounts.map { case (k, v) => WorkflowStatuses.withName(k) -> v })
     }.recover { case NonFatal(e) =>
-      // Recover on errors since this just affects metrics and we don't want it to blow up the whole actor
+      // Recover on errors since this just affects metrics and we don't want it to blow up the whole actor if it fails
       logger.error("Error occurred checking current workflow status counts", e)
       SaveCurrentWorkflowStatusCounts(Map.empty)
     }
