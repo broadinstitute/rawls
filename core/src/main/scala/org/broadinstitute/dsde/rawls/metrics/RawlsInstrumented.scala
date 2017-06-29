@@ -36,7 +36,9 @@ trait RawlsInstrumented extends DefaultInstrumented {
 
   protected class ExpandedMetricBuilder[A] private (m: String = "") {
     def expand[A: Expansion](key: String, a: A) = {
-      new ExpandedMetricBuilder(m + "." + implicitly[Expansion[A]].makeName(key, a))
+      new ExpandedMetricBuilder(
+        (if (m == "") m else m + ".") +
+        implicitly[Expansion[A]].makeName(key, a))
     }
 
     def asCounter(name: Option[String] = None): Counter =
@@ -49,8 +51,9 @@ trait RawlsInstrumented extends DefaultInstrumented {
       metrics.timer(makeName(name))
     }
 
-    private def makeName(name: Option[String]): String =
-      metricBaseName.name + "." + m + name.map(n => s".$n").getOrElse("")
+    private def makeName(name: Option[String]): String = {
+      m + name.map(n => s".$n").getOrElse("")
+    }
   }
 
   object ExpandedMetricBuilder {

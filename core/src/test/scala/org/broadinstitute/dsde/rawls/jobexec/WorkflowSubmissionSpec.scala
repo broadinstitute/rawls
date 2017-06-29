@@ -1,31 +1,45 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorSystem, PoisonPill}
 import akka.testkit.TestKit
+import com.codahale.metrics.SharedMetricRegistries
+import com.codahale.metrics.health.SharedHealthCheckRegistries
 import com.google.api.client.auth.oauth2.Credential
+import com.readytalk.metrics.{StatsD, StatsDReporter}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.mockito.ArgumentCaptor
+import org.mockito.Mockito.{inOrder => mockitoInOrder}
+import org.mockito.Mockito.atLeastOnce
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
+import org.scalatest.concurrent.Eventually
+import org.scalatest.mock.MockitoSugar
+import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http.StatusCodes
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import scala.collection.JavaConverters._
 import scala.concurrent.Await
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration._
+import scala.util.matching.Regex
 
 /**
  * Created by dvoet on 5/17/16.
  */
-class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with RawlsTestUtils {
+class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with RawlsTestUtils with MockitoSugar with Eventually {
   import driver.api._
 
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
@@ -39,7 +53,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val pollInterval: FiniteDuration = 1 second,
     val maxActiveWorkflowsTotal: Int = 100,
     val maxActiveWorkflowsPerUser: Int = 100,
-    val runtimeOptions: Option[JsValue] = None) extends WorkflowSubmission {
+    val runtimeOptions: Option[JsValue] = None,
+    override val rawlsMetricBaseName: String = "test") extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
@@ -76,22 +91,57 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     super.afterAll()
   }
 
-  "WorkflowSubmission" should "get a batch of workflows" in withDefaultTestDatabase {
-    val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
+  override implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
-    val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
-
-    val workflowSubMsg = Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
-    workflowSubMsg match {
-      case SubmitWorkflowBatch(workflowIds) =>
-        assertSameElements(workflowIds, workflowRecs.map(_.id))
-      case _ => fail("wrong workflow submission message")
+  def withStatsD[T](testCode: => T)(verify: Seq[(String, String)] => Unit = _ => ()): T = {
+    val statsD = mock[StatsD]
+    val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
+      .convertRatesTo(TimeUnit.SECONDS)
+      .convertDurationsTo(TimeUnit.MILLISECONDS)
+      .build(statsD)
+    reporter.start(1, TimeUnit.SECONDS)
+    try {
+      val result = testCode
+      eventually {
+        val order = mockitoInOrder(statsD)
+        order.verify(statsD).connect()
+        val metricCaptor = captor[String]
+        val valueCaptor = captor[String]
+        order.verify(statsD, atLeastOnce).send(metricCaptor.capture, valueCaptor.capture)
+        order.verify(statsD).close()
+        verify(metricCaptor.getAllValues.asScala.zip(valueCaptor.getAllValues.asScala))
+      }
+      result
+    } finally {
+      reporter.stop()
+      SharedMetricRegistries.clear()
+      SharedHealthCheckRegistries.clear()
     }
-
-    assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
   }
 
-  def setWorkflowBatchToQueued(batchSize: Int, submissionId: String): Seq[WorkflowRecord] = {
+  "WorkflowSubmission" should "get a batch of workflows" in withDefaultTestDatabase {
+    withStatsD {
+      val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
+
+      val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
+
+      val workflowSubMsg = Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
+      workflowSubMsg match {
+        case SubmitWorkflowBatch(actualWorkflowIds, submissionRec, workspaceRec) =>
+          assertSameElements(actualWorkflowIds, workflowRecs.map(_.id))
+          submissionRec.id.toString should equal (testData.submission1.submissionId)
+          workspaceRec.id.toString should equal (testData.workspace.workspaceId)
+        case _ => fail("wrong workflow submission message")
+      }
+
+      assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
+    } { capturedMetrics =>
+      capturedMetrics.size should be (1)
+      capturedMetrics(0) should equal (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Launching))
+    }
+  }
+
+  private def setWorkflowBatchToQueued(batchSize: Int, submissionId: String): Seq[WorkflowRecord] = {
     val workflowRecs = runAndWait(
       for {
         workflowRecs <- workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(submissionId)).take(batchSize).result
@@ -128,19 +178,26 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   }
 
   it should "get a batch of workflows if at user's cap" in withDefaultTestDatabase {
-    val batchSize = 3
-    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, batchSize = batchSize, maxActiveWorkflowsPerUser = (runAndWait(workflowQuery.length.result) - batchSize))
+    withStatsD {
+      val batchSize = 3
+      val workflowSubmission = new TestWorkflowSubmission(slickDataSource, batchSize = batchSize, maxActiveWorkflowsPerUser = (runAndWait(workflowQuery.length.result) - batchSize))
 
-    val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
+      val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
 
-    val unlaunchedBatch = Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
-    unlaunchedBatch match {
-      case SubmitWorkflowBatch(ids) =>
-        assert(ids.toSet == workflowRecs.map(_.id).toSet) //order isn't consistent, apparently
-      case error => fail(s"Didn't schedule submission of a new workflow batch, instead got: $error")
+      val unlaunchedBatch = Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
+      unlaunchedBatch match {
+        case SubmitWorkflowBatch(workflowIds, submissionRec, workspaceRec) =>
+          assertSameElements(workflowIds, workflowRecs.map(_.id))
+          submissionRec.id.toString should equal (testData.submission1.submissionId)
+          workspaceRec.id.toString should equal (testData.workspace.workspaceId)
+        case error => fail(s"Didn't schedule submission of a new workflow batch, instead got: $error")
+      }
+
+      assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
+    } { capturedMetrics =>
+      capturedMetrics.size should be (1)
+      capturedMetrics(0) should equal (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Launching))
     }
-
-    assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
   }
 
 
@@ -157,27 +214,37 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     runAndWait(workflowQuery.batchUpdateStatus(WorkflowStatuses.Submitted, WorkflowStatuses.Queued))
 
     Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf) match {
-      case SubmitWorkflowBatch(workflowIds) =>
+      case SubmitWorkflowBatch(workflowIds, _, _) =>
         assertResult(1)(runAndWait(workflowQuery.findWorkflowByIds(workflowIds).map(_.submissionId).distinct.result).size)
       case _ => fail("expected some workflows")
     }
   }
 
   it should "submit a batch of workflows" in withDefaultTestDatabase {
-    val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
+    withStatsD {
+      val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
 
-    withWorkspaceContext(testData.workspace) { ctx =>
+      withWorkspaceContext(testData.workspace) { ctx =>
 
-      val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.id)
+        val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
+          wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
+          subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
+          wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
+        } yield (wfRecs, subRec, wsRec))
 
-      assertResult(ProcessNextWorkflow) {
-        Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
+        assertResult(ProcessNextWorkflow) {
+          Await.result(workflowSubmission.submitWorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec), Duration.Inf)
+        }
+
+        assert({
+          workflowRecs.forall(wf => (wf.status == WorkflowStatuses.Submitted.toString) || (wf.status == WorkflowStatuses.Failed.toString))
+        }, "Not all workflows got submitted?")
       }
-
-      val workflowRecs = runAndWait(workflowQuery.filter(_.id inSetBind workflowIds).result)
-      assert({
-        workflowRecs.forall( wf => (wf.status == WorkflowStatuses.Submitted.toString) || (wf.status == WorkflowStatuses.Failed.toString) )
-      }, "Not all workflows got submitted?")
+    } { capturedMetrics =>
+      // should be 2 submitted, 1 failed per the mock Cromwell server
+      capturedMetrics.size should be (2)
+      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, 2))
+      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, 1))
     }
   }
 
@@ -189,10 +256,15 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     withWorkspaceContext(testData.workspace) { ctx =>
 
-      val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.id)
-      Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
+      val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
+        wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
+        subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
+        wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
+      } yield (wfRecs, subRec, wsRec))
 
-      assertResult(workflowIds.map(_ => s"""{"${testData.inputResolutions.head.inputName}":"${testData.inputResolutions.head.value.get.asInstanceOf[AttributeString].value}"}""")) {
+      Await.result(workflowSubmission.submitWorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec), Duration.Inf)
+
+      assertResult(workflowRecs.map(_ => s"""{"${testData.inputResolutions.head.inputName}":"${testData.inputResolutions.head.value.get.asInstanceOf[AttributeString].value}"}""")) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
       }
 
@@ -242,8 +314,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       )
       runAndWait(submissionQuery.create(ctx, thisSubmission))
 
-      val wfIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(thisSubmission.submissionId)).result.map( _.map(_.id) ))
-      Await.result(workflowSubmission.submitWorkflowBatch(wfIds), Duration.Inf)
+      val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
+        wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
+        subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
+        wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
+      } yield (wfRecs, subRec, wsRec))
+
+      Await.result(workflowSubmission.submitWorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec), Duration.Inf)
 
       assertResult(samples.map(r => r.entityName -> r.entityName).toMap) {
         runAndWait(submissionQuery.loadSubmission(UUID.fromString(thisSubmission.submissionId))).get.workflows.map { wf =>
@@ -254,63 +331,81 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   }
 
   it should "fail workflows that timeout when submitting to Cromwell" in withDefaultTestDatabase {
+    withStatsD {
+      val workflowSubmission = new TestWorkflowSubmissionWithTimeoutyExecSvc(slickDataSource)
 
-    val workflowSubmission = new TestWorkflowSubmissionWithTimeoutyExecSvc(slickDataSource)
+      withWorkspaceContext(testData.workspace) { ctx =>
 
-    withWorkspaceContext(testData.workspace) { ctx =>
+        val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
+          wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
+          subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
+          wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
+        } yield (wfRecs, subRec, wsRec))
 
-      val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.id)
+        //This call throws an exception, which is piped back to the actor
+        val submitFailureExc = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(workflowSubmission.submitWorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec), Duration.Inf)
+        }
+        assert(submitFailureExc.errorReport.statusCode.contains(StatusCodes.GatewayTimeout))
 
-      //This call throws an exception, which is piped back to the actor
-      val submitFailureExc = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
+        //Should have marked the workflows as failed, though
+        val newWorkflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
+        assert({
+          newWorkflowRecs.forall(_.status == WorkflowStatuses.Failed.toString)
+        }, "Workflows that timeout on submission to Cromwell should be marked Failed")
       }
-      assert(submitFailureExc.errorReport.statusCode.contains(StatusCodes.GatewayTimeout))
-
-      //Should have marked the workflows as failed, though
-      val workflowRecs = runAndWait(workflowQuery.filter(_.id inSetBind workflowIds).result)
-      assert({
-        workflowRecs.forall( _.status == WorkflowStatuses.Failed.toString )
-      }, "Workflows that timeout on submission to Cromwell should be marked Failed")
+    } { capturedMetrics =>
+      capturedMetrics.size should be (1)
+      capturedMetrics(0) should equal (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed))
     }
   }
 
   "WorkflowSubmissionActor" should "submit workflows" in withDefaultTestDatabase {
-    val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
+    withStatsD {
+      val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
-    val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(3, testData.submission1.submissionId)
+      val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(3, testData.submission1.submissionId)
 
-    val workflowSubmissionActor = system.actorOf(WorkflowSubmissionActor.props(
-      slickDataSource,
-      new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
-      mockGoogleServicesDAO,
-      MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource),
-      3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None)
-    )
+      val workflowSubmissionActor = system.actorOf(WorkflowSubmissionActor.props(
+        slickDataSource,
+        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
+        mockGoogleServicesDAO,
+        MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource),
+        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
+      )
 
-    awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ != WorkflowStatuses.Queued.toString), 10 seconds)
-    workflowSubmissionActor ! PoisonPill
+      awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ != WorkflowStatuses.Queued.toString), 10 seconds)
+      workflowSubmissionActor ! PoisonPill
+    } { capturedMetrics =>
+      // should be 2 submitted, 1 failed per the mock Cromwell server
+      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, 2))
+      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, 1))
+    }
   }
 
   it should "continue submitting workflow on exec svc error" in withDefaultTestDatabase {
-    val credential: Credential =  mockGoogleServicesDAO.getPreparedMockGoogleCredential()
+    withStatsD {
+      val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
-    val batchSize = 3
-    val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(2*batchSize, testData.submissionTerminateTest.submissionId)
+      val batchSize = 3
+      val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(2 * batchSize, testData.submissionTerminateTest.submissionId)
 
-    // we want to test that the actor makes more than one pass so assert that there will be more than one batch
-    assert(workflowRecs.size > batchSize)
+      // we want to test that the actor makes more than one pass so assert that there will be more than one batch
+      assert(workflowRecs.size > batchSize)
 
-    val workflowSubmissionActor = system.actorOf(WorkflowSubmissionActor.props(
-      slickDataSource,
-      new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
-      mockGoogleServicesDAO,
-      MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
-      batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None)
-    )
+      val workflowSubmissionActor = system.actorOf(WorkflowSubmissionActor.props(
+        slickDataSource,
+        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
+        mockGoogleServicesDAO,
+        MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
+        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
+      )
 
-    awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)
-    workflowSubmissionActor ! PoisonPill
+      awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)
+      workflowSubmissionActor ! PoisonPill
+    } { capturedMetrics =>
+      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submissionTerminateTest, WorkflowStatuses.Failed))
+    }
   }
 
   it should "not truncate array inputs" in withDefaultTestDatabase {
@@ -328,8 +423,12 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       runAndWait(submissionQuery.create(ctx, submissionList))
 
-      val workflowIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(submissionList.submissionId)).result.map(_.map(_.id)))
-      Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
+      val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
+        wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
+        subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
+        wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
+      } yield (wfRecs, subRec, wsRec))
+      Await.result(workflowSubmission.submitWorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec), Duration.Inf)
 
       val arrayWdl = """task aggregate_data {
                        |	Array[String] input_array
@@ -376,8 +475,12 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   it should "pass workflow failure modes to cromwell" in withDefaultTestDatabase {
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
-    val workflowIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(testData.submissionWorkflowFailureMode.submissionId)).result.map(_.map(_.id)))
-    Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), 10 seconds)
+    val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
+      wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
+      subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
+      wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
+    } yield (wfRecs, subRec, wsRec))
+    Await.result(workflowSubmission.submitWorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec), 10 seconds)
 
     mockServer.mockServer.verify(
       HttpRequest.request()
@@ -403,4 +506,11 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), 1 minute)
     }
   }
+
+  private def expectedMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus, expectedTimes: Int): (String, String) =
+    (s"test.workspace.${workspace.toWorkspaceName.toString.replace('/', '.')}.submission.${submission.submissionId}.workflowStatus.${workflowStatus.toString}", expectedTimes.toString)
+
+  private def expectedMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus): (String, String) =
+    expectedMetric(workspace, submission, workflowStatus, submission.workflows.size)
+
 }

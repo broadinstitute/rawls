@@ -213,7 +213,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         userServiceConstructor,
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser
+        maxActiveWorkflowsPerUser,
+        "test"
       )_
       lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
       try {

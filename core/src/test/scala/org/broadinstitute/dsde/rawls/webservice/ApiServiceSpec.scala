@@ -151,7 +151,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
       userServiceConstructor,
       genomicsServiceConstructor,
       maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser
+      maxActiveWorkflowsPerUser,
+      "test"
     )_
 
     def cleanupSupervisor = {

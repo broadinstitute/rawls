@@ -107,7 +107,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       userServiceConstructor,
       genomicsServiceConstructor,
       maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser
+      maxActiveWorkflowsPerUser,
+      "test"
     )_
 
     def cleanupSupervisor = {
