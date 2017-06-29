@@ -10,7 +10,7 @@ import com.codahale.metrics.health.SharedHealthCheckRegistries
 import com.google.api.client.auth.oauth2.Credential
 import com.readytalk.metrics.{StatsD, StatsDReporter}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{SubmissionRecord, TestDriverComponent, WorkflowRecord, WorkspaceRecord}
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
@@ -141,18 +141,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     }
   }
 
-  private def setWorkflowBatchToQueued(batchSize: Int, submissionId: String): Seq[WorkflowRecord] = {
-    val workflowRecs = runAndWait(
-      for {
-        workflowRecs <- workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(submissionId)).take(batchSize).result
-        _ <- workflowQuery.batchUpdateStatus(workflowRecs, WorkflowStatuses.Queued)
-      } yield {
-        workflowRecs
-      }
-    )
-    workflowRecs
-  }
-
   it should "not get a batch of workflows if beyond absolute cap" in withDefaultTestDatabase {
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource, maxActiveWorkflowsTotal = 0)
 
@@ -225,12 +213,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
 
       withWorkspaceContext(testData.workspace) { ctx =>
-
-        val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
-          wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
-          subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
-          wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
-        } yield (wfRecs, subRec, wsRec))
+        val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.submission1, testData.workspace)
 
         assertResult(ProcessNextWorkflow) {
           Await.result(workflowSubmission.submitWorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec), Duration.Inf)
@@ -254,12 +237,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     }
 
     withWorkspaceContext(testData.workspace) { ctx =>
-
-      val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
-        wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
-        subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
-        wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
-      } yield (wfRecs, subRec, wsRec))
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.submission1, testData.workspace)
 
       Await.result(workflowSubmission.submitWorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec), Duration.Inf)
 
@@ -313,11 +291,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       )
       runAndWait(submissionQuery.create(ctx, thisSubmission))
 
-      val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
-        wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
-        subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
-        wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
-      } yield (wfRecs, subRec, wsRec))
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(thisSubmission, testData.workspace)
 
       Await.result(workflowSubmission.submitWorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec), Duration.Inf)
 
@@ -335,11 +309,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       withWorkspaceContext(testData.workspace) { ctx =>
 
-        val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
-          wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
-          subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
-          wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
-        } yield (wfRecs, subRec, wsRec))
+        val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.submission1, testData.workspace)
 
         //This call throws an exception, which is piped back to the actor
         val submitFailureExc = intercept[RawlsExceptionWithErrorReport] {
@@ -354,8 +324,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         }, "Workflows that timeout on submission to Cromwell should be marked Failed")
       }
     } { capturedMetrics =>
-      capturedMetrics.size should be (1)
-      capturedMetrics(0) should equal (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed))
+      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed))
     }
   }
 
@@ -422,11 +391,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       runAndWait(submissionQuery.create(ctx, submissionList))
 
-      val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
-        wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
-        subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
-        wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
-      } yield (wfRecs, subRec, wsRec))
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionList, testData.workspace)
+
       Await.result(workflowSubmission.submitWorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec), Duration.Inf)
 
       val arrayWdl = """task aggregate_data {
@@ -474,11 +440,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   it should "pass workflow failure modes to cromwell" in withDefaultTestDatabase {
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
-    val (workflowRecs, submissionRec, workspaceRec) = runAndWait(for {
-      wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))
-      subRec <- submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.map(_.head)
-      wsRec <- workspaceQuery.findByIdQuery(subRec.workspaceId).result.map(_.head)
-    } yield (wfRecs, subRec, wsRec))
+    val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.submissionWorkflowFailureMode, testData.workspaceWorkflowFailureMode)
     Await.result(workflowSubmission.submitWorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec), 10 seconds)
 
     mockServer.mockServer.verify(
@@ -504,6 +466,27 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     assertResult(ScheduleNextWorkflow) {
       Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), 1 minute)
     }
+  }
+
+  private def setWorkflowBatchToQueued(batchSize: Int, submissionId: String): Seq[WorkflowRecord] = {
+    runAndWait(
+      for {
+        workflowRecs <- workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(submissionId)).take(batchSize).result
+        _ <- workflowQuery.batchUpdateStatus(workflowRecs, WorkflowStatuses.Queued)
+      } yield {
+        workflowRecs
+      }
+    )
+  }
+
+  private def getWorkflowSubmissionWorkspaceRecords(submission: Submission, workspace: Workspace): (Seq[WorkflowRecord], SubmissionRecord, WorkspaceRecord) = {
+    runAndWait(
+      for {
+        wfRecs <- workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(submission.submissionId))
+        subRec <- submissionQuery.findById(UUID.fromString(submission.submissionId)).result.map(_.head)
+        wsRec <- workspaceQuery.findByIdQuery(UUID.fromString(workspace.workspaceId)).result.map(_.head)
+      } yield (wfRecs, subRec, wsRec)
+    )
   }
 
   private def expectedMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus, expectedTimes: Int): (String, String) =
