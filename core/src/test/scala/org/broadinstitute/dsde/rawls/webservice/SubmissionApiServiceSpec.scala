@@ -132,7 +132,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
       sealRoute(services.submissionRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, responseAs[String]) {
           status
         }
         val submission = responseAs[SubmissionReport]
