@@ -26,14 +26,14 @@ trait RawlsInstrumented extends DefaultInstrumented {
     * For example: dev.firecloud.rawls
     */
   protected val rawlsMetricBaseName: String
-  protected override lazy val metricBaseName = MetricName(rawlsMetricBaseName)
+  override lazy val metricBaseName = MetricName(rawlsMetricBaseName)
 
   /**
     * Typeclass for something that can be converted into a metric name fragment with a given key.
     * Metric name fragments are combined via ExpandedMetricBuilder to generate a "expanded" metric name.
     * By default this just calls toString on the object of type A, but this can be overridden.
     */
-  @implicitNotFound(msg = "Cannot expand instances of type ${T}")
+  @implicitNotFound(msg = "Cannot expand instances of type ${A}")
   protected sealed trait Expansion[A] {
     def makeName(key: String, a: A) = s"$key.${a.toString}"
   }
