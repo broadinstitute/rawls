@@ -79,7 +79,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       100 milliseconds,
       100000,
       100000,
-      None))
+      None,
+      "test"))
 
     try {
       testCode(actor)

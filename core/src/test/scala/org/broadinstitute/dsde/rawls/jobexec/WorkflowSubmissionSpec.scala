@@ -242,7 +242,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       }
     } { capturedMetrics =>
       // should be 2 submitted, 1 failed per the mock Cromwell server
-      capturedMetrics.size should be (2)
       capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, 2))
       capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, 1))
     }
