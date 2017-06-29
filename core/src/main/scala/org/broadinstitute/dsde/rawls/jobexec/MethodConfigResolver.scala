@@ -54,7 +54,7 @@ object MethodConfigResolver {
     def isAttributeEmpty(fqn: FullyQualifiedName): Boolean = {
       methodConfig.inputs.get(fqn) match {
         case Some(AttributeString(value)) => value.isEmpty
-        case _ => throw new AssertionError(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} input ${fqn} value is unavailable")
+        case _ => throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} input ${fqn} value is unavailable")
       }
     }
     val agoraInputs = workflow.inputs
