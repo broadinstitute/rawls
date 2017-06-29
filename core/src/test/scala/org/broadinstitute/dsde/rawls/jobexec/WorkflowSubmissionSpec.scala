@@ -1,41 +1,33 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorSystem, PoisonPill}
 import akka.testkit.TestKit
-import com.codahale.metrics.SharedMetricRegistries
-import com.codahale.metrics.health.SharedHealthCheckRegistries
 import com.google.api.client.auth.oauth2.Credential
-import com.readytalk.metrics.{StatsD, StatsDReporter}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{SubmissionRecord, TestDriverComponent, WorkflowRecord, WorkspaceRecord}
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
-import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
-import org.mockito.Mockito.{atLeastOnce, inOrder => mockitoInOrder}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils, StatsDTestUtils}
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
 import org.scalatest.mock.MockitoSugar
-import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http.StatusCodes
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration.{FiniteDuration, _}
 
 /**
  * Created by dvoet on 5/17/16.
  */
-class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with RawlsTestUtils with MockitoSugar with Eventually {
+class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with MockitoSugar with Eventually with RawlsTestUtils with StatsDTestUtils {
   import driver.api._
 
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
@@ -85,34 +77,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     system.shutdown()
     mockServer.stopServer
     super.afterAll()
-  }
-
-  override implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
-
-  def withStatsD[T](testCode: => T)(verify: Seq[(String, String)] => Unit = _ => ()): T = {
-    val statsD = mock[StatsD]
-    val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
-      .convertRatesTo(TimeUnit.SECONDS)
-      .convertDurationsTo(TimeUnit.MILLISECONDS)
-      .build(statsD)
-    reporter.start(1, TimeUnit.SECONDS)
-    try {
-      val result = testCode
-      eventually {
-        val order = mockitoInOrder(statsD)
-        order.verify(statsD).connect()
-        val metricCaptor = captor[String]
-        val valueCaptor = captor[String]
-        order.verify(statsD, atLeastOnce).send(metricCaptor.capture, valueCaptor.capture)
-        order.verify(statsD).close()
-        verify(metricCaptor.getAllValues.asScala.zip(valueCaptor.getAllValues.asScala))
-      }
-      result
-    } finally {
-      reporter.stop()
-      SharedMetricRegistries.clear()
-      SharedHealthCheckRegistries.clear()
-    }
   }
 
   "WorkflowSubmission" should "get a batch of workflows" in withDefaultTestDatabase {
@@ -221,8 +185,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       }
     } { capturedMetrics =>
       // should be 2 submitted, 1 failed per the mock Cromwell server
-      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, 2))
-      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, 1))
+      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, None, 2))
+      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, None, 1))
     }
   }
 
@@ -338,12 +302,12 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
       )
 
-      awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ != WorkflowStatuses.Queued.toString), 10 seconds)
+      awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).exists(_ == WorkflowStatuses.Submitted.toString), 10 seconds)
       workflowSubmissionActor ! PoisonPill
     } { capturedMetrics =>
       // should be 2 submitted, 1 failed per the mock Cromwell server
-      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, 2))
-      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, 1))
+      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, None, 2))
+      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, None, 1))
     }
   }
 
@@ -484,11 +448,4 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       } yield (wfRecs, subRec, wsRec)
     )
   }
-
-  private def expectedMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus, expectedTimes: Int): (String, String) =
-    (s"test.workspace.${workspace.toWorkspaceName.toString.replace('/', '.')}.submission.${submission.submissionId}.workflowStatus.${workflowStatus.toString}", expectedTimes.toString)
-
-  private def expectedMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus): (String, String) =
-    expectedMetric(workspace, submission, workflowStatus, submission.workflows.size)
-
 }

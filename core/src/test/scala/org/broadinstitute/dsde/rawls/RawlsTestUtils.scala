@@ -72,6 +72,7 @@ trait RawlsTestUtils extends Suite with TestDriverComponent with Matchers {
     StringBody.regex(anythingWithNewlines + Regex.quote(text.toString) + anythingWithNewlines)
   }
 
+  // Scala sugar for Mockitor ArgumentCaptor
   def captor[T: ClassTag]: ArgumentCaptor[T] =
     ArgumentCaptor.forClass(classTag[T].runtimeClass).asInstanceOf[ArgumentCaptor[T]]
 }

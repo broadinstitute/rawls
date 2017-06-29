@@ -7,21 +7,23 @@ import akka.testkit.{TestActorRef, TestKit}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{ExecutionServiceStatusResponse, StatusCheckComplete}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.{RawlsTestUtils, StatsDTestUtils}
+import org.scalatest.concurrent.Eventually
+import org.scalatest.mock.MockitoSugar
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration._
-import scala.util.{Success, Try}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
-
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
+import scala.util.{Success, Try}
 
 /**
  * Created by dvoet on 7/1/15.
  */
-class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll {
+class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with MockitoSugar with RawlsTestUtils with StatsDTestUtils {
   import driver.api._
 
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
@@ -76,24 +78,30 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   val abortableStatuses = Seq(WorkflowStatuses.Queued) ++ WorkflowStatuses.runningStatuses
 
   abortableStatuses.foreach { status =>
-    it should s"abort all ${status.toString} workflows for a submission marked as aborting" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-      val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
+    it should s"abort all ${status.toString} workflows for a submission marked as aborting foo" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withStatsD {
+        val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
 
-      runAndWait(workflowQuery.batchUpdateStatus(workflowRecs, status))
-      runAndWait(submissionQuery.updateStatus(UUID.fromString(testData.submission1.submissionId), SubmissionStatuses.Aborting))
+        runAndWait(workflowQuery.batchUpdateStatus(workflowRecs, status))
+        runAndWait(submissionQuery.updateStatus(UUID.fromString(testData.submission1.submissionId), SubmissionStatuses.Aborting))
 
-      val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(testData.submission1.submissionId))).get
-      assert(submission.status == SubmissionStatuses.Aborting)
+        val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(testData.submission1.submissionId))).get
+        assert(submission.status == SubmissionStatuses.Aborting)
 
-      assertResult(Seq.fill(workflowRecs.size){status.toString}) {
-        runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result)
+        assertResult(Seq.fill(workflowRecs.size) {
+          status.toString
+        }) {
+          runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result)
+        }
+
+        val monitorRef = createSubmissionMonitorActor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString))
+        watch(monitorRef)
+
+        awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Aborted.toString), 10 seconds)
+        expectMsgClass(5 seconds, classOf[Terminated])
+      } { capturedMetrics =>
+        capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Aborted, None))
       }
-
-      val monitorRef = createSubmissionMonitorActor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString))
-      watch(monitorRef)
-
-      awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Aborted.toString), 10 seconds)
-      expectMsgClass(5 seconds, classOf[Terminated])
     }
   }
 
@@ -457,7 +465,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       dataSource,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
-      1 millisecond,
+      1 second,
       "test"
     ))
   }

@@ -4,6 +4,7 @@ import java.util.UUID
 
 import akka.actor._
 import akka.pattern._
+import com.codahale.metrics.{Gauge, Metric, MetricFilter}
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
@@ -15,10 +16,11 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, addJitter}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -48,6 +50,9 @@ object SubmissionMonitorActor {
    */
   case class ExecutionServiceStatusResponse(statusResponse: Seq[Try[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]]]) extends SubmissionMonitorMessage
   case class StatusCheckComplete(terminateActor: Boolean) extends SubmissionMonitorMessage
+
+  case object CheckCurrentWorkflowStatusCounts extends SubmissionMonitorMessage
+  case class SaveCurrentWorkflowStatusCounts(workflowStatusCounts: Map[WorkflowStatus, Int]) extends SubmissionMonitorMessage
 }
 
 /**
@@ -69,7 +74,21 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              override val rawlsMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
   import context._
 
-  scheduleNextMonitorPass
+  // Marked volatile because it is accessed by statsd in a separate thread
+  @volatile
+  private var currentWorkflowStatusCounts: Map[WorkflowStatus, Int] = Map.empty
+
+  override def preStart(): Unit = {
+    super.preStart()
+    initGauges()
+    scheduleNextMonitorPass
+    scheduleNextCheckCurrentWorkflowStatus
+  }
+
+  override def postStop(): Unit = {
+    destroyGauges()
+    super.postStop()
+  }
 
   override def receive = {
     case StartMonitorPass =>
@@ -82,12 +101,45 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       logger.debug(s"done checking status for submission $submissionId, terminateActor = $terminateActor")
       if (terminateActor) stop(self)
       else scheduleNextMonitorPass
+    case CheckCurrentWorkflowStatusCounts =>
+      logger.debug(s"checkout current workflow status counts for submission $submissionId")
+      checkCurrentWorkflowStatusCounts pipeTo self
+    case SaveCurrentWorkflowStatusCounts(statusCounts) =>
+      logger.debug(s"saving current workflow status counts for submission $submissionId")
+      currentWorkflowStatusCounts = statusCounts
+      scheduleNextCheckCurrentWorkflowStatus
 
     case Status.Failure(t) => throw t // an error happened in some future, let the supervisor handle it
   }
 
-  def scheduleNextMonitorPass: Cancellable = {
+  private def scheduleNextMonitorPass: Cancellable = {
     system.scheduler.scheduleOnce(submissionPollInterval, self, StartMonitorPass)
+  }
+
+  private def scheduleNextCheckCurrentWorkflowStatus: Cancellable = {
+    system.scheduler.scheduleOnce(addJitter(submissionPollInterval), self, CheckCurrentWorkflowStatusCounts)
+  }
+
+  private def initGauges(): Unit = {
+    try {
+      WorkflowStatuses.allStatuses.foreach { status =>
+        ExpandedMetricBuilder
+          .expand(WorkspaceMetric, workspaceName)
+          .expand(SubmissionMetric, submissionId)
+          .expand(WorkflowStatusMetric, status)
+          .asGauge(Some("current"))(currentWorkflowStatusCounts.getOrElse(status, 0))
+      }
+    } catch {
+      case NonFatal(e) => logger.warn(s"Could not initialize gauge metrics for submission $submissionId", e)
+    }
+  }
+
+  private def destroyGauges(): Unit = {
+    metrics.registry.removeMatching(new MetricFilter {
+      override def matches(name: String, metric: Metric): Boolean = {
+        (name contains submissionId.toString) && (metric.isInstanceOf[Gauge[_]])
+      }
+    })
   }
 
 }
@@ -371,6 +423,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       } andThen
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })
+  }
+
+  def checkCurrentWorkflowStatusCounts(implicit executionContext: ExecutionContext): Future[SaveCurrentWorkflowStatusCounts] = {
+    datasource.inTransaction { dataAccess =>
+      dataAccess.workflowQuery.countWorkflowsForSubmissionByQueueStatus(submissionId)
+    }.map { m =>
+      SaveCurrentWorkflowStatusCounts(m.map { case (k, v) => WorkflowStatuses.withName(k) -> v })
+    }.recover { case NonFatal(e) =>
+      // Recover on errors since this just affects metrics and we don't want it to blow up the whole actor
+      logger.error("Error occurred checking current workflow status counts", e)
+      SaveCurrentWorkflowStatusCounts(Map.empty)
+    }
   }
 
   private def workflowStatusCounter(status: WorkflowStatus): Counter =
