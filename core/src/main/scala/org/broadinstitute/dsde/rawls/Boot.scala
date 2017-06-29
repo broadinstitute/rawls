@@ -145,9 +145,11 @@ object Boot extends App with LazyLogging {
 
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
 
+    val submissionMonitorConfig = conf.getConfig("submissionmonitor")
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
-      slickDataSource
+      slickDataSource,
+      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval"))
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))

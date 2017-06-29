@@ -43,7 +43,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    mockServer.startServer
+    mockServer.startServer()
   }
 
   override def afterAll(): Unit = {

@@ -3,15 +3,18 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
+import cats.instances.int._
+import cats.instances.list._
+import cats.instances.map._
+import cats.syntax.foldable._
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, ExecutionServiceId, SlickWorkspaceContext}
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceId, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import slick.dbio.Effect.{Read, Write}
+import slick.dbio.Effect.Write
 import slick.driver.JdbcDriver
-import cats._
-import cats.implicits._
 
 /**
  * Created by mbemis on 2/18/16.
@@ -328,7 +331,7 @@ trait WorkflowComponent {
       getFirstQueuedWorkflow(userInfo.userSubjectId.value) flatMap { optRec =>
         val query = optRec match {
           case Some(workflow) => findWorkflowsQueuedBefore(workflow.statusLastChangedDate)
-          case _ => findQueuedWorkflows(Seq.empty)
+          case _ => findQueuedWorkflows(Seq.empty, Seq.empty)
         }
         query.length.result
       }
@@ -422,16 +425,25 @@ trait WorkflowComponent {
       } yield workflow
     }
 
-    def findQueuedWorkflows(excludedSubmitters: Seq[String]): WorkflowQueryType = {
+    def findQueuedWorkflows(excludedSubmitters: Seq[String], excludedSubmissionStatuses: Seq[SubmissionStatus]): WorkflowQueryType = {
       val queuedWorkflows = filter(_.status === WorkflowStatuses.Queued.toString)
-      val query = if (excludedSubmitters.isEmpty) {
+      val query = if (excludedSubmitters.isEmpty && excludedSubmissionStatuses.isEmpty) {
         queuedWorkflows
       } else {
+        val excludedSubmittersQuery = if (excludedSubmitters.nonEmpty) {
+          submissionQuery.filterNot(_.submitterId.inSetBind(excludedSubmitters))
+        } else submissionQuery
+
+        val filteredSubmissionsQuery = if (excludedSubmissionStatuses.nonEmpty) {
+          excludedSubmittersQuery.filterNot(_.status.inSetBind(excludedSubmissionStatuses.map(_.toString)))
+        } else excludedSubmittersQuery
+
         for {
           workflows <- queuedWorkflows
-          submission <- submissionQuery if workflows.submissionId === submission.id && (!submission.submitterId.inSetBind(excludedSubmitters))
+          submission <- filteredSubmissionsQuery if submission.id === workflows.submissionId
         } yield workflows
       }
+
       query.sortBy(_.id)
     }
 

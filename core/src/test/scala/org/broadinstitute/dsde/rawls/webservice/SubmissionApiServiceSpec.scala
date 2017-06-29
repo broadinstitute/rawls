@@ -2,20 +2,23 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
+import akka.actor.{ActorRef, PoisonPill}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowAuditStatusRecord
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ExecutionServiceVersionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat}
-import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.joda.time.DateTime
+import org.scalatest.time.{Seconds, Span}
 import spray.http._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 /**
  * Created by dvoet on 4/24/15.
@@ -23,6 +26,10 @@ import scala.concurrent.ExecutionContext
 class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+
+  // increase the route timeout slightly for this test as the "large submission" tests sometimes
+  // bump up against the default 5 second timeout.
+  implicit override val routeTestTimeout = RouteTestTimeout(30.seconds)
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
 
@@ -40,6 +47,44 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   def withTestDataApiServices[T](testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
+    }
+  }
+
+  def withLargeSubmissionApiServices[T](testCode: TestApiService => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource) { services =>
+        try {
+          // Simulate a large submission in the mock Cromwell server by making it return
+          // 10000 workflows for submission requests.
+          mockServer.reset
+          mockServer.startServer(10000)
+          testCode(services)
+        } finally {
+          mockServer.reset
+          mockServer.startServer()
+        }
+      }
+    }
+  }
+
+  def withWorkflowSubmissionActor[T](services: TestApiService)(testCode: ActorRef => T): T = {
+    val actor = system.actorOf(WorkflowSubmissionActor.props(
+      slickDataSource,
+      services.methodRepoDAO,
+      services.gcsDAO,
+      MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource),
+      10,
+      services.gcsDAO.getPreparedMockGoogleCredential(),
+      50 milliseconds,
+      100 milliseconds,
+      100000,
+      100000,
+      None))
+
+    try {
+      testCode(actor)
+    } finally {
+      actor ! PoisonPill
     }
   }
 
@@ -63,11 +108,22 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
                                          submissionEntity: Entity, submissionExpression: Option[String],
                                          services: TestApiService, workflowFailureMode: Option[String] = None): SubmissionStatusResponse = {
-    Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
+
+    Get(s"${wsName.path}/methodconfigs/${methodConf.namespace}/${methodConf.name}") ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
-          status
+        if (status == StatusCodes.NotFound) {
+          Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
+            sealRoute(services.methodConfigRoutes) ~>
+            check {
+              assertResult(StatusCodes.Created) {
+                status
+              }
+            }
+        } else {
+          assertResult(StatusCodes.OK) {
+            status
+          }
         }
       }
 
@@ -90,6 +146,37 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       }
 
     fail("Unable to create and monitor submissions")
+  }
+
+  private def abortSubmission(services: TestApiService, wsName: WorkspaceName, submissionId: String, validate: Boolean = true): Unit = {
+    import driver.api._
+    implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(30, Seconds)))
+
+    // Abort the submission
+    Delete(s"${wsName.path}/submissions/${submissionId}") ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+
+    // The submission should be aborting
+    assertResult(SubmissionStatuses.Aborting.toString) {
+      runAndWait(submissionQuery.findById(UUID.fromString(submissionId)).result.head).status
+    }
+
+    // The workflow and submission should be aborted once the SubmissionMonitor runs
+    if (validate) {
+      eventually {
+        assertResult(Set(SubmissionStatuses.Aborted.toString)) {
+          runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(submissionId))).map(_.status).toSet
+        }
+        assertResult(SubmissionStatuses.Aborted.toString) {
+          runAndWait(submissionQuery.findById(UUID.fromString(submissionId)).result.head).status
+        }
+      }
+    }
   }
 
   it should "return 201 Created when creating and monitoring a submission with no expression" in withTestDataApiServices { services =>
@@ -139,6 +226,61 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
     assertResult(1) {
       submission.workflows.size
+    }
+  }
+
+  it should "abort a submission" in withTestDataApiServices { services =>
+    val wsName = testData.wsName
+    val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+
+    // create a submission
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
+
+    assertResult(1) {
+      submission.workflows.size
+    }
+
+    abortSubmission(services, wsName, submission.submissionId)
+  }
+
+  it should "create and abort a large submission" in withLargeSubmissionApiServices { services =>
+    val wsName = testData.wsLargeSubmission
+    val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+
+    // create a submission
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.largeSset, Option("this.hasSamples"), services)
+
+    assertResult(10000) {
+      submission.workflows.size
+    }
+
+    abortSubmission(services, wsName, submission.submissionId)
+  }
+
+  // To test for deadlocks one should run this test, log in to MySQL, run:
+  //
+  // mysql> show engine innodb status;
+  //
+  // and look for a section called "LAST DETECTED DEADLOCK".
+  it should "not deadlock when aborting a large submission" in withLargeSubmissionApiServices { services =>
+    withWorkflowSubmissionActor(services) { _ =>
+      val wsName = testData.wsLargeSubmission
+      val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+      val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+      val numIterations = 30
+
+      (1 to numIterations).map { i =>
+        logger.info(s"deadlock test: iteration $i/$numIterations")
+        val submission = createAndMonitorSubmission(wsName, methodConf, testData.largeSset, Option("this.hasSamples"), services)
+
+        assertResult(10000) {
+          submission.workflows.size
+        }
+
+        abortSubmission(services, wsName, submission.submissionId, false)
+      }
     }
   }
 

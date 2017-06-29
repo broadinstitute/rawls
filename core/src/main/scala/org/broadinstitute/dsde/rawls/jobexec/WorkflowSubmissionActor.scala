@@ -131,7 +131,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       for {
         // we exclude workflows submitted by users that have exceeded the max workflows per user
         excludedUsers <- dataAccess.workflowQuery.listSubmittersWithMoreWorkflowsThan(maxActiveWorkflowsPerUser, WorkflowStatuses.runningStatuses)
-        workflowRecs <- dataAccess.workflowQuery.findQueuedWorkflows(excludedUsers.map { case (submitter, count) => submitter }).take(batchSize).result
+        workflowRecs <- dataAccess.workflowQuery.findQueuedWorkflows(excludedUsers.map { case (submitter, count) => submitter }, SubmissionStatuses.terminalStatuses :+ SubmissionStatuses.Aborting).take(batchSize).result
         reservedRecs <- if (workflowRecs.isEmpty) {
             DBIO.successful(workflowRecs)
           } else {

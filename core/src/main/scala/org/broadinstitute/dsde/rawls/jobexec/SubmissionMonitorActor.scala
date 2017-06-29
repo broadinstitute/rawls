@@ -1,21 +1,21 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
+import java.util.UUID
+
 import akka.actor._
+import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 
 import scala.concurrent.duration.{Duration, FiniteDuration}
-import scala.util.{Failure, Success, Try}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
-
 import scala.concurrent.{ExecutionContext, Future}
-import akka.pattern._
-import java.util.UUID
+import scala.util.{Failure, Success, Try}
 
 /**
  * Created by dvoet on 6/26/15.

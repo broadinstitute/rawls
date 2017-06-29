@@ -5,24 +5,22 @@ import java.util.UUID
 import akka.actor.{ActorSystem, PoisonPill}
 import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
-import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflow, ProcessNextWorkflow, SubmitWorkflowBatch}
+import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
-import org.mockserver.model.{HttpRequest, StringBody}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http.StatusCodes
-import spray.httpx.marshalling._
+import spray.json.DefaultJsonProtocol._
 import spray.json._
-import DefaultJsonProtocol._
 
 import scala.concurrent.Await
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration._
-import scala.util.matching.Regex
 
 /**
  * Created by dvoet on 5/17/16.
@@ -69,7 +67,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   override def beforeAll(): Unit = {
     super.beforeAll()
     Await.result( mockGoogleServicesDAO.storeToken(userInfo, UUID.randomUUID.toString), Duration.Inf )
-    mockServer.startServer
+    mockServer.startServer()
   }
 
   override def afterAll(): Unit = {
@@ -198,8 +196,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
       }
 
-      import spray.json._
-      import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat // implicit format make convertTo work below
       val token = Await.result(workflowSubmission.googleServicesDAO.getToken(testData.submission1.submitter), Duration.Inf).get
       assertResult(
         Some(
@@ -391,5 +387,20 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         .withBody(mockServerContains("ContinueWhilePossible")),
       VerificationTimes.once()
     )
+  }
+
+  it should "not submit workflows whose submission is aborting" in withDefaultTestDatabase {
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
+
+    // Set workflows to Queued
+    setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
+
+    // Set submission to Aborting
+    runAndWait(submissionQuery.updateStatus(UUID.fromString(testData.submission1.submissionId), SubmissionStatuses.Aborting))
+
+    // The queued workflows should not be launchable
+    assertResult(ScheduleNextWorkflow) {
+      Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), 1 minute)
+    }
   }
 }
