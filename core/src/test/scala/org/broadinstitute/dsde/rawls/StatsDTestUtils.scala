@@ -7,7 +7,7 @@ import com.codahale.metrics.health.SharedHealthCheckRegistries
 import com.readytalk.metrics.{StatsD, StatsDReporter}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.{Submission, Workspace}
+import org.broadinstitute.dsde.rawls.model.{Submission, Workspace, WorkspaceName}
 import org.mockito.Mockito.{atLeastOnce, inOrder => mockitoInOrder}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.mock.MockitoSugar
@@ -53,5 +53,8 @@ trait StatsDTestUtils { this: MockitoSugar with Eventually with RawlsTestUtils =
     expectedMetric(workspace, submission, workflowStatus, name, submission.workflows.size)
 
   protected def expectedSubmissionStatusMetric(workspace: Workspace, submissionStatus: SubmissionStatus, expectedTimes: Int = 1): (String, String) =
-    (s"test.workspace.${workspace.toWorkspaceName.toString.replace('/', '.')}.submissionStatus.${submissionStatus.toString}", expectedTimes.toString)
+    expectedSubmissionStatusMetric(workspace.toWorkspaceName, submissionStatus, expectedTimes)
+
+  protected def expectedSubmissionStatusMetric(workspaceName: WorkspaceName, submissionStatus: SubmissionStatus, expectedTimes: Int): (String, String) =
+    (s"test.workspace.${workspaceName.toString.replace('/', '.')}.submissionStatus.${submissionStatus.toString}", expectedTimes.toString)
 }
