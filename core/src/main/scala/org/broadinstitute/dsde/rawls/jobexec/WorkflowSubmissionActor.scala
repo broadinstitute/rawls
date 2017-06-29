@@ -263,7 +263,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
           case (wfRec, Left(success: ExecutionServiceStatus)) =>
             val updatedWfRec = wfRec.copy(externalId = Option(success.id), status = success.status, executionServiceKey = Option(executionServiceKey.toString))
             dataAccess.workflowQuery.updateWorkflowRecord(updatedWfRec).map { count =>
-              workflowStatusCounter(workspaceRec.workspaceName, submissionRec.id, WorkflowStatuses.withName(updatedWfRec.status)) += count
+              workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.withName(updatedWfRec.status)) += count
               count
             }
         }
@@ -274,7 +274,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         }
         val failureMessages = failures map { case (wfRec, failure) => dataAccess.workflowQuery.saveMessages(execServiceFailureMessages(failure), wfRec.id) }
         val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey).map { count =>
-          workflowStatusCounter(workspaceRec.workspaceName, submissionRec.id, WorkflowStatuses.Failed) += count
+          workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.Failed) += count
           count
         }
 
@@ -287,7 +287,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
           val message = Option(t.getMessage).getOrElse(t.getClass.getName)
           dataAccess.workflowQuery.findWorkflowByIds(workflowIds).result flatMap { wfRecs =>
             dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Failed).map { count =>
-              workflowStatusCounter(workspaceRec.workspaceName, submissionRec.id, WorkflowStatuses.Failed) += count
+              workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.Failed) += count
               count
             }
           } andThen
