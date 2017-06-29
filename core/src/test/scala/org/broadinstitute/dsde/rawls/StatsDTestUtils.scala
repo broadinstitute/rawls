@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 import com.codahale.metrics.SharedMetricRegistries
 import com.codahale.metrics.health.SharedHealthCheckRegistries
 import com.readytalk.metrics.{StatsD, StatsDReporter}
+import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{Submission, Workspace}
 import org.mockito.Mockito.{atLeastOnce, inOrder => mockitoInOrder}
@@ -51,5 +52,6 @@ trait StatsDTestUtils { this: MockitoSugar with Eventually with RawlsTestUtils =
   protected def expectedMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus, name: Option[String] = None): (String, String) =
     expectedMetric(workspace, submission, workflowStatus, name, submission.workflows.size)
 
-
+  protected def expectedSubmissionStatusMetric(workspace: Workspace, submissionStatus: SubmissionStatus, expectedTimes: Int = 1): (String, String) =
+    (s"test.workspace.${workspace.toWorkspaceName.toString.replace('/', '.')}.submissionStatus.${submissionStatus.toString}", expectedTimes.toString)
 }

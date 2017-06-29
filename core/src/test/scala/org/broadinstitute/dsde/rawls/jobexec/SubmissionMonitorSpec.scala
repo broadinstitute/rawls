@@ -78,7 +78,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   val abortableStatuses = Seq(WorkflowStatuses.Queued) ++ WorkflowStatuses.runningStatuses
 
   abortableStatuses.foreach { status =>
-    it should s"abort all ${status.toString} workflows for a submission marked as aborting foo" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    it should s"abort all ${status.toString} workflows for a submission marked as aborting" in withDefaultTestDatabase { dataSource: SlickDataSource =>
       withStatsD {
         val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
 
@@ -155,18 +155,24 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   WorkflowStatuses.terminalStatuses.foreach { status =>
     it should s"checkOverallStatus terminal status - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-      val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+      withStatsD {
+        val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
-      runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(status.toString))
+        runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(status.toString))
 
-      Set(SubmissionStatuses.Aborting, SubmissionStatuses.Submitted).foreach { initialStatus =>
-        runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(initialStatus.toString))
+        Set(SubmissionStatuses.Aborting, SubmissionStatuses.Submitted).foreach { initialStatus =>
+          val expectedStatus = if (initialStatus == SubmissionStatuses.Aborting) SubmissionStatuses.Aborted else SubmissionStatuses.Done
+          runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(initialStatus.toString))
 
-        assert(runAndWait(monitor.checkOverallStatus(this)))
+          assert(runAndWait(monitor.checkOverallStatus(this)))
 
-        assertResult(if (initialStatus == SubmissionStatuses.Aborting) SubmissionStatuses.Aborted.toString else SubmissionStatuses.Done.toString) {
-          runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.head).status
+          assertResult(expectedStatus.toString) {
+            runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.head).status
+          }
         }
+      } { capturedMetrics =>
+        capturedMetrics should contain (expectedSubmissionStatusMetric(testData.workspace, SubmissionStatuses.Aborted))
+        capturedMetrics should contain (expectedSubmissionStatusMetric(testData.workspace, SubmissionStatuses.Done))
       }
     }
   }
@@ -260,20 +266,24 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "save workflow error messages" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    withStatsD {
+      val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
-    val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
+      val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
 
-    runAndWait(monitor.saveErrors(workflowsRecs.map(r => (r, Seq(AttributeString("a"), AttributeString("b")))), this))
+      runAndWait(monitor.saveErrors(workflowsRecs.map(r => (r, Seq(AttributeString("a"), AttributeString("b")))), this))
 
-    val submission = runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId)).get
+      val submission = runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId)).get
 
-    assert(submission.workflows.forall(_.status == WorkflowStatuses.Failed))
+      assert(submission.workflows.forall(_.status == WorkflowStatuses.Failed))
 
-    submission.workflows.foreach { workflow =>
-      assertResult(Seq(AttributeString("a"), AttributeString("b"))) {
-        workflow.messages
+      submission.workflows.foreach { workflow =>
+        assertResult(Seq(AttributeString("a"), AttributeString("b"))) {
+          workflow.messages
+        }
       }
+    } { capturedMetrics =>
+      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed))
     }
   }
 
@@ -435,25 +445,33 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   WorkflowStatuses.terminalStatuses.foreach { status =>
     it should s"terminate when workflow is done - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-      val monitorRef = createSubmissionMonitorActor(dataSource, testData.submissionUpdateEntity, new SubmissionTestExecutionServiceDAO(status.toString))
-      watch(monitorRef)
-      expectMsgClass(5 seconds, classOf[Terminated])
+      withStatsD {
+        val monitorRef = createSubmissionMonitorActor(dataSource, testData.submissionUpdateEntity, new SubmissionTestExecutionServiceDAO(status.toString))
+        watch(monitorRef)
+        expectMsgClass(5 seconds, classOf[Terminated])
 
-      assertResult(SubmissionStatuses.Done) {
-        runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submissionUpdateEntity.submissionId)).get.status
+        assertResult(SubmissionStatuses.Done) {
+          runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submissionUpdateEntity.submissionId)).get.status
+        }
+      } { capturedMetrics =>
+        capturedMetrics should contain (expectedSubmissionStatusMetric(testData.workspace, SubmissionStatuses.Done))
       }
     }
   }
 
   WorkflowStatuses.terminalStatuses.foreach { status =>
     it should s"terminate when workflow is aborted - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-      runAndWait(submissionQuery.findById(UUID.fromString(testData.submissionUpdateEntity.submissionId)).map(_.status).update(SubmissionStatuses.Aborting.toString))
-      val monitorRef = createSubmissionMonitorActor(dataSource, testData.submissionUpdateEntity, new SubmissionTestExecutionServiceDAO(status.toString))
-      watch(monitorRef)
-      expectMsgClass(5 seconds, classOf[Terminated])
+      withStatsD {
+        runAndWait(submissionQuery.findById(UUID.fromString(testData.submissionUpdateEntity.submissionId)).map(_.status).update(SubmissionStatuses.Aborting.toString))
+        val monitorRef = createSubmissionMonitorActor(dataSource, testData.submissionUpdateEntity, new SubmissionTestExecutionServiceDAO(status.toString))
+        watch(monitorRef)
+        expectMsgClass(5 seconds, classOf[Terminated])
 
-      assertResult(SubmissionStatuses.Aborted) {
-        runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submissionUpdateEntity.submissionId)).get.status
+        assertResult(SubmissionStatuses.Aborted) {
+          runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submissionUpdateEntity.submissionId)).get.status
+        }
+      } { capturedMetrics =>
+        capturedMetrics should contain (expectedSubmissionStatusMetric(testData.workspace, SubmissionStatuses.Aborted))
       }
     }
   }
