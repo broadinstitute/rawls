@@ -150,7 +150,7 @@ object Boot extends App with LazyLogging {
       shardedExecutionServiceCluster,
       slickDataSource,
       util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
-      rawlsMetricBaseName = "firecloud"
+      rawlsMetricBaseName = metricsPrefix
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
@@ -197,7 +197,7 @@ object Boot extends App with LazyLogging {
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
         Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
-        rawlsMetricBaseName = "firecloud"
+        rawlsMetricBaseName = metricsPrefix
       ))
     }
 
