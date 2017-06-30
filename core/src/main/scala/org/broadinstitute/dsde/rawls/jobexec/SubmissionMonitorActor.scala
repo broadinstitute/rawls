@@ -438,7 +438,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }.recover { case NonFatal(e) =>
       // Recover on errors since this just affects metrics and we don't want it to blow up the whole actor if it fails
       logger.error("Error occurred checking current workflow status counts", e)
-      Map.empty
+      Map.empty[WorkflowStatus, Int]
     }.map(SaveCurrentWorkflowStatusCounts.apply)
   }
 
