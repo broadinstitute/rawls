@@ -96,22 +96,13 @@ trait RawlsInstrumented extends DefaultInstrumented {
   }
 
   /**
-    * Adds a .count(Counter) method to DBIOAction returning a numeric value which is just shorthand for:
-    * {{{
-    *   action.map { count =>
-    *     counter += count
-    *     count
-    *   }
-    * }}}
+    * Adds a .countDBResult method to Counter which counts the result of a numeric DBIOAction.
     */
-  implicit class DBIOActionCounter[+R <% Long, +S <: NoStream, -E <: Effect](action: DBIOAction[R, S, E]) {
-    def count(counter: => Counter)(implicit executionContext: ExecutionContext): DBIOAction[R, NoStream, E] =
+  protected implicit class CounterDBIOActionSupport(counter: Counter) {
+    def countDBResult[R <% Long, S <: NoStream, E <: Effect](action: DBIOAction[R, S, E])(implicit executionContext: ExecutionContext): DBIOAction[R, NoStream, E] =
       action.map { count =>
         counter += count
         count
       }
-
-    def countOpt(counterOpt: => Option[Counter])(implicit executionContext: ExecutionContext): DBIOAction[R, NoStream, E] =
-      counterOpt.map(c => count(c)).getOrElse(action)
   }
 }

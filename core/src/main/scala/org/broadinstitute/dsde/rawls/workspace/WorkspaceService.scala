@@ -298,8 +298,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         //If a workflow is not done, automatically change its status to Aborted
         _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
-          case wf if !WorkflowStatuses.withName(wf.status).isDone => dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted)
-            .count(workflowStatusCounter(workspaceName, wf.submissionId, WorkflowStatuses.Aborted))
+          case wf if !WorkflowStatuses.withName(wf.status).isDone =>
+            workflowStatusCounter(workspaceName, wf.submissionId, WorkflowStatuses.Aborted).countDBResult {
+              dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted)
+            }
         }}
 
         //Gather the Google groups to remove, but don't remove project owners group which is used by other workspaces
@@ -1481,9 +1483,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def abortSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess): ReadWriteAction[PerRequestMessage] = {
     withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
-      dataAccess.submissionQuery.updateStatus(UUID.fromString(submission.submissionId), SubmissionStatuses.Aborting)
-        .count(submissionStatusCounter(workspaceContext.workspace.toWorkspaceName, SubmissionStatuses.Aborting))
-      .map { rows =>
+      submissionStatusCounter(workspaceContext.workspace.toWorkspaceName, SubmissionStatuses.Aborting).countDBResult {
+        dataAccess.submissionQuery.updateStatus(UUID.fromString(submission.submissionId), SubmissionStatuses.Aborting)
+      } map { rows =>
         if(rows == 1)
           RequestComplete(StatusCodes.NoContent)
         else

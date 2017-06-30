@@ -172,7 +172,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     def abortQueuedWorkflows(submissionId: UUID) = {
       datasource.inTransaction { dataAccess =>
-        dataAccess.workflowQuery.batchUpdateWorkflowsOfStatus(submissionId, WorkflowStatuses.Queued, WorkflowStatuses.Aborted).count(workflowStatusCounter(WorkflowStatuses.Aborted))
+        workflowStatusCounter(WorkflowStatuses.Aborted).countDBResult {
+          dataAccess.workflowQuery.batchUpdateWorkflowsOfStatus(submissionId, WorkflowStatuses.Queued, WorkflowStatuses.Aborted)
+        }
       }
     }
 
@@ -275,7 +277,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       // to minimize database updates do 1 update per status
       DBIO.seq(updatedRecs.groupBy(_.status).map { case (status, recs) =>
         val workflowStatus = WorkflowStatuses.withName(status)
-        dataAccess.workflowQuery.batchUpdateStatus(recs, workflowStatus).count(workflowStatusCounter(workflowStatus))
+        workflowStatusCounter(workflowStatus).countDBResult {
+          dataAccess.workflowQuery.batchUpdateStatus(recs, workflowStatus)
+        }
       }.toSeq: _*) andThen
         DBIO.successful(workflowsWithOutputs)
     }
@@ -316,7 +320,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           }
         } flatMap { newStatus =>
           logger.debug(s"submission $submissionId terminating to status $newStatus")
-          dataAccess.submissionQuery.updateStatus(submissionId, newStatus).count(submissionStatusCounter(newStatus))
+          submissionStatusCounter(newStatus).countDBResult {
+            dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
+          }
         } map(_ => true)
       } else {
         DBIO.successful(false)
@@ -413,8 +419,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess)(implicit executionContext: ExecutionContext) = {
     DBIO.sequence(errors.map { case (workflowRecord, errorMessages) =>
-      dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed)
-        .count(workflowStatusCounter(WorkflowStatuses.Failed)) andThen
+      workflowStatusCounter(WorkflowStatuses.Failed).countDBResult {
+        dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed)
+      } andThen
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })
   }
