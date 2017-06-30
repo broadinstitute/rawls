@@ -6,8 +6,10 @@ import nl.grons.metrics.scala._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
+import slick.dbio.{DBIOAction, Effect, NoStream}
 
 import scala.annotation.implicitNotFound
+import scala.concurrent.ExecutionContext
 
 /**
   * Mixin trait for instrumentation.
@@ -91,5 +93,25 @@ trait RawlsInstrumented extends DefaultInstrumented {
     def expand[A: Expansion](key: String, a: A) = {
       new ExpandedMetricBuilder().expand(key, a)
     }
+  }
+
+  /**
+    * Adds a .count(Counter) method to DBIOAction returning a numeric value which is just shorthand for:
+    * {{{
+    *   action.map { count =>
+    *     counter += count
+    *     count
+    *   }
+    * }}}
+    */
+  implicit class DBIOActionCounter[+R <% Long, +S <: NoStream, -E <: Effect](action: DBIOAction[R, S, E]) {
+    def count(counter: => Counter)(implicit executionContext: ExecutionContext): DBIOAction[R, NoStream, E] =
+      action.map { count =>
+        counter += count
+        count
+      }
+
+    def countOpt(counterOpt: => Option[Counter])(implicit executionContext: ExecutionContext): DBIOAction[R, NoStream, E] =
+      counterOpt.map(c => count(c)).getOrElse(action)
   }
 }

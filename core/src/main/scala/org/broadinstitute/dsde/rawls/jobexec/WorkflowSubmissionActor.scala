@@ -117,10 +117,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     workflowRecsToLaunch flatMap { case (wfRecs, submissionRecOpt, workspaceRecOpt) =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching)
-          .map { count =>
-            (workspaceRecOpt |@| submissionRecOpt).map((ws, sub) => workflowStatusCounter(ws.toWorkspaceName, sub.id, WorkflowStatuses.Launching) += count)
-            count
-          }
+          .countOpt((workspaceRecOpt |@| submissionRecOpt).map((ws, sub) => workflowStatusCounter(ws.toWorkspaceName, sub.id, WorkflowStatuses.Launching)))
       } map { _ =>
         if( wfRecs.nonEmpty && submissionRecOpt.isDefined && workspaceRecOpt.isDefined ) {
           SubmitWorkflowBatch(wfRecs.map(_.id), submissionRecOpt.get, workspaceRecOpt.get)
@@ -262,10 +259,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val successUpdates = results collect {
           case (wfRec, Left(success: ExecutionServiceStatus)) =>
             val updatedWfRec = wfRec.copy(externalId = Option(success.id), status = success.status, executionServiceKey = Option(executionServiceKey.toString))
-            dataAccess.workflowQuery.updateWorkflowRecord(updatedWfRec).map { count =>
-              workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.withName(updatedWfRec.status)) += count
-              count
-            }
+            dataAccess.workflowQuery.updateWorkflowRecord(updatedWfRec)
+              .count(workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.withName(updatedWfRec.status)))
         }
 
         //save error messages into failures and flip them to Failed
@@ -273,10 +268,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
           case (wfRec, Right(failure: ExecutionServiceFailure)) => (wfRec, failure)
         }
         val failureMessages = failures map { case (wfRec, failure) => dataAccess.workflowQuery.saveMessages(execServiceFailureMessages(failure), wfRec.id) }
-        val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey).map { count =>
-          workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.Failed) += count
-          count
-        }
+        val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey)
+          .count(workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.Failed))
 
         DBIO.seq((successUpdates ++ failureMessages :+ failureStatusUpd):_*)
       } map { _ => ProcessNextWorkflow }
@@ -286,10 +279,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         dataSource.inTransaction { dataAccess =>
           val message = Option(t.getMessage).getOrElse(t.getClass.getName)
           dataAccess.workflowQuery.findWorkflowByIds(workflowIds).result flatMap { wfRecs =>
-            dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Failed).map { count =>
-              workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.Failed) += count
-              count
-            }
+            dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Failed)
+              .count(workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.Failed))
           } andThen
           DBIO.sequence(workflowIds map { id => dataAccess.workflowQuery.saveMessages(Seq(AttributeString(message)), id) })
         } map { _ => throw t }

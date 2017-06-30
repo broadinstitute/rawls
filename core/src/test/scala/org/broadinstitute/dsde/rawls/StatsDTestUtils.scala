@@ -22,6 +22,8 @@ trait StatsDTestUtils { this: MockitoSugar with Eventually with RawlsTestUtils =
 
   protected def withStatsD[T](testCode: => T)(verify: Seq[(String, String)] => Unit = _ => ()): T = {
     val statsD = mock[StatsD]
+    SharedMetricRegistries.clear()
+    SharedHealthCheckRegistries.clear()
     val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
