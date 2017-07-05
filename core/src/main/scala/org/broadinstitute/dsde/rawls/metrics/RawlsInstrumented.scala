@@ -99,9 +99,9 @@ trait RawlsInstrumented extends DefaultInstrumented {
     * Adds a .countDBResult method to Counter which counts the result of a numeric DBIOAction.
     */
   protected implicit class CounterDBIOActionSupport(counter: Counter) {
-    def countDBResult[R <% Long, S <: NoStream, E <: Effect](action: DBIOAction[R, S, E])(implicit executionContext: ExecutionContext): DBIOAction[R, NoStream, E] =
+    def countDBResult[R, S <: NoStream, E <: Effect](action: DBIOAction[R, S, E])(implicit numeric: Numeric[R], executionContext: ExecutionContext): DBIOAction[R, NoStream, E] =
       action.map { count =>
-        counter += count
+        counter += numeric.toLong(count)
         count
       }
   }

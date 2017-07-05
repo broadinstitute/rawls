@@ -100,7 +100,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Aborted.toString), 10 seconds)
         expectMsgClass(5 seconds, classOf[Terminated])
       } { capturedMetrics =>
-        capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Aborted, None))
+        capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Aborted, None))
       }
     }
   }
@@ -283,7 +283,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         }
       }
     } { capturedMetrics =>
-      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed))
     }
   }
 

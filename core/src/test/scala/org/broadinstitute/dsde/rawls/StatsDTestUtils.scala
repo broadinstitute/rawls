@@ -48,11 +48,11 @@ trait StatsDTestUtils { this: MockitoSugar with Eventually with RawlsTestUtils =
     }
   }
 
-  protected def expectedMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus, name: Option[String], expectedTimes: Int): (String, String) =
+  protected def expectedWorkflowStatusMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus, name: Option[String], expectedTimes: Int): (String, String) =
     (s"test.workspace.${workspace.toWorkspaceName.toString.replace('/', '.')}.submission.${submission.submissionId}.workflowStatus.${workflowStatus.toString}${name.map(n => s".$n").getOrElse("")}", expectedTimes.toString)
 
-  protected def expectedMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus, name: Option[String] = None): (String, String) =
-    expectedMetric(workspace, submission, workflowStatus, name, submission.workflows.size)
+  protected def expectedWorkflowStatusMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus, name: Option[String] = None): (String, String) =
+    expectedWorkflowStatusMetric(workspace, submission, workflowStatus, name, submission.workflows.size)
 
   protected def expectedSubmissionStatusMetric(workspace: Workspace, submissionStatus: SubmissionStatus, expectedTimes: Int = 1): (String, String) =
     expectedSubmissionStatusMetric(workspace.toWorkspaceName, submissionStatus, expectedTimes)

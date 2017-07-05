@@ -331,6 +331,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       response()
         .withHeaders(jsonHeader)
         .withBody {
+          // Make the last one a failure
           (1 to numWorkflows).map(n => ExecutionServiceStatus(UUID.randomUUID().toString, if (n == numWorkflows) "Failed" else "Submitted")).toList.toJson.toString
         }
         .withStatusCode(StatusCodes.Created.intValue)

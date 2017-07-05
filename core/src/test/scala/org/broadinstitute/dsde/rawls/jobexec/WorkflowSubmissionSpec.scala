@@ -97,7 +97,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
     } { capturedMetrics =>
       capturedMetrics.size should be (1)
-      capturedMetrics(0) should equal (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Launching))
+      capturedMetrics(0) should equal (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Launching))
     }
   }
 
@@ -144,7 +144,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
     } { capturedMetrics =>
       capturedMetrics.size should be (1)
-      capturedMetrics(0) should equal (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Launching))
+      capturedMetrics(0) should equal (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Launching))
     }
   }
 
@@ -185,8 +185,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       }
     } { capturedMetrics =>
       // should be 2 submitted, 1 failed per the mock Cromwell server
-      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, None, 2))
-      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, None, 1))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, None, 2))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, None, 1))
     }
   }
 
@@ -284,7 +284,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         }, "Workflows that timeout on submission to Cromwell should be marked Failed")
       }
     } { capturedMetrics =>
-      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed))
     }
   }
 
@@ -306,8 +306,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       workflowSubmissionActor ! PoisonPill
     } { capturedMetrics =>
       // should be 2 submitted, 1 failed per the mock Cromwell server
-      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, None, 2))
-      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, None, 1))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, None, 2))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, None, 1))
     }
   }
 
@@ -332,7 +332,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)
       workflowSubmissionActor ! PoisonPill
     } { capturedMetrics =>
-      capturedMetrics should contain (expectedMetric(testData.workspace, testData.submissionTerminateTest, WorkflowStatuses.Failed))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submissionTerminateTest, WorkflowStatuses.Failed))
     }
   }
 

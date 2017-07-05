@@ -114,44 +114,41 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
     //flip the workflows to Launching in a separate txn.
     //if this optimistic-lock-exceptions with another txn, this one will barf and we'll reschedule when we pipe it back to ourselves
-    workflowRecsToLaunch flatMap { case (wfRecs, submissionRecOpt, workspaceRecOpt) =>
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching).map { count =>
-          (workspaceRecOpt |@| submissionRecOpt).map((ws, sub) => workflowStatusCounter(ws.toWorkspaceName, sub.id, WorkflowStatuses.Launching) += count)
-          count
+    workflowRecsToLaunch flatMap {
+      case Some((wfRecs, submissionRec, workspaceRec)) if wfRecs.nonEmpty =>
+        dataSource.inTransaction { dataAccess =>
+          workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.Launching).countDBResult {
+            dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching)
+          } map { _ =>
+            SubmitWorkflowBatch(wfRecs.map(_.id), submissionRec, workspaceRec)
+          }
         }
-      } map { _ =>
-        if( wfRecs.nonEmpty && submissionRecOpt.isDefined && workspaceRecOpt.isDefined ) {
-          SubmitWorkflowBatch(wfRecs.map(_.id), submissionRecOpt.get, workspaceRecOpt.get)
-        } else {
-          ScheduleNextWorkflow
-        }
-      }
+      case _ => Future.successful(ScheduleNextWorkflow)
     } recover {
       // if we found some but another actor reserved the first look again immediately
-      case t: RawlsConcurrentModificationException => ProcessNextWorkflow
+      case _: RawlsConcurrentModificationException => ProcessNextWorkflow
     }
   }
 
-  def reserveWorkflowBatch(dataAccess: DataAccess, activeCount: Int)(implicit executionContext: ExecutionContext): ReadWriteAction[(Seq[WorkflowRecord], Option[SubmissionRecord], Option[WorkspaceRecord])] = {
+  def reserveWorkflowBatch(dataAccess: DataAccess, activeCount: Int)(implicit executionContext: ExecutionContext): ReadWriteAction[Option[(Seq[WorkflowRecord], SubmissionRecord, WorkspaceRecord)]] = {
     if (activeCount > maxActiveWorkflowsTotal) {
       logger.warn(s"There are $activeCount active workflows which is beyond the total active cap of $maxActiveWorkflowsTotal. Workflows will not be submitted.")
-      DBIO.successful((Seq.empty, None, None))
+      DBIO.successful(None)
     } else {
       for {
         // we exclude workflows submitted by users that have exceeded the max workflows per user
         excludedUsers <- dataAccess.workflowQuery.listSubmittersWithMoreWorkflowsThan(maxActiveWorkflowsPerUser, WorkflowStatuses.runningStatuses)
         workflowRecs <- dataAccess.workflowQuery.findQueuedWorkflows(excludedUsers.map { case (submitter, count) => submitter }, SubmissionStatuses.terminalStatuses :+ SubmissionStatuses.Aborting).take(batchSize).result
         reservedRecs <- if (workflowRecs.isEmpty) {
-            DBIO.successful((Seq.empty, None, None))
+            DBIO.successful(None)
           } else {
             // they should also all have the same submission ID
             val submissionId = workflowRecs.head.submissionId
             val filteredWorkflowRecs = workflowRecs.filter(_.submissionId == submissionId)
             for {
-              submissionRecOpt <- dataAccess.submissionQuery.findById(submissionId).result.map(_.headOption)
-              workspaceRecOpt <- submissionRecOpt.map(sub => dataAccess.workspaceQuery.findByIdQuery(sub.workspaceId).result.map(_.headOption)).getOrElse(DBIO.successful(None))
-            } yield (filteredWorkflowRecs, submissionRecOpt, workspaceRecOpt)
+              submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.head)
+              workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result.map(_.head)
+            } yield Some(filteredWorkflowRecs, submissionRec, workspaceRec)
           }
       } yield reservedRecs
     }

@@ -1438,8 +1438,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         dataAccess.submissionQuery.create(workspaceContext, submission) map { sub =>
           submissionStatusCounter(workspaceName, SubmissionStatuses.Submitted) += 1
           workflowStatusCounter(workspaceName, UUID.fromString(submissionId), WorkflowStatuses.Queued) += workflows.size
-          sub
-        } map { _ =>
           RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, successes))
         }
     }
