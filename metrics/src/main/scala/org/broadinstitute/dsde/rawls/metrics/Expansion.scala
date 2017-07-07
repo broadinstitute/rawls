@@ -49,7 +49,7 @@ object Expansion {
     * Implicit expansion for HttpMethod.
     */
   implicit object HttpMethodExpansion extends Expansion[HttpMethod] {
-    override def makeName(m: HttpMethod): String = s"${m.toString.toLowerCase}"
+    override def makeName(m: HttpMethod): String = m.toString.toLowerCase
   }
 
   /**
@@ -58,19 +58,17 @@ object Expansion {
     * the default toString based implementation.
     */
   implicit object UriExpansion extends Expansion[Uri] {
-    override def makeName(uri: Uri): String = s"${uri2String(uri)}"
-
-    private def uri2String(uri: Uri): String = {
+    override def makeName(uri: Uri): String = {
       val path = if (uri.path.startsWithSlash) uri.path.tail.toString else uri.path
       path.toString.replace('/', '.')
     }
   }
 
   /**
-    * Implicit expansion for StatusCode.
+    * Implicit expansion for a StatusCode.
     */
   implicit object StatusCodeExpansion extends Expansion[StatusCode] {
-    override def makeName(statusCode: StatusCode): String = s"${statusCode.intValue.toString}"
+    override def makeName(statusCode: StatusCode): String = statusCode.intValue.toString
   }
 
   // Implicit expansions for String and Int.

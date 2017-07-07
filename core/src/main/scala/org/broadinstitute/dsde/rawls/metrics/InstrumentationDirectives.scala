@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.metrics
 
+import java.util.concurrent.TimeUnit
+
 import spray.routing.Directive0
 import spray.routing.directives.BasicDirectives.mapHttpResponse
 import spray.routing.directives.MiscDirectives.requestInstance
@@ -9,7 +11,7 @@ trait InstrumentationDirectives extends RawlsInstrumented {
     val timeStamp = System.currentTimeMillis
     mapHttpResponse { response =>
       httpRequestCounter(ExpandedMetricBuilder.empty)(request, response).inc()
-      httpRequestTimer(ExpandedMetricBuilder.empty)(request, response).time(System.currentTimeMillis - timeStamp)
+      httpRequestTimer(ExpandedMetricBuilder.empty)(request, response).update(System.currentTimeMillis - timeStamp, TimeUnit.MILLISECONDS)
       response
     }
   }

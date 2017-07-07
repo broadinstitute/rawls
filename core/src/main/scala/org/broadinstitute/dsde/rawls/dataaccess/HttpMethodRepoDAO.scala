@@ -2,10 +2,12 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus, MethodConfiguration, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus, MethodConfiguration, Subsystems, UserInfo}
 import org.broadinstitute.dsde.rawls.util.Retry
+import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
 import spray.client.pipelining._
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
@@ -18,21 +20,23 @@ import scala.util.control.NonFatal
 /**
  * @author tsharpe
  */
-class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "")(implicit val system: ActorSystem) extends MethodRepoDAO with DsdeHttpDAO with Retry with LazyLogging {
+class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", override val workbenchMetricBaseName: String)(implicit val system: ActorSystem) extends MethodRepoDAO with DsdeHttpDAO with Retry with LazyLogging with RawlsInstrumented {
+  import system.dispatcher
 
   private val methodRepoServiceURL = baseMethodRepoServiceURL + apiPath
 
+  private lazy implicit val baseMetricBuilder: ExpandedMetricBuilder =
+    ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Agora)
+
   private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    import system.dispatcher
-    val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[Option[AgoraEntity]]
+    val pipeline = addAuthHeader(userInfo) ~> instrumentedSendReceive ~> unmarshal[Option[AgoraEntity]]
     retry(when500) { () => pipeline(Get(url)) } recover {
       case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
     }
   }
 
   private def postAgoraEntity( url: String, agoraEntity: AgoraEntity, userInfo: UserInfo): Future[AgoraEntity] = {
-    import system.dispatcher
-    val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[AgoraEntity]
+    val pipeline = addAuthHeader(userInfo) ~> instrumentedSendReceive ~> unmarshal[AgoraEntity]
     retry(when500) { () => pipeline(Post(url, agoraEntity)) }
   }
 

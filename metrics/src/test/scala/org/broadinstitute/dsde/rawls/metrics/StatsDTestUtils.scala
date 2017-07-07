@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.metrics
 
 import java.util.concurrent.TimeUnit
 
-import com.codahale.metrics.health.SharedHealthCheckRegistries
 import com.codahale.metrics.{MetricFilter, SharedMetricRegistries}
 import com.readytalk.metrics.{StatsD, StatsDReporter}
 import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
@@ -46,4 +45,10 @@ trait StatsDTestUtils { this: Eventually with MockitoTestUtils =>
       clearRegistries()
     }
   }
+
+  protected def expectedHttpRequestMetrics(method: String, path: String, statusCode: Int, expectedTimes: Int, subsystem: Option[Subsystem] = None): Set[(String, String)] =
+    Set(
+      (s"test.${subsystem.map(s => s"subsystem.${s.toString}.").getOrElse("")}httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode.request", expectedTimes.toString),
+      (s"test.${subsystem.map(s => s"subsystem.${s.toString}.").getOrElse("")}httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode.latency.samples", expectedTimes.toString)
+    )
 }

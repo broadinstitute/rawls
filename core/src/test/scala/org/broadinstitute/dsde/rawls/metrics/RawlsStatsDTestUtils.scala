@@ -22,8 +22,4 @@ trait RawlsStatsDTestUtils extends StatsDTestUtils { this: Eventually with Mocki
 
   protected def expectedSubmissionStatusMetric(workspaceName: WorkspaceName, submissionStatus: SubmissionStatus, expectedTimes: Int): (String, String) =
     (s"${workbenchMetricBaseName}.workspace.${workspaceName.toString.replace('/', '.')}.submissionStatus.${submissionStatus.toString}.count", expectedTimes.toString)
-
-  protected def expectedHttpRequestMetrics(method: String, path: String, statusCode: Int, expectedTimes: Int): Set[(String, String)] =
-    Set((s"test.httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode.request", expectedTimes.toString),
-      (s"test.httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode.latency.samples", expectedTimes.toString))
 }

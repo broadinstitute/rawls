@@ -48,8 +48,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
     val googleServicesDAO = mockGoogleServicesDAO
-    val executionServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), dataSource)
-    val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl)
+    val executionServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName = workbenchMetricBaseName), dataSource)
+    val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName)
   }
 
   class TestWorkflowSubmissionWithMockExecSvc(
@@ -295,9 +295,9 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       val workflowSubmissionActor = system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
-        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
+        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
-        MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource),
+        MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
         3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
       )
 
@@ -307,6 +307,9 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       // should be 2 submitted, 1 failed per the mock Cromwell server
       capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, 2))
       capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, 1))
+
+      val expected = expectedHttpRequestMetrics("post", "workflows.v1.batch", StatusCodes.Created.intValue, 1, Some(Subsystems.Cromwell))
+      assertSubsetOf(expected, capturedMetrics)
     }
   }
 
@@ -322,7 +325,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       val workflowSubmissionActor = system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
-        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
+        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
         batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
