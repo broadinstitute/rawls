@@ -4,6 +4,7 @@ import java.util.UUID
 
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
+import nl.grons.metrics.scala.{Counter, DefaultInstrumented}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import slick.backend.DatabaseConfig
 import slick.driver.JdbcDriver
@@ -11,6 +12,7 @@ import slick.driver.MySQLDriver.api._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.Owner
+import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, WorkspaceAccessLevel}
@@ -41,10 +43,14 @@ object DbResource {
 /**
  * Created by dvoet on 2/3/16.
  */
-trait TestDriverComponent extends DriverComponent with DataAccess {
+trait TestDriverComponent extends DriverComponent with DataAccess with DefaultInstrumented {
   this: Suite =>
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
+
+  // Implicit counters are required for certain methods on WorkflowComponent and SubmissionComponent
+  implicit def wfStatusCounter(wfStatus: WorkflowStatus): Counter = metrics.counter(s"test.${wfStatus.toString}")
+  implicit def subStatusCounter(subStatus: SubmissionStatus): Counter = metrics.counter(s"test.${subStatus.toString}")
 
   val databaseConfig = DbResource.config
   val slickDataSource = DbResource.dataSource

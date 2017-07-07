@@ -3,9 +3,12 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
+import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import slick.driver.JdbcDriver
@@ -142,7 +145,7 @@ trait SubmissionComponent {
     }
 
     /* creates a submission and associated workflows in a workspace */
-    def create(workspaceContext: SlickWorkspaceContext, submission: Submission): ReadWriteAction[Submission] = {
+    def create(workspaceContext: SlickWorkspaceContext, submission: Submission)(implicit submissionStatusCounter: SubmissionStatus => Counter, wfStatusCounter: WorkflowStatus => Counter): ReadWriteAction[Submission] = {
 
       def saveSubmissionWorkflows(workflows: Seq[Workflow]) = {
         workflowQuery.createWorkflows(workspaceContext, UUID.fromString(submission.submissionId), workflows)
@@ -155,7 +158,9 @@ trait SubmissionComponent {
 
           loadSubmissionEntityId(workspaceContext.workspaceId, submission.submissionEntity) flatMap { entityId =>
             configIdAction flatMap { configId =>
-              (submissionQuery += marshalSubmission(workspaceContext.workspaceId, submission, entityId, configId.get))
+              submissionStatusCounter(submission.status).countDBResult {
+                (submissionQuery += marshalSubmission(workspaceContext.workspaceId, submission, entityId, configId.get))
+              }
             } andThen
               saveSubmissionWorkflows(submission.workflows)
           }
@@ -172,9 +177,11 @@ trait SubmissionComponent {
     }
 
     /* updates the status of a submission */
-    def updateStatus(submissionId: UUID, newStatus: SubmissionStatus) = {
+    def updateStatus(submissionId: UUID, newStatus: SubmissionStatus)(implicit submissionStatusCounter: SubmissionStatus => Counter) = {
       updateSubmissionWorkspace(submissionId) andThen
-        findById(submissionId).map(_.status).update(newStatus.toString)
+        submissionStatusCounter(newStatus).countDBResult {
+          findById(submissionId).map(_.status).update(newStatus.toString)
+        }
     }
 
     /* deletes a submission and all associated records */

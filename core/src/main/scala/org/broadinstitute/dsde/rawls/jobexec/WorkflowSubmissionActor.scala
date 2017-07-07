@@ -4,17 +4,13 @@ import java.util.UUID
 
 import akka.actor._
 import akka.pattern._
-import cats.instances.option._
-import cats.syntax.cartesian._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
-import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, addJitter}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -42,11 +38,13 @@ object WorkflowSubmissionActor {
     Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, rawlsMetricBaseName))
   }
 
+  case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
+
   sealed trait WorkflowSubmissionMessage
   case object ScheduleNextWorkflow extends WorkflowSubmissionMessage
   case object ProcessNextWorkflow extends WorkflowSubmissionMessage
   case object LookForWorkflows extends WorkflowSubmissionMessage
-  case class SubmitWorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord) extends WorkflowSubmissionMessage
+  case class SubmitWorkflowBatch(workflowBatch: WorkflowBatch) extends WorkflowSubmissionMessage
 
 }
 
@@ -77,8 +75,8 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
     case LookForWorkflows =>
       getUnlaunchedWorkflowBatch() pipeTo self
 
-    case SubmitWorkflowBatch(workflowIds, submissionRec, workspaceRec) =>
-      submitWorkflowBatch(workflowIds, submissionRec, workspaceRec) pipeTo self
+    case SubmitWorkflowBatch(workflowBatch) =>
+      submitWorkflowBatch(workflowBatch) pipeTo self
 
     case Status.Failure(t) =>
       logger.error(t.getMessage)
@@ -116,11 +114,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     //if this optimistic-lock-exceptions with another txn, this one will barf and we'll reschedule when we pipe it back to ourselves
     workflowRecsToLaunch flatMap {
       case Some((wfRecs, submissionRec, workspaceRec)) if wfRecs.nonEmpty =>
+        implicit val wfStatusCounter = workflowStatusCounterProvider(workspaceRec.toWorkspaceName, submissionRec.id)
         dataSource.inTransaction { dataAccess =>
-          workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.Launching).countDBResult {
-            dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching)
-          } map { _ =>
-            SubmitWorkflowBatch(wfRecs.map(_.id), submissionRec, workspaceRec)
+          dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching) map { _ =>
+            SubmitWorkflowBatch(WorkflowBatch(wfRecs.map(_.id), submissionRec, workspaceRec))
           }
         }
       case _ => Future.successful(ScheduleNextWorkflow)
@@ -148,7 +145,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
             for {
               submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.head)
               workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result.map(_.head)
-            } yield Some(filteredWorkflowRecs, submissionRec, workspaceRec)
+            } yield Some((filteredWorkflowRecs, submissionRec, workspaceRec))
           }
       } yield reservedRecs
     }
@@ -202,7 +199,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   }
 
   //submit the batch of workflows with the given ids
-  def submitWorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
+  def submitWorkflowBatch(batch: WorkflowBatch)(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
+
+    val WorkflowBatch(workflowIds, submissionRec, workspaceRec) = batch
+    implicit val wfStatusCounter = workflowStatusCounterProvider(workspaceRec.toWorkspaceName, submissionRec.id)
 
     val workflowBatchFuture = dataSource.inTransaction { dataAccess =>
       for {
@@ -258,9 +258,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val successUpdates = results collect {
           case (wfRec, Left(success: ExecutionServiceStatus)) =>
             val updatedWfRec = wfRec.copy(externalId = Option(success.id), status = success.status, executionServiceKey = Option(executionServiceKey.toString))
-            workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.withName(updatedWfRec.status)).countDBResult {
-              dataAccess.workflowQuery.updateWorkflowRecord(updatedWfRec)
-            }
+            dataAccess.workflowQuery.updateWorkflowRecord(updatedWfRec)
         }
 
         //save error messages into failures and flip them to Failed
@@ -268,9 +266,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
           case (wfRec, Right(failure: ExecutionServiceFailure)) => (wfRec, failure)
         }
         val failureMessages = failures map { case (wfRec, failure) => dataAccess.workflowQuery.saveMessages(execServiceFailureMessages(failure), wfRec.id) }
-        val failureStatusUpd = workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.Failed).countDBResult {
-          dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey)
-        }
+        val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey)
 
         DBIO.seq((successUpdates ++ failureMessages :+ failureStatusUpd):_*)
       } map { _ => ProcessNextWorkflow }
@@ -280,19 +276,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         dataSource.inTransaction { dataAccess =>
           val message = Option(t.getMessage).getOrElse(t.getClass.getName)
           dataAccess.workflowQuery.findWorkflowByIds(workflowIds).result flatMap { wfRecs =>
-            workflowStatusCounter(workspaceRec.toWorkspaceName, submissionRec.id, WorkflowStatuses.Failed).countDBResult {
-              dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Failed)
-            }
+            dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Failed)
           } andThen
           DBIO.sequence(workflowIds map { id => dataAccess.workflowQuery.saveMessages(Seq(AttributeString(message)), id) })
         } map { _ => throw t }
     }
   }
-
-  private def workflowStatusCounter(workspaceName: WorkspaceName, submissionId: UUID, status: WorkflowStatus): Counter =
-    ExpandedMetricBuilder
-      .expand(WorkspaceMetric, workspaceName)
-      .expand(SubmissionMetric, submissionId)
-      .expand(WorkflowStatusMetric, status)
-      .asCounter()
 }

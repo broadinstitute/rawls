@@ -43,13 +43,19 @@ trait RawlsInstrumented extends DefaultInstrumented {
   // Typeclass instances:
 
   protected implicit object WorkspaceNameExpansion extends Expansion[WorkspaceName] {
+    // Statsd doesn't allow slashes in metric names, so we override makeName to override
+    // the default toString based implementation.
     override def makeName(key: String, n: WorkspaceName): String = s"$key.${n.toString.replace('/', '.')}"
   }
 
+  // Provide an implicit for UUIDs but can use the default makeName
   protected implicit object UUIDExpansion extends Expansion[UUID]
 
+  // Provide implicits for WorkflowStatus and SubmissionStatus using the default makeName.
+  //
+  // These both take an upper type bound A <: WorkflowStatus|SubmissionStatus so they can
+  // work either with the supertype (e.g. WorkflowStatus) or a subtype (e.g. WorkflowStatuses.Launching).
   protected implicit def WorkflowStatusExpansion[A <: WorkflowStatus] = new Expansion[A] {}
-
   protected implicit def SubmissionStatusExpansion[A <: SubmissionStatus] = new Expansion[A] {}
 
   /**
@@ -68,7 +74,7 @@ trait RawlsInstrumented extends DefaultInstrumented {
     *
     * Note the above will only compile if there are [[Expansion]] instances for the types passed to the expand method.
     */
-  protected class ExpandedMetricBuilder[A] private (m: String = "") {
+  protected class ExpandedMetricBuilder private (m: String = "") {
     def expand[A: Expansion](key: String, a: A) = {
       new ExpandedMetricBuilder(
         (if (m == "") m else m + ".") + implicitly[Expansion[A]].makeName(key, a))
@@ -95,10 +101,27 @@ trait RawlsInstrumented extends DefaultInstrumented {
     }
   }
 
+  // Handy counter definitions which can be used by implementing classes:
+
+  protected def submissionStatusCounterProvider(workspaceName: WorkspaceName) =
+    (status: SubmissionStatus) => ExpandedMetricBuilder
+      .expand(WorkspaceMetric, workspaceName)
+      .expand(SubmissionStatusMetric, status)
+      .asCounter()
+
+  protected def workflowStatusCounterProvider(workspaceName: WorkspaceName, submissionId: UUID) =
+    (status: WorkflowStatus) => ExpandedMetricBuilder
+      .expand(WorkspaceMetric, workspaceName)
+      .expand(SubmissionMetric, submissionId)
+      .expand(WorkflowStatusMetric, status)
+      .asCounter()
+}
+
+object RawlsInstrumented {
   /**
     * Adds a .countDBResult method to Counter which counts the result of a numeric DBIOAction.
     */
-  protected implicit class CounterDBIOActionSupport(counter: Counter) {
+  implicit class CounterDBIOActionSupport(counter: Counter) {
     def countDBResult[R, S <: NoStream, E <: Effect](action: DBIOAction[R, S, E])(implicit numeric: Numeric[R], executionContext: ExecutionContext): DBIOAction[R, NoStream, E] =
       action.map { count =>
         counter += numeric.toLong(count)
