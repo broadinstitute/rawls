@@ -114,6 +114,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     //if this optimistic-lock-exceptions with another txn, this one will barf and we'll reschedule when we pipe it back to ourselves
     workflowRecsToLaunch flatMap {
       case Some((wfRecs, submissionRec, workspaceRec)) if wfRecs.nonEmpty =>
+        // implicitly passed to WorkflowComponent.batchUpdateStatus
         implicit val wfStatusCounter = workflowStatusCounterProvider(workspaceRec.toWorkspaceName, submissionRec.id)
         dataSource.inTransaction { dataAccess =>
           dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching) map { _ =>
@@ -202,6 +203,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   def submitWorkflowBatch(batch: WorkflowBatch)(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
 
     val WorkflowBatch(workflowIds, submissionRec, workspaceRec) = batch
+    // implicitly passed to WorkflowComponent methods which update status
     implicit val wfStatusCounter = workflowStatusCounterProvider(workspaceRec.toWorkspaceName, submissionRec.id)
 
     val workflowBatchFuture = dataSource.inTransaction { dataAccess =>

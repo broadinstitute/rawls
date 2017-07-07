@@ -205,11 +205,11 @@ trait WorkflowComponent {
     }
 
     //input: old workflow records, and the status that we want to apply to all of them
-    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus)(implicit counter: WorkflowStatus => Counter): ReadWriteAction[Int] = {
+    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus)(implicit wfStatusCounter: WorkflowStatus => Counter): ReadWriteAction[Int] = {
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
-        counter(newStatus).countDBResult {
+        wfStatusCounter(newStatus).countDBResult {
           UpdateWorkflowStatusRawSql.actionForWorkflowRecs(workflows, newStatus) map { rows =>
             if (rows.head == workflows.size)
               workflows.size
@@ -220,11 +220,11 @@ trait WorkflowComponent {
       }
     }
 
-    def batchUpdateStatusAndExecutionServiceKey(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, execServiceId: ExecutionServiceId)(implicit counter: WorkflowStatus => Counter): ReadWriteAction[Int] = {
+    def batchUpdateStatusAndExecutionServiceKey(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, execServiceId: ExecutionServiceId)(implicit wfStatusCounter: WorkflowStatus => Counter): ReadWriteAction[Int] = {
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
-        counter(newStatus).countDBResult {
+        wfStatusCounter(newStatus).countDBResult {
           UpdateWorkflowStatusAndExecutionIdRawSql.actionForWorkflowRecs(workflows, newStatus, execServiceId) map { rows =>
             if (rows.head == workflows.size)
               workflows.size
@@ -241,7 +241,8 @@ trait WorkflowComponent {
       }
     }
 
-    // Not instrumented because there is no workspace/submission context for this method
+    // Not instrumented because there is no workspace/submission context for this method.
+    // It is actually only called on Rawls boot to reset Launching workflows to Queued.
     def batchUpdateStatus(currentStatus: WorkflowStatuses.WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
       UpdateWorkflowStatusRawSql.actionForCurrentStatus(currentStatus, newStatus)
     }

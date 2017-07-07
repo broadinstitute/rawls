@@ -1431,6 +1431,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           workflowFailureMode = workflowFailureMode
         )
 
+        // implicitly passed to SubmissionComponent.create
         implicit val subStatusCounter = submissionStatusCounterProvider(workspaceName)
         implicit val wfStatusCounter = workflowStatusCounterProvider(workspaceName, submissionId)
 
@@ -1478,6 +1479,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def abortSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess): ReadWriteAction[PerRequestMessage] = {
     withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
+      // implicitly passed to SubmissionComponent.updateStatus
       implicit val subStatusCounter = submissionStatusCounterProvider(workspaceContext.workspace.toWorkspaceName)
       dataAccess.submissionQuery.updateStatus(UUID.fromString(submission.submissionId), SubmissionStatuses.Aborting) map { rows =>
         if(rows == 1)
