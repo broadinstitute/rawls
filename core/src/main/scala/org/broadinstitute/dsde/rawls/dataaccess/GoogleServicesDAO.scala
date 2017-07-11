@@ -29,7 +29,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project]
 
-    /** Deletes a bucket from Google Cloud Storage. If the bucket is not empty, all objects in the bucket will be marked
+  /** Deletes a bucket from Google Cloud Storage. If the bucket is not empty, all objects in the bucket will be marked
     * for deletion (see below).
     *
     * Warning: Direct calls to this method may cause deletion to not happen if it has to be deferred and rawls is
