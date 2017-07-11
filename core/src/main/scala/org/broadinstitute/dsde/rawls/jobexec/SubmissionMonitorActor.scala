@@ -4,17 +4,23 @@ import java.util.UUID
 
 import akka.actor._
 import akka.pattern._
+import com.codahale.metrics.{Gauge, Metric, MetricFilter}
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
+import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, addJitter}
 
-import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -26,8 +32,9 @@ object SubmissionMonitorActor {
             datasource: SlickDataSource,
             executionServiceCluster: ExecutionServiceCluster,
             credential: Credential,
-            submissionPollInterval: FiniteDuration): Props = {
-    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval))
+            submissionPollInterval: FiniteDuration,
+            rawlsMetricBaseName: String): Props = {
+    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, rawlsMetricBaseName))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -43,6 +50,13 @@ object SubmissionMonitorActor {
    */
   case class ExecutionServiceStatusResponse(statusResponse: Seq[Try[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]]]) extends SubmissionMonitorMessage
   case class StatusCheckComplete(terminateActor: Boolean) extends SubmissionMonitorMessage
+
+  /**
+    * A periodic count of all current workflow statuses for the submission.
+    * This is used for instrumentation.
+    */
+  case object CheckCurrentWorkflowStatusCounts extends SubmissionMonitorMessage
+  case class SaveCurrentWorkflowStatusCounts(workflowStatusCounts: Map[WorkflowStatus, Int]) extends SubmissionMonitorMessage
 }
 
 /**
@@ -60,11 +74,26 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val datasource: SlickDataSource,
                              val executionServiceCluster: ExecutionServiceCluster,
                              val credential: Credential,
-                             val submissionPollInterval: FiniteDuration) extends Actor with SubmissionMonitor with LazyLogging {
-
+                             val submissionPollInterval: FiniteDuration,
+                             override val rawlsMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
   import context._
 
-  scheduleNextMonitorPass
+  // This field is marked volatile because it is read by a separate statsd thread.
+  // It is only written by this actor.
+  @volatile
+  private var currentWorkflowStatusCounts: Map[WorkflowStatus, Int] = Map.empty
+
+  override def preStart(): Unit = {
+    super.preStart()
+    initGauges()
+    scheduleNextMonitorPass
+    scheduleNextCheckCurrentWorkflowStatus
+  }
+
+  override def postStop(): Unit = {
+    destroyGauges()
+    super.postStop()
+  }
 
   override def receive = {
     case StartMonitorPass =>
@@ -77,23 +106,68 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       logger.debug(s"done checking status for submission $submissionId, terminateActor = $terminateActor")
       if (terminateActor) stop(self)
       else scheduleNextMonitorPass
+    case CheckCurrentWorkflowStatusCounts =>
+      logger.debug(s"check current workflow status counts for submission $submissionId")
+      checkCurrentWorkflowStatusCounts pipeTo self
+    case SaveCurrentWorkflowStatusCounts(statusCounts) =>
+      logger.debug(s"saving current workflow status counts for submission $submissionId")
+      currentWorkflowStatusCounts = statusCounts
+      scheduleNextCheckCurrentWorkflowStatus
 
     case Status.Failure(t) => throw t // an error happened in some future, let the supervisor handle it
   }
 
-  def scheduleNextMonitorPass: Cancellable = {
-    system.scheduler.scheduleOnce(submissionPollInterval, self, StartMonitorPass)
+  private def scheduleNextMonitorPass: Cancellable = {
+    system.scheduler.scheduleOnce(addJitter(submissionPollInterval), self, StartMonitorPass)
+  }
+
+  private def scheduleNextCheckCurrentWorkflowStatus: Cancellable = {
+    system.scheduler.scheduleOnce(addJitter(submissionPollInterval), self, CheckCurrentWorkflowStatusCounts)
+  }
+
+  private def initGauges(): Unit = {
+    try {
+      WorkflowStatuses.allStatuses.foreach { status =>
+        workspaceSubmissionMetricBuilder
+          .expand(WorkflowStatusMetric, status)
+          .asGauge(Some("current"))(currentWorkflowStatusCounts.getOrElse(status, 0))
+      }
+    } catch {
+      case NonFatal(e) => logger.warn(s"Could not initialize gauge metrics for submission $submissionId", e)
+    }
+  }
+
+  private def destroyGauges(): Unit = {
+    metrics.registry.removeMatching(new MetricFilter {
+      override def matches(name: String, metric: Metric): Boolean = {
+        (name contains submissionId.toString) && (metric.isInstanceOf[Gauge[_]])
+      }
+    })
   }
 
 }
 
-trait SubmissionMonitor extends FutureSupport with LazyLogging {
+trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrumented {
   val workspaceName: WorkspaceName
   val submissionId: UUID
   val datasource: SlickDataSource
   val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
   val submissionPollInterval: Duration
+
+  // Cache these metric builders since they won't change for this SubmissionMonitor
+  protected lazy val workspaceMetricBuilder: ExpandedMetricBuilder =
+    workspaceMetricBuilder(workspaceName)
+
+  protected lazy val workspaceSubmissionMetricBuilder: ExpandedMetricBuilder =
+    workspaceSubmissionMetricBuilder(workspaceName, submissionId)
+
+  // implicitly passed to WorkflowComponent/SubmissionComponent methods
+  private implicit val wfStatusCounter: WorkflowStatus => Counter =
+    workflowStatusCounter(workspaceSubmissionMetricBuilder)
+
+  private implicit val subStatusCounter: SubmissionStatus => Counter =
+    submissionStatusCounter(workspaceMetricBuilder)
 
   import datasource.dataAccess.driver.api._
 
@@ -353,5 +427,17 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
       dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })
+  }
+
+  def checkCurrentWorkflowStatusCounts(implicit executionContext: ExecutionContext): Future[SaveCurrentWorkflowStatusCounts] = {
+    datasource.inTransaction { dataAccess =>
+      dataAccess.workflowQuery.countWorkflowsForSubmissionByQueueStatus(submissionId).map { workflowStatusCounts =>
+        workflowStatusCounts.map { case (k, v) => WorkflowStatuses.withName(k) -> v }
+      }
+    }.recover { case NonFatal(e) =>
+      // Recover on errors since this just affects metrics and we don't want it to blow up the whole actor if it fails
+      logger.error("Error occurred checking current workflow status counts", e)
+      Map.empty[WorkflowStatus, Int]
+    }.map(SaveCurrentWorkflowStatusCounts.apply)
   }
 }

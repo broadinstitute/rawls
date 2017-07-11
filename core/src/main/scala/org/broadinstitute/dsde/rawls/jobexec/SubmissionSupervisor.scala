@@ -21,8 +21,9 @@ object SubmissionSupervisor {
 
   def props(executionServiceCluster: ExecutionServiceCluster,
             datasource: SlickDataSource,
-            submissionPollInterval: FiniteDuration = 1 minutes): Props = {
-    Props(new SubmissionSupervisor(executionServiceCluster, datasource, submissionPollInterval))
+            submissionPollInterval: FiniteDuration = 1 minutes,
+            rawlsMetricBaseName: String): Props = {
+    Props(new SubmissionSupervisor(executionServiceCluster, datasource, submissionPollInterval, rawlsMetricBaseName))
   }
 }
 
@@ -36,7 +37,8 @@ object SubmissionSupervisor {
  */
 class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            datasource: SlickDataSource,
-                           submissionPollInterval: FiniteDuration) extends Actor {
+                           submissionPollInterval: FiniteDuration,
+                           rawlsMetricBaseName: String) extends Actor {
   import context._
 
   override def receive = {
@@ -44,7 +46,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential): Unit = {
-    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval), submissionId.toString)
+    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, rawlsMetricBaseName), submissionId.toString)
   }
 
   override val supervisorStrategy =

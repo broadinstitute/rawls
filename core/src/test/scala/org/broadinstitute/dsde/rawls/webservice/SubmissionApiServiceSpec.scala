@@ -79,7 +79,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       100 milliseconds,
       100000,
       100000,
-      None))
+      None,
+      "test"))
 
     try {
       testCode(actor)
@@ -127,23 +128,27 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression, false, workflowFailureMode)
-    Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
-      sealRoute(services.submissionRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-        val submission = responseAs[SubmissionReport]
-        Get(s"${wsName.path}/submissions/${submission.submissionId}") ~>
-          sealRoute(services.submissionRoutes) ~>
-          check {
-            assertResult(StatusCodes.OK) {
-              status
-            }
-            return responseAs[SubmissionStatusResponse]
+    withStatsD {
+      val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression, false, workflowFailureMode)
+      Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
+        sealRoute(services.submissionRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created, responseAs[String]) {
+            status
           }
-      }
+          val submission = responseAs[SubmissionReport]
+          Get(s"${wsName.path}/submissions/${submission.submissionId}") ~>
+            sealRoute(services.submissionRoutes) ~>
+            check {
+              assertResult(StatusCodes.OK) {
+                status
+              }
+              return responseAs[SubmissionStatusResponse]
+            }
+        }
+    } { capturedMetrics =>
+      capturedMetrics should contain (expectedSubmissionStatusMetric(wsName, SubmissionStatuses.Submitted, 1))
+    }
 
     fail("Unable to create and monitor submissions")
   }
@@ -152,18 +157,22 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     import driver.api._
     implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(30, Seconds)))
 
-    // Abort the submission
-    Delete(s"${wsName.path}/submissions/${submissionId}") ~>
-      sealRoute(services.submissionRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
+    withStatsD {
+      // Abort the submission
+      Delete(s"${wsName.path}/submissions/${submissionId}") ~>
+        sealRoute(services.submissionRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
         }
-      }
 
-    // The submission should be aborting
-    assertResult(SubmissionStatuses.Aborting.toString) {
-      runAndWait(submissionQuery.findById(UUID.fromString(submissionId)).result.head).status
+      // The submission should be aborting
+      assertResult(SubmissionStatuses.Aborting.toString) {
+        runAndWait(submissionQuery.findById(UUID.fromString(submissionId)).result.head).status
+      }
+    } { capturedMetrics =>
+      capturedMetrics should contain (expectedSubmissionStatusMetric(wsName, SubmissionStatuses.Aborting, 1))
     }
 
     // The workflow and submission should be aborted once the SubmissionMonitor runs

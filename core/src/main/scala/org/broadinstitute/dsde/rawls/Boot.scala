@@ -149,7 +149,8 @@ object Boot extends App with LazyLogging {
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
       slickDataSource,
-      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval"))
+      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
+      rawlsMetricBaseName = metricsPrefix
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
@@ -195,7 +196,8 @@ object Boot extends App with LazyLogging {
         util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
-        Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption
+        Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
+        rawlsMetricBaseName = metricsPrefix
       ))
     }
 
@@ -230,7 +232,8 @@ object Boot extends App with LazyLogging {
         userServiceConstructor,
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser),
+        maxActiveWorkflowsPerUser,
+        rawlsMetricBaseName = metricsPrefix),
       userServiceConstructor,
       genomicsServiceConstructor,
       statisticsServiceConstructor,

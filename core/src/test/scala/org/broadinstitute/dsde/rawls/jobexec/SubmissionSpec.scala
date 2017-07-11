@@ -171,7 +171,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val gpsDAO = new MockGooglePubSubDAO
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         execServiceCluster,
-        slickDataSource
+        slickDataSource,
+        rawlsMetricBaseName = "test"
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
       val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
@@ -212,7 +213,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         userServiceConstructor,
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser
+        maxActiveWorkflowsPerUser,
+        "test"
       )_
       lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
       try {
