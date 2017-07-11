@@ -101,18 +101,37 @@ trait RawlsInstrumented extends DefaultInstrumented {
     }
   }
 
-  // Handy counter definitions which can be used by implementing classes:
+  // Handy definitions which can be used by implementing classes:
 
-  protected def submissionStatusCounterProvider(workspaceName: WorkspaceName) =
-    (status: SubmissionStatus) => ExpandedMetricBuilder
-      .expand(WorkspaceMetric, workspaceName)
+  /**
+    * An ExpandedMetricBuilder for a WorkspaceName.
+    */
+  protected def workspaceMetricBuilder(workspaceName: WorkspaceName): ExpandedMetricBuilder =
+    ExpandedMetricBuilder.expand(WorkspaceMetric, workspaceName)
+
+  /**
+    * An ExpandedMetricBuilder for a WorkspaceName and a submission ID.
+    */
+  protected def workspaceSubmissionMetricBuilder(workspaceName: WorkspaceName, submissionId: UUID): ExpandedMetricBuilder =
+    workspaceMetricBuilder(workspaceName).expand(SubmissionMetric, submissionId)
+
+  /**
+    * Provides a counter for a SubmissionStatus.
+    * @param builder base builder used to generate the counter
+    * @return SubmissionStatus => Counter
+    */
+  protected def submissionStatusCounter(builder: ExpandedMetricBuilder): SubmissionStatus => Counter =
+    status => builder
       .expand(SubmissionStatusMetric, status)
       .asCounter()
 
-  protected def workflowStatusCounterProvider(workspaceName: WorkspaceName, submissionId: UUID) =
-    (status: WorkflowStatus) => ExpandedMetricBuilder
-      .expand(WorkspaceMetric, workspaceName)
-      .expand(SubmissionMetric, submissionId)
+  /**
+    * Provides a counter for a WorkflowStatus.
+    * @param builder base builder used to generate the counter
+    * @return WorkflowStatus => Counter
+    */
+  protected def workflowStatusCounter(builder: ExpandedMetricBuilder): WorkflowStatus => Counter =
+    status => builder
       .expand(WorkflowStatusMetric, status)
       .asCounter()
 }

@@ -157,21 +157,17 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   // Cache these metric builders since they won't change for this SubmissionMonitor
   protected lazy val workspaceMetricBuilder: ExpandedMetricBuilder =
-    ExpandedMetricBuilder.expand(WorkspaceMetric, workspaceName)
+    workspaceMetricBuilder(workspaceName)
 
   protected lazy val workspaceSubmissionMetricBuilder: ExpandedMetricBuilder =
-    workspaceMetricBuilder.expand(SubmissionMetric, submissionId)
+    workspaceSubmissionMetricBuilder(workspaceName, submissionId)
 
   // implicitly passed to WorkflowComponent/SubmissionComponent methods
-  private implicit def workflowStatusCounter(status: WorkflowStatus): Counter =
-    workspaceSubmissionMetricBuilder
-      .expand(WorkflowStatusMetric, status)
-      .asCounter()
+  private implicit val wfStatusCounter: WorkflowStatus => Counter =
+    workflowStatusCounter(workspaceSubmissionMetricBuilder)
 
-  private implicit def submissionStatusCounter(status: SubmissionStatus): Counter =
-    workspaceMetricBuilder
-      .expand(SubmissionStatusMetric, status)
-      .asCounter()
+  private implicit val subStatusCounter: SubmissionStatus => Counter =
+    submissionStatusCounter(workspaceMetricBuilder)
 
   import datasource.dataAccess.driver.api._
 

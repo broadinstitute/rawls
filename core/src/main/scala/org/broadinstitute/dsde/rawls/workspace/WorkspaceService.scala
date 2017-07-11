@@ -297,7 +297,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         //If a workflow is not done, automatically change its status to Aborted
         _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
           case wf if !WorkflowStatuses.withName(wf.status).isDone =>
-            dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted)(workflowStatusCounterProvider(workspaceName, wf.submissionId))
+            dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted)(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId)))
         }}
 
         //Gather the Google groups to remove, but don't remove project owners group which is used by other workspaces
@@ -1432,8 +1432,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         )
 
         // implicitly passed to SubmissionComponent.create
-        implicit val subStatusCounter = submissionStatusCounterProvider(workspaceName)
-        implicit val wfStatusCounter = workflowStatusCounterProvider(workspaceName, submissionId)
+        implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceName))
+        implicit val wfStatusCounter = workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, submissionId))
 
         dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
           RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, successes))
@@ -1480,7 +1480,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def abortSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess): ReadWriteAction[PerRequestMessage] = {
     withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
       // implicitly passed to SubmissionComponent.updateStatus
-      implicit val subStatusCounter = submissionStatusCounterProvider(workspaceContext.workspace.toWorkspaceName)
+      implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.workspace.toWorkspaceName))
       dataAccess.submissionQuery.updateStatus(UUID.fromString(submission.submissionId), SubmissionStatuses.Aborting) map { rows =>
         if(rows == 1)
           RequestComplete(StatusCodes.NoContent)
