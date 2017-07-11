@@ -37,7 +37,7 @@ paths:
       tags:
         - status
       summary: status check for underlying systems
-      operationId: status
+      operationId: systemStatus
   '/api/version/executionEngine':
     get:
       responses:
@@ -88,7 +88,7 @@ paths:
         - admin
         - billing
       summary: list billing projects for a user
-      operationId: listUserBillingProjects
+      operationId: listBillingProjectsForUser
       security:
         - authorization:
           - openid
@@ -3114,7 +3114,7 @@ paths:
       tags:
         - workspaces
       summary: Create new workspace
-      operationId: create
+      operationId: createWorkspace
       parameters:
         - in: body
           description: Workspace contents
@@ -3144,7 +3144,7 @@ paths:
       tags:
         - workspaces
       summary: List workspaces
-      operationId: list
+      operationId: listWorkspaces
       security:
         - authorization:
             - openid
@@ -3218,7 +3218,7 @@ paths:
       tags:
         - workspaces
       summary: Get workspace details
-      operationId: list
+      operationId: listWorkspaceDetails
       parameters:
         - in: path
           description: Workspace Namespace
@@ -3449,7 +3449,7 @@ paths:
        tags:
          - users
        summary: Create user
-       operationId: create
+       operationId: createUser
        security:
          - authorization:
             - openid
@@ -3471,7 +3471,7 @@ paths:
        tags:
          - users
        summary: gets the status of a user
-       operationId: status
+       operationId: userStatus
        security:
          - authorization:
             - openid
@@ -4242,8 +4242,7 @@ definitions:
         description: Status
       workflowStatuses:
         type: object
-        description: Map[String,Int]
-        description: a count of the workflow statuses in the submission
+        description: a count of the workflow statuses in the submission as a Map[String,Int]
       workflowFailureMode:
         type: string
         description: What happens after a task fails. Choose from ContinueWhilePossible and NoNewCalls. Defaults to NoNewCalls if not specified. See Cromwell docs for more information.
@@ -5487,6 +5486,8 @@ definitions:
     required:
       - membersGroupName
     properties:
+      membersGroupName:
+        type: string
       usersGroupName:
         type: string
   ManagedGroupAccessResponse:
