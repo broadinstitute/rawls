@@ -2137,13 +2137,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           withMethodInputs(methodConfig, userInfo) { (wdl, methodInputs) =>
             withSubmissionEntityRecs(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntityRecs =>
               withWorkflowFailureMode(submissionRequest) { workflowFailureMode =>
+                //Remove inputs that are both empty and optional
+                val inputsToEvaluate = methodInputs.filter(input => !(input.workflowInput.optional && input.expression.isEmpty))
                 //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-                MethodConfigResolver.resolveInputsForEntities(workspaceContext, methodInputs, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
+                MethodConfigResolver.resolveInputsForEntities(workspaceContext, inputsToEvaluate, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
                   valuesByEntity
                     .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values) })
                     .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
                     case (succeeded, failed) =>
-                      val methodConfigInputs = methodInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
+                      val methodConfigInputs = inputsToEvaluate.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
                       val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
                       op(dataAccess, workspaceContext, wdl, header, succeeded.toSeq, failed.toSeq, workflowFailureMode)
                   }
