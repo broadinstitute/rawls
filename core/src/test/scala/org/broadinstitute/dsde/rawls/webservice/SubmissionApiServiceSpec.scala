@@ -238,6 +238,47 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "return workflow_failure_mode in submission GET calls" in withTestDataApiServices { services =>
+    val wsName = testData.wsName
+    val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+
+    // calls GET ../submissions/<sub-id> and returns the SubmissionStatusResponse
+    val submissionResponseWithFailureMode = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
+
+    // The SubmissionStatusResponse should contain the workflow failure mode
+    submissionResponseWithFailureMode.workflows.size should equal (1)
+    submissionResponseWithFailureMode.workflowFailureMode should equal (Some(WorkflowFailureModes.ContinueWhilePossible))
+
+    // calls GET ../submissions/<sub-id> and returns the SubmissionStatusResponse
+    val submissionResponseWithoutFailureMode = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services)
+
+    // The SubmissionStatusResponse should not contain a workflow failure mode
+    submissionResponseWithoutFailureMode.workflows.size should equal (1)
+    submissionResponseWithoutFailureMode.workflowFailureMode should equal (None)
+
+    def getSubmission(id: String) = runAndWait(submissionQuery.loadSubmission(UUID.fromString(id))).get
+    // Build expected SubmissionListResponse objects
+    val submissionListResponseWithFailureMode = new SubmissionListResponse(getSubmission(submissionResponseWithFailureMode.submissionId), testData.userOwner, Map("Queued" -> 1))
+    val submissionListResponseWithoutFailureMode = new SubmissionListResponse(getSubmission(submissionResponseWithoutFailureMode.submissionId), testData.userOwner, Map("Queued" -> 1))
+
+    // Sanity check the workflow failure modes in the expected SubmissionListResponse objects
+    submissionListResponseWithFailureMode.workflowFailureMode should equal (Some(WorkflowFailureModes.ContinueWhilePossible))
+    submissionListResponseWithoutFailureMode.workflowFailureMode should equal (None)
+
+    // Listing submissions should return the correct workflow failure mode
+    Get(s"${testData.wsName.path}/submissions") ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        responseAs[Seq[SubmissionListResponse]] should contain allOf (
+          submissionListResponseWithFailureMode,
+          submissionListResponseWithoutFailureMode)
+      }
+  }
+
   it should "abort a submission" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
