@@ -8,6 +8,8 @@ object Dependencies {
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
+  val wdl4sV = "0.13"
+
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
   val sprayJson: ModuleID =     "io.spray" %% "spray-json"    % sprayV
@@ -64,7 +66,7 @@ object Dependencies {
     exclude("com.typesafe.scala-logging", "scala-logging-api_2.11")
     exclude("com.google.guava", "guava"))
 
-  val wdl4s: ModuleID = ("org.broadinstitute" %% "wdl4s" % "0.12"
+  val wdl4s: ModuleID = ("org.broadinstitute" %% "wdl4s" % wdl4sV
     exclude("org.typelevel", "cats_2.11")
     exclude("io.spray", "spray-json_2.11"))
 

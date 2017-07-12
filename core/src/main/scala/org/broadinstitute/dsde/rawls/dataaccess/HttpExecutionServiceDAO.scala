@@ -39,7 +39,7 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
     val url = executionServiceURL+"/workflows/v1/batch"
 
     val pipeline = addAuthHeader(userInfo) ~> gzSendReceive(timeout) ~> unmarshal[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]]
-    val formData = Map("wdlSource" -> BodyPart(wdl), "workflowInputs" -> BodyPart(inputs.mkString("[", ",", "]"))) ++ options.map("workflowOptions" -> BodyPart(_))
+    val formData = Map("workflowSource" -> BodyPart(wdl), "workflowInputs" -> BodyPart(inputs.mkString("[", ",", "]"))) ++ options.map("workflowOptions" -> BodyPart(_))
     pipeline(Post(url, MultipartFormData(formData)))
   }
 
