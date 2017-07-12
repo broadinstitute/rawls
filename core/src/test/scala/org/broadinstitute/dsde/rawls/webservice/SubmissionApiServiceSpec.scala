@@ -328,7 +328,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       val mcName = MethodConfigurationName("no_input", "dsde", wsName)
       val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
       val largeSset = createLargeSampleSet(testData.workspaceLargeSubmission, numSamples)
-      val numIterations = 30
+      val numIterations = 20
 
       (1 to numIterations).map { i =>
         logger.info(s"deadlock test: iteration $i/$numIterations")
