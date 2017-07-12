@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.genomics.model.Operation
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -24,7 +25,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   // returns bucket and group information
   def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo]
 
-  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String]
+  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long): Future[String]
+
+  def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project]
 
   /** Deletes a bucket from Google Cloud Storage. If the bucket is not empty, all objects in the bucket will be marked
     * for deletion (see below).

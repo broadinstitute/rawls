@@ -267,11 +267,13 @@ class HttpGoogleServicesDAO(
     s"I_${workspaceId}-${accessLevel.toString}"
   }
 
-  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String] = {
+  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long): Future[String] = {
     val bucketName = getCromwellAuthBucketName(billingProject)
     retryWithRecoverWhen500orGoogleError(
       () => {
-        val bucket = new Bucket().setName(bucketName)
+        val bucketAcls = List(new BucketAccessControl().setEntity("project-editors-" + projectNumber).setRole("OWNER"), new BucketAccessControl().setEntity("project-owners-" + projectNumber).setRole("OWNER"))
+        val defaultObjectAcls = List(new ObjectAccessControl().setEntity("project-editors-" + projectNumber).setRole("OWNER"), new ObjectAccessControl().setEntity("project-owners-" + projectNumber).setRole("OWNER"))
+        val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
         val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(billingProject.value, bucket)
         executeGoogleRequest(inserter)
 
@@ -784,6 +786,16 @@ class HttpGoogleServicesDAO(
     })
   }
 
+  override def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project] = {
+    val credential = getBillingServiceAccountCredential
+
+    val cloudResManager = getCloudResourceManager(credential)
+
+    retryWhen500orGoogleError(() => {
+      executeGoogleRequest(cloudResManager.projects().get(projectName.value))
+    })
+  }
+
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] = {
     val credential = getBillingServiceAccountCredential
 
@@ -914,7 +926,9 @@ class HttpGoogleServicesDAO(
       storageLogsBucket <- createStorageLogsBucket(projectName)
       _ <- retryWhen500orGoogleError(() => { allowGoogleCloudStorageWrite(storageLogsBucket) })
 
-      cromwellAuthBucket <- createCromwellAuthBucket(projectName)
+      googleProject <- getGoogleProject(projectName)
+
+      cromwellAuthBucket <- createCromwellAuthBucket(projectName, googleProject.getProjectNumber)
 
       _ <- retryWhen500orGoogleError(() => {
         val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
