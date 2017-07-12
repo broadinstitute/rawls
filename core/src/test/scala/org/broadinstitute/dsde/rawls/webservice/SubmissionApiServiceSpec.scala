@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import akka.actor.{ActorRef, PoisonPill}
+import akka.testkit.TestProbe
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowAuditStatusRecord
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -50,14 +51,14 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  def withLargeSubmissionApiServices[T](testCode: TestApiService => T): T = {
+  def withLargeSubmissionApiServices[T](numSamples: Int)(testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource) { services =>
         try {
           // Simulate a large submission in the mock Cromwell server by making it return
-          // 10000 workflows for submission requests.
+          // numSamples workflows for submission requests.
           mockServer.reset
-          mockServer.startServer(10000)
+          mockServer.startServer(numSamples)
           testCode(services)
         } finally {
           mockServer.reset
@@ -85,7 +86,11 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     try {
       testCode(actor)
     } finally {
+      // stops actor and waits for it to shut down
+      val testProbe = TestProbe()
+      testProbe watch actor
       actor ! PoisonPill
+      testProbe.expectTerminated(actor, 5 seconds)
     }
   }
 
@@ -294,15 +299,18 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     abortSubmission(services, wsName, submission.submissionId)
   }
 
-  it should "create and abort a large submission" in withLargeSubmissionApiServices { services =>
+  val numSamples = 10000
+
+  it should "create and abort a large submission" in withLargeSubmissionApiServices(numSamples) { services =>
     val wsName = testData.wsLargeSubmission
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+    val largeSset = createLargeSampleSet(testData.workspaceLargeSubmission, numSamples)
 
     // create a submission
-    val submission = createAndMonitorSubmission(wsName, methodConf, testData.largeSset, Option("this.hasSamples"), services)
+    val submission = createAndMonitorSubmission(wsName, methodConf, largeSset, Option("this.hasSamples"), services)
 
-    assertResult(10000) {
+    assertResult(numSamples) {
       submission.workflows.size
     }
 
@@ -314,18 +322,19 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   // mysql> show engine innodb status;
   //
   // and look for a section called "LAST DETECTED DEADLOCK".
-  it should "not deadlock when aborting a large submission" in withLargeSubmissionApiServices { services =>
+  it should "not deadlock when aborting a large submission" in withLargeSubmissionApiServices(numSamples) { services =>
     withWorkflowSubmissionActor(services) { _ =>
       val wsName = testData.wsLargeSubmission
       val mcName = MethodConfigurationName("no_input", "dsde", wsName)
       val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+      val largeSset = createLargeSampleSet(testData.workspaceLargeSubmission, numSamples)
       val numIterations = 30
 
       (1 to numIterations).map { i =>
         logger.info(s"deadlock test: iteration $i/$numIterations")
-        val submission = createAndMonitorSubmission(wsName, methodConf, testData.largeSset, Option("this.hasSamples"), services)
+        val submission = createAndMonitorSubmission(wsName, methodConf, largeSset, Option("this.hasSamples"), services)
 
-        assertResult(10000) {
+        assertResult(numSamples) {
           submission.workflows.size
         }
 

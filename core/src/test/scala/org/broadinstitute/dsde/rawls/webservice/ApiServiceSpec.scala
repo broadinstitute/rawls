@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.concurrent.TimeUnit
 
 import akka.actor.PoisonPill
+import akka.testkit.TestKitBase
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.{RawlsTestUtils, StatsDTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -28,7 +29,7 @@ import spray.testkit.ScalatestRouteTest
 import scala.concurrent.duration._
 
 // common trait to be inherited by API service tests
-trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with HttpService with ScalatestRouteTest with SprayJsonSupport with RawlsTestUtils with Eventually with LazyLogging with MockitoSugar with StatsDTestUtils {
+trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with HttpService with ScalatestRouteTest with TestKitBase with SprayJsonSupport with RawlsTestUtils with Eventually with LazyLogging with MockitoSugar with StatsDTestUtils {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)

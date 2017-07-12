@@ -149,6 +149,20 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       intersectionGroupsByLevel.getOrElse(Map.empty).values ++ newAccessGroupsByLevel.values)
   }
 
+  def createLargeSampleSet(workspace: Workspace, numSamples: Int): Entity = {
+    val (lotsOfSamples, largeSset) = {
+      val entities = (1 to numSamples).map(n => Entity(s"lotsOfSamples$n", s"Sample", Map.empty))
+      val sset = Entity("largeSset", "SampleSet", Map(AttributeName.withDefaultNS("hasSamples") -> AttributeEntityReferenceList(entities.map(_.toReference))))
+      (entities, sset)
+    }
+
+    withWorkspaceContext(workspace) { context =>
+      runAndWait(entityQuery.save(context, lotsOfSamples :+ largeSset))
+    }
+
+    largeSset
+  }
+
   class EmptyWorkspace() extends TestData {
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
@@ -361,13 +375,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val sset_empty = Entity("sset_empty", "SampleSet",
       Map(AttributeName.withDefaultNS("samples") -> AttributeValueEmptyList ))
-
-    val (lotsOfSamples, largeSset) = {
-      val total = 10000
-      val entities = (1 to total).map(n => Entity(s"lotsOfSamples$n", s"Sample", Map.empty)).toSeq
-      val sset = Entity("largeSset", "SampleSet", Map(AttributeName.withDefaultNS("hasSamples") -> AttributeEntityReferenceList(entities.map(_.toReference))))
-      (entities, sset)
-    }
 
     val ps1 = Entity("ps1", "PairSet",
       Map(AttributeName.withDefaultNS("pairs") -> AttributeEntityReferenceList( Seq(pair1.toReference, pair2.toReference)) ) )
@@ -721,7 +728,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         }),
         withWorkspaceContext(workspaceLargeSubmission)({ context =>
           DBIO.seq(
-            entityQuery.save(context, lotsOfSamples ++ Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2, largeSset)),
+            entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
             methodConfigurationQuery.create(context, methodConfig),
 
