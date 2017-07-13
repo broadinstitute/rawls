@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import spray.http._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -29,7 +28,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
-    def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
+    def requireUserInfo(): Directive1[UserInfo] = {
       // just return the cookie text as the common name
       user match {
         case testData.userProjectOwner.userEmail.value => provide(UserInfo(RawlsUserEmail(user), OAuth2BearerToken("token"), 123, testData.userProjectOwner.userSubjectId))

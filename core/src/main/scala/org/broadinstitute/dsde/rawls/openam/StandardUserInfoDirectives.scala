@@ -1,17 +1,13 @@
 package org.broadinstitute.dsde.rawls.openam
 
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo}
-import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import spray.http.{HttpHeader, OAuth2BearerToken}
 import spray.routing.Directive1
 import spray.routing.Directives._
 
-import scala.concurrent.ExecutionContext
-
 trait StandardUserInfoDirectives extends UserInfoDirectives {
 
-  def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
-    implicit val ec = magnet.value
+  def requireUserInfo(): Directive1[UserInfo] = {
     for(accessToken <- accessTokenHeaderDirective;
         userEmail <- emailHeaderDirective;
         accessTokenExpiresIn <- accessTokenExpiresInHeaderDirective;

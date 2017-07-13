@@ -53,7 +53,6 @@ object Dependencies {
   val swaggerUI: ModuleID =       "org.webjars"                   % "swagger-ui"            % "2.1.1"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats"                 % "0.9.0"
-  val vaultCommon: ModuleID =     "org.broadinstitute.dsde.vault" %% "vault-common"         % "0.1-15-bf74315"
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.38"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.1.6"
@@ -125,7 +124,6 @@ object Dependencies {
     commonsJEXL,
     wdl4s,
     cats,
-    vaultCommon,
     mysqlConnector,
     liquibaseCore,
     logbackClassic,
