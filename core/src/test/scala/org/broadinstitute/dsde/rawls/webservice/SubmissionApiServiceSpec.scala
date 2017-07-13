@@ -150,14 +150,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
               assertResult(StatusCodes.OK) {
                 status
               }
-              return responseAs[SubmissionStatusResponse]
+              responseAs[SubmissionStatusResponse]
             }
         }
     } { capturedMetrics =>
       capturedMetrics should contain (expectedSubmissionStatusMetric(wsName, SubmissionStatuses.Submitted, 1))
     }
-
-    fail("Unable to create and monitor submissions")
   }
 
   private def abortSubmission(services: TestApiService, wsName: WorkspaceName, submissionId: String, validate: Boolean = true): Unit = {
