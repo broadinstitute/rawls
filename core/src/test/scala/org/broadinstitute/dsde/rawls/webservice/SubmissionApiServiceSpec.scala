@@ -5,7 +5,7 @@ import java.util.UUID
 import akka.actor.{ActorRef, PoisonPill}
 import akka.testkit.TestProbe
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowAuditStatusRecord
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData, WorkflowAuditStatusRecord}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ExecutionServiceVersionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat}
@@ -51,14 +51,16 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  def withLargeSubmissionApiServices[T](numSamples: Int)(testCode: TestApiService => T): T = {
-    withDefaultTestDatabase { dataSource: SlickDataSource =>
+  val largeSampleTestData = new LargeSampleSetTestData()
+
+  def withLargeSubmissionApiServices[T](testCode: TestApiService => T): T = {
+    withCustomTestDatabase(largeSampleTestData) { dataSource: SlickDataSource =>
       withApiServices(dataSource) { services =>
         try {
           // Simulate a large submission in the mock Cromwell server by making it return
           // numSamples workflows for submission requests.
           mockServer.reset
-          mockServer.startServer(numSamples)
+          mockServer.startServer(largeSampleTestData.numSamples)
           testCode(services)
         } finally {
           mockServer.reset
@@ -301,14 +303,13 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   val numSamples = 10000
 
-  it should "create and abort a large submission" in withLargeSubmissionApiServices(numSamples) { services =>
-    val wsName = testData.wsLargeSubmission
+  it should "create and abort a large submission" in withLargeSubmissionApiServices { services =>
+    val wsName = largeSampleTestData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
-    val largeSset = createLargeSampleSet(testData.workspaceLargeSubmission, numSamples)
 
     // create a submission
-    val submission = createAndMonitorSubmission(wsName, methodConf, largeSset, Option("this.hasSamples"), services)
+    val submission = createAndMonitorSubmission(wsName, methodConf, largeSampleTestData.sampleSet, Option("this.hasSamples"), services)
 
     assertResult(numSamples) {
       submission.workflows.size
@@ -322,17 +323,16 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   // mysql> show engine innodb status;
   //
   // and look for a section called "LAST DETECTED DEADLOCK".
-  it should "not deadlock when aborting a large submission" in withLargeSubmissionApiServices(numSamples) { services =>
+  it should "not deadlock when aborting a large submission" in withLargeSubmissionApiServices { services =>
     withWorkflowSubmissionActor(services) { _ =>
-      val wsName = testData.wsLargeSubmission
+      val wsName = largeSampleTestData.wsName
       val mcName = MethodConfigurationName("no_input", "dsde", wsName)
       val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
-      val largeSset = createLargeSampleSet(testData.workspaceLargeSubmission, numSamples)
       val numIterations = 20
 
       (1 to numIterations).map { i =>
         logger.info(s"deadlock test: iteration $i/$numIterations")
-        val submission = createAndMonitorSubmission(wsName, methodConf, largeSset, Option("this.hasSamples"), services)
+        val submission = createAndMonitorSubmission(wsName, methodConf, largeSampleTestData.sampleSet, Option("this.hasSamples"), services)
 
         assertResult(numSamples) {
           submission.workflows.size
@@ -601,5 +601,40 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {status}
         responseAs[ExecutionServiceVersion]
       }
+  }
+
+  class LargeSampleSetTestData extends TestData {
+    val userProjectOwner = RawlsUser(UserInfo(RawlsUserEmail("project-owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543210101")))
+    val userOwner = RawlsUser(UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345")))
+    val wsName = WorkspaceName("myNamespace", "myWorkspaceToTestLargeSubmissions")
+    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
+    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set())
+    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set())
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner, userOwner), ProjectRoles.User -> Set.empty), Map.empty), "testBucketUrl", CreationStatuses.Ready, None, None)
+
+    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
+
+    val numSamples = 10000
+
+    val lotsOfSamples = (1 to numSamples).map(n => Entity(s"lotsOfSamples$n", s"Sample", Map.empty))
+    val sampleSet = Entity("largeSset", "SampleSet", Map(AttributeName.withDefaultNS("hasSamples") -> AttributeEntityReferenceList(lotsOfSamples.map(_.toReference))))
+
+    override def save(): ReadWriteAction[Unit] = {
+      import driver.api._
+
+      DBIO.seq(
+        rawlsUserQuery.save(userProjectOwner),
+        rawlsUserQuery.save(userOwner),
+        rawlsGroupQuery.save(ownerGroup),
+        rawlsGroupQuery.save(writerGroup),
+        rawlsGroupQuery.save(readerGroup),
+        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+        rawlsBillingProjectQuery.create(billingProject),
+        workspaceQuery.save(workspace),
+        entityQuery.save(SlickWorkspaceContext(workspace), lotsOfSamples :+ sampleSet)
+      )
+    }
   }
 }

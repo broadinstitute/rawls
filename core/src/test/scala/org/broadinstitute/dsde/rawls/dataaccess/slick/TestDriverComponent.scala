@@ -149,20 +149,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       intersectionGroupsByLevel.getOrElse(Map.empty).values ++ newAccessGroupsByLevel.values)
   }
 
-  def createLargeSampleSet(workspace: Workspace, numSamples: Int): Entity = {
-    val (lotsOfSamples, largeSset) = {
-      val entities = (1 to numSamples).map(n => Entity(s"lotsOfSamples$n", s"Sample", Map.empty))
-      val sset = Entity("largeSset", "SampleSet", Map(AttributeName.withDefaultNS("hasSamples") -> AttributeEntityReferenceList(entities.map(_.toReference))))
-      (entities, sset)
-    }
-
-    withWorkspaceContext(workspace) { context =>
-      runAndWait(entityQuery.save(context, lotsOfSamples :+ largeSset))
-    }
-
-    largeSset
-  }
-
   class EmptyWorkspace() extends TestData {
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
@@ -233,7 +219,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val wsName9 = WorkspaceName("myNamespace", "myWorkspaceToTestGrantPermissions")
     val wsInterleaved = WorkspaceName("myNamespace", "myWorkspaceToTestInterleavedSubmissions")
     val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWorkspaceToTestWorkflowFailureMode")
-    val wsLargeSubmission = WorkspaceName("myNamespace", "myWorkspaceToTestLargeSubmissions")
     val workspaceToTestGrantId = UUID.randomUUID()
 
     val nestedProjectGroup = makeRawlsGroup("nested project group", Set(userOwner))
@@ -326,9 +311,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     // Workspace with a custom workflow failure mode
     val (workspaceWorkflowFailureMode, workspaceWorkflowFailureModeGroups) = makeWorkspace(billingProject, wsWorkflowFailureMode.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
-
-    // Workspace to test large submissions
-    val (workspaceLargeSubmission, workspaceLargeSubmissionGroups) = makeWorkspace(billingProject, wsLargeSubmission.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Standard workspace to test grant permissions
     val (workspaceToTestGrant, workspaceToTestGrantGroups) = makeWorkspaceToTestGrant(billingProject, wsName9.name, None, workspaceToTestGrantId.toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
@@ -545,7 +527,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         workspaceTerminatedSubmissionsGroups ++
         workspaceInterleavedSubmissionsGroups ++
         workspaceWorkflowFailureModeGroups ++
-        workspaceLargeSubmissionGroups ++
         controlledWorkspaceGroups ++
         Seq(realm.membersGroup, realm.adminsGroup, realm2.membersGroup, realm2.adminsGroup)
 
@@ -567,7 +548,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceTerminatedSubmissions,
       workspaceInterleavedSubmissions,
       workspaceWorkflowFailureMode,
-      workspaceLargeSubmission,
       workspaceToTestGrant)
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
 
@@ -605,7 +585,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         DBIO.sequence(workspaceTerminatedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceInterleavedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceWorkflowFailureModeGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceLargeSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceToTestGrantGroups.map(rawlsGroupQuery.save).toSeq),
         managedGroupQuery.createManagedGroup(realm),
         managedGroupQuery.createManagedGroup(realm2),
@@ -723,15 +702,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
             methodConfigurationQuery.create(context, methodConfig),
 
             submissionQuery.create(context, submissionWorkflowFailureMode),
-            updateWorkflowExecutionServiceKey("unittestdefault")
-          )
-        }),
-        withWorkspaceContext(workspaceLargeSubmission)({ context =>
-          DBIO.seq(
-            entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
-
-            methodConfigurationQuery.create(context, methodConfig),
-
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
         })
