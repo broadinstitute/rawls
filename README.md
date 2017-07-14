@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/broadinstitute/rawls.svg?branch=master)](https://travis-ci.org/broadinstitute/rawls) [![Coverage Status](https://coveralls.io/repos/broadinstitute/rawls/badge.svg?branch=master)](https://coveralls.io/r/broadinstitute/rawls?branch=master)
+[![Build Status](https://travis-ci.org/broadinstitute/rawls.svg?branch=develop)](https://travis-ci.org/broadinstitute/rawls) [![Coverage Status](https://coveralls.io/repos/broadinstitute/rawls/badge.svg?branch=develop)](https://coveralls.io/r/broadinstitute/rawls?branch=develop)
 
 # rawls
 
