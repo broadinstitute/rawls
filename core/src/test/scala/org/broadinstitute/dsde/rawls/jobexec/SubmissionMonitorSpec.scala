@@ -479,13 +479,12 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "attach outputs and not deadlock with multiple submissions all updating the same entity at once" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-
-    //create 20 submissions all running on the same entity
-    val numSubmissions = 50
+    //create a bunch of submissions all running on the same two entities
+    val numSubmissions = 200
     withWorkspaceContext(testData.workspace) { ctx =>
       val submissions = (1 to numSubmissions).map { _ =>
         val testSub = createTestSubmission(testData.workspace, testData.methodConfigEntityUpdate, testData.indiv1, testData.userOwner,
-          Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
+          Seq(testData.indiv1, testData.indiv2), Map(testData.indiv1 -> testData.inputResolutions, testData.indiv2 -> testData.inputResolutions),
           Seq(), Map())
         runAndWait(submissionQuery.create(ctx, testSub))
         runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
