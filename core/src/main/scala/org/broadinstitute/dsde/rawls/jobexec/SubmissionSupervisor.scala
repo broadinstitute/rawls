@@ -50,7 +50,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   override val supervisorStrategy =
-    OneForOneStrategy(maxNrOfRetries = 3) {
+    OneForOneStrategy(maxNrOfRetries = -1) {
       case e => {
         system.log.error(e, "error monitoring submission")
         Restart

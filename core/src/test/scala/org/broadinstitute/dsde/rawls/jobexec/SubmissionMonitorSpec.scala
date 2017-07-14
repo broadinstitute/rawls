@@ -495,8 +495,6 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         testSub
       }
 
-      println("awaitCond")
-
       //they're all being monitored. they should all complete just fine, without deadlocking or otherwise barfing
       awaitCond({
         val submissionList = runAndWait(DBIO.sequence(submissions map { sub: Submission =>
@@ -505,16 +503,13 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         submissionList.forall(_.status == SubmissionStatuses.Done.toString) && submissionList.length == numSubmissions
       }, 10 seconds)
 
-      println("afterCond")
-
       //check that all the outputs got bound correctly too
       //apparently not :(
+      // but I thought we were supposed to bail and not mark the workflow as done (and thus not the submission) if we can't attach outputs?
       val subKeys = (1 to numSubmissions).map ( subNum => AttributeName.fromDelimitedName(s"sub_$subNum") )
 
       val indiv1 = runAndWait( entityQuery.get(ctx, testData.indiv1.entityType, testData.indiv1.name) ).get
       val indiv2 = runAndWait( entityQuery.get(ctx, testData.indiv2.entityType, testData.indiv2.name) ).get
-
-      println("afterWait")
 
       indiv1.attributes.keys should contain theSameElementsAs subKeys
       indiv2.attributes.keys should contain theSameElementsAs subKeys
