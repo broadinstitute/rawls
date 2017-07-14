@@ -477,6 +477,12 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
+  it should "attach outputs and not deadlock with multiple submissions all updating the same entity at once" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    //TODO:
+    // create 100 submissions on the same 10 entities and send ExecutionServiceStatusResponse to all of them at once
+    // this should deadlock or at least contend on the entity table
+  }
+
   def createSubmissionMonitorActor(dataSource: SlickDataSource, submission: Submission, execSvcDAO: ExecutionServiceDAO): TestActorRef[SubmissionMonitorActor] = {
     TestActorRef[SubmissionMonitorActor](SubmissionMonitorActor.props(
       testData.wsName,
