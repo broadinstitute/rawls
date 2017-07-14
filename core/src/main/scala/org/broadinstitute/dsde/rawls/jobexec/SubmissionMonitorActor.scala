@@ -188,7 +188,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       }
     }
 
-    def abortActiveWorkflows(submissionId: UUID) = {
+    def abortActiveWorkflows(submissionId: UUID): Future[Seq[Future[(Option[String], Try[ExecutionServiceStatus])]]] = {
       datasource.inTransaction { dataAccess =>
         // look up abortable WorkflowRecs for this submission
         val wrquery = dataAccess.workflowQuery.findWorkflowsForAbort(submissionId)
@@ -260,6 +260,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       logger.error(s"Failure monitoring workflow in submission $submissionId", t)
     }
 
+    //all workflow records in this status response list
+    val workflowsWithStatuses = response.statusResponse.collect {
+      case Success(Some((aWorkflow, _))) => aWorkflow
+    }
+
+    //just the workflow records in this response list which have outputs
     val workflowsWithOutputs = response.statusResponse.collect {
       case Success(Some((workflowRec, Some(outputs)))) => (workflowRec, outputs)
     }
@@ -273,10 +279,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     val statusUpdateTxn = datasource.inTransaction { dataAccess =>
 
       // Refetch workflows as some may have been marked as Failed by handleOutputs.
-      val workflowUpdatesDB = dataAccess.workflowQuery.findWorkflowByIds( workflowsWithOutputs.map( _._1.id ) ).result map { updatedRecs =>
+      val workflowUpdatesDB = dataAccess.workflowQuery.findWorkflowByIds( workflowsWithStatuses.map( _.id ) ).result flatMap { updatedRecs =>
 
         //New statuses according to the execution service.
-        val workflowIdToNewStatus = workflowsWithOutputs.map({ case (workflowRec, _) => workflowRec.id -> workflowRec.status }).toMap
+        val workflowIdToNewStatus = workflowsWithStatuses.map({ workflowRec => workflowRec.id -> workflowRec.status }).toMap
 
         // No need to update statuses for any workflows that are in terminal statuses.
         // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by attachOutputs.
@@ -295,7 +301,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         StatusCheckComplete(shouldStop)
       }
 
-      workflowUpdatesDB andThen submissionUpdatesDB
+      workflowUpdatesDB flatMap { _ => submissionUpdatesDB }
     }
 
     attachOutputsTxn.flatMap( _ => statusUpdateTxn )
