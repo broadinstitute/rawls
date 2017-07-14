@@ -271,29 +271,31 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     // Update statuses for workflows and submission in a separate txn.
     val statusUpdateTxn = datasource.inTransaction { dataAccess =>
+
       // Refetch workflows as some may have been marked as Failed by handleOutputs.
-      val workflowUpdates = dataAccess.workflowQuery.findWorkflowByIds( workflowsWithOutputs.map( _._1.id ) ).result map { updatedRecs =>
+      val workflowUpdatesDB = dataAccess.workflowQuery.findWorkflowByIds( workflowsWithOutputs.map( _._1.id ) ).result map { updatedRecs =>
+
         //New statuses according to the execution service.
-        val workflowIdToNewStatus = workflowsWithOutputs.map({ case (workflowRec, outputs) => workflowRec.id -> workflowRec.status }).toMap
+        val workflowIdToNewStatus = workflowsWithOutputs.map({ case (workflowRec, _) => workflowRec.id -> workflowRec.status }).toMap
 
         // No need to update statuses for any workflows that are in terminal statuses.
         // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by attachOutputs.
         val workflowsToUpdate = updatedRecs.filter(rec => !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(rec.status)))
-        val updatedWorkflows = workflowsToUpdate.map(rec => rec.copy(status = workflowIdToNewStatus(rec.id)))
+        val workflowsWithNewStatuses = workflowsToUpdate.map(rec => rec.copy(status = workflowIdToNewStatus(rec.id)))
 
         // to minimize database updates batch 1 update per workflow status
-        DBIO.seq(updatedWorkflows.groupBy(_.status).map { case (status, recs) =>
+        DBIO.seq(workflowsWithNewStatuses.groupBy(_.status).map { case (status, recs) =>
           dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
         }.toSeq: _*)
       }
 
       // update submission after workflows are updated
-      val submissionUpdates = checkOverallStatus(dataAccess) map { shouldStop: Boolean =>
+      val submissionUpdatesDB = checkOverallStatus(dataAccess) map { shouldStop: Boolean =>
         //return a message about whether our submission is done entirely
         StatusCheckComplete(shouldStop)
       }
 
-      workflowUpdates andThen submissionUpdates
+      workflowUpdatesDB andThen submissionUpdatesDB
     }
 
     attachOutputsTxn.flatMap( _ => statusUpdateTxn )
