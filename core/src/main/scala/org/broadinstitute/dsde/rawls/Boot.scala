@@ -60,6 +60,8 @@ object Boot extends App with LazyLogging {
       slickDataSource.initWithLiquibase(liquibaseChangeLog, changelogParams)
     }
 
+    // tmp nothing just forcing a build here
+
     val metricsConf = conf.getConfig("metrics")
     val metricsPrefix = {
       val basePrefix = metricsConf.getString("prefix")
