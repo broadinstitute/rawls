@@ -7,7 +7,7 @@ import akka.testkit.{TestActorRef, TestKit}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{SubmissionRecord, TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{ExecutionServiceStatusResponse, StatusCheckComplete}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
+import scala.collection.immutable.IndexedSeq
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -477,10 +478,28 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
-  it should "attach outputs and not deadlock with multiple submissions all updating the same entity at once" in withEmptyTestDatabase { dataSource: SlickDataSource =>
-    //TODO:
-    // create 100 submissions on the same 10 entities and send ExecutionServiceStatusResponse to all of them at once
-    // this should deadlock or at least contend on the entity table
+  it should "attach outputs and not deadlock with multiple submissions all updating the same entity at once" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+
+    //create 20 submissions all running on the same entity
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val submissions = (1 to 20).map { _ =>
+        val testSub = createTestSubmission(testData.workspace, testData.methodConfigEntityUpdate, testData.indiv1, testData.userOwner,
+          Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
+          Seq(), Map())
+        runAndWait(submissionQuery.create(ctx, testSub))
+
+        createSubmissionMonitorActor(dataSource, testSub, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+        testSub
+      }
+
+      //they're all being monitored. they should all complete just fine, without deadlocking or otherwise barfing
+      awaitCond({
+        val submissionList = runAndWait(DBIO.sequence(submissions map { sub: Submission =>
+          submissionQuery.findById(UUID.fromString(sub.submissionId)).result
+        })).flatten
+        submissionList.forall(_.status == SubmissionStatuses.Done.toString)
+      }, 10 seconds)
+    }
   }
 
   def createSubmissionMonitorActor(dataSource: SlickDataSource, submission: Submission, execSvcDAO: ExecutionServiceDAO): TestActorRef[SubmissionMonitorActor] = {
