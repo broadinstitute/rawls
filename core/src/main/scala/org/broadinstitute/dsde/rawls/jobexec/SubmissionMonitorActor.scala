@@ -248,22 +248,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   }
 
   /**
-    * Helper function to re-fetch the WorkflowRecords in workflowsWithOutputs, in case they've had their versions bumped
-    */
-  private def refetchWorkflowsAndOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)(implicit executionContext: ExecutionContext) = {
-    //findWorkflowsByIds below uses inSetBind, which doesn't guarantee the same ordering of returned results.
-    //so keep track of which workflow records are associated with each output
-    val idsToOutputs = (workflowsWithOutputs map { case (rec, outputs) =>
-      (rec.id, outputs)
-    }) toMap
-
-    dataAccess.workflowQuery.findWorkflowByIds(idsToOutputs.keys).result map { updatedRecords =>
-      updatedRecords map (rec => (rec, idsToOutputs(rec.id)))
-    }
-  }
-
-  /**
    * once all the execution service queries have completed this function is called to handle the responses
+    * the WorkflowRecords in ExecutionServiceStatus response have not been saved to the database but have been updated with their status from Cromwell.
     *
     * @param response
    * @param executionContext
@@ -274,40 +260,43 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       logger.error(s"Failure monitoring workflow in submission $submissionId", t)
     }
 
-    //Update the workflow statuses in their own transaction
-    val workflowsWithOutputsF = datasource.inTransaction { dataAccess =>
-      val updatedRecs = response.statusResponse.collect {
-        case Success(Some((updatedRec, _))) => updatedRec
-      }
-
-      val workflowsWithOutputs = response.statusResponse.collect {
-        case Success(Some((workflowRec, Some(outputs)))) => (workflowRec, outputs)
-      }
-
-      // to minimize database updates do 1 update per status
-      DBIO.seq(updatedRecs.groupBy(_.status).map { case (status, recs) =>
-        dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
-      }.toSeq: _*) andThen
-        DBIO.successful(workflowsWithOutputs)
+    val workflowsWithOutputs = response.statusResponse.collect {
+      case Success(Some((workflowRec, Some(outputs)))) => (workflowRec, outputs)
     }
 
-    //Then in a new transaction, update the submission status.
-    //If this transaction throws an exception, it'll roll back, but the workflows will still be in their terminal state.
-    //The submission supervisor will restart the submission monitor, which will find this submission (again) in a non-terminal state,
-    //query Cromwell again, and restart from the top of this function with the results.
-    workflowsWithOutputsF flatMap { workflowsWithOutputs =>
-      datasource.inTransaction { dataAccess =>
-        //we need to re-fetch the workflow records because their version number has been bumped by batchUpdateStatus above,
-        //and trying to reuse the old workflow records will give a concurrent modification exception in saveErrors if any fail
-        refetchWorkflowsAndOutputs(workflowsWithOutputs, dataAccess) flatMap { updatedWorkflowsWithOutputs =>
-          handleOutputs(updatedWorkflowsWithOutputs, dataAccess) flatMap { _ =>
-            checkOverallStatus(dataAccess) map {
-              shouldStop => StatusCheckComplete(shouldStop)
-            }
-          }
-        }
-      }
+    // Attach the outputs in a txn of their own. If attaching outputs fails, it will mark the workflow as failed. This is fine.
+    val attachOutputsTxn = datasource.inTransaction { dataAccess =>
+      handleOutputs(workflowsWithOutputs, dataAccess)
     }
+
+    // Update statuses for workflows and submission in a separate txn.
+    val statusUpdateTxn = datasource.inTransaction { dataAccess =>
+      // Refetch workflows as some may have been marked as Failed by handleOutputs.
+      val workflowUpdates = dataAccess.workflowQuery.findWorkflowByIds( workflowsWithOutputs.map( _._1.id ) ).result map { updatedRecs =>
+        //New statuses according to the execution service.
+        val workflowIdToNewStatus = workflowsWithOutputs.map({ case (workflowRec, outputs) => workflowRec.id -> workflowRec.status }).toMap
+
+        // No need to update statuses for any workflows that are in terminal statuses.
+        // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by attachOutputs.
+        val workflowsToUpdate = updatedRecs.filter(rec => !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(rec.status)))
+        val updatedWorkflows = workflowsToUpdate.map(rec => rec.copy(status = workflowIdToNewStatus(rec.id)))
+
+        // to minimize database updates batch 1 update per workflow status
+        DBIO.seq(updatedWorkflows.groupBy(_.status).map { case (status, recs) =>
+          dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
+        }.toSeq: _*)
+      }
+
+      // update submission after workflows are updated
+      val submissionUpdates = checkOverallStatus(dataAccess) map { shouldStop: Boolean =>
+        //return a message about whether our submission is done entirely
+        StatusCheckComplete(shouldStop)
+      }
+
+      workflowUpdates andThen submissionUpdates
+    }
+
+    attachOutputsTxn.flatMap( _ => statusUpdateTxn )
   }
 
   /**
