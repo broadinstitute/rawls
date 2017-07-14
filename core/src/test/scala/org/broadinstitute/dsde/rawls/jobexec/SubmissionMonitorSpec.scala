@@ -482,16 +482,20 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     //create a bunch of submissions all running on the same two entities
     val numSubmissions = 200
     withWorkspaceContext(testData.workspace) { ctx =>
-      val submissions = (1 to numSubmissions).map { _ =>
-        val testSub = createTestSubmission(testData.workspace, testData.methodConfigEntityUpdate, testData.indiv1, testData.userOwner,
+      val submissions = (1 to numSubmissions).map { subNumber =>
+        val methodConfig = testData.methodConfigEntityUpdate.copy(name = s"this.sub_$subNumber", outputs = Map("o1" -> AttributeString(s"this.sub_$subNumber")))
+        val testSub = createTestSubmission(testData.workspace, methodConfig, testData.indiv1, testData.userOwner,
           Seq(testData.indiv1, testData.indiv2), Map(testData.indiv1 -> testData.inputResolutions, testData.indiv2 -> testData.inputResolutions),
           Seq(), Map())
+        runAndWait(methodConfigurationQuery.create(ctx, methodConfig))
         runAndWait(submissionQuery.create(ctx, testSub))
         runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
 
         createSubmissionMonitorActor(dataSource, testSub, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
         testSub
       }
+
+      println("awaitCond")
 
       //they're all being monitored. they should all complete just fine, without deadlocking or otherwise barfing
       awaitCond({
@@ -500,6 +504,20 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         })).flatten
         submissionList.forall(_.status == SubmissionStatuses.Done.toString) && submissionList.length == numSubmissions
       }, 10 seconds)
+
+      println("afterCond")
+
+      //check that all the outputs got bound correctly too
+      //apparently not :(
+      val subKeys = (1 to numSubmissions).map ( subNum => AttributeName.fromDelimitedName(s"sub_$subNum") )
+
+      val indiv1 = runAndWait( entityQuery.get(ctx, testData.indiv1.entityType, testData.indiv1.name) ).get
+      val indiv2 = runAndWait( entityQuery.get(ctx, testData.indiv2.entityType, testData.indiv2.name) ).get
+
+      println("afterWait")
+
+      indiv1.attributes.keys should contain theSameElementsAs subKeys
+      indiv2.attributes.keys should contain theSameElementsAs subKeys
     }
   }
 
