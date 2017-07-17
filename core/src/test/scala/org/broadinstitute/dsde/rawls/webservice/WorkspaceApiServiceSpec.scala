@@ -292,6 +292,87 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "create a workspace with a multi-group auth domain" in withTestDataApiServices { services =>
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner))
+    val realmGroup2 = createAndSaveManagedGroup("realm-for-testing2", Set(testData.userOwner))
+    val realmGroup3 = createAndSaveManagedGroup("realm-for-testing3", Set(testData.userOwner))
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace2",
+      authorizationDomain = Set(realmGroup, realmGroup2, realmGroup3),
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+        assertResult(workspaceWithRealm) {
+          val ws = runAndWait(workspaceQuery.findByName(workspaceWithRealm.toWorkspaceName)).get
+          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
+        }
+        assertResult(workspaceWithRealm) {
+          val ws = responseAs[Workspace]
+          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
+        }
+      }
+  }
+
+  it should "shouldnt create a workspace with a multi-group auth domain if you're not in all groups" in withTestDataApiServices { services =>
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner))
+    val realmGroup2 = createAndSaveManagedGroup("realm-for-testing2", Set(testData.userOwner))
+    val realmGroup3 = createAndSaveManagedGroup("realm-for-testing3", Set.empty)
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace2",
+      authorizationDomain = Set(realmGroup, realmGroup2, realmGroup3),
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+          status
+        }
+      }
+  }
+
+  it should "clone a workspace if the source has a multi-group auth domain and user is in all groups" in withTestDataApiServices { services =>
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner))
+    val realmGroup2 = createAndSaveManagedGroup("realm-for-testing2", Set(testData.userOwner))
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace2",
+      authorizationDomain = Set(realmGroup, realmGroup2),
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+      }
+
+    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", workspaceWithRealm.authorizationDomain, Map.empty)
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+
+        assertResult(workspaceWithRealm.authorizationDomain) {
+          val ws = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+          ws.authorizationDomain
+        }
+      }
+  }
+
   it should "return 403 creating a workspace with a Realm for owner and not user" in withTestDataApiServices { services =>
     val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty, Set(testData.userOwner))
     val workspaceWithRealm = WorkspaceRequest(
