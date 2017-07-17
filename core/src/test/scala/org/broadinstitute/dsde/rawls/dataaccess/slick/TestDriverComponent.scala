@@ -4,7 +4,7 @@ import java.util.UUID
 
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
-import nl.grons.metrics.scala.{Counter, DefaultInstrumented}
+import nl.grons.metrics.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import slick.backend.DatabaseConfig
 import slick.driver.JdbcDriver
@@ -49,8 +49,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
   // Implicit counters are required for certain methods on WorkflowComponent and SubmissionComponent
-  implicit def wfStatusCounter(wfStatus: WorkflowStatus): Counter = metrics.counter(s"test.${wfStatus.toString}")
-  implicit def subStatusCounter(subStatus: SubmissionStatus): Counter = metrics.counter(s"test.${subStatus.toString}")
+  override lazy val metricBaseName = MetricName("test")
+  implicit def wfStatusCounter(wfStatus: WorkflowStatus): Counter = metrics.counter(s"${wfStatus.toString}")
+  implicit def subStatusCounter(subStatus: SubmissionStatus): Counter = metrics.counter(s"${subStatus.toString}")
 
   val databaseConfig = DbResource.config
   val slickDataSource = DbResource.dataSource

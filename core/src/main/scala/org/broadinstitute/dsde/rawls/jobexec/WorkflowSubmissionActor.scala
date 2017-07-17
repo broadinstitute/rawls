@@ -34,8 +34,8 @@ object WorkflowSubmissionActor {
             maxActiveWorkflowsTotal: Int,
             maxActiveWorkflowsPerUser: Int,
             runtimeOptions: Option[JsValue],
-            rawlsMetricBaseName: String): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, rawlsMetricBaseName))
+            workbenchMetricBaseName: String): Props = {
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, workbenchMetricBaseName))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -59,7 +59,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val maxActiveWorkflowsTotal: Int,
                               val maxActiveWorkflowsPerUser: Int,
                               val runtimeOptions: Option[JsValue],
-                              override val rawlsMetricBaseName: String) extends Actor with WorkflowSubmission with LazyLogging {
+                              override val workbenchMetricBaseName: String) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
 

@@ -8,14 +8,15 @@ import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{SubmissionRecord, TestDriverComponent, WorkflowRecord, WorkspaceRecord}
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch, WorkflowBatch}
+import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils, StatsDTestUtils}
+import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mock.MockitoSugar
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http.StatusCodes
 import spray.json.DefaultJsonProtocol._
@@ -27,7 +28,7 @@ import scala.concurrent.duration.{FiniteDuration, _}
 /**
  * Created by dvoet on 5/17/16.
  */
-class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with MockitoSugar with Eventually with RawlsTestUtils with StatsDTestUtils {
+class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
   import driver.api._
 
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
@@ -42,7 +43,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val maxActiveWorkflowsTotal: Int = 100,
     val maxActiveWorkflowsPerUser: Int = 100,
     val runtimeOptions: Option[JsValue] = None,
-    override val rawlsMetricBaseName: String = "test") extends WorkflowSubmission {
+    override val workbenchMetricBaseName: String = "test") extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
@@ -96,8 +97,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
     } { capturedMetrics =>
-      capturedMetrics.size should be (1)
-      capturedMetrics(0) should equal (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Launching))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Launching))
     }
   }
 
@@ -143,8 +143,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
     } { capturedMetrics =>
-      capturedMetrics.size should be (1)
-      capturedMetrics(0) should equal (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Launching))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Launching))
     }
   }
 
@@ -185,8 +184,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       }
     } { capturedMetrics =>
       // should be 2 submitted, 1 failed per the mock Cromwell server
-      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, None, 2))
-      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, None, 1))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, 2))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, 1))
     }
   }
 
@@ -306,8 +305,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       workflowSubmissionActor ! PoisonPill
     } { capturedMetrics =>
       // should be 2 submitted, 1 failed per the mock Cromwell server
-      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, None, 2))
-      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, None, 1))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, 2))
+      capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, 1))
     }
   }
 
