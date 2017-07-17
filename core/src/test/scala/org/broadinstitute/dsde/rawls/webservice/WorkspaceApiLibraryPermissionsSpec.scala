@@ -66,7 +66,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
     val unpublishedWriterGroup = makeRawlsGroup(s"${wsUnpublishedName} WRITER", users.filter(_.level == WorkspaceAccessLevels.Write).map(_.rawlsUser:RawlsUserRef).toSet)
     val unpublishedReaderGroup = makeRawlsGroup(s"${wsUnpublishedName} READER", users.filter(_.level == WorkspaceAccessLevels.Read).map(_.rawlsUser:RawlsUserRef).toSet)
 
-    val unpublishedWorkspace = Workspace(wsUnpublishedName.namespace, wsUnpublishedName.name, None, wsUnpublishedId.toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+    val unpublishedWorkspace = Workspace(wsUnpublishedName.namespace, wsUnpublishedName.name, Set.empty, wsUnpublishedId.toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> unpublishedOwnerGroup, WorkspaceAccessLevels.Write -> unpublishedWriterGroup, WorkspaceAccessLevels.Read -> unpublishedReaderGroup),
       Map(WorkspaceAccessLevels.Owner -> unpublishedOwnerGroup, WorkspaceAccessLevels.Write -> unpublishedWriterGroup, WorkspaceAccessLevels.Read -> unpublishedReaderGroup))
 

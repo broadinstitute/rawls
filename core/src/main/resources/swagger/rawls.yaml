@@ -5024,8 +5024,10 @@ definitions:
         type: string
         description: The name of the workspace
       authorizationDomain:
-        $ref: '#/definitions/ManagedGroupRef'
-        description: An optional Authorization Domain for the workspace
+        type: array
+        items:
+          $ref: '#/definitions/ManagedGroupRef'
+        description: The list of groups in the Authorization Domain (empty if no AD is set)
       workspaceId:
         type: string
         description: A UUID associated with the workspace
@@ -5087,8 +5089,10 @@ definitions:
         type: string
         description: The name of the workspace
       authorizationDomain:
-        $ref: '#/definitions/ManagedGroupRef'
-        description: An optional Authorization Domain for the workspace
+        type: array
+        items:
+          $ref: '#/definitions/ManagedGroupRef'
+        description: The list of groups in the Authorization Domain (empty if no AD is set)
       attributes:
         $ref: ''
 
@@ -5487,8 +5491,6 @@ definitions:
       - membersGroupName
     properties:
       membersGroupName:
-        type: string
-      usersGroupName:
         type: string
   ManagedGroupAccessResponse:
     description: an element of a list of groups a user has access to

@@ -301,10 +301,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }}
 
         //Gather the Google groups to remove, but don't remove project owners group which is used by other workspaces
-        groupRefsToRemove: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.filterKeys(_ != ProjectOwner).values.toSet ++ workspaceContext.workspace.authorizationDomain.map(_ => workspaceContext.workspace.authDomainACLs.values).getOrElse(Seq.empty)
+        authDomainAclRefsToRemove = if(workspaceContext.workspace.authorizationDomain.nonEmpty) workspaceContext.workspace.authDomainACLs.values else Seq.empty
+        groupRefsToRemove: Set[RawlsGroupRef] = (workspaceContext.workspace.accessLevels.filterKeys(_ != ProjectOwner).values ++ authDomainAclRefsToRemove).toSet
         groupsToRemove <- DBIO.sequence(groupRefsToRemove.toSeq.map(groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
 
         // Delete components of the workspace
+        _ <- dataAccess.workspaceQuery.deleteWorkspaceAuthDomainRecords(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceInvites(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceSharePermissions(workspaceContext.workspaceId)
@@ -400,21 +402,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       val query = for {
         permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
-        realmsForUser <- dataAccess.workspaceQuery.getAuthorizedRealms(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo))
+        authDomainsForUser <- dataAccess.workspaceQuery.getAuthorizedAuthDomainGroups(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo))
         ownerEmails <- dataAccess.workspaceQuery.listAccessGroupMemberEmails(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), WorkspaceAccessLevels.Owner)
         submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
         workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
-      } yield (permissionsPairs, realmsForUser, ownerEmails, submissionSummaryStats, workspaces)
+      } yield (permissionsPairs, authDomainsForUser, ownerEmails, submissionSummaryStats, workspaces)
 
-      val results = query.map { case (permissionsPairs, realmsForUser, ownerEmails, submissionSummaryStats, workspaces) =>
+      val results = query.map { case (permissionsPairs, authDomainsForUser, ownerEmails, submissionSummaryStats, workspaces) =>
         val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
         permissionsPairs.map { permissionsPair =>
           workspacesById.get(permissionsPair.workspaceId).map { workspace =>
-            def trueAccessLevel = workspace.authorizationDomain match {
-              case None => permissionsPair.accessLevel
-              case Some(realm) =>
-                if (realmsForUser.flatten.contains(realm)) permissionsPair.accessLevel
-                else WorkspaceAccessLevels.NoAccess
+            def trueAccessLevel = {
+              if((workspace.authorizationDomain -- authDomainsForUser).nonEmpty) WorkspaceAccessLevels.NoAccess
+              else permissionsPair.accessLevel
             }
             val wsId = UUID.fromString(workspace.workspaceId)
             WorkspaceListResponse(trueAccessLevel, workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId, Seq.empty))
@@ -451,12 +451,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
         dataSource.inTransaction { dataAccess =>
           withWorkspaceContextAndPermissions(sourceWorkspaceName, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
-            withClonedRealm(sourceWorkspaceContext, destWorkspaceRequest) { newRealm =>
+            withClonedAuthDomain(sourceWorkspaceContext, destWorkspaceRequest) { newAuthDomain =>
 
               // add to or replace current attributes, on an individual basis
               val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
 
-              withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
+              withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = newAuthDomain, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
                 dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
                   dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                     val inserts = methodConfigShorts.map { methodConfigShort =>
@@ -476,15 +476,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def withClonedRealm(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Option[ManagedGroupRef]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    // if the source has a realm, the dest must also have that realm or no realm, and the source realm is applied to the destination
-    // otherwise, the caller may choose to apply a realm
-    (sourceWorkspaceContext.workspace.authorizationDomain, destWorkspaceRequest.authorizationDomain) match {
-      case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
-        val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot change it to $destRealm when cloning"
-        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
-      case (Some(sourceRealm), _) => op(Option(sourceRealm))
-      case (None, destOpt) => op(destOpt)
+  private def withClonedAuthDomain(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Set[ManagedGroupRef]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    // if the source has an auth domain, the dest must also have that auth domain as a subset
+    // otherwise, the caller may choose to add to the auth domain
+    val sourceWorkspaceADs = sourceWorkspaceContext.workspace.authorizationDomain
+    val destWorkspaceADs = destWorkspaceRequest.authorizationDomain
+
+    if(sourceWorkspaceADs.subsetOf(destWorkspaceADs)) op(sourceWorkspaceADs ++ destWorkspaceADs)
+    else {
+      val missingGroups = sourceWorkspaceADs -- destWorkspaceADs
+      val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has an Authorization Domain containing the groups $missingGroups which, which are missing on the destination workspace"
+      DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
     }
   }
 
@@ -847,7 +849,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevels.Write, dataAccess) { destWorkspaceContext =>
         withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
-          realmCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
+          authDomainCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
             val entityNames = entityCopyDef.entityNames
             val entityType = entityCopyDef.entityType
             val copyResults = dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
@@ -860,17 +862,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  // can't use withClonedRealm because the Realm -> no Realm logic is different
-  private def realmCheck(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
-    // if the source has a realm, the dest must also have that realm
-    (sourceWorkspaceContext.workspace.authorizationDomain, destWorkspaceContext.workspace.authorizationDomain) match {
-      case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
-        val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot copy entities to realm $destRealm"
-        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
-      case (Some(sourceRealm), None) =>
-        val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot copy entities outside of a realm"
-        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
-      case _ => DBIO.successful(true)
+  // can't use withClonedAuthDomain because the Auth Domain -> no Auth Domain logic is different
+  private def authDomainCheck(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
+    // if the source has any auth domains, the dest must also *at least* have those auth domains
+    val sourceWorkspaceADs = sourceWorkspaceContext.workspace.authorizationDomain
+    val destWorkspaceADs = destWorkspaceContext.workspace.authorizationDomain
+
+    if(sourceWorkspaceADs.subsetOf(destWorkspaceADs)) DBIO.successful(true)
+    else {
+      val missingGroups = sourceWorkspaceADs -- destWorkspaceADs
+      val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has an Authorization Domain containing the groups $missingGroups which, which are missing on the destination workspace"
+      DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
     }
   }
 
@@ -1823,13 +1825,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         accessGroups.flatMap { memberOf =>
           if (memberOf.flatten.isEmpty) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
           else {
-            workspaceContext.workspace.authorizationDomain match {
-              case Some(authDomain) => {
-                dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Seq(workspaceContext.workspace.authorizationDomain.get)) map { instructions =>
-                  RequestComplete(StatusCodes.OK, instructions)
-                }
-              }
-              case None => DBIO.successful(RequestComplete(StatusCodes.OK, Seq.empty[ManagedGroupAccessInstructions]))
+            dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(workspaceContext.workspace.authorizationDomain) map { instructions =>
+              RequestComplete(StatusCodes.OK, instructions)
             }
           }
         }
@@ -1927,14 +1924,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           for {
             project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
 
-            // we have already verified that the user is in the realm but the project owners might not be
-            // so if there is a realm we have to do the intersection. There should not be any readers or writers
+            // we have already verified that the user is in all of the auth domain groups but the project owners might not be
+            // so if there is an auth domain we have to do the intersection. There should not be any readers or writers
             // at this point (brand new workspace) so we don't need to do intersections for those
-            realmProjectOwnerIntersection <- DBIOUtils.maybeDbAction(workspaceRequest.authorizationDomain) {
-              realm => dataAccess.rawlsGroupQuery.intersectGroupMembership(project.get.groups(ProjectRoles.Owner), realm.toMembersGroupRef)
+            authDomainProjectOwnerIntersection <- DBIOUtils.maybeDbAction(if(workspaceRequest.authorizationDomain.isEmpty)None else Option(workspaceRequest.authorizationDomain)) { authDomain =>
+              dataAccess.rawlsGroupQuery.intersectGroupMembership(authDomain.map(_.toMembersGroupRef) ++ Set(RawlsGroupRef(project.get.groups(ProjectRoles.Owner).groupName)))
             }
 
-            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain, realmProjectOwnerIntersection))
+            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain, authDomainProjectOwnerIntersection))
 
             savedWorkspace <- saveNewWorkspace(workspaceId, googleWorkspaceInfo, workspaceRequest, dataAccess)
             response <- op(SlickWorkspaceContext(savedWorkspace))
@@ -1952,12 +1949,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case true =>
         dataAccess.rawlsBillingProjectQuery.load(projectName).flatMap {
           case Some(RawlsBillingProject(_, _, _, CreationStatuses.Ready, _, _)) =>
-            workspaceRequest.authorizationDomain match {
-              case Some(realm) => dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUser(userInfo)) flatMap { realmAccesses =>
-                if(realmAccesses.contains(ManagedGroupAccess(realm, ManagedRoles.Member))) op
-                else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.membersGroupName.value}] as you do not have access to it.")))
-              }
-              case None => op
+            dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUser(userInfo)) flatMap { authDomainAccesses =>
+              if(workspaceRequest.authorizationDomain.subsetOf(authDomainAccesses.filter(_.role == ManagedRoles.Member).map(_.managedGroupRef))) op
+              else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"In order to use groups as Authorization Domain, you must be a member of all of those groups.")))
             }
 
           case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, _, CreationStatuses.Creating, _, _)) =>

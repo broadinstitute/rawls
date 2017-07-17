@@ -96,7 +96,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val workspaceSrcRequest = WorkspaceRequest(
       workspace2Name.namespace,
       workspace2Name.name,
-      None,
+      Set.empty,
       Map.empty
     )
 
@@ -1401,7 +1401,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   val workspace2Request = WorkspaceRequest(
     workspace2Name.namespace,
     workspace2Name.name,
-    None,
+    Set.empty,
     Map.empty
   )
 
@@ -1464,7 +1464,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val newWorkspace = WorkspaceName(testData.workspace.namespace, "my-brand-new-workspace")
 
-    val newWorkspaceCreate = WorkspaceRequest(newWorkspace.namespace, newWorkspace.name, None, Map.empty)
+    val newWorkspaceCreate = WorkspaceRequest(newWorkspace.namespace, newWorkspace.name, Set.empty, Map.empty)
 
     val copyAliquot1 = EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.aliquot1.entityType, Seq(testData.aliquot1.name))
     val copySample3 = EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.sample3.entityType, Seq(testData.sample3.name))
@@ -1597,14 +1597,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     runAndWait(rawlsGroupQuery.save(newRealm.adminsGroup))
     runAndWait(managedGroupQuery.createManagedGroup(newRealm))
 
-    val wrongRealmCloneRequest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "copy_add_realm", Option(newRealm), Map.empty)
+    val wrongRealmCloneRequest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "copy_add_realm", Set(newRealm), Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(wrongRealmCloneRequest)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        assertResult(Some(ManagedGroup.toRef(newRealm))) {
+        assertResult(Set(ManagedGroup.toRef(newRealm))) {
           responseAs[Workspace].authorizationDomain
         }
       }
@@ -1652,7 +1652,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set())
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set())
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
 

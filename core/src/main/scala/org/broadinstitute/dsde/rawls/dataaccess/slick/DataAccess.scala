@@ -50,8 +50,9 @@ trait DataAccess
       TableQuery[WorkspaceGroupShareTable].delete andThen         // FK to workspace, group
       TableQuery[WorkspaceUserCatalogTable].delete andThen        // FK to workspace, user
       TableQuery[WorkspaceGroupCatalogTable].delete andThen       // FK to workspace, group
-      TableQuery[WorkspaceTable].delete andThen                   // FK to realm
-      TableQuery[ManagedGroupTable].delete andThen                       // FK to group
+      TableQuery[WorkspaceAuthDomainTable].delete andThen         // FK to workspace, managed group
+      TableQuery[WorkspaceTable].delete andThen
+      TableQuery[ManagedGroupTable].delete andThen                // FK to group
       TableQuery[RawlsBillingProjectTable].delete andThen
       TableQuery[RawlsGroupTable].delete andThen
       TableQuery[RawlsUserTable].delete andThen

@@ -650,7 +650,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       val query = for {
         group <- dataAccess.managedGroupQuery.load(groupRef)
-        accessInstructions <- dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Seq(groupRef))
+        accessInstructions <- dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Set(groupRef))
       } yield (group, accessInstructions)
 
       query.flatMap { case (group, accessInstructions) =>
@@ -787,7 +787,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
           // update intersection groups associated with groupRef
           groupsToIntersects <- dataAccess.workspaceQuery.findAssociatedGroupsToIntersect(savedGroup)
-          intersectionGroups <- updateIntersectionGroupMembers(groupsToIntersects, dataAccess)
+          intersectionGroups <- updateIntersectionGroupMembers(groupsToIntersects.toSet, dataAccess)
         } yield (savedGroup, intersectionGroups)
       }, TransactionIsolation.ReadCommitted)
 
@@ -927,12 +927,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def updateIntersectionGroupMembers(groupsToIntersect: Set[GroupsToIntersect], dataAccess:DataAccess): ReadWriteAction[Iterable[RawlsGroupRef]] = {
-    val groups = groupsToIntersect.flatMap { case GroupsToIntersect(target, group1, group2) => Seq(group1, group2) }.toSet
+    val groups = groupsToIntersect.flatMap { _.groups }
     val flattenedGroupsAction = DBIO.sequence(groups.map(group => dataAccess.rawlsGroupQuery.flattenGroupMembership(group).map(group -> _)).toSeq).map(_.toMap)
 
     val intersectionMemberships = flattenedGroupsAction.map { flattenedGroups =>
-      groupsToIntersect.map { case GroupsToIntersect(target, group1, group2) =>
-        (target, flattenedGroups(group1) intersect flattenedGroups(group2))
+      groupsToIntersect.map { case GroupsToIntersect(target, sourceGroups) =>
+        val flattenedGroupsToIntersect = flattenedGroups.filterKeys(sourceGroups)
+        target -> flattenedGroupsToIntersect.tail.values.fold(flattenedGroupsToIntersect.head._2) { (group1, group2) =>
+          group1.intersect(group2)
+        }
       }
     }
 

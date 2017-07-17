@@ -17,7 +17,7 @@ import scala.concurrent.duration.Duration
 class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with AttributeComponent with RawlsTestUtils {
   import driver.api._
 
-  val workspace = Workspace("broad-dsde-test", "test-workspace", None, UUID.randomUUID().toString, "fake-bucket", DateTime.now, DateTime.now, "biden", Map.empty, Map.empty, Map.empty, false)
+  val workspace = Workspace("broad-dsde-test", "test-workspace", Set.empty, UUID.randomUUID().toString, "fake-bucket", DateTime.now, DateTime.now, "biden", Map.empty, Map.empty, Map.empty, false)
   val workspaceId = UUID.fromString(workspace.workspaceId)
 
   // we don't know the IDs because it autoincrements
@@ -160,7 +160,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "insert entity reference attribute" in withEmptyTestDatabase {
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None, 0))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, 0))
     val entityId = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name", "type", workspaceId, 0, None, deleted = false, None))
     val testAttribute = AttributeEntityReference("type", "name")
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
@@ -169,7 +169,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "insert entity reference attribute list" in withEmptyTestDatabase {
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None, 0))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, 0))
     val entityId1 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name1", "type", workspaceId, 0, None, deleted = false, None))
     val entityId2 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name2", "type", workspaceId, 0, None, deleted = false, None))
     val entityId3 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name3", "type", workspaceId, 0, None, deleted = false, None))
@@ -187,7 +187,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "throw exception inserting ref to nonexistent entity" in withEmptyTestDatabase {
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None, 0))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, 0))
     val testAttribute = AttributeEntityReference("type", "name")
     intercept[RawlsException] {
       runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
@@ -338,7 +338,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val workspace = Workspace(
       "test_namespace",
       "test_name",
-      None,
+      Set.empty,
       workspaceId.toString,
       "bucketname",
       currentTime(),
@@ -379,7 +379,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val workspace = Workspace(
       "test_namespace",
       "test_name",
-      None,
+      Set.empty,
       workspaceId.toString,
       "bucketname",
       currentTime(),
@@ -460,7 +460,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
 
     val workspace2ID = UUID.randomUUID()
-    val workspace2 = Workspace("broad-dsde-test", "test-tag-workspace", None, workspace2ID.toString, "fake-bucket", DateTime.now, DateTime.now, "testuser", Map.empty, Map.empty, Map.empty, false)
+    val workspace2 = Workspace("broad-dsde-test", "test-tag-workspace", Set.empty, workspace2ID.toString, "fake-bucket", DateTime.now, DateTime.now, "testuser", Map.empty, Map.empty, Map.empty, false)
     runAndWait(workspaceQuery.save(workspace2))
     runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("cancer")))
     runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("buffalo")))

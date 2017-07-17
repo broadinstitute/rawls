@@ -241,15 +241,10 @@ trait RawlsGroupComponent {
       }
     }
 
-    def intersectGroupMembership(group1: RawlsGroupRef, group2: RawlsGroupRef): ReadAction[Set[RawlsUserRef]] = {
-      val group1Members = flattenGroupMembership(group1)
-      val group2Members = flattenGroupMembership(group2)
+    def intersectGroupMembership(groups: Set[RawlsGroupRef]): ReadAction[Set[RawlsUserRef]] = {
+      val flattenedGroups = DBIO.sequence(groups.map(flattenGroupMembership).toSeq)
 
-      group1Members flatMap { members1 =>
-        group2Members flatMap { members2 =>
-          DBIO.successful(members1.intersect(members2))
-        }
-      }
+      flattenedGroups.map(groupUsers => groupUsers.tail.fold(groupUsers.head){(group1, group2) => group1.intersect(group2)})
     }
 
     private def checkMembershipRecursively(userRef: RawlsUserRef, previouslyCheckedGroups: Set[RawlsGroupRef], groupsToCheck: Set[RawlsGroupRef]): ReadAction[Boolean] = {
