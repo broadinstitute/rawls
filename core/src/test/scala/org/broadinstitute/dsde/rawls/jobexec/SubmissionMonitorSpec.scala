@@ -129,7 +129,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       val initialStatus = SubmissionStatuses.Submitted
       runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(initialStatus.toString))
 
-      assert(!runAndWait(monitor.checkOverallStatus(this)), "Queued workflows should not result in the submission changing state")
+      assert(!runAndWait(monitor.updateSubmissionStatus(this)), "Queued workflows should not result in the submission changing state")
 
       assertResult(initialStatus.toString) {
         runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.head).status
@@ -146,7 +146,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       Set(SubmissionStatuses.Aborting, SubmissionStatuses.Submitted).foreach { initialStatus =>
         runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(initialStatus.toString))
 
-        assert(!runAndWait(monitor.checkOverallStatus(this)))
+        assert(!runAndWait(monitor.updateSubmissionStatus(this)))
 
         assertResult(initialStatus.toString) {
           runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.head).status
@@ -166,7 +166,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
           val expectedStatus = if (initialStatus == SubmissionStatuses.Aborting) SubmissionStatuses.Aborted else SubmissionStatuses.Done
           runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(initialStatus.toString))
 
-          assert(runAndWait(monitor.checkOverallStatus(this)))
+          assert(runAndWait(monitor.updateSubmissionStatus(this)))
 
           assertResult(expectedStatus.toString) {
             runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.head).status
@@ -487,13 +487,15 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         val testSub = createTestSubmission(testData.workspace, methodConfig, testData.indiv1, testData.userOwner,
           Seq(testData.indiv1, testData.indiv2), Map(testData.indiv1 -> testData.inputResolutions, testData.indiv2 -> testData.inputResolutions),
           Seq(), Map())
+        //println(s"submission $subNumber - ${testSub.submissionId.split("-").head}")
         runAndWait(methodConfigurationQuery.create(ctx, methodConfig))
         runAndWait(submissionQuery.create(ctx, testSub))
         runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
 
-        createSubmissionMonitorActor(dataSource, testSub, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
         testSub
       }
+
+      submissions.foreach ( sub => createSubmissionMonitorActor(dataSource, sub, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)) )
 
       //they're all being monitored. they should all complete just fine, without deadlocking or otherwise barfing
       awaitCond({
@@ -501,11 +503,13 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
           submissionQuery.findById(UUID.fromString(sub.submissionId)).result
         })).flatten
         submissionList.forall(_.status == SubmissionStatuses.Done.toString) && submissionList.length == numSubmissions
-      }, 10 seconds)
+      }, 60 seconds)
 
       //check that all the outputs got bound correctly too
       //apparently not :(
       // but I thought we were supposed to bail and not mark the workflow as done (and thus not the submission) if we can't attach outputs?
+      // TODO: is the supervisor restart actually happening?
+      // TODO: why are we marking the submissions as done if their outputs aren't attached?
       val subKeys = (1 to numSubmissions).map ( subNum => AttributeName.fromDelimitedName(s"sub_$subNum") )
 
       val indiv1 = runAndWait( entityQuery.get(ctx, testData.indiv1.entityType, testData.indiv1.name) ).get

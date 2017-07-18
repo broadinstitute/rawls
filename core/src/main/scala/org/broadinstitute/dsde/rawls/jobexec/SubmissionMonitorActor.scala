@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, addJitter}
 
+import scala.collection.immutable.Iterable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
@@ -267,44 +268,57 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     //just the workflow records in this response list which have outputs
     val workflowsWithOutputs = response.statusResponse.collect {
-      case Success(Some((workflowRec, Some(outputs)))) => (workflowRec, outputs)
+      case Success(Some((workflowRec, Some(outputs)))) =>
+        //println(s"workflow ${workflowRec.submissionId.toString.split("-").head} has outputs")
+        (workflowRec, outputs)
     }
 
     // Attach the outputs in a txn of their own. If attaching outputs fails, it will mark the workflow as failed. This is fine.
-    val attachOutputsTxn = datasource.inTransaction { dataAccess =>
+    /*val attachOutputsTxn =*/ datasource.inTransaction { dataAccess =>
       handleOutputs(workflowsWithOutputs, dataAccess)
-    }
+    } flatMap { _ =>
+      // Update statuses for workflows and submission in a separate txn.
+      datasource.inTransaction { dataAccess =>
 
-    // Update statuses for workflows and submission in a separate txn.
-    val statusUpdateTxn = datasource.inTransaction { dataAccess =>
+        // Refetch workflows as some may have been marked as Failed by handleOutputs.
+        /*val workflowUpdatesDB = */ dataAccess.workflowQuery.findWorkflowByIds(workflowsWithStatuses.map(_.id)).result flatMap { updatedRecs =>
 
-      // Refetch workflows as some may have been marked as Failed by handleOutputs.
-      val workflowUpdatesDB = dataAccess.workflowQuery.findWorkflowByIds( workflowsWithStatuses.map( _.id ) ).result flatMap { updatedRecs =>
+          //New statuses according to the execution service.
+          val workflowIdToNewStatus = workflowsWithStatuses.map({ workflowRec => workflowRec.id -> workflowRec.status }).toMap
 
-        //New statuses according to the execution service.
-        val workflowIdToNewStatus = workflowsWithStatuses.map({ workflowRec => workflowRec.id -> workflowRec.status }).toMap
+          // No need to update statuses for any workflows that are in terminal statuses.
+          // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by attachOutputs.
+          val workflowsToUpdate = updatedRecs.filter(rec => !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(rec.status)))
+          val workflowsWithNewStatuses = workflowsToUpdate.map(rec => rec.copy(status = workflowIdToNewStatus(rec.id)))
 
-        // No need to update statuses for any workflows that are in terminal statuses.
-        // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by attachOutputs.
-        val workflowsToUpdate = updatedRecs.filter(rec => !WorkflowStatuses.terminalStatuses.contains(WorkflowStatuses.withName(rec.status)))
-        val workflowsWithNewStatuses = workflowsToUpdate.map(rec => rec.copy(status = workflowIdToNewStatus(rec.id)))
+          // to minimize database updates batch 1 update per workflow status
+          val zzz: Iterable[ReadWriteAction[Int]] = workflowsWithNewStatuses.groupBy(_.status).map { case (status, recs) =>
+            val x: ReadWriteAction[Int] = dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
+            x
+          }
+          val fff = DBIO.seq(zzz.toSeq: _*)
 
-        // to minimize database updates batch 1 update per workflow status
-        DBIO.seq(workflowsWithNewStatuses.groupBy(_.status).map { case (status, recs) =>
-          dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
-        }.toSeq: _*)
+
+          fff.asTry map {
+            case Success(aaa) => DBIO.successful(aaa)
+            case Failure(regret) =>
+              println(s"$submissionId failure: $regret")
+              DBIO.failed(regret)
+          }
+        } flatMap { _ =>
+
+        // update submission after workflows are updated
+        /* val submissionUpdatesDB = */ updateSubmissionStatus(dataAccess) map { shouldStop: Boolean =>
+          //return a message about whether our submission is done entirely
+          StatusCheckComplete(shouldStop)
+        }
       }
 
-      // update submission after workflows are updated
-      val submissionUpdatesDB = checkOverallStatus(dataAccess) map { shouldStop: Boolean =>
-        //return a message about whether our submission is done entirely
-        StatusCheckComplete(shouldStop)
+        //workflowUpdatesDB flatMap { _ => submissionUpdatesDB }
       }
-
-      workflowUpdatesDB flatMap { _ => submissionUpdatesDB }
     }
 
-    attachOutputsTxn.flatMap( _ => statusUpdateTxn )
+    //attachOutputsTxn.flatMap( _ => statusUpdateTxn )
   }
 
   /**
@@ -314,7 +328,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
    * @param executionContext
    * @return true if the submission is done/aborted
    */
-  def checkOverallStatus(dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Boolean] = {
+  def updateSubmissionStatus(dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Boolean] = {
     dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(submissionId, (WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses):_*) flatMap { workflowRecs =>
       if (workflowRecs.isEmpty) {
         dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.map { status =>
@@ -323,7 +337,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             case _ => SubmissionStatuses.Done
           }
         } flatMap { newStatus =>
-          logger.debug(s"submission $submissionId terminating to status $newStatus")
+          println(s"submission $submissionId terminating to status $newStatus")
           dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
         } map(_ => true)
       } else {
@@ -336,6 +350,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     if (workflowsWithOutputs.isEmpty) {
       DBIO.successful(Unit)
     } else {
+      val xoxo = workflowsWithOutputs.map( _._2.outputs.keys).flatten
+      //println(s"${workflowsWithOutputs.head._1.submissionId.toString.split("-").head} handleOutputs")
       for {
         // load all the starting data
         entitiesById <-      listWorkflowEntitiesById(workflowsWithOutputs, dataAccess)
@@ -381,7 +397,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressions: Map[String, String]): Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
-      logger.debug(s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs}")
+      //println(s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs}")
       logger.debug(s"output expressions for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputExpressions}")
 
       val attributes = outputExpressions.map { case (outputName, outputExpr) =>
@@ -421,6 +437,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess) = {
     DBIO.sequence(errors.map { case (workflowRecord, errorMessages) =>
+      println(s"setting ${workflowRecord.submissionId.toString.split("-").head} to Failed")
       dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })

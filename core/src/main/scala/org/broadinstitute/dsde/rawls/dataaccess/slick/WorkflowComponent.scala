@@ -213,8 +213,10 @@ trait WorkflowComponent {
           UpdateWorkflowStatusRawSql.actionForWorkflowRecs(workflows, newStatus) map { rows =>
             if (rows.head == workflows.size)
               workflows.size
-            else
+            else {
+              println(s"CME updating workflows on ${workflows.head.submissionId}")
               throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
+            }
           }
         }
       }
