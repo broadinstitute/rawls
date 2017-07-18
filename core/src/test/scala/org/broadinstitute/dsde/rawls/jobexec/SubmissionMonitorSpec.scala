@@ -506,10 +506,6 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       }, 600 seconds)
 
       //check that all the outputs got bound correctly too
-      //apparently not :(
-      // but I thought we were supposed to bail and not mark the workflow as done (and thus not the submission) if we can't attach outputs?
-      // TODO: is the supervisor restart actually happening?
-      // TODO: why are we marking the submissions as done if their outputs aren't attached?
       val subKeys = (1 to numSubmissions).map ( subNum => AttributeName.fromDelimitedName(s"sub_$subNum") )
 
       val indiv1 = runAndWait( entityQuery.get(ctx, testData.indiv1.entityType, testData.indiv1.name) ).get
