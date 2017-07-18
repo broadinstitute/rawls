@@ -503,7 +503,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
           submissionQuery.findById(UUID.fromString(sub.submissionId)).result
         })).flatten
         submissionList.forall(_.status == SubmissionStatuses.Done.toString) && submissionList.length == numSubmissions
-      }, 60 seconds)
+      }, 600 seconds)
 
       //check that all the outputs got bound correctly too
       //apparently not :(
@@ -515,8 +515,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       val indiv1 = runAndWait( entityQuery.get(ctx, testData.indiv1.entityType, testData.indiv1.name) ).get
       val indiv2 = runAndWait( entityQuery.get(ctx, testData.indiv2.entityType, testData.indiv2.name) ).get
 
-      indiv1.attributes.keys should contain theSameElementsAs subKeys
-      indiv2.attributes.keys should contain theSameElementsAs subKeys
+      indiv1.attributes.keys.filter( an => an.name.startsWith("sub_") ) should contain theSameElementsAs subKeys
+      indiv2.attributes.keys.filter( an => an.name.startsWith("sub_") ) should contain theSameElementsAs subKeys
     }
   }
 
