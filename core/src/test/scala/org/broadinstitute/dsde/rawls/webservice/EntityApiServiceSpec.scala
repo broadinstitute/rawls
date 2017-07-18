@@ -1634,6 +1634,36 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 422 when copying entities from an auth domain protected workspace with only a partial match of AD groups" in withTestDataApiServices { services =>
+    val srcWorkspace = testData.workspaceWithMultiGroupAD
+    val destWorkspace = testData.workspaceWithRealm
+    val srcWorkspaceName = srcWorkspace.toWorkspaceName
+
+    // add an entity to a workspace with a Realm
+
+    Post(s"${srcWorkspace.path}/entities", httpJson(z1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+        assertResult(z1) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(srcWorkspace), z1.entityType, z1.name)).get
+        }
+      }
+
+    val destWorkspaceWrongRealmName = destWorkspace.toWorkspaceName
+
+    val wrongRealmCopyDef = EntityCopyDefinition(srcWorkspaceName, destWorkspaceWrongRealmName, "Sample", Seq("z1"))
+    Post("/workspaces/entities/copy", httpJson(wrongRealmCopyDef)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.UnprocessableEntity) {
+          status
+        }
+      }
+  }
+
   it should "not allow dots in user-defined strings" in withTestDataApiServices { services =>
     val dotSample = Entity("sample.with.dots.in.name", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
     Post(s"${testData.workspace.path}/entities", httpJson(dotSample)) ~>

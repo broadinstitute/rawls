@@ -219,6 +219,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val wsName7 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSubmission")
     val wsName8 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSuccessfulSubmission")
     val wsName9 = WorkspaceName("myNamespace", "myWorkspaceToTestGrantPermissions")
+    val wsName10 = WorkspaceName("myNamespace", "myMultiGroupADWorkspace")
     val wsInterleaved = WorkspaceName("myNamespace", "myWorkspaceToTestInterleavedSubmissions")
     val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWorkspaceToTestWorkflowFailureMode")
     val workspaceToTestGrantId = UUID.randomUUID()
@@ -285,6 +286,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val realm7 = makeManagedGroup(s"Test-Realm7", Set.empty)
 
     val (workspaceWithRealm, workspaceWithRealmGroups) = makeWorkspace(billingProject, realmWsName, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+
+    val (workspaceWithMultiGroupAD, workspaceWithMultiGroupADGroups) = makeWorkspace(billingProject, wsName10.name, Set(realm, realm2), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     val (controlledWorkspace, controlledWorkspaceGroups) = makeWorkspace(billingProject, "test-tcga", Set(dbGapAuthorizedUsersGroup), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
@@ -520,6 +523,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         testProject3.groups.values ++
         workspaceGroups ++
         workspaceWithRealmGroups ++
+        workspaceWithMultiGroupADGroups ++
         otherWorkspaceWithRealmGroups ++
         workspaceNoSubmissionsGroups ++
         workspaceSuccessfulSubmissionGroups ++
@@ -541,6 +545,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceNoAttrs,
       workspaceNoGroups,
       workspaceWithRealm,
+      workspaceWithMultiGroupAD,
       otherWorkspaceWithRealm,
       workspaceNoSubmissions,
       workspaceSuccessfulSubmission,
@@ -577,6 +582,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         rawlsGroupQuery.save(realm2.membersGroup),
         rawlsGroupQuery.save(realm2.adminsGroup),
         DBIO.sequence(workspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceWithMultiGroupADGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(controlledWorkspaceGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(otherWorkspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceNoSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
@@ -624,6 +630,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
           )
         }),
         withWorkspaceContext(workspaceWithRealm)({ context =>
+          DBIO.seq(
+            entityQuery.save(context, extraSample)
+          )
+        }),
+        withWorkspaceContext(workspaceWithMultiGroupAD)({ context =>
           DBIO.seq(
             entityQuery.save(context, extraSample)
           )

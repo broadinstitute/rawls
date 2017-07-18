@@ -340,6 +340,89 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "shouldnt let a user access a shared workspace if they aren't in all auth domain groups" in withTestDataApiServices { services =>
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner, testData.userWriter))
+    val realmGroup2 = createAndSaveManagedGroup("realm-for-testing2", Set(testData.userOwner))
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace2",
+      authorizationDomain = Set(realmGroup, realmGroup2),
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+      }
+
+    //add userWriter to writer ACLs
+    Patch(s"${workspaceWithRealm.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+      }
+
+    Get(s"${workspaceWithRealm.path}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        val ws = responseAs[WorkspaceResponse]
+        assert(!runAndWait(rawlsGroupQuery.isGroupMember(ws.workspace.authDomainACLs(WorkspaceAccessLevels.Write), testData.userWriter)))
+      }
+  }
+
+  it should "should let a user access a shared workspace once they are added to all auth domain groups" in withTestDataApiServices { services =>
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner, testData.userWriter))
+    val realmGroup2 = createAndSaveManagedGroup("realm-for-testing2", Set(testData.userOwner))
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace2",
+      authorizationDomain = Set(realmGroup, realmGroup2),
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+      }
+
+    //add userWriter to writer ACLs
+    Patch(s"${workspaceWithRealm.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+      }
+
+    Get(s"${workspaceWithRealm.path}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        val ws = responseAs[WorkspaceResponse]
+        assert(!runAndWait(rawlsGroupQuery.isGroupMember(ws.workspace.authDomainACLs(WorkspaceAccessLevels.Write), testData.userWriter)))
+      }
+
+    services.gcsDAO.adminList += testData.userOwner.userEmail.value
+
+    Post(s"/admin/groups/${realmGroup2.membersGroup.groupName.value}/members", RawlsGroupMemberList(userEmails = Some(Seq("writer-access")))) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+
+    Get(s"${workspaceWithRealm.path}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        val ws = responseAs[WorkspaceResponse]
+        assert(runAndWait(rawlsGroupQuery.isGroupMember(ws.workspace.authDomainACLs(WorkspaceAccessLevels.Write), testData.userWriter)))
+      }
+  }
+
   it should "clone a workspace if the source has a multi-group auth domain and user is in all groups" in withTestDataApiServices { services =>
     val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner))
     val realmGroup2 = createAndSaveManagedGroup("realm-for-testing2", Set(testData.userOwner))
@@ -367,6 +450,40 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(workspaceWithRealm.authorizationDomain) {
+          val ws = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+          ws.authorizationDomain
+        }
+      }
+  }
+
+  it should "clone a workspace if the user added a group to the source authorization domain" in withTestDataApiServices { services =>
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner))
+    val realmGroup2 = createAndSaveManagedGroup("realm-for-testing2", Set(testData.userOwner))
+    val realmGroup3 = createAndSaveManagedGroup("realm-for-testing3", Set(testData.userOwner))
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace2",
+      authorizationDomain = Set(realmGroup, realmGroup2),
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+      }
+
+    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", Set(realmGroup, realmGroup2, realmGroup3), Map.empty)
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+
+        assertResult(workspaceCopy.authorizationDomain) {
           val ws = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
           ws.authorizationDomain
         }
