@@ -189,13 +189,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       }
     }
 
-    def abortActiveWorkflows(submissionId: UUID): Future[Seq[Future[(Option[String], Try[ExecutionServiceStatus])]]] = {
+    def abortActiveWorkflows(submissionId: UUID): Future[Seq[(Option[String], Try[ExecutionServiceStatus])]] = {
       datasource.inTransaction { dataAccess =>
         // look up abortable WorkflowRecs for this submission
-        val wrquery = dataAccess.workflowQuery.findWorkflowsForAbort(submissionId)
-        wrquery.result map { _.map{ wr =>
-          Future.successful(wr.externalId).zip(executionServiceCluster.abort(wr, UserInfo.buildFromTokens(credential)))
-        }}
+        dataAccess.workflowQuery.findWorkflowsForAbort(submissionId).result
+      }.flatMap { workflowRecs =>
+        Future.traverse(workflowRecs) { workflowRec =>
+          Future.successful(workflowRec.externalId).zip(executionServiceCluster.abort(workflowRec, UserInfo.buildFromTokens(credential)))
+        }
       }
     }
 
@@ -217,8 +218,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       case Some(submission) =>
         if(submission.status == SubmissionStatuses.Aborting) {
           for {
-            abortQueued <- abortQueuedWorkflows(submissionId)
-            abortActive <- abortActiveWorkflows(submissionId)
+            _ <- abortQueuedWorkflows(submissionId)
+            _ <- abortActiveWorkflows(submissionId)
             getStatuses <- queryForWorkflowStatuses()
           } yield getStatuses
         }
@@ -291,9 +292,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           val workflowsWithNewStatuses = workflowsToUpdate.map(rec => rec.copy(status = workflowIdToNewStatus(rec.id)))
 
           // to minimize database updates batch 1 update per workflow status
-          DBIO.seq( workflowsWithNewStatuses.groupBy(_.status).map { case (status, recs) =>
+          DBIO.sequence( workflowsWithNewStatuses.groupBy(_.status).map { case (status, recs) =>
               dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
-          }.toSeq: _*)
+          })
 
         } flatMap { _ =>
           // update submission after workflows are updated
@@ -322,6 +323,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             case _ => SubmissionStatuses.Done
           }
         } flatMap { newStatus =>
+          logger.debug(s"submission $submissionId terminating to status $newStatus")
           dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
         } map(_ => true)
       } else {
@@ -334,7 +336,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     if (workflowsWithOutputs.isEmpty) {
       DBIO.successful(Unit)
     } else {
-      workflowsWithOutputs.map( _._2.outputs.keys).flatten
       for {
         // load all the starting data
         entitiesById <-      listWorkflowEntitiesById(workflowsWithOutputs, dataAccess)

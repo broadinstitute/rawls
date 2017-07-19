@@ -487,7 +487,6 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         val testSub = createTestSubmission(testData.workspace, methodConfig, testData.indiv1, testData.userOwner,
           Seq(testData.indiv1, testData.indiv2), Map(testData.indiv1 -> testData.inputResolutions, testData.indiv2 -> testData.inputResolutions),
           Seq(), Map())
-        //println(s"submission $subNumber - ${testSub.submissionId.split("-").head}")
         runAndWait(methodConfigurationQuery.create(ctx, methodConfig))
         runAndWait(submissionQuery.create(ctx, testSub))
         runAndWait(updateWorkflowExecutionServiceKey("unittestdefault"))
