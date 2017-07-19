@@ -33,8 +33,8 @@ object SubmissionMonitorActor {
             executionServiceCluster: ExecutionServiceCluster,
             credential: Credential,
             submissionPollInterval: FiniteDuration,
-            rawlsMetricBaseName: String): Props = {
-    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, rawlsMetricBaseName))
+            workbenchMetricBaseName: String): Props = {
+    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, workbenchMetricBaseName))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -75,7 +75,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val executionServiceCluster: ExecutionServiceCluster,
                              val credential: Credential,
                              val submissionPollInterval: FiniteDuration,
-                             override val rawlsMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
+                             override val workbenchMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
   import context._
 
   // This field is marked volatile because it is read by a separate statsd thread.
@@ -129,8 +129,8 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
     try {
       WorkflowStatuses.allStatuses.foreach { status =>
         workspaceSubmissionMetricBuilder
-          .expand(WorkflowStatusMetric, status)
-          .asGauge(Some("current"))(currentWorkflowStatusCounts.getOrElse(status, 0))
+          .expand(WorkflowStatusMetricKey, status)
+          .asGauge("current")(currentWorkflowStatusCounts.getOrElse(status, 0))
       }
     } catch {
       case NonFatal(e) => logger.warn(s"Could not initialize gauge metrics for submission $submissionId", e)

@@ -172,7 +172,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         execServiceCluster,
         slickDataSource,
-        rawlsMetricBaseName = "test"
+        workbenchMetricBaseName = "test"
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
       val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 

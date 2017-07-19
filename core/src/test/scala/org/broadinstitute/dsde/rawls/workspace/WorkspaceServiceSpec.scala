@@ -10,15 +10,18 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
+import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
+import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.scalatest.concurrent.Eventually
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http.{StatusCode, StatusCodes}
 import spray.testkit.ScalatestRouteTest
@@ -27,7 +30,7 @@ import scala.concurrent.duration.{Duration, FiniteDuration, _}
 import scala.concurrent.{Await, ExecutionContext}
 
 
-class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils {
+class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
   import driver.api._
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
@@ -69,7 +72,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       slickDataSource,
-      rawlsMetricBaseName = "test"
+      workbenchMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"), "test-ws-submission-supervisor")
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
@@ -108,7 +111,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       genomicsServiceConstructor,
       maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser,
-      "test"
+      workbenchMetricBaseName
     )_
 
     def cleanupSupervisor = {
