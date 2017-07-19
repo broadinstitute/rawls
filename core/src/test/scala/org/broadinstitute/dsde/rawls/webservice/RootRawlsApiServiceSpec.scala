@@ -12,11 +12,18 @@ class RootRawlsApiServiceSpec extends ApiServiceSpec with RootRawlsApiService {
   override val googleClientId = "FAKE-VALUE"
 
   "RootRawlsApiService" should "get a version" in  {
-    Get("/version") ~>
-      sealRoute(versionRoute) ~>
-      check {
-        assertResult(StatusCodes.OK) {status}
-        assertResult(appVersion) {responseAs[ApplicationVersion]}
+    withStatsD {
+      Get("/version") ~>
+        sealRoute(instrumentRequest {versionRoute} ) ~>
+        check {
+          assertResult(StatusCodes.OK) {status}
+          assertResult(appVersion) {responseAs[ApplicationVersion]}
+        }
+    } { capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("get", "version", StatusCodes.OK.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
       }
+    }
   }
 }
