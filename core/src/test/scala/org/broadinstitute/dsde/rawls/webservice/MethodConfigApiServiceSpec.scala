@@ -651,10 +651,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           }
         }
     } { capturedMetrics =>
-      println(capturedMetrics)
       val wsPathForRequestMetrics = s"methodconfigs.copyFromMethodRepo"
       val expected = expectedHttpRequestMetrics("post", wsPathForRequestMetrics, StatusCodes.UnprocessableEntity.intValue, 1)
-      println(expected)
       assert {
         expected subsetOf capturedMetrics.toSet
       }
