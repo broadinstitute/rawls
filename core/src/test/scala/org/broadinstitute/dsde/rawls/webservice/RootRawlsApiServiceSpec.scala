@@ -8,8 +8,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ApplicationVersi
  * Created by dvoet on 1/26/16.
  */
 class RootRawlsApiServiceSpec extends ApiServiceSpec with RootRawlsApiService {
-  val appVersion = ApplicationVersion("githash", "buildnumber", "version")
-  val googleClientId = "FAKE-VALUE"
+  override val appVersion = ApplicationVersion("githash", "buildnumber", "version")
+  override val googleClientId = "FAKE-VALUE"
 
   "RootRawlsApiService" should "get a version" in  {
     Get("/version") ~>

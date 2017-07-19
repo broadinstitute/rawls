@@ -19,10 +19,11 @@ import scala.concurrent.duration._
 trait StatsDTestUtils { this: Eventually with MockitoTestUtils =>
 
   protected def workbenchMetricBaseName = "test"
+  def clearRegistries(): Unit = SharedMetricRegistries.getOrCreate("default").removeMatching(MetricFilter.ALL)
 
   protected def withStatsD[T](testCode: => T)(verify: Seq[(String, String)] => Unit = _ => ()): T = {
     val statsD = mock[StatsD]
-    SharedMetricRegistries.getOrCreate("default").removeMatching(MetricFilter.ALL)
+    clearRegistries()
     val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
@@ -42,8 +43,7 @@ trait StatsDTestUtils { this: Eventually with MockitoTestUtils =>
       result
     } finally {
       reporter.stop()
-      SharedMetricRegistries.clear()
-      SharedHealthCheckRegistries.clear()
+      clearRegistries()
     }
   }
 }

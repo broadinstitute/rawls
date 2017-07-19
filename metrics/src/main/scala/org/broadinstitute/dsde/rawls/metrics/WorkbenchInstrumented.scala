@@ -58,9 +58,7 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
       new ExpandedMetricBuilder().expand(key, a)
     }
 
-    def empty: ExpandedMetricBuilder = {
-      expand("", "")
-    }
+    def empty: ExpandedMetricBuilder = new ExpandedMetricBuilder()
   }
 
   // Keys for expanded metric fragments

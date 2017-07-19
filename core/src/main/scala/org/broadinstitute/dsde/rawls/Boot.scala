@@ -240,7 +240,8 @@ object Boot extends App with LazyLogging {
       statusServiceConstructor,
       ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
       clientSecrets.getDetails.getClientId,
-      submissionTimeout
+      submissionTimeout,
+      rawlsMetricBaseName = metricsPrefix
     ),
       "rawls-service")
 

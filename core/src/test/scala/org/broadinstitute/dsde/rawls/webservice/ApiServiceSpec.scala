@@ -12,8 +12,9 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
+import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.RawlsUser
+import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, RawlsUser}
 import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor, HealthMonitor}
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -31,10 +32,15 @@ import spray.testkit.ScalatestRouteTest
 import scala.concurrent.duration._
 
 // common trait to be inherited by API service tests
-trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with HttpService with ScalatestRouteTest with TestKitBase with SprayJsonSupport with RawlsTestUtils with MockitoTestUtils with Eventually with LazyLogging with RawlsStatsDTestUtils {
-  // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
+trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils with RawlsInstrumented
+  with RawlsStatsDTestUtils with InstrumentationDirectives with HttpService with ScalatestRouteTest with TestKitBase
+  with SprayJsonSupport with MockitoTestUtils with MockitoSugar with Eventually with LazyLogging {
+
+  // increase the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
+
+  override val workbenchMetricBaseName = "test"
 
   def actorRefFactory = system
 
@@ -80,7 +86,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
       }
   }
 
-  trait ApiServices extends AdminApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with WorkspaceApiService with BillingApiService with NotificationsApiService with StatusApiService {
+  trait ApiServices extends AdminApiService with BillingApiService with EntityApiService with MethodConfigApiService
+    with NotificationsApiService with RootRawlsApiService with StatusApiService with SubmissionApiService with UserApiService with WorkspaceApiService {
+
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
     val gpsDAO: MockGooglePubSubDAO
@@ -163,6 +171,17 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
       submissionSupervisor ! PoisonPill
       googleGroupSyncMonitorSupervisor ! PoisonPill
       bucketDeletionMonitor ! PoisonPill
+    }
+
+    val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
+    val googleClientId = "dummy"
+
+    // for metrics testing
+    val sealedInstrumentedRoutes: Route = sealRoute {
+      instrumentRequest {
+        adminRoutes ~ billingRoutes ~ entityRoutes ~  methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
+          submissionRoutes ~ userRoutes ~ createUserRoute ~ getUserStatusRoute ~ versionRoute ~ workspaceRoutes
+      }
     }
   }
 

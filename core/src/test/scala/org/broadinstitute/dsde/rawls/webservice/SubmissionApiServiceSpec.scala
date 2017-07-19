@@ -164,8 +164,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
     withStatsD {
       // Abort the submission
-      Delete(s"${wsName.path}/submissions/${submissionId}") ~>
-        sealRoute(services.submissionRoutes) ~>
+      Delete(s"${wsName.path}/submissions/${submissionId}") ~> services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
@@ -178,6 +177,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       }
     } { capturedMetrics =>
       capturedMetrics should contain (expectedSubmissionStatusMetric(wsName, SubmissionStatuses.Aborting, 1))
+
+      val wsPathForRequestMetrics = s"workspaces.${wsName.namespace}.${wsName.name}"
+      val expected = expectedHttpRequestMetrics("delete", s"$wsPathForRequestMetrics.submissions.$submissionId", StatusCodes.NoContent.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
+      }
     }
 
     // The workflow and submission should be aborted once the SubmissionMonitor runs
@@ -416,14 +421,23 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when counting submissions" in withTestDataApiServices { services =>
-    Get(s"${testData.wsName.path}/submissionsCount") ~>
-      sealRoute(services.submissionRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {status}
-        assertResult(Map("Submitted" -> 6)) {
-          responseAs[Map[String, Int]]
+    withStatsD {
+      Get(s"${testData.wsName.path}/submissionsCount") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(Map("Submitted" -> 6)) {
+            responseAs[Map[String, Int]]
+          }
         }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics.submissionsCount", StatusCodes.OK.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
       }
+    }
   }
 
   // Submissions Queue methods

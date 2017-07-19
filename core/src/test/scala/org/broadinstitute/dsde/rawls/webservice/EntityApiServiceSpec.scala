@@ -59,18 +59,31 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the workspace last modified date on entity rename" in withTestDataApiServices { services =>
-    Post(s"${testData.sample2.path(testData.workspace)}/rename", httpJson(EntityName("s2_changed"))) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
+    withStatsD {
+      Post(s"${testData.sample2.path(testData.workspace)}/rename", httpJson(EntityName("s2_changed"))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
         }
+      Get(testData.workspace.path) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
-    Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+    } {capturedMetrics =>
+      val WorkspaceName(wsNamespace, wsName) = testData.workspace.toWorkspaceName
+      val AttributeEntityReference(eType, eName) = testData.sample2.toReference
+      val postPath = s"workspaces.$wsNamespace.$wsName.entities.$eType.$eName.rename"
+      val getPath = s"workspaces.$wsNamespace.$wsName"
+
+      val expected = expectedHttpRequestMetrics("post", postPath, StatusCodes.NoContent.intValue, 1) ++
+        expectedHttpRequestMetrics("get", getPath, StatusCodes.OK.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
       }
+    }
   }
 
   it should "update the workspace last modified date on entity update" in withTestDataApiServices { services =>
@@ -944,20 +957,28 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 on get entity" in withTestDataApiServices { services =>
-    Get(testData.sample2.path(testData.workspace)) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
+    withStatsD {
+      Get(testData.sample2.path(testData.workspace)) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
 
-        assertResult(testData.sample2) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name)).get
+          assertResult(testData.sample2) {
+            runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name)).get
+          }
+          assertResult(testData.sample2) {
+            responseAs[Entity]
+          }
         }
-        assertResult(testData.sample2) {
-          responseAs[Entity]
-        }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}.entities.${testData.sample2.entityType}.${testData.sample2.name}"
+      val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics", StatusCodes.OK.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
       }
+    }
   }
 
   // metadata attribute name sequences have undefined ordering, so can't compare directly
@@ -1182,16 +1203,24 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 on update entity" in withTestDataApiServices { services =>
-    Patch(testData.sample2.path(testData.workspace), httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation))) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK, responseAs[String]) {
-          status
+    withStatsD {
+      Patch(testData.sample2.path(testData.workspace), httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK, responseAs[String]) {
+            status
+          }
+          assertResult(Option(AttributeString("bang"))) {
+            runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name)).get.attributes.get(AttributeName.withDefaultNS("boo"))
+          }
         }
-        assertResult(Option(AttributeString("bang"))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name)).get.attributes.get(AttributeName.withDefaultNS("boo"))
-        }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}.entities.${testData.sample2.entityType}.${testData.sample2.name}"
+      val expected = expectedHttpRequestMetrics("patch", s"$wsPathForRequestMetrics", StatusCodes.OK.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
       }
+    }
   }
 
   it should "return 200 on remove attribute from entity" in withTestDataApiServices { services =>
@@ -1316,16 +1345,24 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 204 on entity rename" in withTestDataApiServices { services =>
-    Post(s"${testData.sample2.path(testData.workspace)}/rename", httpJson(EntityName("s2_changed"))) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
+    withStatsD {
+      Post(s"${testData.sample2.path(testData.workspace)}/rename", httpJson(EntityName("s2_changed"))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+          assertResult(true) {
+            runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, "s2_changed")).isDefined
+          }
         }
-        assertResult(true) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, "s2_changed")).isDefined
-        }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}.entities.${testData.sample2.entityType}.${testData.sample2.name}"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.rename", StatusCodes.NoContent.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
       }
+    }
   }
 
   it should "return 404 on entity rename, entity does not exist" in withTestDataApiServices { services =>
@@ -1518,8 +1555,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     //this will cause a soft conflict because it references sample1
     val entityCopyDefinition2 = EntityCopyDefinition(sourceWorkspace, testData.controlledWorkspace.toWorkspaceName, testData.sample3.entityType, Seq(testData.sample3.name))
 
-    Post("/workspaces/entities/copy", httpJson(entityCopyDefinition1)) ~>
-      sealRoute(services.entityRoutes) ~>
+    withStatsD {
+      Post("/workspaces/entities/copy", httpJson(entityCopyDefinition1)) ~>
+        services.sealedInstrumentedRoutes ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
@@ -1531,6 +1569,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertSameElements(Seq.empty, copyResponse.hardConflicts)
         assertSameElements(Seq.empty, copyResponse.softConflicts)
       }
+    } {capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("post", "workspaces.entities.copy", StatusCodes.Created.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
+      }
+    }
 
     val expectedSoftConflictResponse = EntityCopyResponse(Seq.empty, Seq.empty, Seq(
       EntitySoftConflict(testData.sample3.entityType, testData.sample3.name, Seq(
@@ -1539,8 +1583,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           EntitySoftConflict(testData.aliquot1.entityType, testData.aliquot1.name, Seq.empty)))))))
 
     //test the default case of no parameter set
-    Post("/workspaces/entities/copy", httpJson(entityCopyDefinition2)) ~>
-      sealRoute(services.entityRoutes) ~>
+    withStatsD {
+      Post("/workspaces/entities/copy", httpJson(entityCopyDefinition2)) ~>
+      services.sealedInstrumentedRoutes ~>
       check {
         assertResult(StatusCodes.Conflict, response.entity.asString) {
           status
@@ -1549,17 +1594,30 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           responseAs[EntityCopyResponse]
         }
       }
+    } {capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("post", "workspaces.entities.copy", StatusCodes.Conflict.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
+      }
+    }
 
-    Post("/workspaces/entities/copy?linkExistingEntities=false", httpJson(entityCopyDefinition2)) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.Conflict, response.entity.asString) {
-          status
+    withStatsD {
+      Post("/workspaces/entities/copy?linkExistingEntities=false", httpJson(entityCopyDefinition2)) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Conflict, response.entity.asString) {
+            status
+          }
+          assertResult(expectedSoftConflictResponse) {
+            responseAs[EntityCopyResponse]
+          }
         }
-        assertResult(expectedSoftConflictResponse) {
-          responseAs[EntityCopyResponse]
-        }
+    } {capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("post", "workspaces.entities.copy", StatusCodes.Conflict.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
       }
+    }
 
     Post("/workspaces/entities/copy?linkExistingEntities=true", httpJson(entityCopyDefinition2)) ~>
       sealRoute(services.entityRoutes) ~>
@@ -1826,43 +1884,52 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "not return deleted entities on entity query" in withPaginationTestDataApiServices { services =>
     val e = Entity("foo", "bar", Map.empty)
+    withStatsD {
+      Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+          assertResult(e) {
+            responseAs[Entity]
+          }
+        }
 
-    Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
+      Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+          assertResult(None) {
+            runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+          }
         }
-        assertResult(e) {
-          responseAs[Entity]
+
+      Get(s"${paginationTestData.workspace.path}/entityQuery/bar") ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK, response.entity.asString) {
+            status
+          }
+          assertResult(EntityQueryResponse(
+            defaultQuery,
+            EntityQueryResultMetadata(0, 0, 0),
+            Seq.empty)) {
+
+            responseAs[EntityQueryResponse]
+          }
         }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics.entityQuery.bar", StatusCodes.OK.intValue, 1) ++
+                     expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.entities.delete", StatusCodes.NoContent.intValue, 1) ++
+                     expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.entities", StatusCodes.Created.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
       }
-
-    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-        assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
-        }
-      }
-
-    Get(s"${paginationTestData.workspace.path}/entityQuery/bar") ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
-          status
-        }
-        assertResult(EntityQueryResponse(
-          defaultQuery,
-          EntityQueryResultMetadata(0, 0, 0),
-          Seq.empty)) {
-
-          responseAs[EntityQueryResponse]
-        }
-      }
+    }
   }
 
   it should "return 200 OK on entity query when all results are filtered" in withPaginationTestDataApiServices { services =>
@@ -1921,20 +1988,28 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return sorted results on entity query for number field" in withPaginationTestDataApiServices { services =>
-    Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=number") ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
-          status
-        }
-        assertResult(EntityQueryResponse(
-          defaultQuery.copy(sortField = "number"),
-          EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
-          paginationTestData.entities.sortBy(_.attributes(AttributeName.withDefaultNS("number")).asInstanceOf[AttributeNumber].value).take(defaultQuery.pageSize))) {
+    withStatsD {
+      Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=number") ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK, response.entity.asString) {
+            status
+          }
+          assertResult(EntityQueryResponse(
+            defaultQuery.copy(sortField = "number"),
+            EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
+            paginationTestData.entities.sortBy(_.attributes(AttributeName.withDefaultNS("number")).asInstanceOf[AttributeNumber].value).take(defaultQuery.pageSize))) {
 
-          responseAs[EntityQueryResponse]
+            responseAs[EntityQueryResponse]
         }
       }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics.entityQuery.${paginationTestData.entityType}", StatusCodes.OK.intValue, 1)
+      assert {
+        expected subsetOf capturedMetrics.toSet
+      }
+    }
   }
 
   it should "return sorted results on entity query for string field" in withPaginationTestDataApiServices { services =>

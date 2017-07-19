@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.metrics
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.model.{RawlsEnumeration, WorkspaceName}
+import spray.http.{HttpMethod, StatusCode, Uri}
 
 import scala.annotation.implicitNotFound
 
@@ -43,6 +44,34 @@ object Expansion {
     * subtype of RawlsEnumeration.
     */
   implicit def RawlsEnumerationExpansion[A <: RawlsEnumeration[_]] = new Expansion[A] {}
+
+  /**
+    * Implicit expansion for HttpMethod.
+    */
+  implicit object HttpMethodExpansion extends Expansion[HttpMethod] {
+    override def makeName(m: HttpMethod): String = s"${m.toString.toLowerCase}"
+  }
+
+  /**
+    * Implicit expansion for Uri.
+    * Statsd doesn't allow slashes in metric names, so we override makeName to override
+    * the default toString based implementation.
+    */
+  implicit object UriExpansion extends Expansion[Uri] {
+    override def makeName(uri: Uri): String = s"${uri2String(uri)}"
+
+    private def uri2String(uri: Uri): String = {
+      val path = if (uri.path.startsWithSlash) uri.path.tail.toString else uri.path
+      path.toString.replace('/', '.')
+    }
+  }
+
+  /**
+    * Implicit expansion for StatusCode.
+    */
+  implicit object StatusCodeExpansion extends Expansion[StatusCode] {
+    override def makeName(statusCode: StatusCode): String = s"${statusCode.intValue.toString}"
+  }
 
   // Implicit expansions for String and Int.
   // It's preferable to use more specific types when possible, but sometimes expanding
