@@ -480,7 +480,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   it should "attach outputs and not deadlock with multiple submissions all updating the same entity at once" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     //create a bunch of submissions all running on the same two entities
-    val numSubmissions = 200
+    val numSubmissions = 50
     withWorkspaceContext(testData.workspace) { ctx =>
       val submissions = (1 to numSubmissions).map { subNumber =>
         val methodConfig = testData.methodConfigEntityUpdate.copy(name = s"this.sub_$subNumber", outputs = Map("o1" -> AttributeString(s"this.sub_$subNumber")))
@@ -502,7 +502,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
           submissionQuery.findById(UUID.fromString(sub.submissionId)).result
         })).flatten
         submissionList.forall(_.status == SubmissionStatuses.Done.toString) && submissionList.length == numSubmissions
-      }, max = 45 seconds, interval = 1 second)
+      }, max = 10 seconds, interval = 1 second)
 
       //check that all the outputs got bound correctly too
       val subKeys = (1 to numSubmissions).map ( subNum => AttributeName.fromDelimitedName(s"sub_$subNum") )
