@@ -221,23 +221,30 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
+    val projectName = RawlsBillingProjectName("new_project")
+    val createRequest = CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)
 
-    Put(s"/admin/billing/register/${project.projectName.value}") ~>
+    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+    Post(s"/billing", httpJson(createRequest)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Put(s"/admin/billing/${projectName.value}/user/nobody") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        Put(s"/admin/billing/${project.projectName.value}/nobody") ~>
-          sealRoute(services.adminRoutes) ~>
-          check {
-            assertResult(StatusCodes.NotFound) {
-              status
-            }
-          }
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
       }
   }
 
   it should "return 404 when adding a user to a nonexistent project" in withTestDataApiServices { services =>
-    Put(s"/admin/billing/missing_project/${testData.userOwner.userEmail.value}") ~>
+    Put(s"/admin/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -270,23 +277,30 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
+    val projectName = RawlsBillingProjectName("new_project")
+    val createRequest = CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)
 
-    Put(s"/admin/billing/register/${project.projectName.value}") ~>
+    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+    Post(s"/billing", httpJson(createRequest)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Delete(s"/admin/billing/${projectName.value}/user/nobody") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        Delete(s"/admin/billing/${project.projectName.value}/nobody") ~>
-          sealRoute(services.adminRoutes) ~>
-          check {
-            assertResult(StatusCodes.NotFound) {
-              status
-            }
-          }
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
       }
   }
 
   it should "return 404 when removing a user from a nonexistent billing project" in withTestDataApiServices { services =>
-    Delete(s"/admin/billing/missing_project/${testData.userOwner.userEmail.value}") ~>
+    Delete(s"/admin/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
