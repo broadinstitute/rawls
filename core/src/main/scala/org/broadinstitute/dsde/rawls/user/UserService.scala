@@ -933,9 +933,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     val intersectionMemberships = flattenedGroupsAction.map { flattenedGroups =>
       groupsToIntersect.map { case GroupsToIntersect(target, sourceGroups) =>
         val flattenedGroupsToIntersect = flattenedGroups.filterKeys(sourceGroups)
-        target -> flattenedGroupsToIntersect.tail.values.fold(flattenedGroupsToIntersect.head._2) { (group1, group2) =>
-          group1.intersect(group2)
-        }
+        target -> flattenedGroupsToIntersect.values.reduce(_ intersect _)
       }
     }
 

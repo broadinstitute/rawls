@@ -485,7 +485,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     if(sourceWorkspaceADs.subsetOf(destWorkspaceADs)) op(sourceWorkspaceADs ++ destWorkspaceADs)
     else {
       val missingGroups = sourceWorkspaceADs -- destWorkspaceADs
-      val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has an Authorization Domain containing the groups $missingGroups which, which are missing on the destination workspace"
+      val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has an Authorization Domain containing the groups ${missingGroups.map(_.membersGroupName.value).mkString(", ")}, which are missing on the destination workspace"
       DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
     }
   }
@@ -871,7 +871,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     if(sourceWorkspaceADs.subsetOf(destWorkspaceADs)) DBIO.successful(true)
     else {
       val missingGroups = sourceWorkspaceADs -- destWorkspaceADs
-      val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has an Authorization Domain containing the groups $missingGroups which, which are missing on the destination workspace"
+      val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has an Authorization Domain containing the groups ${missingGroups.map(_.membersGroupName.value).mkString(", ")}, which are missing on the destination workspace"
       DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
     }
   }
