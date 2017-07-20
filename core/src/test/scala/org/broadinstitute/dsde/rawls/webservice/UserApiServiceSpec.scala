@@ -142,28 +142,34 @@ class UserApiServiceSpec extends ApiServiceSpec {
       runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace.workspaceId), minimalTestData.userReader.userSubjectId.value, WorkspaceACLUpdate("owner-access", WorkspaceAccessLevels.Read, None)))
       runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace2.workspaceId), minimalTestData.userReader.userSubjectId.value, WorkspaceACLUpdate("owner-access", WorkspaceAccessLevels.Write, None)))
 
-      Post("/user") ~>
-        sealRoute(services.createUserRoute) ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
+      withStatsD {
+        Post("/user") ~> services.sealedInstrumentedRoutes ~>
+          check {
+            assertResult(StatusCodes.Created) {
+              status
+            }
           }
+
+        assertUserExists(services, user)
+
+        import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
+
+        Get(s"/workspaces") ~> services.sealedInstrumentedRoutes ~>
+          check {
+            assertResult(Some(WorkspaceAccessLevels.Read)) {
+              responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == minimalTestData.workspace.toWorkspaceName).map(_.accessLevel)
+            }
+            assertResult(Some(WorkspaceAccessLevels.Write)) {
+              responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == minimalTestData.workspace2.toWorkspaceName).map(_.accessLevel)
+            }
+          }
+      } { capturedMetrics =>
+        val expected = expectedHttpRequestMetrics("post", "user", StatusCodes.Created.intValue, 1) ++
+          expectedHttpRequestMetrics("get", "workspaces", StatusCodes.OK.intValue, 1)
+        assert {
+          expected subsetOf capturedMetrics.toSet
         }
-
-      assertUserExists(services, user)
-
-      import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
-
-      Get(s"/workspaces") ~>
-        sealRoute(services.workspaceRoutes) ~>
-        check {
-          assertResult(Some(WorkspaceAccessLevels.Read)) {
-            responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == minimalTestData.workspace.toWorkspaceName).map(_.accessLevel)
-          }
-          assertResult(Some(WorkspaceAccessLevels.Write)) {
-            responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == minimalTestData.workspace2.toWorkspaceName).map(_.accessLevel)
-          }
-        }
+      }
 
       val leftoverInvites = runAndWait(dataSource.dataAccess.workspaceQuery.findWorkspaceInvitesForUser(user.userEmail))
       assert(leftoverInvites.size == 0)
@@ -571,24 +577,40 @@ class UserApiServiceSpec extends ApiServiceSpec {
     runAndWait(rawlsGroupQuery.save(group1))
 
     import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-    Get(s"/user/group/${group3.groupName.value}") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        assertResult(group3.toRawlsGroupShort) { responseAs[RawlsGroupShort] }
+    withStatsD {
+      Get(s"/user/group/${group3.groupName.value}") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(group3.toRawlsGroupShort) {
+            responseAs[RawlsGroupShort]
+          }
+        }
+      Get(s"/user/group/${group2.groupName.value}") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(group2.toRawlsGroupShort) {
+            responseAs[RawlsGroupShort]
+          }
+        }
+      Get(s"/user/group/${group1.groupName.value}") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(group1.toRawlsGroupShort) {
+            responseAs[RawlsGroupShort]
+          }
+        }
+    } { capturedMetrics =>
+      val expected = Set(group1, group2, group3) flatMap { g => expectedHttpRequestMetrics("get", s"user.group.${g.groupName.value}", StatusCodes.OK.intValue, 1) }
+      assert {
+        expected subsetOf capturedMetrics.toSet
       }
-    Get(s"/user/group/${group2.groupName.value}") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        assertResult(group2.toRawlsGroupShort) { responseAs[RawlsGroupShort] }
-      }
-    Get(s"/user/group/${group1.groupName.value}") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        assertResult(group1.toRawlsGroupShort) { responseAs[RawlsGroupShort] }
-      }
+    }
   }
 
   it should "not get details of a group a user is not a member of" in withTestDataApiServices { services =>
@@ -842,24 +864,30 @@ class UserApiServiceSpec extends ApiServiceSpec {
         roleOption.foreach(role => addUser(services, testGroupName, role, usersTestData.userUser.userEmail.value))
       }
       withApiServices(dataSource, usersTestData.userUser) { services =>
-        Get(s"/groups/$testGroupName") ~>
-          sealRoute(services.userRoutes) ~>
-          check {
-            assertResult(expectedStatus) {
-              status
-            }
-            if (status.isSuccess) {
-              val managedGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get
+        withStatsD {
+          Get(s"/groups/$testGroupName") ~> services.sealedInstrumentedRoutes ~>
+            check {
+              assertResult(expectedStatus) {
+                status
+              }
+              if (status.isSuccess) {
+                val managedGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get
 
-              assertResult(ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort,
-                managedGroup.adminsGroup.toRawlsGroupShort,
-                Seq.empty,
-                Seq(usersTestData.userOwner.userEmail.value, usersTestData.userUser.userEmail.value))) {
+                assertResult(ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort,
+                  managedGroup.adminsGroup.toRawlsGroupShort,
+                  Seq.empty,
+                  Seq(usersTestData.userOwner.userEmail.value, usersTestData.userUser.userEmail.value))) {
 
-                responseAs[ManagedGroupWithMembers]
+                  responseAs[ManagedGroupWithMembers]
+                }
               }
             }
+        } { capturedMetrics =>
+          val expected = expectedHttpRequestMetrics("get", s"groups.$testGroupName", expectedStatus.intValue, 1)
+          assert {
+            expected subsetOf capturedMetrics.toSet
           }
+        }
       }
     }
   }
