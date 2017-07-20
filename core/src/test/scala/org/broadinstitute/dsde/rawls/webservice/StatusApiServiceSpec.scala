@@ -63,9 +63,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
           }
       } { capturedMetrics =>
         val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.OK.intValue, 1)
-        assert {
-          expected subsetOf capturedMetrics.toSet
-        }
+        assertSubsetOf(expected, capturedMetrics)
       }
     }
   }
@@ -88,9 +86,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
           }
       } { capturedMetrics =>
         val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.InternalServerError.intValue, 1)
-        assert {
-          expected subsetOf capturedMetrics.toSet
-        }
+        assertSubsetOf(expected, capturedMetrics)
       }
     }
   }

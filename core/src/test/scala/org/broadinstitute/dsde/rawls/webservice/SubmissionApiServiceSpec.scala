@@ -180,9 +180,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
       val wsPathForRequestMetrics = s"workspaces.${wsName.namespace}.${wsName.name}"
       val expected = expectedHttpRequestMetrics("delete", s"$wsPathForRequestMetrics.submissions.$submissionId", StatusCodes.NoContent.intValue, 1)
-      assert {
-        expected subsetOf capturedMetrics.toSet
-      }
+      assertSubsetOf(expected, capturedMetrics)
     }
 
     // The workflow and submission should be aborted once the SubmissionMonitor runs
@@ -434,9 +432,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     } { capturedMetrics =>
       val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
       val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics.submissionsCount", StatusCodes.OK.intValue, 1)
-      assert {
-        expected subsetOf capturedMetrics.toSet
-      }
+      expected foreach { m =>        capturedMetrics should contain(m)      }
     }
   }
 

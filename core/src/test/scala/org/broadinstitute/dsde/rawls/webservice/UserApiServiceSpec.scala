@@ -166,9 +166,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       } { capturedMetrics =>
         val expected = expectedHttpRequestMetrics("post", "user", StatusCodes.Created.intValue, 1) ++
           expectedHttpRequestMetrics("get", "workspaces", StatusCodes.OK.intValue, 1)
-        assert {
-          expected subsetOf capturedMetrics.toSet
-        }
+        assertSubsetOf(expected, capturedMetrics)
       }
 
       val leftoverInvites = runAndWait(dataSource.dataAccess.workspaceQuery.findWorkspaceInvitesForUser(user.userEmail))
@@ -607,9 +605,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
     } { capturedMetrics =>
       val expected = Set(group1, group2, group3) flatMap { g => expectedHttpRequestMetrics("get", s"user.group.${g.groupName.value}", StatusCodes.OK.intValue, 1) }
-      assert {
-        expected subsetOf capturedMetrics.toSet
-      }
+      assertSubsetOf(expected, capturedMetrics)
     }
   }
 
@@ -884,9 +880,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
             }
         } { capturedMetrics =>
           val expected = expectedHttpRequestMetrics("get", s"groups.$testGroupName", expectedStatus.intValue, 1)
-          assert {
-            expected subsetOf capturedMetrics.toSet
-          }
+          assertSubsetOf(expected, capturedMetrics)
         }
       }
     }

@@ -57,9 +57,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     } {capturedMetrics =>
       val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
       val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs", StatusCodes.Created.intValue, 1)
-      assert {
-        expected subsetOf capturedMetrics.toSet
-      }
+      assertSubsetOf(expected, capturedMetrics)
     }
   }
 
@@ -82,9 +80,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     } { capturedMetrics =>
       val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
       val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics", StatusCodes.OK.intValue, 1)
-      assert {
-        expected subsetOf capturedMetrics.toSet
-      }
+      assertSubsetOf(expected, capturedMetrics)
     }
   }
 
@@ -232,9 +228,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     } {capturedMetrics =>
       val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
       val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}.rename", StatusCodes.Conflict.intValue, 1)
-      assert {
-        expected subsetOf capturedMetrics.toSet
-      }
+      assertSubsetOf(expected, capturedMetrics)
     }
   }
 
@@ -327,9 +321,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
       val expected = expectedHttpRequestMetrics("delete", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig3.namespace}.${testData.methodConfig3.name}",
         StatusCodes.NoContent.intValue, 1)
-      assert {
-        expected subsetOf capturedMetrics.toSet
-      }
+      assertSubsetOf(expected, capturedMetrics)
     }
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -392,9 +384,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
       val expected = expectedHttpRequestMetrics("put", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}", StatusCodes.OK.intValue, 1) ++
         expectedHttpRequestMetrics("get", s"${wsPathForRequestMetrics}", StatusCodes.OK.intValue, 1)
-      assert {
-        expected subsetOf capturedMetrics.toSet
-      }
+      assertSubsetOf(expected, capturedMetrics)
     }
   }
 
@@ -653,9 +643,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     } { capturedMetrics =>
       val wsPathForRequestMetrics = s"methodconfigs.copyFromMethodRepo"
       val expected = expectedHttpRequestMetrics("post", wsPathForRequestMetrics, StatusCodes.UnprocessableEntity.intValue, 1)
-      assert {
-        expected subsetOf capturedMetrics.toSet
-      }
+      assertSubsetOf(expected, capturedMetrics)
     }
   }
 

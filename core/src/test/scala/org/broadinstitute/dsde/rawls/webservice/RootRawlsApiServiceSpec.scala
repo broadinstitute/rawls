@@ -21,9 +21,7 @@ class RootRawlsApiServiceSpec extends ApiServiceSpec with RootRawlsApiService {
         }
     } { capturedMetrics =>
       val expected = expectedHttpRequestMetrics("get", "version", StatusCodes.OK.intValue, 1)
-      assert {
-        expected subsetOf capturedMetrics.toSet
-      }
+      assertSubsetOf(expected, capturedMetrics)
     }
   }
 }
