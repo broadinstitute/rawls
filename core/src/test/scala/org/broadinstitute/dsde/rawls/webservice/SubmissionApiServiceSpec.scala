@@ -432,7 +432,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     } { capturedMetrics =>
       val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
       val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics.submissionsCount", StatusCodes.OK.intValue, 1)
-      expected foreach { m =>        capturedMetrics should contain(m)      }
+      assertSubsetOf(expected, capturedMetrics)
     }
   }
 
