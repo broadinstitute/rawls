@@ -721,10 +721,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(aclUpdates.map(_.email))
       existingRefsAndLevels <- dataAccess.workspaceQuery.findWorkspaceUsersAndAccessLevel(workspaceContext.workspaceId)
     } yield {
-      val emailsNotFound = aclUpdates.filterNot(aclChange => refsToUpdateByEmail.keySet.contains(aclChange.email))
+      val emailsNotFound = aclUpdates.filterNot(aclChange => refsToUpdateByEmail.keySet.map(_.toLowerCase).contains(aclChange.email.toLowerCase))
+      val lcRefsToUpdateByEmail = refsToUpdateByEmail.map{ case (key, value) => (key.toLowerCase, value)}
 
       // match up elements of aclUpdates and refsToUpdateByEmail ignoring unfound emails
-      val refsToUpdate = aclUpdates.map { aclUpdate => (refsToUpdateByEmail.get(aclUpdate.email), aclUpdate.accessLevel, aclUpdate.canShare) }.collect {
+      val refsToUpdate = aclUpdates.map { aclUpdate => (lcRefsToUpdateByEmail.get(aclUpdate.email.toLowerCase), aclUpdate.accessLevel, aclUpdate.canShare) }.collect {
         case (Some(ref), WorkspaceAccessLevels.NoAccess, _) => ref -> (WorkspaceAccessLevels.NoAccess, Option(false))
         case (Some(ref), accessLevel, canShare) => ref -> (accessLevel, canShare)
       }.toSet
