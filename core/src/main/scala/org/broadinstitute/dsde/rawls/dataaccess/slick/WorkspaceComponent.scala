@@ -680,8 +680,10 @@ trait WorkspaceComponent {
         workspaceRecsForAuthDomains <- findWorkspacesForAuthDomains(allGroups).result
         authDomainedWorkspaceRecs = workspaceRecsForGroups ++ workspaceRecsForAuthDomains
         accessGroupRecs <- workspaceAccessQuery.filter(rec => rec.workspaceId.inSetBind(authDomainedWorkspaceRecs.map(_.id))).result
+        authDomainRecs <- workspaceAuthDomainQuery.filter(rec => rec.workspaceId.inSetBind(authDomainedWorkspaceRecs.map(_.id))).result
       } yield {
         val indexedAccessGroups = accessGroupRecs.map(rec => (rec.workspaceId, rec.accessLevel, rec.isAuthDomainAcl) -> RawlsGroupRef(RawlsGroupName(rec.groupName))).toMap
+        val authDomainGroupsByWorkspace = authDomainRecs.groupBy(_.workspaceId).map { case (wsId, recs) => wsId -> recs.map{ rec => RawlsGroupRef(RawlsGroupName(rec.groupName)) } }
 
         val groupsToIntersect = for {
           workspaceRec <- authDomainedWorkspaceRecs
@@ -692,17 +694,14 @@ trait WorkspaceComponent {
           // for all the access groups of a workspace.
           accessLevel <- WorkspaceAccessLevels.groupAccessLevelsAscending if workspaceAccessRec.isEmpty || workspaceAccessRec.get.workspaceId != workspaceRec.id || (workspaceRec.id == workspaceAccessRec.get.workspaceId && accessLevel == WorkspaceAccessLevels.withName(workspaceAccessRec.get.accessLevel))
         } yield {
-          workspaceAuthDomainQuery.filter(_.workspaceId === workspaceRec.id).result.map { authDomainRecs =>
-            val authDomainRefs = authDomainRecs.map(rec => RawlsGroupRef(RawlsGroupName(rec.groupName))).toSet
-            GroupsToIntersect(
-              indexedAccessGroups((workspaceRec.id, accessLevel.toString, true)),
-              authDomainRefs ++ Set(indexedAccessGroups((workspaceRec.id, accessLevel.toString, false)))
-            )
-          }
+          GroupsToIntersect(
+            indexedAccessGroups((workspaceRec.id, accessLevel.toString, true)),
+            authDomainGroupsByWorkspace(workspaceRec.id).toSet ++ Set(indexedAccessGroups((workspaceRec.id, accessLevel.toString, false)))
+          )
         }
-        DBIO.sequence(groupsToIntersect)
+        groupsToIntersect
       }
-    }.flatMap(_.map(groupsToIntersect => groupsToIntersect.distinct))
+    }
 
     def findWorkspaceUsers(workspaceId: UUID) = {
       val userQuery = for {
