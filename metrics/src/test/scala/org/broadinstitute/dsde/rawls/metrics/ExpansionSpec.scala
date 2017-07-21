@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.metrics.Expansion._
 import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{FlatSpec, Matchers}
+import spray.http._
 
 /**
   * Created by rtitle on 7/16/17.
@@ -38,6 +39,27 @@ class ExpansionSpec extends FlatSpec with Matchers {
     }
     assertResult("Database") {
       implicitly[Expansion[Subsystems.Database.type]].makeName(subsystem)
+    }
+  }
+
+  it should "expand HttpMethods" in {
+    val test = HttpMethods.PATCH
+    assertResult("patch") {
+      implicitly[Expansion[HttpMethod]].makeName(test)
+    }
+  }
+
+  it should "expand StatusCodes" in {
+    val test = StatusCodes.Forbidden
+    assertResult("403") {
+      implicitly[Expansion[StatusCode]].makeName(test)
+    }
+  }
+
+  it should "expand Uris" in {
+    val test = Uri("/workspace/broad-dsde-dev/myspace")
+    assertResult("workspace.broad-dsde-dev.myspace") {
+      implicitly[Expansion[Uri]].makeName(test)
     }
   }
 

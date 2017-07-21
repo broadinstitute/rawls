@@ -11,11 +11,12 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import spray.http.StatusCodes
+import spray.http.{HttpMethods, StatusCodes, Uri}
 import spray.json.DefaultJsonProtocol._
+import spray.routing.Route
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Future, Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 class BillingApiServiceSpec extends ApiServiceSpec {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
@@ -85,29 +86,33 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
     createProject(project, testData.userWriter)
 
-    Put(s"/billing/${project.projectName.value}/user/${testData.userReader.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
-          status
+    withStatsD {
+      Put(s"/billing/${project.projectName.value}/user/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Forbidden) {
+            status
+          }
+          assert {
+            val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
+            !loadedProject.groups(ProjectRoles.User).users.contains(testData.userReader) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userReader)
+          }
         }
-        assert {
-          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userReader) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userReader)
-        }
-      }
 
-    Put(s"/billing/${project.projectName.value}/owner/${testData.userReader.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
-          status
+      Put(s"/billing/${project.projectName.value}/owner/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Forbidden) {
+            status
+          }
+          assert {
+            val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
+            !loadedProject.groups(ProjectRoles.User).users.contains(testData.userReader) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userReader)
+          }
         }
-        assert {
-          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userReader) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userReader)
-        }
-      }
+    } { capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("put", s"billing.${project.projectName.value}.user.${testData.userReader.userEmail.value}", StatusCodes.Forbidden.intValue, 1) ++
+        expectedHttpRequestMetrics("put", s"billing.${project.projectName.value}.owner.${testData.userReader.userEmail.value}", StatusCodes.Forbidden.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "return 404 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
@@ -138,24 +143,31 @@ class BillingApiServiceSpec extends ApiServiceSpec {
     val project = billingProjectFromName("new_project")
     createProject(project)
 
-    Put(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assert {
-          runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userWriter)
+    withStatsD {
+      Put(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assert {
+            runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userWriter)
+          }
         }
-      }
 
-    Delete(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+      Delete(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assert {
+            !runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userWriter)
+          }
         }
-        assert {
-          ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userWriter)
-        }
-      }
+    } { capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("put", s"billing.${project.projectName.value}.user.${testData.userWriter.userEmail.value}", StatusCodes.OK.intValue, 1) ++
+        expectedHttpRequestMetrics("delete", s"billing.${project.projectName.value}.user.${testData.userWriter.userEmail.value}", StatusCodes.OK.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "return 403 when removing a user from a non-owned billing project" in withTestDataApiServices { services =>

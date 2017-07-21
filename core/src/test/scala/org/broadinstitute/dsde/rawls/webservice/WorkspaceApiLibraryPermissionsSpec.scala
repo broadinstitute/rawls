@@ -140,22 +140,27 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
 
   // reusable test util - called by every test
   def testUpdateLibraryAttributes(payload: Seq[AttributeUpdateOperation], expectedStatusCode: StatusCode = StatusCodes.OK, ws: WorkspaceName = libraryPermissionTestData.wsUnpublishedName)(implicit services: TestApiService): Option[Workspace] = {
-    Patch(ws.path + "/library", httpJson(payload)) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        expectedStatusCode match {
-          case StatusCodes.OK =>
-            assertResult(StatusCodes.OK) {
-              status
-            }
-            Some(responseAs[Workspace])
-          case x =>
-            assertResult(expectedStatusCode) {
-              status
-            }
-            None
+    withStatsD {
+      Patch(ws.path + "/library", httpJson(payload)) ~> services.sealedInstrumentedRoutes ~>
+        check {
+          expectedStatusCode match {
+            case StatusCodes.OK =>
+              assertResult(StatusCodes.OK) {
+                status
+              }
+              Some(responseAs[Workspace])
+            case x =>
+              assertResult(expectedStatusCode) {
+                status
+              }
+              None
+          }
         }
-      }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${ws.namespace}.${ws.name}.library"
+      val expected = expectedHttpRequestMetrics("patch", wsPathForRequestMetrics, expectedStatusCode.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   case class LibraryPermissionTest(
