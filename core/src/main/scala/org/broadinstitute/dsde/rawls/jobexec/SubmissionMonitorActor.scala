@@ -216,16 +216,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     submissionFuture flatMap {
       case Some(submission) =>
-        if(submission.status == SubmissionStatuses.Aborting) {
+        val abortFuture = if(submission.status == SubmissionStatuses.Aborting) {
           for {
             _ <- abortQueuedWorkflows(submissionId)
             _ <- abortActiveWorkflows(submissionId)
-            getStatuses <- queryForWorkflowStatuses()
-          } yield getStatuses
+          } yield {}
+        } else {
+          Future.successful()
         }
-        else {
-          queryForWorkflowStatuses()
-        }
+        abortFuture flatMap( _ => queryForWorkflowStatuses() )
       case None => throw new RawlsException(s"Submission ${submissionId} could not be found")
     }
   }
@@ -273,7 +272,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         (workflowRec, outputs)
     }
 
-    // Attach the outputs in a txn of their own. If attaching outputs fails, it will mark the workflow as failed. This is fine.
+    // Attach the outputs in a txn of their own.
+    // If attaching outputs fails for legit reasons (e.g. they're missing), it will mark the workflow as failed. This is correct.
+    // If attaching outputs throws an exception (because e.g. deadlock or ConcurrentModificationException), the status will remain un-updated
+    // and will be re-processed next time we call queryForWorkflowStatus().
+    // This is why it's important to attach the outputs before updating the status -- if you update the status to Successful first, and the attach
+    // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
     datasource.inTransaction { dataAccess =>
       handleOutputs(workflowsWithOutputs, dataAccess)
     } flatMap { _ =>

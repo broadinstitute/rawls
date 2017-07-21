@@ -502,7 +502,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
           submissionQuery.findById(UUID.fromString(sub.submissionId)).result
         })).flatten
         submissionList.forall(_.status == SubmissionStatuses.Done.toString) && submissionList.length == numSubmissions
-      }, max = 10 seconds, interval = 1 second)
+      }, max = 30 seconds, interval = 1 second)
 
       //check that all the outputs got bound correctly too
       val subKeys = (1 to numSubmissions).map ( subNum => AttributeName.fromDelimitedName(s"sub_$subNum") )
