@@ -13,7 +13,6 @@ lazy val rawlsModel = project.in(file("model"))
 
 lazy val workbenchMetrics = project.in(file("metrics"))
   .settings(metricsSettings:_*)
-  .dependsOn(rawlsModel)
   .dependsOn(workbenchUtil % compileAndTest)
   .withTestSettings
 

@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.metrics
 
 import nl.grons.metrics.scala._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
-import org.broadinstitute.dsde.rawls.model.WorkspaceName
+import spray.http.{HttpRequest, HttpResponse}
 
 /**
   * Mixin trait for instrumentation.
@@ -58,17 +58,28 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
       new ExpandedMetricBuilder().expand(key, a)
     }
 
-    def empty: ExpandedMetricBuilder = new ExpandedMetricBuilder()
+    def empty: ExpandedMetricBuilder = {
+      new ExpandedMetricBuilder()
+    }
   }
 
   // Keys for expanded metric fragments
-  final val WorkspaceMetricKey  = "workspace"
+  final val HttpRequestMethodMetricKey      = "httpRequestMethod"
+  final val HttpRequestUriMetricKey         = "httpRequestUri"
+  final val HttpResponseStatusCodeMetricKey = "httpResponseStatusCode"
 
   // Handy definitions which can be used by implementing classes:
 
-  /**
-    * An ExpandedMetricBuilder for a WorkspaceName.
-    */
-  protected def workspaceMetricBuilder(workspaceName: WorkspaceName): ExpandedMetricBuilder =
-    ExpandedMetricBuilder.expand(WorkspaceMetricKey, workspaceName)
+  protected def httpRequestMetricBuilder(builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => ExpandedMetricBuilder = {
+    (httpRequest, httpResponse) => builder
+      .expand(HttpRequestMethodMetricKey, httpRequest.method)
+      .expand(HttpRequestUriMetricKey, httpRequest.uri)
+      .expand(HttpResponseStatusCodeMetricKey, httpResponse.status)
+  }
+
+  protected implicit def httpRequestCounter(implicit builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => Counter =
+    httpRequestMetricBuilder(builder)(_, _).asCounter("request")
+
+  protected implicit def httpRequestTimer(implicit builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => Timer =
+    httpRequestMetricBuilder(builder)(_, _).asTimer("latency")
 }

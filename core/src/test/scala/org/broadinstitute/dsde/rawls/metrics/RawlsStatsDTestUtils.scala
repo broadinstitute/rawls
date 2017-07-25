@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.metrics
 
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{Submission, Workspace, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -10,6 +11,15 @@ import org.scalatest.concurrent.Eventually
   * Created by rtitle on 7/14/17.
   */
 trait RawlsStatsDTestUtils extends StatsDTestUtils { this: Eventually with MockitoTestUtils =>
+
+  protected def expectedHttpRequestMetrics(method: String, path: String, statusCode: Int, expectedTimes: Int, subsystem: Option[Subsystem] = None): Set[(String, String)] = {
+    val prefix = s"test.${subsystem.map(s => s"subsystem.${s.toString}.").getOrElse("")}httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode"
+    val expectedTimesStr = expectedTimes.toString
+    Set(
+      (s"$prefix.request", expectedTimesStr),
+      (s"$prefix.latency.samples", expectedTimesStr)
+    )
+  }
 
   protected def expectedWorkflowStatusMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus, expectedTimes: Int): (String, String) =
     (s"${workbenchMetricBaseName}.workspace.${workspace.toWorkspaceName.toString.replace('/', '.')}.submission.${submission.submissionId}.workflowStatus.${workflowStatus.toString}.count", expectedTimes.toString)
@@ -22,8 +32,4 @@ trait RawlsStatsDTestUtils extends StatsDTestUtils { this: Eventually with Mocki
 
   protected def expectedSubmissionStatusMetric(workspaceName: WorkspaceName, submissionStatus: SubmissionStatus, expectedTimes: Int): (String, String) =
     (s"${workbenchMetricBaseName}.workspace.${workspaceName.toString.replace('/', '.')}.submissionStatus.${submissionStatus.toString}.count", expectedTimes.toString)
-
-  protected def expectedHttpRequestMetrics(method: String, path: String, statusCode: Int, expectedTimes: Int): Set[(String, String)] =
-    Set((s"test.httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode.request", expectedTimes.toString),
-      (s"test.httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode.latency.samples", expectedTimes.toString))
 }

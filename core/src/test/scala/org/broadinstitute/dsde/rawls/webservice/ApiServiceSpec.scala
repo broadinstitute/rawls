@@ -22,7 +22,6 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mock.MockitoSugar
 import spray.http.{ContentTypes, HttpEntity, StatusCodes}
 import spray.httpx.SprayJsonSupport
 import spray.json._
@@ -34,7 +33,7 @@ import scala.concurrent.duration._
 // common trait to be inherited by API service tests
 trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils with RawlsInstrumented
   with RawlsStatsDTestUtils with InstrumentationDirectives with HttpService with ScalatestRouteTest with TestKitBase
-  with SprayJsonSupport with MockitoTestUtils with MockitoSugar with Eventually with LazyLogging {
+  with SprayJsonSupport with MockitoTestUtils with Eventually with LazyLogging {
 
   // increase the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
@@ -97,7 +96,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-    val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource)
+    val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
@@ -141,7 +140,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       directoryDAO
     )_
 
-    val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl)
+    val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName)
 
     val healthMonitor = system.actorOf(HealthMonitor.props(
       dataSource, gcsDAO, gpsDAO, directoryDAO, methodRepoDAO,

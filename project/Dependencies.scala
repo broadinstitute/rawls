@@ -72,6 +72,7 @@ object Dependencies {
   val metricsDependencies = Seq(
     metricsScala,
     metricsStatsd,
+    sprayHttp,
     scalatest,
     mockito
   )
