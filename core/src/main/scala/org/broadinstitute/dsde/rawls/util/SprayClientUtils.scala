@@ -22,12 +22,12 @@ object SprayClientUtils {
     * sendReceive, but with gzip.
     * Two versions, one of which overrides the timeout.
     */
-  def gzSendReceive(timeout: Timeout)(implicit actorRefFactory: ActorRefFactory, executionContext: ExecutionContext) = {
+  def gzSendReceive(timeout: Timeout)(implicit actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive = {
     implicit val to = timeout //make the explicit implicit, a process known as "tactfulization"
     addHeaders(`Accept-Encoding`(gzip)) ~> sendReceive ~> decode(Gzip)
   }
 
-  def gzSendReceive(implicit actorRefFactory: ActorRefFactory, executionContext: ExecutionContext) =
+  def gzSendReceive(implicit actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
     addHeaders(`Accept-Encoding`(gzip)) ~> sendReceive ~> decode(Gzip)
 
   /**
