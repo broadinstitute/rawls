@@ -23,7 +23,7 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     case _ => Restart
   }
 
-  class TestException extends Exception("boom")
+  object TestException extends Exception("boom")
 
   case class ChildLifeCheck(a: ActorRef)
 
@@ -49,7 +49,7 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
         sender() ! counter
 
       case "exception" =>
-        throw new TestException
+        throw TestException
     }
   }
 
@@ -60,7 +60,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     var testVar: Int = varInit
 
     // threshold function
-    def setVar(v: Int): Unit = {
+    def setVar(cause: Throwable, v: Int): Unit = {
+      assertResult(TestException)(cause)
       testVar = v
     }
 
@@ -126,7 +127,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     var testVar: Int = varInit
 
     // threshold function
-    def setVar(v: Int): Unit = {
+    def setVar(cause: Throwable, v: Int): Unit = {
+      assertResult(TestException)(cause)
       testVar = v
     }
 
@@ -233,7 +235,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     var testVar: Int = varInit
 
     // threshold function
-    def setVar(v: Int): Unit = {
+    def setVar(cause: Throwable, v: Int): Unit = {
+      assertResult(TestException)(cause)
       testVar = v
     }
 
@@ -330,7 +333,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
       var testVar: Int = varInit
 
       // threshold function
-      def setVar(v: Int): Unit = {
+      def setVar(cause: Throwable, v: Int): Unit = {
+        assertResult(TestException)(cause)
         testVar = v
       }
 

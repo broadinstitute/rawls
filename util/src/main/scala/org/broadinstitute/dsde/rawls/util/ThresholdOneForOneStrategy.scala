@@ -9,8 +9,8 @@ import scala.concurrent.duration.Duration
 class ThresholdOneForOneStrategy(thresholdLimit: Int,
                                  maxNrOfRetries: Option[Int] = None,
                                  override val loggingEnabled: Boolean = true)
-                                (override val decider: SupervisorStrategy.Decider)
-                                (thresholdFunc: Int => Unit)
+                                (override val decider: SupervisorStrategy.Decider = SupervisorStrategy.defaultDecider)
+                                (thresholdFunc: (Throwable, Int) => Unit)
   extends SupervisorStrategy {
 
   // this is a stupid hack because
@@ -31,7 +31,7 @@ class ThresholdOneForOneStrategy(thresholdLimit: Int,
     if (restart && stats.requestRestartPermission(retriesWindow) ) {
       // this is post-increment so thresholdLimit = 0 means this will always run
       if (stats.maxNrOfRetriesCount > thresholdLimit) {
-        thresholdFunc(stats.maxNrOfRetriesCount)
+        thresholdFunc(cause, stats.maxNrOfRetriesCount)
       }
       restartChild(child, cause, suspendFirst = false)
     } else {

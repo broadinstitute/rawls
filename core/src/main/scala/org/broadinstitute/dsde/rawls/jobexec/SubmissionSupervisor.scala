@@ -3,11 +3,12 @@ package org.broadinstitute.dsde.rawls.jobexec
 import java.util.UUID
 
 import akka.actor.SupervisorStrategy.Restart
-import akka.actor.{Props, OneForOneStrategy, Actor}
+import akka.actor.{Actor, Props, SupervisorStrategy}
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
+import org.broadinstitute.dsde.rawls.util.ThresholdOneForOneStrategy
 
 import scala.concurrent.duration._
 
@@ -49,11 +50,17 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, workbenchMetricsBaseName), submissionId.toString)
   }
 
-  override val supervisorStrategy =
-    OneForOneStrategy(maxNrOfRetries = -1) {
-      case e => {
-        system.log.error(e, "error monitoring submission")
-        Restart
-      }
+  // restart the actor on failure (e.g. a DB deadlock or failed transaction)
+  // if this actor has failed more than 3 times, log each new failure
+  override val supervisorStrategy = {
+    val alwaysRestart: SupervisorStrategy.Decider = {
+      case _ => Restart
     }
+
+    def thresholdFunc(cause: Throwable, count: Int): Unit = {
+      system.log.error(cause, s"error monitoring submission: SubmissionMonitorActor has been restarted $count times")
+    }
+
+    new ThresholdOneForOneStrategy(thresholdLimit = 3)(alwaysRestart)(thresholdFunc)
+  }
 }
