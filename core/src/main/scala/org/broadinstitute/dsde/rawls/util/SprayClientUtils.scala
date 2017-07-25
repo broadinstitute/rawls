@@ -47,4 +47,16 @@ object SprayClientUtils {
     */
   def instrumentedSendReceive(implicit requestCounter: (HttpRequest, HttpResponse) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
     instrument(sendReceive)
+
+  /**
+    * Instruments [[gzSendReceive]] by updating a given request counter and timer.
+    */
+  def instrumentedGzSendReceive(implicit requestCounter: (HttpRequest, HttpResponse) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
+    instrument(gzSendReceive)
+
+  /**
+    * Instruments [[gzSendReceive(timeout)]] by updating a given request counter and timer.
+    */
+  def instrumentedGzSendReceive(timeout: Timeout)(implicit requestCounter: (HttpRequest, HttpResponse) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
+    instrument(gzSendReceive(timeout))
 }
