@@ -159,7 +159,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   def removeAdmin(userEmail: String): Future[Unit] = {
     if(adminList.contains(userEmail)) {
       adminList -= userEmail
-      Future.successful(())
+      Future.successful(Unit)
     }
     else Future.failed(new RawlsException("Unable to remove user"))
   }
@@ -170,25 +170,25 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def addLibraryCurator(userEmail: String): Future[Unit] = {
     curatorList += userEmail
-    Future.successful(())
+    Future.successful(Unit)
   }
 
   override def removeLibraryCurator(userEmail: String): Future[Unit] = {
     if(curatorList.contains(userEmail)) {
       curatorList -= userEmail
-      Future.successful(())
+      Future.successful(Unit)
     }
     else Future.failed(new RawlsException("Unable to remove user"))
   }
 
   override def createProxyGroup(user: RawlsUser): Future[Unit] = {
     mockProxyGroups += (user -> false)
-    Future.successful(())
+    Future.successful(Unit)
   }
 
   override def deleteProxyGroup(user: RawlsUser): Future[Unit] = {
     mockProxyGroups -= user
-    Future.successful(())
+    Future.successful(Unit)
   }
 
   def containsProxyGroup(user: RawlsUser) = mockProxyGroups.keySet.contains(user)
@@ -222,7 +222,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     googleGroups(groupEmail) += emailToAdd
-    Future.successful(())
+    Future.successful(Unit)
   }
 
   override def addMemberToGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]) = Future {
@@ -239,7 +239,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit] = {
     googleGroups(groupEmail) -= emailToRemove
-    Future.successful(())
+    Future.successful(Unit)
   }
 
   override def removeMemberFromGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]) = Future {

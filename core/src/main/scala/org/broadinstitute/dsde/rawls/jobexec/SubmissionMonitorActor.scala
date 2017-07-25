@@ -222,7 +222,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             _ <- abortActiveWorkflows(submissionId)
           } yield {}
         } else {
-          Future.successful()
+          Future.successful(Unit)
         }
         abortFuture flatMap( _ => queryForWorkflowStatuses() )
       case None => throw new RawlsException(s"Submission ${submissionId} could not be found")
