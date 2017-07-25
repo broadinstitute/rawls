@@ -222,7 +222,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
             _ <- abortActiveWorkflows(submissionId)
           } yield {}
         } else {
-          Future.successful(Unit)
+          Future.successful(())
         }
         abortFuture flatMap( _ => queryForWorkflowStatuses() )
       case None => throw new RawlsException(s"Submission ${submissionId} could not be found")
@@ -338,7 +338,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   def handleOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Unit] = {
     if (workflowsWithOutputs.isEmpty) {
-      DBIO.successful(Unit)
+      DBIO.successful(())
     } else {
       for {
         // load all the starting data

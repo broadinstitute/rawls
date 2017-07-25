@@ -908,7 +908,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   val emptyData = new TestData() {
     override def save() = {
-      DBIO.successful(Unit)
+      DBIO.successful(())
     }
   }
 

@@ -335,7 +335,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // Remove Google Groups
       _ <- Future.traverse(groupsToRemove) {
         case Some(group) => gcsDAO.deleteGoogleGroup(group)
-        case None => Future.successful(Unit)
+        case None => Future.successful(())
       }
     } yield {
       aborts.onFailure {
