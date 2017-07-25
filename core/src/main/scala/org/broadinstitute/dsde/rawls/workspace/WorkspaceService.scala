@@ -1951,7 +1951,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           case Some(RawlsBillingProject(_, _, _, CreationStatuses.Ready, _, _)) =>
             dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUser(userInfo)) flatMap { authDomainAccesses =>
               if(workspaceRequest.authorizationDomain.subsetOf(authDomainAccesses.filter(_.role == ManagedRoles.Member).map(_.managedGroupRef))) op
-              else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"In order to use groups as Authorization Domain, you must be a member of all of those groups.")))
+              else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"In order to use a group in an Authorization Domain, you must be a member of that group.")))
             }
 
           case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, _, CreationStatuses.Creating, _, _)) =>

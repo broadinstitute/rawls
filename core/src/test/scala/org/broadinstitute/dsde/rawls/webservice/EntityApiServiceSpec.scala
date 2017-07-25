@@ -1634,6 +1634,56 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 204 when copying entities from an auth-domain protected workspace into one with a compatible auth-domain" in withTestDataApiServices { services =>
+    val srcWorkspace = testData.workspaceWithRealm
+    val srcWorkspaceName = WorkspaceName(testData.workspaceWithRealm.namespace, "source_ws")
+
+    val authDomain = Set(ManagedGroupRef(testData.dbGapAuthorizedUsersGroup.membersGroup.groupName))
+
+    val x = WorkspaceRequest(namespace = testData.workspaceWithRealm.namespace, name = "source_ws", authDomain, Map.empty)
+    Post("/workspaces", x) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+        assertResult(authDomain) {
+          responseAs[Workspace].authorizationDomain
+        }
+      }
+
+    val destCloneRequest = WorkspaceRequest(namespace = testData.workspaceWithRealm.namespace, name = "copy_of_source_ws", authDomain, Map.empty)
+    Post(s"/workspaces/${srcWorkspaceName.namespace}/source_ws/clone", httpJson(destCloneRequest)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+        assertResult(authDomain) {
+          responseAs[Workspace].authorizationDomain
+        }
+      }
+
+    Post(s"/workspaces/${srcWorkspaceName.namespace}/${srcWorkspaceName.name}/entities", httpJson(z1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+      }
+
+    val destWorkspaceName = destCloneRequest.toWorkspaceName
+
+    val copyDef = EntityCopyDefinition(srcWorkspaceName, destWorkspaceName, "Sample", Seq("z1"))
+    Post("/workspaces/entities/copy", httpJson(copyDef)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+  }
+
   it should "return 422 when copying entities from an auth domain protected workspace with only a partial match of AD groups" in withTestDataApiServices { services =>
     val srcWorkspace = testData.workspaceWithMultiGroupAD
     val destWorkspace = testData.workspaceWithRealm
