@@ -4,7 +4,6 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{MetricFilter, SharedMetricRegistries}
 import com.readytalk.metrics.{StatsD, StatsDReporter}
-import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.mockito.Mockito.{atLeastOnce, inOrder => mockitoInOrder}
 import org.scalatest.concurrent.Eventually
@@ -45,10 +44,4 @@ trait StatsDTestUtils { this: Eventually with MockitoTestUtils =>
       clearRegistries()
     }
   }
-
-  protected def expectedHttpRequestMetrics(method: String, path: String, statusCode: Int, expectedTimes: Int, subsystem: Option[Subsystem] = None): Set[(String, String)] =
-    Set(
-      (s"test.${subsystem.map(s => s"subsystem.${s.toString}.").getOrElse("")}httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode.request", expectedTimes.toString),
-      (s"test.${subsystem.map(s => s"subsystem.${s.toString}.").getOrElse("")}httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode.latency.samples", expectedTimes.toString)
-    )
 }

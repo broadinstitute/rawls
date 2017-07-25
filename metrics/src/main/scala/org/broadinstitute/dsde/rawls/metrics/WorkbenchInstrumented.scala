@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.metrics
 
 import nl.grons.metrics.scala._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
-import org.broadinstitute.dsde.rawls.model.WorkspaceName
 import spray.http.{HttpRequest, HttpResponse}
 
 /**
@@ -68,17 +67,8 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
   final val HttpRequestMethodMetricKey      = "httpRequestMethod"
   final val HttpRequestUriMetricKey         = "httpRequestUri"
   final val HttpResponseStatusCodeMetricKey = "httpResponseStatusCode"
-  final val SubsystemMetricKey              = "subsystem"
-  final val UriPathMetricKey                = "uriPath"
-  final val WorkspaceMetricKey              = "workspace"
 
   // Handy definitions which can be used by implementing classes:
-
-  /**
-    * An ExpandedMetricBuilder for a WorkspaceName.
-    */
-  protected def workspaceMetricBuilder(workspaceName: WorkspaceName): ExpandedMetricBuilder =
-    ExpandedMetricBuilder.expand(WorkspaceMetricKey, workspaceName)
 
   protected def httpRequestMetricBuilder(builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => ExpandedMetricBuilder = {
     (httpRequest, httpResponse) => builder

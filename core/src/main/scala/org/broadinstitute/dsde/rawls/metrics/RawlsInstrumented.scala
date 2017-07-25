@@ -6,6 +6,7 @@ import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
+import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import slick.dbio.{DBIOAction, Effect, NoStream}
 
 import scala.concurrent.ExecutionContext
@@ -16,9 +17,17 @@ import scala.concurrent.ExecutionContext
 trait RawlsInstrumented extends WorkbenchInstrumented {
 
   // Keys for expanded metric fragments
-  final val SubmissionMetricKey = "submission"
-  final val SubmissionStatusMetricKey = "submissionStatus"
-  final val WorkflowStatusMetricKey = "workflowStatus"
+  final val SubmissionMetricKey        = "submission"
+  final val SubmissionStatusMetricKey  = "submissionStatus"
+  final val SubsystemMetricKey         = "subsystem"
+  final val WorkflowStatusMetricKey    = "workflowStatus"
+  final val WorkspaceMetricKey         = "workspace"
+
+  /**
+    * An ExpandedMetricBuilder for a WorkspaceName.
+    */
+  protected def workspaceMetricBuilder(workspaceName: WorkspaceName): ExpandedMetricBuilder =
+    ExpandedMetricBuilder.expand(WorkspaceMetricKey, workspaceName)
 
   /**
     * An ExpandedMetricBuilder for a WorkspaceName and a submission ID.

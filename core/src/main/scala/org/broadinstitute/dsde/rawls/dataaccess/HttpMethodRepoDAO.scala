@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
