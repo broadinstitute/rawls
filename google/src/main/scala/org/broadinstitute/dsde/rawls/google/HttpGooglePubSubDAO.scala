@@ -9,7 +9,7 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.pubsub.model._
 import com.google.api.services.pubsub.{Pubsub, PubsubScopes}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
-import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.workbench.util.FutureSupport
 import spray.http.StatusCodes
 
 import scala.collection.JavaConversions._

@@ -4,7 +4,8 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{MetricFilter, SharedMetricRegistries}
 import com.readytalk.metrics.{StatsD, StatsDReporter}
-import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
+import org.broadinstitute.dsde.workbench.util.MockitoTestUtils
 import org.mockito.Mockito.{atLeastOnce, inOrder => mockitoInOrder}
 import org.scalatest.concurrent.Eventually
 

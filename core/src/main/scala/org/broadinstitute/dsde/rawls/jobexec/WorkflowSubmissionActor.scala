@@ -12,7 +12,8 @@ import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, addJitter}
+import org.broadinstitute.dsde.workbench.util.{FutureSupport, addJitter}
+import org.broadinstitute.dsde.rawls.util.MethodWiths
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import spray.http.StatusCodes
 import spray.json.DefaultJsonProtocol._

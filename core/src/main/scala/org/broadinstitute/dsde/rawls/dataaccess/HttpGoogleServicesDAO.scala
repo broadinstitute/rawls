@@ -36,7 +36,7 @@ import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
+import org.broadinstitute.dsde.workbench.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time
 import spray.client.pipelining._

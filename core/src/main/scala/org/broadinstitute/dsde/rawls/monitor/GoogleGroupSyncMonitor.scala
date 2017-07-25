@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitor.StartMonitorPass
 import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitorSupervisor.{Init, Start}
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.util.addJitter
+import org.broadinstitute.dsde.workbench.util.addJitter
 import spray.http.StatusCodes
 
 import scala.concurrent.{Future, ExecutionContext}

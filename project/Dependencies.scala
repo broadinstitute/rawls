@@ -60,6 +60,9 @@ object Dependencies {
   val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.7.22" % "test"
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
 
+  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.1-f5cad18-SNAP"
+  val workbenchUtilTest: ModuleID = (workbenchUtil % Test).classifier("tests")
+
   val spraySwagger: ModuleID = ("com.gettyimages" %% "spray-swagger" % "0.5.0"
     exclude("com.typesafe.scala-logging", "scala-logging-slf4j_2.11")
     exclude("com.typesafe.scala-logging", "scala-logging-api_2.11")
@@ -74,7 +77,9 @@ object Dependencies {
     metricsStatsd,
     sprayHttp,
     scalatest,
-    mockito
+    mockito,
+    workbenchUtil,
+    workbenchUtilTest
   )
 
   val googleDependencies = metricsDependencies ++ Seq(
@@ -94,15 +99,9 @@ object Dependencies {
     googleOAuth2,
     googlePubSub,
     googleServicemanagement,
-    googleGuava
-  )
-
-  val utilDependencies = Seq(
-    scalaLogging,
-    akkaActor,
-    akkaTestkit,
-    scalatest,
-    mockito
+    googleGuava,
+    workbenchUtil,
+    workbenchUtilTest
   )
 
   val modelDependencies = Seq(
@@ -115,7 +114,9 @@ object Dependencies {
     jodaConvert,
     scalaLogging,
     googleApiClient,
-    scalatest
+    scalatest,
+    workbenchUtil,
+    workbenchUtilTest
   )
 
   val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ metricsDependencies ++ Seq(
@@ -137,6 +138,8 @@ object Dependencies {
     akkaTestkit,
     sprayTestkit,
     mockserverNetty,
-    mockito
+    mockito,
+    workbenchUtil,
+    workbenchUtilTest
   )
 }

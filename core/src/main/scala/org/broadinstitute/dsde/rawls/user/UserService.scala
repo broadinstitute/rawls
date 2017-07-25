@@ -16,7 +16,8 @@ import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.user.UserService._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
+import org.broadinstitute.dsde.workbench.util.FutureSupport
+import org.broadinstitute.dsde.rawls.util.{RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete, RequestCompleteWithLocation}
 import spray.http.StatusCodes
 import spray.json._

@@ -5,7 +5,8 @@ import akka.pattern._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
+import org.broadinstitute.dsde.workbench.util.FutureSupport
+import org.broadinstitute.dsde.rawls.util.{RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
