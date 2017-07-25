@@ -12,11 +12,14 @@ import org.scalatest.concurrent.Eventually
   */
 trait RawlsStatsDTestUtils extends StatsDTestUtils { this: Eventually with MockitoTestUtils =>
 
-  protected def expectedHttpRequestMetrics(method: String, path: String, statusCode: Int, expectedTimes: Int, subsystem: Option[Subsystem] = None): Set[(String, String)] =
+  protected def expectedHttpRequestMetrics(method: String, path: String, statusCode: Int, expectedTimes: Int, subsystem: Option[Subsystem] = None): Set[(String, String)] = {
+    val prefix = s"test.${subsystem.map(s => s"subsystem.${s.toString}.").getOrElse("")}httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode"
+    val expectedTimesStr = expectedTimes.toString
     Set(
-      (s"test.${subsystem.map(s => s"subsystem.${s.toString}.").getOrElse("")}httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode.request", expectedTimes.toString),
-      (s"test.${subsystem.map(s => s"subsystem.${s.toString}.").getOrElse("")}httpRequestMethod.$method.httpRequestUri.$path.httpResponseStatusCode.$statusCode.latency.samples", expectedTimes.toString)
+      (s"$prefix.request", expectedTimesStr),
+      (s"$prefix.latency.samples", expectedTimesStr)
     )
+  }
 
   protected def expectedWorkflowStatusMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus, expectedTimes: Int): (String, String) =
     (s"${workbenchMetricBaseName}.workspace.${workspace.toWorkspaceName.toString.replace('/', '.')}.submission.${submission.submissionId}.workflowStatus.${workflowStatus.toString}.count", expectedTimes.toString)
