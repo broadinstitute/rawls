@@ -9,6 +9,7 @@ lazy val rawlsModel = project.in(file("model"))
 
 lazy val workbenchMetrics = project.in(file("metrics"))
   .settings(metricsSettings:_*)
+  .dependsOn(rawlsModel)
   .withTestSettings
 
 lazy val workbenchGoogle = project.in(file("google"))
