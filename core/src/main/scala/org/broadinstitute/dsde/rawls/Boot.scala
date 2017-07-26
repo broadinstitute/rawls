@@ -21,7 +21,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor}
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo, Subsystems}
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -250,10 +250,10 @@ object Boot extends App with LazyLogging {
     (IO(Http) ? Http.Bind(service, interface = "0.0.0.0", port = 8080)).onComplete {
       case Success(Http.CommandFailed(failure)) =>
         system.log.error("could not bind to port: " + failure.toString)
-        system.shutdown()
+        system.terminate()
       case Failure(t) =>
         system.log.error(t, "could not bind to port")
-        system.shutdown()
+        system.terminate()
       case _ =>
     }
   }

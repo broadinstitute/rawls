@@ -1,7 +1,7 @@
 import sbt._
 
 object Dependencies {
-  val akkaV = "2.3.6"
+  val akkaV = "2.5.3"
   val sprayV = "1.3.3"
   val slickV = "3.1.1"
 
@@ -60,8 +60,11 @@ object Dependencies {
   val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.7.22" % "test"
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
 
-  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.1-f5cad18-SNAP"
-  val workbenchUtilTest: ModuleID = (workbenchUtil % Test).classifier("tests")
+  def excludeAkkaActor(m: ModuleID): ModuleID = m.exclude("com.typesafe.akka", "akka-actor")
+
+  //decouple akka dependency from workbench-libs
+  val workbenchUtil: ModuleID = excludeAkkaActor("org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.1-f5cad18-SNAP")
+  val workbenchUtilTest: ModuleID = excludeAkkaActor((workbenchUtil % Test).classifier("tests"))
 
   val spraySwagger: ModuleID = ("com.gettyimages" %% "spray-swagger" % "0.5.0"
     exclude("com.typesafe.scala-logging", "scala-logging-slf4j_2.11")

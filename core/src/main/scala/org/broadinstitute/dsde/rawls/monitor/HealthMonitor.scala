@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.monitor
 import java.util.concurrent.TimeoutException
 
 import akka.actor.{Actor, Props}
-import akka.pattern.{after, pipe}
 import cats._
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
@@ -93,6 +92,18 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
   // We define a separate execution context (a fixed thread pool) for health checking to
   // not interfere with user facing operations.
   import context.dispatcher
+
+    /**
+    * A monoid used for combining SubsystemStatuses.
+    * Zero is an ok status with no messages.
+    * Append uses && on the ok flag, and ++ on the messages.
+    */
+  private implicit val SubsystemStatusMonoid = new Monoid[SubsystemStatus] {
+    def combine(a: SubsystemStatus, b: SubsystemStatus): SubsystemStatus = {
+      SubsystemStatus(a.ok && b.ok, a.messages |+| b.messages)
+    }
+    def empty: SubsystemStatus = OkStatus
+  }
 
   /**
     * Contains each subsystem status along with a timestamp of when the entry was made.
@@ -253,31 +264,5 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     // overall status is ok iff all subsystems are ok
     val overall = processed.forall(_._2.ok)
     StatusCheckResponse(overall, processed)
-  }
-
-  /**
-    * A monoid used for combining SubsystemStatuses.
-    * Zero is an ok status with no messages.
-    * Append uses && on the ok flag, and ++ on the messages.
-    */
-  private implicit val SubsystemStatusMonoid = new Monoid[SubsystemStatus] {
-    def combine(a: SubsystemStatus, b: SubsystemStatus): SubsystemStatus = {
-      SubsystemStatus(a.ok && b.ok, a.messages |+| b.messages)
-    }
-    def empty: SubsystemStatus = OkStatus
-  }
-
-  /**
-    * Adds non-blocking timeout support to futures.
-    * Example usage:
-    * {{{
-    *   val future = Future(Thread.sleep(1000*60*60*24*365)) // 1 year
-    *   Await.result(future.withTimeout(5 seconds, "Timed out"), 365 days)
-    *   // returns in 5 seconds
-    * }}}
-    */
-  private implicit class FutureWithTimeout[A](f: Future[A]) {
-    def withTimeout(duration: FiniteDuration, errMsg: String): Future[A] =
-      Future.firstCompletedOf(Seq(f, after(duration, context.system.scheduler)(Future.failed(new TimeoutException(errMsg)))))
   }
 }
