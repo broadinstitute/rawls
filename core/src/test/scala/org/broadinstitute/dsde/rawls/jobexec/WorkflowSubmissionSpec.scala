@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
@@ -75,7 +75,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   }
 
   override def afterAll(): Unit = {
-    system.shutdown()
+    system.terminate()
     mockServer.stopServer
     super.afterAll()
   }

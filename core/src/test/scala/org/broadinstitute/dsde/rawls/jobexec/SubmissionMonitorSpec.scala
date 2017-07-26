@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{ExecutionSe
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.metrics.{RawlsStatsDTestUtils, StatsDTestUtils}
-import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.util.MockitoTestUtils
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 

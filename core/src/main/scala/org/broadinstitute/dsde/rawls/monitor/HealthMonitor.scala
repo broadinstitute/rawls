@@ -3,9 +3,11 @@ package org.broadinstitute.dsde.rawls.monitor
 import java.util.concurrent.TimeoutException
 
 import akka.actor.{Actor, Props}
+import akka.pattern.pipe
 import cats._
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.workbench.util.FutureSupport._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MethodRepoDAO, SlickDataSource, UserDirectoryDAO}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Subsystems._
@@ -241,6 +243,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
 
   private def processSubsystemResult(subsystemAndResult: (Subsystem, Future[SubsystemStatus])): Unit = {
     val (subsystem, result) = subsystemAndResult
+
     result.withTimeout(futureTimeout, s"Timed out after ${futureTimeout.toString} waiting for a response from ${subsystem.toString}")
     .recover { case NonFatal(ex) =>
       failedStatus(ex.getMessage)

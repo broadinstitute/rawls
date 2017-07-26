@@ -56,14 +56,14 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.38"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.1.6"
-  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "2.2.4" % "test"
-  val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.7.22" % "test"
+  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.0.1" % "test"
+  val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.8.47" % "test"
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
 
   def excludeAkkaActor(m: ModuleID): ModuleID = m.exclude("com.typesafe.akka", "akka-actor")
 
   //decouple akka dependency from workbench-libs
-  val workbenchUtil: ModuleID = excludeAkkaActor("org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.1-f5cad18-SNAP")
+  val workbenchUtil: ModuleID = excludeAkkaActor("org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.1-02148b1-SNAP")
   val workbenchUtilTest: ModuleID = excludeAkkaActor((workbenchUtil % Test).classifier("tests"))
 
   val spraySwagger: ModuleID = ("com.gettyimages" %% "spray-swagger" % "0.5.0"

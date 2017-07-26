@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}

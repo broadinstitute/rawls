@@ -4,7 +4,7 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{Submission, Workspace, WorkspaceName}
-import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.util.MockitoTestUtils
 import org.scalatest.concurrent.Eventually
 
 /**
