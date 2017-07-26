@@ -63,7 +63,7 @@ object Dependencies {
   def excludeAkkaActor(m: ModuleID): ModuleID = m.exclude("com.typesafe.akka", "akka-actor")
 
   //decouple akka dependency from workbench-libs
-  val workbenchUtil: ModuleID = excludeAkkaActor("org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.1-02148b1-SNAP")
+  val workbenchUtil: ModuleID = excludeAkkaActor("org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.1-e8bdfd0")
   val workbenchUtilTest: ModuleID = excludeAkkaActor((workbenchUtil % Test).classifier("tests"))
 
   val spraySwagger: ModuleID = ("com.gettyimages" %% "spray-swagger" % "0.5.0"
