@@ -64,14 +64,6 @@ object Settings {
     libraryDependencies ++= modelDependencies
   ) ++ versionSettings ++ publishSettings
 
-  //the full list of settings for the workbenchUtil project (see build.sbt)
-  //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
-  //thus commonSettings needs to be added first.
-  val utilSettings = commonSettings ++ List(
-    name := "workbench-util",
-    libraryDependencies ++= utilDependencies
-  ) ++ versionSettings ++ publishSettings
-
   //the full list of settings for the workbenchMetrics project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
   //thus commonSettings needs to be added first.

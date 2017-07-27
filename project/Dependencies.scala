@@ -1,7 +1,7 @@
 import sbt._
 
 object Dependencies {
-  val akkaV = "2.3.6"
+  val akkaV = "2.5.3"
   val sprayV = "1.3.3"
   val slickV = "3.1.1"
 
@@ -56,9 +56,15 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.38"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.1.6"
-  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "2.2.4" % "test"
-  val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.7.22" % "test"
+  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.0.1" % "test"
+  val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.8.47" % "test"
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
+
+  def excludeAkkaActor(m: ModuleID): ModuleID = m.exclude("com.typesafe.akka", "akka-actor")
+
+  //decouple akka dependency from workbench-libs
+  val workbenchUtil: ModuleID = excludeAkkaActor("org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.1-e8bdfd0")
+  val workbenchUtilTest: ModuleID = excludeAkkaActor((workbenchUtil % Test).classifier("tests"))
 
   val spraySwagger: ModuleID = ("com.gettyimages" %% "spray-swagger" % "0.5.0"
     exclude("com.typesafe.scala-logging", "scala-logging-slf4j_2.11")
@@ -74,7 +80,9 @@ object Dependencies {
     metricsStatsd,
     sprayHttp,
     scalatest,
-    mockito
+    mockito,
+    workbenchUtil,
+    workbenchUtilTest
   )
 
   val googleDependencies = metricsDependencies ++ Seq(
@@ -94,15 +102,9 @@ object Dependencies {
     googleOAuth2,
     googlePubSub,
     googleServicemanagement,
-    googleGuava
-  )
-
-  val utilDependencies = Seq(
-    scalaLogging,
-    akkaActor,
-    akkaTestkit,
-    scalatest,
-    mockito
+    googleGuava,
+    workbenchUtil,
+    workbenchUtilTest
   )
 
   val modelDependencies = Seq(
@@ -115,7 +117,9 @@ object Dependencies {
     jodaConvert,
     scalaLogging,
     googleApiClient,
-    scalatest
+    scalatest,
+    workbenchUtil,
+    workbenchUtilTest
   )
 
   val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ metricsDependencies ++ Seq(
@@ -137,6 +141,8 @@ object Dependencies {
     akkaTestkit,
     sprayTestkit,
     mockserverNetty,
-    mockito
+    mockito,
+    workbenchUtil,
+    workbenchUtilTest
   )
 }

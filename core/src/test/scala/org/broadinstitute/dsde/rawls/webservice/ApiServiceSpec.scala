@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroup
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.concurrent.Eventually
 import spray.http.{ContentTypes, HttpEntity, StatusCodes}

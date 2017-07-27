@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, addJitter}
+import org.broadinstitute.dsde.workbench.util.{FutureSupport, addJitter}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}

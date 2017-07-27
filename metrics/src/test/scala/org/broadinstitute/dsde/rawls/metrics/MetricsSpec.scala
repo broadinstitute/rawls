@@ -11,7 +11,7 @@ import org.mockito.ArgumentMatchers.{eq => argEq, _}
 import org.mockito.Mockito.{inOrder => mockitoInOrder, _}
 import org.mockito.{ArgumentMatcher, InOrder}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
 

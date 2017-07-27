@@ -5,10 +5,13 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
+import org.broadinstitute.dsde.workbench.util.{FutureSupport, Retry}
+
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.FiniteDuration
 import spray.client.pipelining._
 import spray.http.{BodyPart, MultipartFormData}
 import spray.httpx.SprayJsonSupport._

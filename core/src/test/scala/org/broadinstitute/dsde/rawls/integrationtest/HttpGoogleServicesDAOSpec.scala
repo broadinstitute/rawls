@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
 import org.broadinstitute.dsde.rawls.monitor.{CreatingBillingProjectMonitor, BucketDeletionMonitor}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
-import org.broadinstitute.dsde.rawls.util.Retry
+import org.broadinstitute.dsde.workbench.util.Retry
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration

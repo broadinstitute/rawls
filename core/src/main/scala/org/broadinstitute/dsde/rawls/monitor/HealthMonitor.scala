@@ -3,10 +3,11 @@ package org.broadinstitute.dsde.rawls.monitor
 import java.util.concurrent.TimeoutException
 
 import akka.actor.{Actor, Props}
-import akka.pattern.{after, pipe}
+import akka.pattern.pipe
 import cats._
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.workbench.util.FutureSupport._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MethodRepoDAO, SlickDataSource, UserDirectoryDAO}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Subsystems._
@@ -254,8 +255,8 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     val overall = processed.forall(_._2.ok)
     StatusCheckResponse(overall, processed)
   }
-
-  /**
+  
+      /**
     * A monoid used for combining SubsystemStatuses.
     * Zero is an ok status with no messages.
     * Append uses && on the ok flag, and ++ on the messages.
@@ -265,19 +266,5 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
       SubsystemStatus(a.ok && b.ok, a.messages |+| b.messages)
     }
     def empty: SubsystemStatus = OkStatus
-  }
-
-  /**
-    * Adds non-blocking timeout support to futures.
-    * Example usage:
-    * {{{
-    *   val future = Future(Thread.sleep(1000*60*60*24*365)) // 1 year
-    *   Await.result(future.withTimeout(5 seconds, "Timed out"), 365 days)
-    *   // returns in 5 seconds
-    * }}}
-    */
-  private implicit class FutureWithTimeout[A](f: Future[A]) {
-    def withTimeout(duration: FiniteDuration, errMsg: String): Future[A] =
-      Future.firstCompletedOf(Seq(f, after(duration, context.system.scheduler)(Future.failed(new TimeoutException(errMsg)))))
   }
 }

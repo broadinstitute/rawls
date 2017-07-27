@@ -21,12 +21,12 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor}
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo, Subsystems}
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.util._
+import org.broadinstitute.dsde.workbench.util._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -133,7 +133,7 @@ object Boot extends App with LazyLogging {
     }
 
     val executionServiceConfig = conf.getConfig("executionservice")
-    val submissionTimeout = util.toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
+    val submissionTimeout = toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
 
     val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = executionServiceConfig.getObject("readServers").map {
         case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout, metricsPrefix))
@@ -149,7 +149,7 @@ object Boot extends App with LazyLogging {
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
       slickDataSource,
-      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
+      toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
       workbenchMetricBaseName = metricsPrefix
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
@@ -167,8 +167,8 @@ object Boot extends App with LazyLogging {
     system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
 
     system.actorOf(GoogleGroupSyncMonitorSupervisor.props(
-      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
-      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollIntervalJitter")),
+      toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
+      toScalaDuration(gcsConfig.getDuration("groupMonitor.pollIntervalJitter")),
       pubSubDAO,
       gcsConfig.getString("groupMonitor.topicName"),
       gcsConfig.getString("groupMonitor.subscriptionName"),
@@ -192,8 +192,8 @@ object Boot extends App with LazyLogging {
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO.getBucketServiceAccountCredential,
-        util.toScalaDuration(conf.getDuration("executionservice.processInterval")),
-        util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
+        toScalaDuration(conf.getDuration("executionservice.processInterval")),
+        toScalaDuration(conf.getDuration("executionservice.pollInterval")),
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
         Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
@@ -250,10 +250,10 @@ object Boot extends App with LazyLogging {
     (IO(Http) ? Http.Bind(service, interface = "0.0.0.0", port = 8080)).onComplete {
       case Success(Http.CommandFailed(failure)) =>
         system.log.error("could not bind to port: " + failure.toString)
-        system.shutdown()
+        system.terminate()
       case Failure(t) =>
         system.log.error(t, "could not bind to port")
-        system.shutdown()
+        system.terminate()
       case _ =>
     }
   }
