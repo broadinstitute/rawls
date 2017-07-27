@@ -50,7 +50,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     this.token = refreshToken
     this.tokenDate = DateTime.now
-    Future.successful(Unit)
+    Future.successful(())
   }
 
   override def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[DateTime]] = {
@@ -60,7 +60,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit] = {
     token = null
     tokenDate = null
-    Future.successful(Unit)
+    Future.successful(())
   }
 
   override def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {
@@ -136,7 +136,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long): Future[String] = Future.successful("mockBucket")
 
-  override def deleteBucket(bucketName: String, monitorRef: ActorRef) = Future.successful(Unit)
+  override def deleteBucket(bucketName: String, monitorRef: ActorRef) = Future.successful(())
 
   override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(Some(new Bucket))
 
@@ -271,7 +271,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   def getServiceAccountUserInfo(): Future[UserInfo] = Future.successful(UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000")))
 
-  override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = Future.successful(Unit)
+  override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = Future.successful(())
 
   override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = Future {
     if (jobId == mockJobId) {
@@ -303,5 +303,5 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(rawlsBillingProjectOperation.copy(done = true))
   }
 
-  override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(Unit)
+  override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(())
 }

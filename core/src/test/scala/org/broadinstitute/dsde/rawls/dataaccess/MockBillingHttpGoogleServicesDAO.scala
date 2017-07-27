@@ -55,7 +55,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
   override def createProxyGroup(user: RawlsUser): Future[Unit] = {
     mockProxyGroups += (user -> false)
-    Future.successful(Unit)
+    Future.successful(())
   }
 
   override def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {

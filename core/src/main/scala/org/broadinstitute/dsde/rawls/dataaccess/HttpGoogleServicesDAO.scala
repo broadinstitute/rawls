@@ -137,7 +137,7 @@ class HttpGoogleServicesDAO(
     def rollbackGroups(groupInsertTries: Iterable[Try[RawlsGroup]]) = {
       Future.traverse(groupInsertTries) {
         case Success(group) => deleteGoogleGroup(group)
-        case _ => Future.successful(Unit)
+        case _ => Future.successful(())
       }
     }
 
@@ -749,7 +749,7 @@ class HttpGoogleServicesDAO(
         val pipeline = sendReceive
         pipeline(Get(url))
 
-      case None => Future.successful(Unit)
+      case None => Future.successful(())
     }
   }
 

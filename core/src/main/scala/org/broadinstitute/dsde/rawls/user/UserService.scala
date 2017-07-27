@@ -327,7 +327,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def verifyNoSubmissions(userRef: RawlsUserRef, dataAccess: DataAccess): ReadAction[Unit] = {
     dataAccess.submissionQuery.findBySubmitter(userRef.userSubjectId.value).exists.result flatMap {
-      case false => DBIO.successful(Unit)
+      case false => DBIO.successful(())
       case _ => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Cannot delete a user with submissions")))
     }
   }
