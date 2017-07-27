@@ -217,7 +217,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     submissionFuture flatMap {
       case Some(submission) =>
         val abortFuture = if(submission.status == SubmissionStatuses.Aborting) {
-          Future.sequence(Seq(abortQueuedWorkflows(submissionId), abortActiveWorkflows(submissionId))).mapTo[Unit]
+          for {
+            _ <- abortQueuedWorkflows(submissionId)
+            _ <- abortActiveWorkflows(submissionId)
+          } yield {}
         } else {
           Future.successful(())
         }
