@@ -5,6 +5,7 @@ import java.util.UUID
 import akka.actor.SupervisorStrategy.Restart
 import akka.actor.{Actor, Props, SupervisorStrategy}
 import com.google.api.client.auth.oauth2.Credential
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
@@ -39,7 +40,7 @@ object SubmissionSupervisor {
 class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            datasource: SlickDataSource,
                            submissionPollInterval: FiniteDuration,
-                           workbenchMetricsBaseName: String) extends Actor {
+                           workbenchMetricsBaseName: String) extends Actor with LazyLogging {
   import context._
 
   override def receive = {
@@ -58,7 +59,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     }
 
     def thresholdFunc(cause: Throwable, count: Int): Unit = {
-      system.log.error(cause, s"error monitoring submission: SubmissionMonitorActor has been restarted $count times")
+      logger.error(s"error monitoring submission after $count times", cause)
     }
 
     new ThresholdOneForOneStrategy(thresholdLimit = 3)(alwaysRestart)(thresholdFunc)
