@@ -69,9 +69,7 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     val supervisor: ActorRef = system.actorOf(Props(new SupervisorTestActor(strategy)))
 
     // retrieve a new supervised child
-    val childRef: ActorRef = whenReady(supervisor ? "newchild") {
-      _.asInstanceOf[ActorRef]
-    }
+    val childRef = (supervisor ? "newchild").mapTo[ActorRef].futureValue
 
     // start count = 0
     // increment a few times and retrieve new counts
@@ -136,9 +134,7 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     val supervisor: ActorRef = system.actorOf(Props(new SupervisorTestActor(strategy)))
 
     // retrieve a new supervised child
-    val childRef: ActorRef = whenReady(supervisor ? "newchild") {
-      _.asInstanceOf[ActorRef]
-    }
+    val childRef = (supervisor ? "newchild").mapTo[ActorRef].futureValue
 
     // start count = 0
     // increment a few times and retrieve new counts
@@ -244,9 +240,7 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     val supervisor: ActorRef = system.actorOf(Props(new SupervisorTestActor(strategy)))
 
     // retrieve a new supervised child
-    val childRef: ActorRef = whenReady(supervisor ? "newchild") {
-      _.asInstanceOf[ActorRef]
-    }
+    val childRef = (supervisor ? "newchild").mapTo[ActorRef].futureValue
 
     // start count = 0
     // increment a few times and retrieve new counts
@@ -342,9 +336,7 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
       val supervisor: ActorRef = system.actorOf(Props(new SupervisorTestActor(strategy)))
 
       // retrieve a new supervised child
-      val childRef: ActorRef = whenReady(supervisor ? "newchild") {
-        _.asInstanceOf[ActorRef]
-      }
+      val childRef = (supervisor ? "newchild").mapTo[ActorRef].futureValue
 
       // start count = 0
       // increment a few times and retrieve new counts
