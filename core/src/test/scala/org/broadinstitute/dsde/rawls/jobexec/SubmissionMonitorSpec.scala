@@ -521,7 +521,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       super.save() flatMap { _ =>
         withWorkspaceContext(workspace) { ctx =>
           DBIO.seq(
-            entityQuery.save(ctx, Seq(testData.indiv1, testData.indiv2)),
+            entityQuery.save(ctx, Seq(testData.aliquot1, testData.aliquot2, testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sample8, testData.pair1, testData.pair2, testData.ps1, testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.sset_empty, testData.indiv1, testData.indiv2)),
             DBIO.sequence(methodConfigs.map(m => methodConfigurationQuery.create(ctx, m)).toSeq),
             DBIO.sequence(submissions.map(s => submissionQuery.create(ctx, s)).toSeq),
             updateWorkflowExecutionServiceKey("unittestdefault")
