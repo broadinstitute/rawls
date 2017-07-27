@@ -75,13 +75,16 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // increment a few times and retrieve new counts
 
     whenReady(childRef ? "increment") { resp =>
-      resp.asInstanceOf[Int] shouldEqual 1
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 1
     }
     whenReady(childRef ? "increment") { resp =>
-      resp.asInstanceOf[Int] shouldEqual 2
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 2
     }
     whenReady(childRef ? "increment") { resp =>
-      resp.asInstanceOf[Int] shouldEqual 3
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 3
     }
 
     // throw an exception, triggering a supervised restart
@@ -92,7 +95,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // the child reference is still alive, pointing to a new Actor
 
     whenReady(supervisor ? ChildLifeCheck(childRef)) { resp =>
-      resp.asInstanceOf[Boolean] shouldEqual true
+      resp shouldBe a [java.lang.Boolean]
+      resp.asInstanceOf[java.lang.Boolean] shouldEqual true
     }
 
     // threshold function was not run
@@ -101,8 +105,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // start count is 0 again so it increments to 1
 
     whenReady(childRef ? "increment") { resp =>
-      val response = resp.asInstanceOf[Int]
-      response shouldEqual 1
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 1
     }
 
     // throw another exception, but we have no restarts remaining
@@ -111,7 +115,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     Thread.sleep(100)
 
     whenReady(supervisor ? ChildLifeCheck(childRef)) { resp =>
-      resp.asInstanceOf[Boolean] shouldEqual false
+      resp shouldBe a [java.lang.Boolean]
+      resp.asInstanceOf[java.lang.Boolean] shouldEqual false
     }
 
     // threshold function was not run
@@ -140,13 +145,16 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // increment a few times and retrieve new counts
 
     whenReady(childRef ? "increment") { resp =>
-      resp.asInstanceOf[Int] shouldEqual 1
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 1
     }
     whenReady(childRef ? "increment") { resp =>
-      resp.asInstanceOf[Int] shouldEqual 2
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 2
     }
     whenReady(childRef ? "increment") { resp =>
-      resp.asInstanceOf[Int] shouldEqual 3
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 3
     }
 
     // throw an exception, triggering a supervised restart
@@ -157,7 +165,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // the child reference is still alive, pointing to a new Actor
 
     whenReady(supervisor ? ChildLifeCheck(childRef)) { resp =>
-      resp.asInstanceOf[Boolean] shouldEqual true
+      resp shouldBe a [java.lang.Boolean]
+      resp.asInstanceOf[java.lang.Boolean] shouldEqual true
     }
 
     // threshold function was not run
@@ -166,8 +175,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // start count is 0 again so it increments to 1
 
     whenReady(childRef ? "increment") { resp =>
-      val response = resp.asInstanceOf[Int]
-      response shouldEqual 1
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 1
     }
 
     // throw an exception, triggering a supervised restart
@@ -178,7 +187,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // the child reference is still alive, pointing to a new Actor
 
     whenReady(supervisor ? ChildLifeCheck(childRef)) { resp =>
-      resp.asInstanceOf[Boolean] shouldEqual true
+      resp shouldBe a [java.lang.Boolean]
+      resp.asInstanceOf[java.lang.Boolean] shouldEqual true
     }
 
     // threshold function was run
@@ -187,8 +197,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // start count is 0 again so it increments to 1
 
     whenReady(childRef ? "increment") { resp =>
-      val response = resp.asInstanceOf[Int]
-      response shouldEqual 1
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 1
     }
 
     // throw an exception, triggering a supervised restart
@@ -199,7 +209,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // the child reference is still alive, pointing to a new Actor
 
     whenReady(supervisor ? ChildLifeCheck(childRef)) { resp =>
-      resp.asInstanceOf[Boolean] shouldEqual true
+      resp shouldBe a [java.lang.Boolean]
+      resp.asInstanceOf[java.lang.Boolean] shouldEqual true
     }
 
     // threshold function was run
@@ -208,8 +219,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // start count is 0 again so it increments to 1
 
     whenReady(childRef ? "increment") { resp =>
-      val response = resp.asInstanceOf[Int]
-      response shouldEqual 1
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 1
     }
 
     // throw another exception, but we have no restarts remaining
@@ -218,7 +229,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     Thread.sleep(100)
 
     whenReady(supervisor ? ChildLifeCheck(childRef)) { resp =>
-      resp.asInstanceOf[Boolean] shouldEqual false
+      resp shouldBe a [java.lang.Boolean]
+      resp.asInstanceOf[java.lang.Boolean] shouldEqual false
     }
 
     testVar shouldEqual 3
@@ -246,13 +258,16 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // increment a few times and retrieve new counts
 
     whenReady(childRef ? "increment") { resp =>
-      resp.asInstanceOf[Int] shouldEqual 1
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 1
     }
     whenReady(childRef ? "increment") { resp =>
-      resp.asInstanceOf[Int] shouldEqual 2
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 2
     }
     whenReady(childRef ? "increment") { resp =>
-      resp.asInstanceOf[Int] shouldEqual 3
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 3
     }
 
     // throw an exception, triggering a supervised restart
@@ -263,7 +278,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // the child reference is still alive, pointing to a new Actor
 
     whenReady(supervisor ? ChildLifeCheck(childRef)) { resp =>
-      resp.asInstanceOf[Boolean] shouldEqual true
+      resp shouldBe a [java.lang.Boolean]
+      resp.asInstanceOf[java.lang.Boolean] shouldEqual true
     }
 
     // threshold function was not run
@@ -272,8 +288,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // start count is 0 again so it increments to 1
 
     whenReady(childRef ? "increment") { resp =>
-      val response = resp.asInstanceOf[Int]
-      response shouldEqual 1
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 1
     }
 
     // throw an exception, triggering a supervised restart
@@ -284,7 +300,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // the child reference is still alive, pointing to a new Actor
 
     whenReady(supervisor ? ChildLifeCheck(childRef)) { resp =>
-      resp.asInstanceOf[Boolean] shouldEqual true
+      resp shouldBe a [java.lang.Boolean]
+      resp.asInstanceOf[java.lang.Boolean] shouldEqual true
     }
 
     // threshold function was run
@@ -293,8 +310,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // start count is 0 again so it increments to 1
 
     whenReady(childRef ? "increment") { resp =>
-      val response = resp.asInstanceOf[Int]
-      response shouldEqual 1
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 1
     }
 
     // throw an exception, triggering a supervised restart
@@ -305,7 +322,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // the child reference is still alive, pointing to a new Actor
 
     whenReady(supervisor ? ChildLifeCheck(childRef)) { resp =>
-      resp.asInstanceOf[Boolean] shouldEqual true
+      resp shouldBe a [java.lang.Boolean]
+      resp.asInstanceOf[java.lang.Boolean] shouldEqual true
     }
 
     // threshold function was run
@@ -314,8 +332,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
     // start count is 0 again so it increments to 1
 
     whenReady(childRef ? "increment") { resp =>
-      val response = resp.asInstanceOf[Int]
-      response shouldEqual 1
+      resp shouldBe an [Integer]
+      resp.asInstanceOf[Integer] shouldEqual 1
     }
   }
 
@@ -342,13 +360,16 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
       // increment a few times and retrieve new counts
 
       whenReady(childRef ? "increment") { resp =>
-        resp.asInstanceOf[Int] shouldEqual 1
+        resp shouldBe an [Integer]
+        resp.asInstanceOf[Integer] shouldEqual 1
       }
       whenReady(childRef ? "increment") { resp =>
-        resp.asInstanceOf[Int] shouldEqual 2
+        resp shouldBe an [Integer]
+        resp.asInstanceOf[Integer] shouldEqual 2
       }
       whenReady(childRef ? "increment") { resp =>
-        resp.asInstanceOf[Int] shouldEqual 3
+        resp shouldBe an [Integer]
+        resp.asInstanceOf[Integer] shouldEqual 3
       }
 
       // throw an exception, triggering a supervised restart
@@ -359,7 +380,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
       // the child reference is still alive, pointing to a new Actor
 
       whenReady(supervisor ? ChildLifeCheck(childRef)) { resp =>
-        resp.asInstanceOf[Boolean] shouldEqual true
+        resp shouldBe a [java.lang.Boolean]
+        resp.asInstanceOf[java.lang.Boolean] shouldEqual true
       }
 
       // threshold function was run
@@ -368,8 +390,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
       // start count is 0 again so it increments to 1
 
       whenReady(childRef ? "increment") { resp =>
-        val response = resp.asInstanceOf[Int]
-        response shouldEqual 1
+        resp shouldBe an [Integer]
+        resp.asInstanceOf[Integer] shouldEqual 1
       }
 
       // throw an exception, triggering a supervised restart
@@ -380,7 +402,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
       // the child reference is still alive, pointing to a new Actor
 
       whenReady(supervisor ? ChildLifeCheck(childRef)) { resp =>
-        resp.asInstanceOf[Boolean] shouldEqual true
+        resp shouldBe a [java.lang.Boolean]
+        resp.asInstanceOf[java.lang.Boolean] shouldEqual true
       }
 
       // threshold function was run
@@ -389,8 +412,8 @@ class ThresholdOneForOneStrategySpec extends TestKit(ActorSystem("ThresholdOneFo
       // start count is 0 again so it increments to 1
 
       whenReady(childRef ? "increment") { resp =>
-        val response = resp.asInstanceOf[Int]
-        response shouldEqual 1
+        resp shouldBe an [Integer]
+        resp.asInstanceOf[Integer] shouldEqual 1
       }
     }
   }
