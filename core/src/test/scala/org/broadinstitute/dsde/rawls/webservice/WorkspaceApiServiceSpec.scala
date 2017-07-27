@@ -271,25 +271,29 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Map.empty
     )
 
-    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
-          status
+    withStatsD {
+      Post(s"/workspaces", httpJson(workspaceWithRealm)) ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Created, response.entity.asString) {
+            status
+          }
+          assertResult(workspaceWithRealm) {
+            val ws = runAndWait(workspaceQuery.findByName(workspaceWithRealm.toWorkspaceName)).get
+            WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
+          }
+          assertResult(workspaceWithRealm) {
+            val ws = responseAs[Workspace]
+            WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
+          }
+          // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+          assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceWithRealm.path))))) {
+            header("Location")
+          }
         }
-        assertResult(workspaceWithRealm) {
-          val ws = runAndWait(workspaceQuery.findByName(workspaceWithRealm.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
-        }
-        assertResult(workspaceWithRealm) {
-          val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
-        }
-        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceWithRealm.path))))) {
-          header("Location")
-        }
-      }
+    } { capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("post", "workspaces", StatusCodes.Created.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "create a workspace with a multi-group auth domain" in withTestDataApiServices { services =>
@@ -1503,16 +1507,21 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", Set.empty, newAtts)
-    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopyRealm)) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
+    withStatsD {
+      Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopyRealm)) ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+          assertResult(testData.workspace.attributes ++ newAtts) {
+            responseAs[Workspace].attributes
+          }
         }
-        assertResult(testData.workspace.attributes ++ newAtts) {
-          responseAs[Workspace].attributes
-        }
-      }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.workspace.namespace}.${testData.workspace.name}.clone"
+      val expected = expectedHttpRequestMetrics("post", wsPathForRequestMetrics, StatusCodes.Created.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "return 409 Conflict on clone if the destination already exists" in withTestDataApiServices { services =>
@@ -2401,17 +2410,22 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when reading a Google Genomics operation" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
-    Get(s"${testWorkspaces.workspace.path}/genomics/operations/dummy-job-id") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+    withStatsD {
+      Get(s"${testWorkspaces.workspace.path}/genomics/operations/dummy-job-id") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          // message returned by MockGoogleServicesDAO
+          assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
+            responseAs[JsObject]
+          }
         }
-        // message returned by MockGoogleServicesDAO
-        assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
-          responseAs[JsObject]
-        }
-      }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testWorkspaces.workspace.namespace}.${testWorkspaces.workspace.name}.genomics.operations.dummy-job-id"
+      val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "return 404 when reading a Google Genomics operation for a non-existent workspace" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>

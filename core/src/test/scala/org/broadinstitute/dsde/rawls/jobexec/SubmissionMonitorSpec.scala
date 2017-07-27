@@ -10,9 +10,10 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{ExecutionServiceStatusResponse, StatusCheckComplete}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.{RawlsTestUtils, StatsDTestUtils}
+import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.metrics.{RawlsStatsDTestUtils, StatsDTestUtils}
+import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mock.MockitoSugar
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -23,7 +24,7 @@ import scala.util.{Success, Try}
 /**
  * Created by dvoet on 7/1/15.
  */
-class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with MockitoSugar with RawlsTestUtils with StatsDTestUtils {
+class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with RawlsTestUtils with MockitoTestUtils with RawlsStatsDTestUtils {
   import driver.api._
 
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
@@ -100,7 +101,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Aborted.toString), 10 seconds)
         expectMsgClass(5 seconds, classOf[Terminated])
       } { capturedMetrics =>
-        capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Aborted, None))
+        capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Aborted))
       }
     }
   }
@@ -535,4 +536,4 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val executionServiceCluster: ExecutionServiceCluster,
                             val credential: Credential,
                             val submissionPollInterval: Duration,
-                            override val rawlsMetricBaseName: String) extends SubmissionMonitor
+                            override val workbenchMetricBaseName: String) extends SubmissionMonitor

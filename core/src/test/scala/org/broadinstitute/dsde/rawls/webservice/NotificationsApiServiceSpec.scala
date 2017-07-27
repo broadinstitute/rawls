@@ -22,40 +22,53 @@ class NotificationsApiServiceSpec extends ApiServiceSpec {
 
   "NotificationsApiService" should "get workspace notifications" in withEmptyTestDatabase { slickDataSource: SlickDataSource =>
     withApiServices(slickDataSource) { services =>
-      Get("/notifications/workspace/foo/bar") ~>
-        sealRoute(services.notificationsRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          val results = responseAs[Seq[Map[String, String]]]
-//          assert(!results.isEmpty)
-          results.foreach { map =>
-            val notificationKey = map.getOrElse("notificationKey", fail("notificationKey missing"))
-            assert(notificationKey.startsWith("notifications/"))
-            assert(notificationKey.endsWith("/foo/bar"))
-            assert(map.isDefinedAt("description"))
-          }
-        }
+     withStatsD {
+       Get("/notifications/workspace/foo/bar") ~>
+         services.sealedInstrumentedRoutes ~>
+         check {
+           assertResult(StatusCodes.OK) {
+             status
+           }
+           val results = responseAs[Seq[Map[String, String]]]
+           //          assert(!results.isEmpty)
+           results.foreach { map =>
+             val notificationKey = map.getOrElse("notificationKey", fail("notificationKey missing"))
+             assert(notificationKey.startsWith("notifications/"))
+             assert(notificationKey.endsWith("/foo/bar"))
+             assert(map.isDefinedAt("description"))
+           }
+         }
+     } { capturedMetrics =>
+       val wsPathForRequestMetrics = "notifications.workspace.foo.bar"
+       val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
+       assertSubsetOf(expected, capturedMetrics)
+     }
     }
   }
 
   it should "get general notifications" in withEmptyTestDatabase { slickDataSource: SlickDataSource =>
     withApiServices(slickDataSource) { services =>
-      Get("/notifications/general") ~>
-        sealRoute(services.notificationsRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
+      withStatsD {
+        Get("/notifications/general") ~>
+          services.sealedInstrumentedRoutes ~>
+          check {
+            assertResult(StatusCodes.OK) {
+              status
+            }
+            val results = responseAs[Seq[Map[String, String]]]
+            assert(!results.isEmpty)
+            results.foreach { map =>
+              val notificationKey = map.getOrElse("notificationKey", fail("notificationKey missing"))
+              assert(notificationKey.startsWith("notifications/"))
+              assert(map.isDefinedAt("description"))
+            }
           }
-          val results = responseAs[Seq[Map[String, String]]]
-          assert(!results.isEmpty)
-          results.foreach { map =>
-            val notificationKey = map.getOrElse("notificationKey", fail("notificationKey missing"))
-            assert(notificationKey.startsWith("notifications/"))
-            assert(map.isDefinedAt("description"))
-          }
-        }
+      } { capturedMetrics =>
+        val wsPathForRequestMetrics = "notifications.general"
+        val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
+        assertSubsetOf(expected, capturedMetrics)
+      }
     }
   }
+
 }

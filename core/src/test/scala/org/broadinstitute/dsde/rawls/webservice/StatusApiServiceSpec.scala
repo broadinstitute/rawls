@@ -50,34 +50,44 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
 
   "StatusApiService" should "return 200 for ok status" in withConstantTestDataApiServices(true) { services =>
     eventually {
-      Get("/status") ~>
-        sealRoute(services.statusRoute) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
+      withStatsD {
+        Get("/status") ~>
+          services.sealedInstrumentedRoutes ~>
+          check {
+            assertResult(StatusCodes.OK) {
+              status
+            }
+            assertResult(StatusCheckResponse(true, AllSubsystems.map(_ -> SubsystemStatus(true, None)).toMap)) {
+              responseAs[StatusCheckResponse]
+            }
           }
-          assertResult(StatusCheckResponse(true, AllSubsystems.map(_ -> SubsystemStatus(true, None)).toMap)) {
-            responseAs[StatusCheckResponse]
-          }
-        }
+      } { capturedMetrics =>
+        val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.OK.intValue, 1)
+        assertSubsetOf(expected, capturedMetrics)
+      }
     }
   }
 
   it should "return 500 for non-ok status for any subsystem" in withConstantTestDataApiServices(false) { services =>
     eventually {
-      Get("/status") ~>
-        sealRoute(services.statusRoute) ~>
-        check {
-          assertResult(StatusCodes.InternalServerError) {
-            status
+      withStatsD {
+        Get("/status") ~>
+          services.sealedInstrumentedRoutes ~>
+          check {
+            assertResult(StatusCodes.InternalServerError) {
+              status
+            }
+            assertResult(StatusCheckResponse(false, AllSubsystems.map {
+              case LDAP => LDAP -> SubsystemStatus(false, Some(List("Could not find any users in LDAP")))
+              case other => other -> SubsystemStatus(true, None)
+            }.toMap)) {
+              responseAs[StatusCheckResponse]
+            }
           }
-          assertResult(StatusCheckResponse(false, AllSubsystems.map {
-            case LDAP => LDAP -> SubsystemStatus(false, Some(List("Could not find any users in LDAP")))
-            case other => other -> SubsystemStatus(true, None)
-          }.toMap)) {
-            responseAs[StatusCheckResponse]
-          }
-        }
+      } { capturedMetrics =>
+        val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.InternalServerError.intValue, 1)
+        assertSubsetOf(expected, capturedMetrics)
+      }
     }
   }
 

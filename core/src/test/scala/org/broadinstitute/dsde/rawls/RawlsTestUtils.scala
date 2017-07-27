@@ -1,14 +1,12 @@
 package org.broadinstitute.dsde.rawls
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, TestDriverComponentWithFlatSpecAndMatchers}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.Workspace
-import org.mockito.ArgumentCaptor
 import org.mockserver.model.StringBody
-import org.scalatest.{Matchers, Suite}
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.{Matchers, Suite}
 import spray.http.{StatusCode, StatusCodes}
 
-import scala.reflect.{ClassTag, classTag}
 import scala.util.matching.Regex
 
 trait RawlsTestUtils extends Suite with TestDriverComponent with Matchers {
@@ -66,13 +64,14 @@ trait RawlsTestUtils extends Suite with TestDriverComponent with Matchers {
     expected.toTraversable should contain theSameElementsAs actual.toTraversable
   }
 
+  def assertSubsetOf[T](expected: TraversableOnce[T], actual: TraversableOnce[T]): Unit = {
+    val as = actual.toSet
+    expected foreach { as should contain(_) }
+  }
+
   // MockServer's .withBody doesn't have a built-in string contains feature.  This serves that purpose.
   def mockServerContains(text: String): StringBody = {
     val anythingWithNewlines = "((.|\n|\r)*)"
     StringBody.regex(anythingWithNewlines + Regex.quote(text.toString) + anythingWithNewlines)
   }
-
-  // Scala sugar for Mockitor ArgumentCaptor
-  def captor[T: ClassTag]: ArgumentCaptor[T] =
-    ArgumentCaptor.forClass(classTag[T].runtimeClass).asInstanceOf[ArgumentCaptor[T]]
 }

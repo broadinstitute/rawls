@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import com.codahale.metrics._
 import com.codahale.metrics.health.SharedHealthCheckRegistries
 import com.readytalk.metrics.{StatsD, StatsDReporter}
-import nl.grons.metrics.scala.{DefaultInstrumented, MetricName}
+
 import org.broadinstitute.dsde.rawls.metrics.MetricsSpec.TestInstrumented
 import org.mockito.ArgumentMatchers.{eq => argEq, _}
 import org.mockito.Mockito.{inOrder => mockitoInOrder, _}
@@ -51,7 +51,7 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
 
     // counter value should be 100
     verifyStatsD { order =>
-      order.verify(statsD).send(argEq("test.counter"), argEq("100"))
+      order.verify(statsD).send(argEq("test.a.counter.count"), argEq("100"))
     }
   }
 
@@ -60,7 +60,7 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
 
     // Gauge value should be 42
     verifyStatsD { order =>
-      order.verify(statsD).send(argEq("test.gauge"), argEq("42"))
+      order.verify(statsD).send(argEq("test.a.gauge.current"), argEq("42"))
     }
 
     test.set(88)
@@ -68,7 +68,7 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
 
     // Gauge should take the most recent value
     verifyStatsD { order =>
-      order.verify(statsD).send(argEq("test.gauge"), argEq("99"))
+      order.verify(statsD).send(argEq("test.a.gauge.current"), argEq("99"))
     }
   }
 
@@ -77,19 +77,19 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
 
     // Gauge value should be 42
     verifyStatsD { order =>
-      order.verify(statsD).send(argEq("test.gauge"), argEq("42"))
+      order.verify(statsD).send(argEq("test.a.gauge.current"), argEq("42"))
     }
 
     test.set(43)
 
     // The gauge value should not be updated immediately
     verifyStatsD { order =>
-      order.verify(statsD).send(argEq("test.gauge"), argEq("42"))
+      order.verify(statsD).send(argEq("test.a.gauge.current"), argEq("42"))
     }
 
     // Eventually gauge value should be 43
     verifyStatsD { order =>
-      order.verify(statsD).send(argEq("test.gauge"), argEq("43"))
+      order.verify(statsD).send(argEq("test.a.gauge.current"), argEq("43"))
     }
   }
 
@@ -98,8 +98,8 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
 
     // Timer should have been updated
     verifyStatsD { order =>
-      verifyTimer(order, "test.timer")
-      verifyMeter(order, "test.timer", 10)
+      verifyTimer(order, "test.a.timer.latency")
+      verifyMeter(order, "test.a.timer.latency", 10)
     }
   }
 
@@ -108,8 +108,8 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
 
     // Timer should have been updated
     verifyStatsD { order =>
-      verifyTimer(order, "test.timer")
-      verifyMeter(order, "test.timer", 10)
+      verifyTimer(order, "test.a.timer.latency")
+      verifyMeter(order, "test.a.timer.latency", 10)
     }
   }
 
@@ -214,17 +214,15 @@ object MetricsSpec {
   /**
     * Test class to exercise DropWizard metrics functionality.
     */
-  class TestInstrumented extends DefaultInstrumented {
+  class TestInstrumented extends WorkbenchInstrumented {
+    override val workbenchMetricBaseName = "test"
     private var n: Int = _
 
     // Define a counter and a timer metric
-    lazy val counter = metrics.counter("counter")
-    lazy val timer = metrics.timer("timer")
+    lazy val counter = ExpandedMetricBuilder.expand("a", "counter").asCounter("count")
+    lazy val timer = ExpandedMetricBuilder.expand("a", "timer").asTimer("latency")
     lazy val histogram = metrics.histogram("histogram")
     lazy val meter = metrics.meter("meter")
-
-    // Override the metric base name (it defaults to the fully qualified class name)
-    override lazy val metricBaseName = MetricName("test")
 
     // Non-instrumented methods:
     def set(v: Int): Unit = n = v
@@ -240,7 +238,7 @@ object MetricsSpec {
     }
 
     // A gauge of the value of n
-    metrics.gauge("gauge")(get)
+    ExpandedMetricBuilder.expand("a", "gauge").asGauge("current")(get)
 
     // A cached gauge of the value of n with a 2 second TTL
     metrics.cachedGauge("cachedGauge", 2 seconds)(get)

@@ -69,8 +69,15 @@ object Dependencies {
     exclude("org.typelevel", "cats_2.11")
     exclude("io.spray", "spray-json_2.11"))
 
+  val metricsDependencies = Seq(
+    metricsScala,
+    metricsStatsd,
+    sprayHttp,
+    scalatest,
+    mockito
+  )
 
-  val googleDependencies = Seq(
+  val googleDependencies = metricsDependencies ++ Seq(
     sprayJson,
     sprayHttp,
     akkaActor,
@@ -111,7 +118,7 @@ object Dependencies {
     scalatest
   )
 
-  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ Seq(
+  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ metricsDependencies ++ Seq(
     typesafeConfig,
     spraySwagger,
     ravenLogback,
@@ -127,8 +134,6 @@ object Dependencies {
     mysqlConnector,
     liquibaseCore,
     logbackClassic,
-    metricsScala,
-    metricsStatsd,
     akkaTestkit,
     sprayTestkit,
     mockserverNetty,

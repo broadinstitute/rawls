@@ -136,11 +136,11 @@ object Boot extends App with LazyLogging {
     val submissionTimeout = util.toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
 
     val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = executionServiceConfig.getObject("readServers").map {
-        case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout))
+        case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout, metricsPrefix))
       }.toMap
 
     val executionServiceSubmitServers: Map[ExecutionServiceId, ExecutionServiceDAO] = executionServiceConfig.getObject("submitServers").map {
-      case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout))
+      case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout, metricsPrefix))
     }.toMap
 
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
@@ -150,7 +150,7 @@ object Boot extends App with LazyLogging {
       shardedExecutionServiceCluster,
       slickDataSource,
       util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
-      rawlsMetricBaseName = metricsPrefix
+      workbenchMetricBaseName = metricsPrefix
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
@@ -180,7 +180,7 @@ object Boot extends App with LazyLogging {
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val agoraConfig = conf.getConfig("methodrepo")
-    val methodRepoDAO = new HttpMethodRepoDAO(agoraConfig.getString("server"), agoraConfig.getString("path"))
+    val methodRepoDAO = new HttpMethodRepoDAO(agoraConfig.getString("server"), agoraConfig.getString("path"), metricsPrefix)
 
     val maxActiveWorkflowsTotal = conf.getInt("executionservice.maxActiveWorkflowsPerServer") * executionServiceServers.size
     val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt("executionservice.activeWorkflowHogFactor")
@@ -197,7 +197,7 @@ object Boot extends App with LazyLogging {
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
         Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
-        rawlsMetricBaseName = metricsPrefix
+        workbenchMetricBaseName = metricsPrefix
       ))
     }
 
@@ -233,14 +233,15 @@ object Boot extends App with LazyLogging {
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
-        rawlsMetricBaseName = metricsPrefix),
+        workbenchMetricBaseName = metricsPrefix),
       userServiceConstructor,
       genomicsServiceConstructor,
       statisticsServiceConstructor,
       statusServiceConstructor,
       ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
       clientSecrets.getDetails.getClientId,
-      submissionTimeout
+      submissionTimeout,
+      rawlsMetricBaseName = metricsPrefix
     ),
       "rawls-service")
 

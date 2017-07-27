@@ -39,20 +39,26 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   "MethodConfigApi" should "return 201 on create method configuration" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
       MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
-    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
+    withStatsD {
+      Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+          assertResult(newMethodConfig) {
+            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get
+          }
+          // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+          assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
+            header("Location")
+          }
         }
-        assertResult(newMethodConfig) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get
-        }
-        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
-          header("Location")
-        }
-      }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs", StatusCodes.Created.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "update the workspace last modified date on create method configuration" in withTestDataApiServices { services =>
@@ -65,11 +71,17 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
-    Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
-      }
+    withStatsD {
+      Get(testData.workspace.path) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+        }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics", StatusCodes.OK.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
@@ -205,13 +217,19 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 409 on method configuration rename when rename already exists" in withTestDataApiServices { services =>
-    Post(s"${testData.methodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
-      sealRoute(services.methodConfigRoutes) ~>
-      check {
-        assertResult(StatusCodes.Conflict) {
-          status
+    withStatsD {
+      Post(s"${testData.methodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Conflict) {
+            status
+          }
         }
-      }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}.rename", StatusCodes.Conflict.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "return 204 on method configuration rename" in withTestDataApiServices { services =>
@@ -291,13 +309,20 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the workspace last modified date on delete method configuration" in withTestDataApiServices { services =>
-    Delete(testData.methodConfig3.path(testData.workspace)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
+    withStatsD {
+      Delete(testData.methodConfig3.path(testData.workspace)) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
         }
-      }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val expected = expectedHttpRequestMetrics("delete", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig3.namespace}.${testData.methodConfig3.name}",
+        StatusCodes.NoContent.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -342,18 +367,25 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "update the workspace last modified date on update method configuration" in withTestDataApiServices { services =>
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
-    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+    withStatsD {
+      Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
         }
-      }
-    Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
-      }
+      Get(testData.workspace.path) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+        }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val expected = expectedHttpRequestMetrics("put", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}", StatusCodes.OK.intValue, 1) ++
+        expectedHttpRequestMetrics("get", s"${wsPathForRequestMetrics}", StatusCodes.OK.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
 
@@ -534,13 +566,18 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   val copyToMethodRepo = "/methodconfigs/copyToMethodRepo"
 
   it should "return 200 on copy method configuration to method repo" in withTestDataApiServices { services =>
-    Post(copyToMethodRepo, httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.methodConfigName))) ~>
-      sealRoute(services.methodConfigRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
-          status
+    withStatsD {
+      Post(copyToMethodRepo, httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.methodConfigName))) ~>
+        sealRoute(services.methodConfigRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK, response.entity.asString) {
+            status
+          }
         }
-      }
+    } { capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("post", "configurations", StatusCodes.OK.intValue, 1, Some(Subsystems.Agora))
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "return 404 on copy method configuration to method repo if config dne" in withTestDataApiServices { services =>
@@ -556,16 +593,21 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   val copyFromMethodRepo = "/methodconfigs/copyFromMethodRepo"
 
   it should "return 201 on copy method configuration from method repo" in withTestDataApiServices { services =>
-    Post(copyFromMethodRepo, httpJson(testData.methodRepoGood)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
+    withStatsD {
+      Post(copyFromMethodRepo, httpJson(testData.methodRepoGood)) ~>
+        sealRoute(services.methodConfigRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+          assertResult("testConfig1") {
+            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.name
+          }
         }
-        assertResult("testConfig1") {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.name
-        }
-      }
+    } { capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("get", s"configurations.${testData.methodRepoGood.methodRepoNamespace}.${testData.methodRepoGood.methodRepoName}.${testData.methodRepoGood.methodRepoSnapshotId}", StatusCodes.OK.intValue, 1, Some(Subsystems.Agora))
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "return 409 on copy method configuration from method repo to existing name" in withTestDataApiServices { services =>
@@ -600,13 +642,19 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 422 on copy method configuration when method repo payload is unparseable" in withTestDataApiServices { services =>
-    Post(copyFromMethodRepo, httpJson(testData.methodRepoBadPayload)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
-      check {
-        assertResult(StatusCodes.UnprocessableEntity) {
-          status
+    withStatsD {
+      Post(copyFromMethodRepo, httpJson(testData.methodRepoBadPayload)) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.UnprocessableEntity) {
+            status
+          }
         }
-      }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = s"methodconfigs.copyFromMethodRepo"
+      val expected = expectedHttpRequestMetrics("post", wsPathForRequestMetrics, StatusCodes.UnprocessableEntity.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "not allow copy method configuration from repo with library attributes in outputs by curator" in withTestDataApiServices { services =>

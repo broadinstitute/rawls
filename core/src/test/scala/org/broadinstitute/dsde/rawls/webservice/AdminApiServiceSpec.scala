@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+import spray.routing.Route
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
@@ -92,12 +93,19 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission1),
       ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission2))
 
-    Get(s"/admin/submissions") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        assertSameElements(expected, responseAs[Seq[ActiveSubmission]])
-      }
+    withStatsD {
+      Get("/admin/submissions") ~>
+        sealRoute(instrumentRequest { services.adminRoutes }) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertSameElements(expected, responseAs[Seq[ActiveSubmission]])
+        }
+    } { capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("get", "admin.submissions", StatusCodes.OK.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "return 200 when listing active submissions on deleted entities" in withConstantTestDataApiServices { services =>
@@ -221,23 +229,30 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
+    val projectName = RawlsBillingProjectName("new_project")
+    val createRequest = CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)
 
-    Put(s"/admin/billing/register/${project.projectName.value}") ~>
+    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+    Post(s"/billing", httpJson(createRequest)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Put(s"/admin/billing/${projectName.value}/user/nobody") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        Put(s"/admin/billing/${project.projectName.value}/nobody") ~>
-          sealRoute(services.adminRoutes) ~>
-          check {
-            assertResult(StatusCodes.NotFound) {
-              status
-            }
-          }
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
       }
   }
 
   it should "return 404 when adding a user to a nonexistent project" in withTestDataApiServices { services =>
-    Put(s"/admin/billing/missing_project/${testData.userOwner.userEmail.value}") ~>
+    Put(s"/admin/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -270,23 +285,34 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
+    val projectName = RawlsBillingProjectName("new_project")
+    val createRequest = CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)
 
-    Put(s"/admin/billing/register/${project.projectName.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        Delete(s"/admin/billing/${project.projectName.value}/nobody") ~>
-          sealRoute(services.adminRoutes) ~>
-          check {
-            assertResult(StatusCodes.NotFound) {
-              status
-            }
+    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+    withStatsD {
+      Post(s"/billing", httpJson(createRequest)) ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
           }
-      }
+        }
+
+      Delete(s"/admin/billing/${projectName.value}/user/nobody") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.NotFound) {
+            status
+          }
+        }
+    } { capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("post", "billing", StatusCodes.Created.intValue, 1) ++
+        expectedHttpRequestMetrics("delete", s"admin.billing.${projectName.value}.user.nobody", StatusCodes.NotFound.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "return 404 when removing a user from a nonexistent billing project" in withTestDataApiServices { services =>
-    Delete(s"/admin/billing/missing_project/${testData.userOwner.userEmail.value}") ~>
+    Delete(s"/admin/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -301,37 +327,40 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
     runAndWait(rawlsUserQuery.save(testUser))
 
-    Get(s"/admin/billing/list/${testUser.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+    withStatsD {
+      Get(s"/admin/billing/list/${testUser.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(Set.empty) {
+            responseAs[Seq[RawlsBillingProjectName]].toSet
+          }
         }
-        assertResult(Set.empty) {
-          responseAs[Seq[RawlsBillingProjectName]].toSet
-        }
-      }
 
-    createBillingProject(project1)
+      createBillingProject(project1)
 
-    Put(s"/admin/billing/${project1.projectName.value}/user/${testUser.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+      Put(s"/admin/billing/${project1.projectName.value}/user/${testUser.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
         }
-      }
 
-    Get(s"/admin/billing/list/${testUser.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+      Get(s"/admin/billing/list/${testUser.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User, CreationStatuses.Ready))) {
+            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+          }
         }
-        assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User, CreationStatuses.Ready))) {
-          responseAs[Seq[RawlsBillingProjectMembership]].toSet
-        }
-      }
+    } { capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("get", s"admin.billing.list.${testUser.userEmail.value}", StatusCodes.OK.intValue, 2) ++
+        expectedHttpRequestMetrics("put", s"admin.billing.${project1.projectName.value}.user.${testUser.userEmail.value}", StatusCodes.OK.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   def createBillingProject(project: RawlsBillingProject): Unit = {
