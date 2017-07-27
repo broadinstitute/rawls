@@ -95,18 +95,6 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
   // not interfere with user facing operations.
   import context.dispatcher
 
-    /**
-    * A monoid used for combining SubsystemStatuses.
-    * Zero is an ok status with no messages.
-    * Append uses && on the ok flag, and ++ on the messages.
-    */
-  private implicit val SubsystemStatusMonoid = new Monoid[SubsystemStatus] {
-    def combine(a: SubsystemStatus, b: SubsystemStatus): SubsystemStatus = {
-      SubsystemStatus(a.ok && b.ok, a.messages |+| b.messages)
-    }
-    def empty: SubsystemStatus = OkStatus
-  }
-
   /**
     * Contains each subsystem status along with a timestamp of when the entry was made.
     * Initialized with unknown status.
@@ -243,7 +231,6 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
 
   private def processSubsystemResult(subsystemAndResult: (Subsystem, Future[SubsystemStatus])): Unit = {
     val (subsystem, result) = subsystemAndResult
-
     result.withTimeout(futureTimeout, s"Timed out after ${futureTimeout.toString} waiting for a response from ${subsystem.toString}")
     .recover { case NonFatal(ex) =>
       failedStatus(ex.getMessage)
@@ -267,5 +254,17 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     // overall status is ok iff all subsystems are ok
     val overall = processed.forall(_._2.ok)
     StatusCheckResponse(overall, processed)
+  }
+  
+      /**
+    * A monoid used for combining SubsystemStatuses.
+    * Zero is an ok status with no messages.
+    * Append uses && on the ok flag, and ++ on the messages.
+    */
+  private implicit val SubsystemStatusMonoid = new Monoid[SubsystemStatus] {
+    def combine(a: SubsystemStatus, b: SubsystemStatus): SubsystemStatus = {
+      SubsystemStatus(a.ok && b.ok, a.messages |+| b.messages)
+    }
+    def empty: SubsystemStatus = OkStatus
   }
 }
