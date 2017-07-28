@@ -74,7 +74,7 @@ trait ManagedGroupComponent {
       }
     }
 
-    def getManagedGroupAccessInstructions(groupList: Seq[ManagedGroupRef]): ReadAction[Seq[ManagedGroupAccessInstructions]] = {
+    def getManagedGroupAccessInstructions(groupList: Set[ManagedGroupRef]): ReadAction[Seq[ManagedGroupAccessInstructions]] = {
       val managedGroupsQuery: ReadAction[Seq[ManagedGroupRecord]] = managedGroupQuery.filter(_.membersGroupName inSetBind groupList.map(_.membersGroupName.value)).result
 
       managedGroupsQuery.map { managedGroups =>

@@ -76,7 +76,7 @@ object AttributeName {
 case class WorkspaceRequest (
                               namespace: String,
                               name: String,
-                              authorizationDomain: Option[ManagedGroupRef],
+                              authorizationDomain: Set[ManagedGroupRef],
                               attributes: AttributeMap
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
@@ -87,7 +87,7 @@ case class WorkspaceRequest (
 case class Workspace(
                       namespace: String,
                       name: String,
-                      authorizationDomain: Option[ManagedGroupRef],
+                      authorizationDomain: Set[ManagedGroupRef],
                       workspaceId: String,
                       bucketName: String,
                       createdDate: DateTime,

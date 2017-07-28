@@ -120,7 +120,7 @@ class HttpGoogleServicesDAO(
 
   private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
-  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], authDomainProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
 
     // we do not make a special access group for project owners because the only member would be a single group
     // we will just use that group directly and avoid potential google problems with a group being in too many groups
@@ -128,10 +128,13 @@ class HttpGoogleServicesDAO(
       (accessLevel, RawlsGroupRef(RawlsGroupName(workspaceAccessGroupName(workspaceId, accessLevel))))
     }.toMap
 
-    val intersectionGroupRefsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroupRef]] = realm map { realmGroupRef =>
-      groupAccessLevelsAscending.map { accessLevel =>
-        (accessLevel, RawlsGroupRef(RawlsGroupName(intersectionGroupName(workspaceId, realmGroupRef.toMembersGroupRef, accessLevel))))
-      }.toMap
+    val intersectionGroupRefsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroupRef]] = {
+      if(authDomain.isEmpty) None
+      else {
+        Option(groupAccessLevelsAscending.map { accessLevel =>
+          (accessLevel, RawlsGroupRef(RawlsGroupName(intersectionGroupName(workspaceId, accessLevel))))
+        }.toMap)
+      }
     }
 
     def rollbackGroups(groupInsertTries: Iterable[Try[RawlsGroup]]) = {
@@ -150,15 +153,15 @@ class HttpGoogleServicesDAO(
       addMemberToGoogleGroup(ownerGroup, Left(RawlsUser(userInfo))).map(_ => groupsByAccess + (WorkspaceAccessLevels.Owner -> ownerGroup.copy(users = ownerGroup.users + RawlsUser(userInfo))))
     }
 
-    def insertRealmProjectOwnerIntersection: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
+    def insertAuthDomainProjectOwnerIntersection: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
       val projectOwnerGroup = groupsByAccess(WorkspaceAccessLevels.ProjectOwner)
-      val inserts = Future.traverse(realmProjectOwnerIntersection.getOrElse(Set.empty)) { userRef =>
+      val inserts = Future.traverse(authDomainProjectOwnerIntersection.getOrElse(Set.empty)) { userRef =>
         addEmailToGoogleGroup(projectOwnerGroup.groupEmail.value, toProxyFromUser(userRef.userSubjectId))
       }
 
       inserts.map { _ =>
         groupsByAccess.map {
-          case (ProjectOwner, group) => ProjectOwner -> group.copy(users = realmProjectOwnerIntersection.getOrElse(Set.empty))
+          case (ProjectOwner, group) => ProjectOwner -> group.copy(users = authDomainProjectOwnerIntersection.getOrElse(Set.empty))
           case otherwise => otherwise
         }
       }
@@ -238,7 +241,7 @@ class HttpGoogleServicesDAO(
       accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember map { _ + (ProjectOwner -> project.groups(ProjectRoles.Owner)) }
       intersectionGroupTries <- intersectionGroupInserts
       intersectionGroups <- intersectionGroupTries match {
-        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertRealmProjectOwnerIntersection map { Option(_) }
+        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertAuthDomainProjectOwnerIntersection map { Option(_) }
         case None => Future.successful(None)
       }
       bucketName <- insertBucket(accessGroups, intersectionGroups)
@@ -262,9 +265,8 @@ class HttpGoogleServicesDAO(
 
   def workspaceAccessGroupName(workspaceId: String, accessLevel: WorkspaceAccessLevel) = s"${workspaceId}-${accessLevel.toString}"
 
-  def intersectionGroupName(workspaceId: String, realmGroupRef: RawlsGroupRef, accessLevel: WorkspaceAccessLevel) = {
-    val realm = realmGroupRef.groupName.value
-    s"I_${workspaceId}-${accessLevel.toString}"
+  def intersectionGroupName(workspaceId: String, accessLevel: WorkspaceAccessLevel) = {
+    s"I_$workspaceId-${accessLevel.toString}"
   }
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long): Future[String] = {

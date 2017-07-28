@@ -361,7 +361,7 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     runAndWait(rawlsGroupQuery.save(realm))
 
     assertResult(Set(RawlsUserRef(obama.userSubjectId), RawlsUserRef(trump.userSubjectId), RawlsUserRef(clinton.userSubjectId), RawlsUserRef(bernie.userSubjectId))) {
-      runAndWait(rawlsGroupQuery.intersectGroupMembership(realm, group4))
+      runAndWait(rawlsGroupQuery.intersectGroupMembership(Set(realm, group4)))
     }
   }
 

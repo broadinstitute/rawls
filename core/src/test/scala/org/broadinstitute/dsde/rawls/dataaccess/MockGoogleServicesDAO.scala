@@ -97,14 +97,14 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
-  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
 
     def workspaceAccessGroup(workspaceId: String, accessLevel: WorkspaceAccessLevel, users: Set[RawlsUserRef]) = {
-      RawlsGroup(RawlsGroupName(s"fc-${workspaceId}-${accessLevel.toString}"), RawlsGroupEmail(s"$accessLevel@$workspaceId"), users, Set.empty)
+      RawlsGroup(RawlsGroupName(s"${workspaceId}-${accessLevel.toString}"), RawlsGroupEmail(s"$accessLevel@$workspaceId"), users, Set.empty)
     }
 
-    def intersectionGroup(workspaceId: String, realm: String, accessLevel: WorkspaceAccessLevel, users: Set[RawlsUserRef]) = {
-      RawlsGroup(RawlsGroupName(s"fc-${realm}-${workspaceId}-${accessLevel.toString}"), RawlsGroupEmail(s"$realm-$accessLevel@$workspaceId"), users, Set.empty)
+    def intersectionGroup(workspaceId: String, accessLevel: WorkspaceAccessLevel, users: Set[RawlsUserRef]) = {
+      RawlsGroup(RawlsGroupName(s"I_${workspaceId}-${accessLevel.toString}"), RawlsGroupEmail(s"I_$accessLevel@$workspaceId"), users, Set.empty)
     }
 
     val accessGroups: Map[WorkspaceAccessLevel, RawlsGroup] = groupAccessLevelsAscending.map { accessLevel =>
@@ -115,15 +115,18 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
       })
     }.toMap
 
-    val intersectionGroups: Option[Map[WorkspaceAccessLevel, RawlsGroup]] = realm map { realmGroupRef =>
-      groupAccessLevelsAscending.map { accessLevel =>
-        val users: Set[RawlsUserRef] = accessLevel match {
-          case WorkspaceAccessLevels.Owner => Set(RawlsUser(userInfo))
-          case WorkspaceAccessLevels.ProjectOwner => realmProjectOwnerIntersection.getOrElse(Set.empty)
-          case _ => Set.empty
-        }
-        accessLevel -> intersectionGroup(workspaceId, realmGroupRef.membersGroupName.value, accessLevel, users)
-      }.toMap
+    val intersectionGroups: Option[Map[WorkspaceAccessLevel, RawlsGroup]] = {
+      if(authDomain.isEmpty) None
+      else {
+        Option(groupAccessLevelsAscending.map { accessLevel =>
+          val users: Set[RawlsUserRef] = accessLevel match {
+            case WorkspaceAccessLevels.Owner => Set(RawlsUser(userInfo))
+            case WorkspaceAccessLevels.ProjectOwner => realmProjectOwnerIntersection.getOrElse(Set.empty)
+            case _ => Set.empty
+          }
+          accessLevel -> intersectionGroup(workspaceId, accessLevel, users)
+        }.toMap)
+      }
     }
 
     val googleWorkspaceInfo: GoogleWorkspaceInfo = GoogleWorkspaceInfo(s"fc-$workspaceId", accessGroups, intersectionGroups)

@@ -23,7 +23,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingEmail: String
 
   // returns bucket and group information
-  def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo]
+  def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo]
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long): Future[String]
 

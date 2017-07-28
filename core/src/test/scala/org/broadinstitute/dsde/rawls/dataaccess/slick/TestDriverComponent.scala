@@ -123,7 +123,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def makeWorkspaceWithUsers(usersByLevel: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, Set[RawlsUserRef]], groupsByLevel: Map[WorkspaceAccessLevel, Set[RawlsGroupRef]] = Map(WorkspaceAccessLevels.Owner -> Set.empty, WorkspaceAccessLevels.Write -> Set.empty, WorkspaceAccessLevels.Read -> Set.empty))(project: RawlsBillingProject,
                     name: String,
-                    realm: Option[ManagedGroupRef],
+                    authDomain: Set[ManagedGroupRef],
                     workspaceId: String,
                     bucketName: String,
                     createdDate: DateTime,
@@ -132,9 +132,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                     attributes: AttributeMap,
                     isLocked: Boolean) = {
 
-    val intersectionGroupsByLevel = realm.map { _ => usersByLevel.map { case (level, users) =>
-      level -> makeRawlsGroup(s"${project.projectName.value}/${name} IG ${level.toString}", users, groupsByLevel(level))
-    } + (ProjectOwner -> makeRawlsGroup(s"${project.projectName.value}/${name} IG ${ProjectOwner.toString}", project.groups(Owner).users, Set.empty)) }
+    val intersectionGroupsByLevel = if(authDomain.isEmpty) None else {
+      Option(usersByLevel.map { case (level, users) =>
+        level -> makeRawlsGroup(s"${project.projectName.value}/${name} IG ${level.toString}", users, groupsByLevel(level))
+      } + (ProjectOwner -> makeRawlsGroup(s"${project.projectName.value}/${name} IG ${ProjectOwner.toString}", project.groups(Owner).users, Set.empty)))
+    }
 
 
     val newAccessGroupsByLevel = usersByLevel.map { case (level, users) =>
@@ -143,7 +145,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val accessGroupsByLevel = newAccessGroupsByLevel + (ProjectOwner -> project.groups(Owner))
 
-    (Workspace(project.projectName.value, name, realm, workspaceId, bucketName, createdDate, createdDate, createdBy, attributes,
+    (Workspace(project.projectName.value, name, authDomain, workspaceId, bucketName, createdDate, createdDate, createdBy, attributes,
       accessGroupsByLevel.map { case (level, group) => level -> RawlsGroup.toRef(group) },
       intersectionGroupsByLevel.getOrElse(accessGroupsByLevel).map { case (level, group) => level -> RawlsGroup.toRef(group) }, isLocked),
 
@@ -159,7 +161,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
 
@@ -185,7 +187,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup), isLocked = true)
 
@@ -218,6 +220,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val wsName7 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSubmission")
     val wsName8 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSuccessfulSubmission")
     val wsName9 = WorkspaceName("myNamespace", "myWorkspaceToTestGrantPermissions")
+    val wsName10 = WorkspaceName("myNamespace", "myMultiGroupADWorkspace")
     val wsInterleaved = WorkspaceName("myNamespace", "myWorkspaceToTestInterleavedSubmissions")
     val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWorkspaceToTestWorkflowFailureMode")
     val workspaceToTestGrantId = UUID.randomUUID()
@@ -259,13 +262,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       AttributeName.withDefaultNS("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
-    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", None, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", wsAttrs, Map.empty, Map.empty)
+    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", Set.empty, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", wsAttrs, Map.empty, Map.empty)
 
-    val (workspace, workspaceGroups) = makeWorkspace(billingProject, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspace, workspaceGroups) = makeWorkspace(billingProject, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", None, UUID.randomUUID().toString, "aBucket3", currentTime(), currentTime(), "testUser",
+    val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", Set.empty, UUID.randomUUID().toString, "aBucket3", currentTime(), currentTime(), "testUser",
       wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)), Map.empty, Map.empty)
-    val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", None, UUID.randomUUID().toString, "aBucket4", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
+    val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", Set.empty, UUID.randomUUID().toString, "aBucket4", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
     val realm = makeManagedGroup(s"Test-Realm", Set.empty)
     val realmWsName = wsName.name + "withRealm"
@@ -283,38 +286,40 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val realm7 = makeManagedGroup(s"Test-Realm7", Set.empty)
 
-    val (workspaceWithRealm, workspaceWithRealmGroups) = makeWorkspace(billingProject, realmWsName, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceWithRealm, workspaceWithRealmGroups) = makeWorkspace(billingProject, realmWsName, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val (controlledWorkspace, controlledWorkspaceGroups) = makeWorkspace(billingProject, "test-tcga", Option(dbGapAuthorizedUsersGroup), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceWithMultiGroupAD, workspaceWithMultiGroupADGroups) = makeWorkspace(billingProject, wsName10.name, Set(realm, realm2), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val (otherWorkspaceWithRealm, otherWorkspaceWithRealmGroups) = makeWorkspace(billingProject, realmWs2Name, Option(realm2), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (controlledWorkspace, controlledWorkspaceGroups) = makeWorkspace(billingProject, "test-tcga", Set(dbGapAuthorizedUsersGroup), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+
+    val (otherWorkspaceWithRealm, otherWorkspaceWithRealmGroups) = makeWorkspace(billingProject, realmWs2Name, Set(realm2), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, without submissions
-    val (workspaceNoSubmissions, workspaceNoSubmissionsGroups) = makeWorkspace(billingProject, wsName3.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceNoSubmissions, workspaceNoSubmissionsGroups) = makeWorkspace(billingProject, wsName3.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with successful submission
-    val (workspaceSuccessfulSubmission, workspaceSuccessfulSubmissionGroups) = makeWorkspace(billingProject, wsName4.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceSuccessfulSubmission, workspaceSuccessfulSubmissionGroups) = makeWorkspace(billingProject, wsName4.name , Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with failed submission
-    val (workspaceFailedSubmission, workspaceFailedSubmissionGroups) = makeWorkspace(billingProject, wsName5.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceFailedSubmission, workspaceFailedSubmissionGroups) = makeWorkspace(billingProject, wsName5.name , Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with submitted submission
-    val (workspaceSubmittedSubmission, workspaceSubmittedSubmissionGroups) = makeWorkspace(billingProject, wsName6.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceSubmittedSubmission, workspaceSubmittedSubmissionGroups) = makeWorkspace(billingProject, wsName6.name , Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms with mixed workflows
-    val (workspaceMixedSubmissions, workspaceMixedSubmissionsGroups) = makeWorkspace(billingProject, wsName7.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceMixedSubmissions, workspaceMixedSubmissionsGroups) = makeWorkspace(billingProject, wsName7.name, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with aborted and successful submissions
-    val (workspaceTerminatedSubmissions, workspaceTerminatedSubmissionsGroups) = makeWorkspace(billingProject, wsName8.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceTerminatedSubmissions, workspaceTerminatedSubmissionsGroups) = makeWorkspace(billingProject, wsName8.name, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with a successful submission that had another submission run and fail while it was running
-    val (workspaceInterleavedSubmissions, workspaceInterleavedSubmissionsGroups) = makeWorkspace(billingProject, wsInterleaved.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceInterleavedSubmissions, workspaceInterleavedSubmissionsGroups) = makeWorkspace(billingProject, wsInterleaved.name, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with a custom workflow failure mode
-    val (workspaceWorkflowFailureMode, workspaceWorkflowFailureModeGroups) = makeWorkspace(billingProject, wsWorkflowFailureMode.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceWorkflowFailureMode, workspaceWorkflowFailureModeGroups) = makeWorkspace(billingProject, wsWorkflowFailureMode.name, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Standard workspace to test grant permissions
-    val (workspaceToTestGrant, workspaceToTestGrantGroups) = makeWorkspaceToTestGrant(billingProject, wsName9.name, None, workspaceToTestGrantId.toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceToTestGrant, workspaceToTestGrantGroups) = makeWorkspaceToTestGrant(billingProject, wsName9.name, Set.empty, workspaceToTestGrantId.toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
@@ -519,6 +524,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         testProject3.groups.values ++
         workspaceGroups ++
         workspaceWithRealmGroups ++
+        workspaceWithMultiGroupADGroups ++
         otherWorkspaceWithRealmGroups ++
         workspaceNoSubmissionsGroups ++
         workspaceSuccessfulSubmissionGroups ++
@@ -540,6 +546,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceNoAttrs,
       workspaceNoGroups,
       workspaceWithRealm,
+      workspaceWithMultiGroupAD,
       otherWorkspaceWithRealm,
       workspaceNoSubmissions,
       workspaceSuccessfulSubmission,
@@ -576,6 +583,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         rawlsGroupQuery.save(realm2.membersGroup),
         rawlsGroupQuery.save(realm2.adminsGroup),
         DBIO.sequence(workspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceWithMultiGroupADGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(controlledWorkspaceGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(otherWorkspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceNoSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
@@ -623,6 +631,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
           )
         }),
         withWorkspaceContext(workspaceWithRealm)({ context =>
+          DBIO.seq(
+            entityQuery.save(context, extraSample)
+          )
+        }),
+        withWorkspaceContext(workspaceWithMultiGroupAD)({ context =>
           DBIO.seq(
             entityQuery.save(context, extraSample)
           )
@@ -721,10 +734,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val readerGroup2 = makeRawlsGroup(s"${wsName2} READER", Set.empty)
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map.empty, Map.empty), "testBucketUrl", CreationStatuses.Ready, None, None)
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
-    val workspace2 = Workspace(wsName2.namespace, wsName2.name, None, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", Map.empty,
+    val workspace2 = Workspace(wsName2.namespace, wsName2.name, Set.empty, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup2, WorkspaceAccessLevels.Write -> writerGroup2, WorkspaceAccessLevels.Read -> readerGroup2),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup2, WorkspaceAccessLevels.Write -> writerGroup2, WorkspaceAccessLevels.Read -> readerGroup2))
 
@@ -766,7 +779,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       AttributeName.withDefaultNS("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
 

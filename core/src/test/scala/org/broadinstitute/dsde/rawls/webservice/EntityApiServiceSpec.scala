@@ -107,7 +107,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val workspaceSrcRequest = WorkspaceRequest(
       workspace2Name.namespace,
       workspace2Name.name,
-      None,
+      Set.empty,
       Map.empty
     )
 
@@ -1430,7 +1430,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   val workspace2Request = WorkspaceRequest(
     workspace2Name.namespace,
     workspace2Name.name,
-    None,
+    Set.empty,
     Map.empty
   )
 
@@ -1493,7 +1493,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val newWorkspace = WorkspaceName(testData.workspace.namespace, "my-brand-new-workspace")
 
-    val newWorkspaceCreate = WorkspaceRequest(newWorkspace.namespace, newWorkspace.name, None, Map.empty)
+    val newWorkspaceCreate = WorkspaceRequest(newWorkspace.namespace, newWorkspace.name, Set.empty, Map.empty)
 
     val copyAliquot1 = EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.aliquot1.entityType, Seq(testData.aliquot1.name))
     val copySample3 = EntityCopyDefinition(sourceWorkspace, newWorkspace, testData.sample3.entityType, Seq(testData.sample3.name))
@@ -1641,14 +1641,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     runAndWait(rawlsGroupQuery.save(newRealm.adminsGroup))
     runAndWait(managedGroupQuery.createManagedGroup(newRealm))
 
-    val wrongRealmCloneRequest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "copy_add_realm", Option(newRealm), Map.empty)
+    val wrongRealmCloneRequest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "copy_add_realm", Set(newRealm), Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(wrongRealmCloneRequest)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        assertResult(Some(ManagedGroup.toRef(newRealm))) {
+        assertResult(Set(ManagedGroup.toRef(newRealm))) {
           responseAs[Workspace].authorizationDomain
         }
       }
@@ -1678,6 +1678,86 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 204 when copying entities from an auth-domain protected workspace into one with a compatible auth-domain" in withTestDataApiServices { services =>
+    val srcWorkspace = testData.workspaceWithRealm
+    val srcWorkspaceName = WorkspaceName(testData.workspaceWithRealm.namespace, "source_ws")
+
+    val authDomain = Set(ManagedGroupRef(testData.dbGapAuthorizedUsersGroup.membersGroup.groupName))
+
+    val x = WorkspaceRequest(namespace = testData.workspaceWithRealm.namespace, name = "source_ws", authDomain, Map.empty)
+    Post("/workspaces", x) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+        assertResult(authDomain) {
+          responseAs[Workspace].authorizationDomain
+        }
+      }
+
+    val destCloneRequest = WorkspaceRequest(namespace = testData.workspaceWithRealm.namespace, name = "copy_of_source_ws", authDomain, Map.empty)
+    Post(s"/workspaces/${srcWorkspaceName.namespace}/source_ws/clone", httpJson(destCloneRequest)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+        assertResult(authDomain) {
+          responseAs[Workspace].authorizationDomain
+        }
+      }
+
+    Post(s"/workspaces/${srcWorkspaceName.namespace}/${srcWorkspaceName.name}/entities", httpJson(z1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+      }
+
+    val destWorkspaceName = destCloneRequest.toWorkspaceName
+
+    val copyDef = EntityCopyDefinition(srcWorkspaceName, destWorkspaceName, "Sample", Seq("z1"))
+    Post("/workspaces/entities/copy", httpJson(copyDef)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+  }
+
+  it should "return 422 when copying entities from an auth domain protected workspace with only a partial match of AD groups" in withTestDataApiServices { services =>
+    val srcWorkspace = testData.workspaceWithMultiGroupAD
+    val destWorkspace = testData.workspaceWithRealm
+    val srcWorkspaceName = srcWorkspace.toWorkspaceName
+
+    // add an entity to a workspace with a Realm
+
+    Post(s"${srcWorkspace.path}/entities", httpJson(z1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+        assertResult(z1) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(srcWorkspace), z1.entityType, z1.name)).get
+        }
+      }
+
+    val destWorkspaceWrongRealmName = destWorkspace.toWorkspaceName
+
+    val wrongRealmCopyDef = EntityCopyDefinition(srcWorkspaceName, destWorkspaceWrongRealmName, "Sample", Seq("z1"))
+    Post("/workspaces/entities/copy", httpJson(wrongRealmCopyDef)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.UnprocessableEntity) {
+          status
+        }
+      }
+  }
+
   it should "not allow dots in user-defined strings" in withTestDataApiServices { services =>
     val dotSample = Entity("sample.with.dots.in.name", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
     Post(s"${testData.workspace.path}/entities", httpJson(dotSample)) ~>
@@ -1696,7 +1776,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set())
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set())
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
 

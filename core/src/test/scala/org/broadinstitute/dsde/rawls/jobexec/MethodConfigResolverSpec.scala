@@ -57,7 +57,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val intOptName = "w1.t1.int_opt"
   val intArrayName = "w1.int_array"
 
-  val workspace = Workspace("workspaces", "test_workspace", None, UUID.randomUUID().toString(), "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
+  val workspace = Workspace("workspaces", "test_workspace", Set.empty, UUID.randomUUID().toString(), "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
   val sampleGood = Entity("sampleGood", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(1)))
   val sampleGood2 = Entity("sampleGood2", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(2)))
