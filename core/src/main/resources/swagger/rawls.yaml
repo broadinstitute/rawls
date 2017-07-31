@@ -1828,6 +1828,11 @@ paths:
           name: entityName
           required: true
           type: string
+        - in: body
+          description: Expression
+          name: expression
+          required: true
+          type: string
       security:
         - authorization:
             - openid
