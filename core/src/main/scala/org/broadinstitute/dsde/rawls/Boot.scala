@@ -70,6 +70,7 @@ object Boot extends App with LazyLogging {
         case _ => basePrefix
       }
     }
+    val metricsApiKey = metricsConf.getString("apiKey")
 
     metricsConf.getObjectOption("reporters") match {
       case Some(configObject) =>
@@ -277,9 +278,10 @@ object Boot extends App with LazyLogging {
     }
   }
 
-  def startStatsDReporter(host: String, port: Int, period: java.time.Duration): Unit = {
+  def startStatsDReporter(host: String, apiKey: String, port: Int, period: java.time.Duration): Unit = {
     logger.info(s"Starting statsd reporter writing to [$host:$port] with period [${period.getSeconds} seconds]")
     val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
+      .prefixedWith(apiKey)
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .build(host, port)
