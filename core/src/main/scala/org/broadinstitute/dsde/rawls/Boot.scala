@@ -278,7 +278,7 @@ object Boot extends App with LazyLogging {
     }
   }
 
-  def startStatsDReporter(host: String, metricsApiKey: String, port: Int, period: java.time.Duration): Unit = {
+  def startStatsDReporter(host: String, port: Int, metricsApiKey: String, period: java.time.Duration): Unit = {
     logger.info(s"Starting statsd reporter writing to [$host:$port] with period [${period.toMillis} ms]")
     val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
       .prefixedWith(metricsApiKey)
