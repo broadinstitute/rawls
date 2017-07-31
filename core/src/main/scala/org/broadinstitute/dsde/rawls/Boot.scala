@@ -80,7 +80,7 @@ object Boot extends App with LazyLogging {
               statsDConf.getString("host"),
               statsDConf.getInt("port"),
               statsDConf.getDuration("period"),
-              apiKey = Some(statsDConf.getString("apiKey")))
+              apiKey = statsDConf.getStringOption("apiKey"))
           case (other, _) =>
             logger.warn(s"Unknown metrics backend: $other")
         }
