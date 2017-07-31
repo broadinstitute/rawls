@@ -39,6 +39,7 @@ object Dependencies {
   val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev14-" + googleV)
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev17-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
+  val googleRpc: ModuleID =               "com.google.api.grpc"    % "grpc-google-common-protos"                 % "0.1.15"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
   val metricsScala: ModuleID =       "nl.grons"              %% "metrics-scala"    % "3.5.6"
@@ -137,6 +138,7 @@ object Dependencies {
     akkaTestkit,
     sprayTestkit,
     mockserverNetty,
-    mockito
+    mockito,
+    googleRpc
   )
 }
