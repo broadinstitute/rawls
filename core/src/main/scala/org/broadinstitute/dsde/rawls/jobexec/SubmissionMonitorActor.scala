@@ -89,13 +89,12 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       // Before terminating this actor, run one more CheckCurrentWorkflowStatusCounts pass to ensure
       // we have accurate metrics at the time of actor termination.
       if (terminateActor) {
-        self ! CheckCurrentWorkflowStatusCounts
-        stop(self)
+        checkCurrentWorkflowStatusCounts(false) pipeTo parent andThen { case _ => stop(self) }
       }
       else scheduleNextMonitorPass
     case CheckCurrentWorkflowStatusCounts =>
       logger.debug(s"check current workflow status counts for submission $submissionId")
-      checkCurrentWorkflowStatusCounts pipeTo parent
+      checkCurrentWorkflowStatusCounts(true) pipeTo parent
 
     case Status.Failure(t) => throw t // an error happened in some future, let the supervisor handle it
   }
@@ -388,7 +387,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     })
   }
 
-  def checkCurrentWorkflowStatusCounts(implicit executionContext: ExecutionContext): Future[SaveCurrentWorkflowStatusCounts] = {
+  def checkCurrentWorkflowStatusCounts(reschedule: Boolean)(implicit executionContext: ExecutionContext): Future[SaveCurrentWorkflowStatusCounts] = {
     datasource.inTransaction { dataAccess =>
       for {
         wfStatuses <- dataAccess.workflowQuery.countWorkflowsForSubmissionByQueueStatus(submissionId)
@@ -403,6 +402,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       // Recover on errors since this just affects metrics and we don't want it to blow up the whole actor if it fails
       logger.error("Error occurred checking current workflow status counts", e)
       (Map.empty[WorkflowStatus, Int], Map.empty[SubmissionStatus, Int])
-    }.map(SaveCurrentWorkflowStatusCounts.tupled)
+    }.map { case (wfCounts, subCounts) =>
+      SaveCurrentWorkflowStatusCounts(wfCounts, subCounts, reschedule)
+    }
   }
 }

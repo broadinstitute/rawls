@@ -31,7 +31,7 @@ object SubmissionSupervisor {
     * This is used for instrumentation.
     */
   case object CheckCurrentWorkflowStatusCounts
-  case class SaveCurrentWorkflowStatusCounts(workflowStatusCounts: Map[WorkflowStatus, Int], submissionStatusCounts: Map[SubmissionStatus, Int])
+  case class SaveCurrentWorkflowStatusCounts(workflowStatusCounts: Map[WorkflowStatus, Int], submissionStatusCounts: Map[SubmissionStatus, Int], reschedule: Boolean)
 
   def props(executionServiceCluster: ExecutionServiceCluster,
             datasource: SlickDataSource,
@@ -68,10 +68,12 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
       scheduleNextCheckCurrentWorkflowStatus(child)
       initGauge(workspaceContext, submissionId)
 
-    case SaveCurrentWorkflowStatusCounts(workflowStatusCounts, submissionStatusCounts) =>
+    case SaveCurrentWorkflowStatusCounts(workflowStatusCounts, submissionStatusCounts, reschedule) =>
       this.currentWorkflowStatusCounts = workflowStatusCounts
       this.currentSubmissionStatusCounts = submissionStatusCounts
-      scheduleNextCheckCurrentWorkflowStatus(sender)
+      if (reschedule) {
+        scheduleNextCheckCurrentWorkflowStatus(sender)
+      }
   }
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential): ActorRef = {
