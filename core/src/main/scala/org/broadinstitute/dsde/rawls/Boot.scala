@@ -278,12 +278,12 @@ object Boot extends App with LazyLogging {
   }
 
   def startStatsDReporter(host: String, port: Int, period: java.time.Duration): Unit = {
-    logger.info(s"Starting statsd reporter writing to [$host:$port] with period [${period.getSeconds} seconds]")
+    logger.info(s"Starting statsd reporter writing to [$host:$port] with period [${period.toMillis} ms]")
     val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .build(host, port)
-    reporter.start(period.getSeconds, period.getSeconds, TimeUnit.SECONDS)
+    reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
   startup()
