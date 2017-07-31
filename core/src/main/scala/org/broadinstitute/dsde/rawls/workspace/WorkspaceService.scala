@@ -770,8 +770,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       val membersWithSharePermission = actualShareChangesToMake.filter { case (_, canShare) => canShare.isDefined }
 
-      if(membersWithSharePermission.nonEmpty && userAccessLevel < WorkspaceAccessLevels.Owner) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the share permissions of users unless you are a workspace owner. Please correct these entries: $membersWithHigherAccessLevelThanGranter"))
+      if(membersWithSharePermission.exists(x => x._2.getOrElse(false)) && userAccessLevel < WorkspaceAccessLevels.Owner) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the share permissions of users unless you are a workspace owner. Please correct these entries: $membersWithSharePermission"))
       }
 
       val actualChangesToMakeByMember = actualAccessChangesToMake.toMap
