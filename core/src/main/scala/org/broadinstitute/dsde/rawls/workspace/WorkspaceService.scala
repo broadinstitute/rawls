@@ -768,10 +768,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not grant higher access than your own access level. Please correct these entries: $membersWithHigherAccessLevelThanGranter"))
       }
 
-      val membersWithSharePermission = actualShareChangesToMake.filter { case (_, canShare) => canShare.isDefined }
+      val membersWithSharePermissionGiven = actualShareChangesToMake.filter { case (_, canShare) => canShare.getOrElse(false) }
 
-      if(membersWithSharePermission.exists{ case (_, canShare) => canShare.getOrElse(false)} && userAccessLevel < WorkspaceAccessLevels.Owner) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the share permissions of users unless you are a workspace owner. Please correct these entries: $membersWithSharePermission"))
+      if(membersWithSharePermissionGiven.nonEmpty && userAccessLevel < WorkspaceAccessLevels.Owner) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the share permissions of users unless you are a workspace owner. Please correct these entries: $membersWithSharePermissionGiven"))
       }
 
       val actualChangesToMakeByMember = actualAccessChangesToMake.toMap
