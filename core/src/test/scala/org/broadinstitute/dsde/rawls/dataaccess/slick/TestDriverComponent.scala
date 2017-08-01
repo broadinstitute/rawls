@@ -251,8 +251,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       WorkspaceAccessLevels.Read -> Set.empty
     ),Map(
       WorkspaceAccessLevels.Owner -> Set.empty,
-      WorkspaceAccessLevels.Write -> Set.empty,
-      WorkspaceAccessLevels.Read -> Set(dbGapAuthorizedUsersGroup.membersGroup)
+      WorkspaceAccessLevels.Write -> Set(dbGapAuthorizedUsersGroup.membersGroup),
+      WorkspaceAccessLevels.Read -> Set.empty
     ))_
 
     val wsAttrs = Map(
