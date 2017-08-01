@@ -87,6 +87,8 @@ object Boot extends App with LazyLogging {
           }
         case None => logger.info("No metrics reporters defined")
       }
+    } else {
+      logger.info("Metrics reporting is disabled.")
     }
 
     val jsonFactory = JacksonFactory.getDefaultInstance
