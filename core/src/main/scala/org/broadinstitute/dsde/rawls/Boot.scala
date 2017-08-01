@@ -71,20 +71,22 @@ object Boot extends App with LazyLogging {
       }
     }
 
-    metricsConf.getObjectOption("reporters") match {
-      case Some(configObject) =>
-        configObject.entrySet.map(_.toTuple).foreach {
-          case ("statsd", conf: ConfigObject) =>
-            val statsDConf = conf.toConfig
-            startStatsDReporter(
-              statsDConf.getString("host"),
-              statsDConf.getInt("port"),
-              statsDConf.getDuration("period"),
-              apiKey = statsDConf.getStringOption("apiKey"))
-          case (other, _) =>
-            logger.warn(s"Unknown metrics backend: $other")
-        }
-      case None => logger.info("No metrics reporters defined")
+    if (metricsConf.getBooleanOption("enabled").getOrElse(false)) {
+      metricsConf.getObjectOption("reporters") match {
+        case Some(configObject) =>
+          configObject.entrySet.map(_.toTuple).foreach {
+            case ("statsd", conf: ConfigObject) =>
+              val statsDConf = conf.toConfig
+              startStatsDReporter(
+                statsDConf.getString("host"),
+                statsDConf.getInt("port"),
+                statsDConf.getDuration("period"),
+                apiKey = statsDConf.getStringOption("apiKey"))
+            case (other, _) =>
+              logger.warn(s"Unknown metrics backend: $other")
+          }
+        case None => logger.info("No metrics reporters defined")
+      }
     }
 
     val jsonFactory = JacksonFactory.getDefaultInstance
