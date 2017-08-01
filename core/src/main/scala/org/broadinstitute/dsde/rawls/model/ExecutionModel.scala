@@ -388,6 +388,7 @@ object WorkflowStatuses {
 object SubmissionStatuses {
   val activeStatuses: Seq[SubmissionStatus] = Seq(Accepted, Evaluating, Submitting, Submitted, Aborting)
   val terminalStatuses: Seq[SubmissionStatus] = Seq(Aborted, Done)
+  val allStatuses: Seq[SubmissionStatus] = Seq(Accepted, Evaluating, Submitting, Submitted, Aborting, Aborted, Done)
 
   sealed trait SubmissionStatus extends RawlsEnumeration[SubmissionStatus] {
     def isTerminated = {
