@@ -35,7 +35,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
   "Retry" should "retry 3 times by default" in {
     val testable = new TestRetry(system, setUpMockLogger)
 
-    val result = testable.retry()(() => testable.failure)
+    val result = testable.retry()(_ => testable.failure)
 
     // result should be a failure
     // invocationCount should be 4 (1 initial run plus 3 retries)
@@ -56,7 +56,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
   it should "not retry upon success" in {
     val testable = new TestRetry(system, setUpMockLogger)
 
-    val result = testable.retry()(() => testable.success)
+    val result = testable.retry()(_ => testable.success)
 
     // result should a success
     // invocationCount should be 1
@@ -71,7 +71,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
   it should "not retry if the predicate returns false" in {
     val testable = new TestRetry(system, setUpMockLogger)
 
-    val result = testable.retry(_ => false)(() => testable.failure)
+    val result = testable.retry(_ => false)(_ => testable.failure)
 
     // result should be a failure
     // invocationCount should be 1
@@ -88,7 +88,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
     val testable = new TestRetry(system, setUpMockLogger)
     val customLogMsg = "custom"
 
-    val result = testable.retry(failureLogMessage = customLogMsg)(() => testable.failure)
+    val result = testable.retry(failureLogMessage = customLogMsg)(_ => testable.failure)
 
     // result should be a failure
     // invocationCount should be 4 (1 initial run plus 3 retries)
@@ -111,7 +111,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
 
     val testable = new TestRetry(system, setUpMockLogger)
 
-    val result = testable.retryExponentially()(() => testable.failure)
+    val result = testable.retryExponentially()(_ => testable.failure)
 
     // result should be a failure
     // invocationCount should be 7 (1 initial run plus 6 retries)
@@ -127,7 +127,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
   it should "retry until a success" in {
     val testable = new TestRetry(system, setUpMockLogger)
 
-    val result = testable.retryUntilSuccessOrTimeout()(100 milliseconds, 1 minute)(() => testable.failureNTimes(10))
+    val result = testable.retryUntilSuccessOrTimeout()(100 milliseconds, 1 minute)(_ => testable.failureNTimes(10))
 
     // result should be a success
     // invocationCount should be 11 (10 failures and 1 success)
@@ -142,7 +142,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
   it should "retry until a timeout" in {
     val testable = new TestRetry(system, setUpMockLogger)
 
-    val result = testable.retryUntilSuccessOrTimeout()(100 milliseconds, 1 second)(() => testable.failure)
+    val result = testable.retryUntilSuccessOrTimeout()(100 milliseconds, 1 second)(_ => testable.failure)
 
     // result should be a failure
     // invocationCounts should be 11

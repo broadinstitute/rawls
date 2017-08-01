@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import spray.client.pipelining._
 import spray.http.{BodyPart, MultipartFormData}
 import spray.httpx.SprayJsonSupport._
+import spray.httpx.unmarshalling.FromResponseUnmarshaller
 import spray.json.DefaultJsonProtocol._
 import spray.json.JsObject
 
@@ -32,45 +33,42 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
     val timeout = Timeout(submissionTimeout)
     val url = executionServiceURL+"/workflows/v1/batch"
 
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedGzSendReceive(timeout) ~> unmarshal[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]]
+    val pipeline = addAuthHeader(userInfo) ~> instrumentedGzSendReceive(timeout, 0) ~> unmarshal[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]]
     val formData = Map("workflowSource" -> BodyPart(wdl), "workflowInputs" -> BodyPart(inputs.mkString("[", ",", "]"))) ++ options.map("workflowOptions" -> BodyPart(_))
     pipeline(Post(url, MultipartFormData(formData)))
   }
 
+  private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo, retryCount: Int = 0) =
+    addAuthHeader(userInfo) ~> instrumentedGzSendReceive(retryCount) ~> unmarshal[A]
+
   override def status(id: String, userInfo: UserInfo): Future[ExecutionServiceStatus] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/status"
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedGzSendReceive ~> unmarshal[ExecutionServiceStatus]
-    retry(when500) { () => pipeline(Get(url)) }
+    retry(when500) { count => pipeline[ExecutionServiceStatus](userInfo, count) apply Get(url) }
   }
 
   override def callLevelMetadata(id: String, userInfo: UserInfo): Future[JsObject] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/metadata"
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedGzSendReceive ~> unmarshal[JsObject]
-    retry(when500) { () => pipeline(Get(url)) }
+    retry(when500) { count => pipeline[JsObject](userInfo, count) apply Get(url) }
   }
 
   override def outputs(id: String, userInfo: UserInfo): Future[ExecutionServiceOutputs] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/outputs"
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedGzSendReceive ~> unmarshal[ExecutionServiceOutputs]
-    retry(when500) { () => pipeline(Get(url)) }
+    retry(when500) { count => pipeline[ExecutionServiceOutputs](userInfo, count) apply Get(url) }
   }
 
   override def logs(id: String, userInfo: UserInfo): Future[ExecutionServiceLogs] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/logs"
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedGzSendReceive ~> unmarshal[ExecutionServiceLogs]
-    retry(when500) { () => pipeline(Get(url)) }
+    retry(when500) { count => pipeline[ExecutionServiceLogs](userInfo, count) apply Get(url) }
   }
 
   override def abort(id: String, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/abort"
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedGzSendReceive ~> unmarshal[ExecutionServiceStatus]
-    retry(when500) { () => toFutureTry(pipeline(Post(url))) }
+    retry(when500) { count => toFutureTry(pipeline[ExecutionServiceStatus](userInfo, count) apply Post(url)) }
   }
 
   override def version(userInfo: UserInfo): Future[ExecutionServiceVersion] = {
     val url = executionServiceURL + s"/engine/v1/version"
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedGzSendReceive ~> unmarshal[ExecutionServiceVersion]
-    retry(when500) { () => pipeline(Get(url)) }
+    retry(when500) { count => pipeline[ExecutionServiceVersion](userInfo, count) apply Get(url) }
   }
 
   private def when500( throwable: Throwable ): Boolean = {

@@ -33,11 +33,11 @@ object SprayClientUtils {
   /**
     * Instruments the provided sendReceive by updating a given request counter and timer.
     */
-  def instrument(sendReceive: SendReceive)(implicit requestCounter: (HttpRequest, HttpResponse) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
+  def instrument(sendReceive: SendReceive, retryCount: Int = 0)(implicit requestCounter: (HttpRequest, HttpResponse, Boolean) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
     request => (sendReceive andThen { future =>
       val start = System.currentTimeMillis()
       future.andThen { case Success(response) =>
-        requestCounter(request, response) += 1
+        requestCounter(request, response, retryCount != 0) += 1
         requestTimer(request, response).update(System.currentTimeMillis() - start, TimeUnit.MILLISECONDS)
       }
     })(request)
@@ -45,18 +45,18 @@ object SprayClientUtils {
   /**
     * Instruments the default sendReceive by updating a given request counter and timer.
     */
-  def instrumentedSendReceive(implicit requestCounter: (HttpRequest, HttpResponse) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
-    instrument(sendReceive)
+  def instrumentedSendReceive(retryCount: Int = 0)(implicit requestCounter: (HttpRequest, HttpResponse, Boolean) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
+    instrument(sendReceive, retryCount)
 
   /**
     * Instruments [[gzSendReceive]] by updating a given request counter and timer.
     */
-  def instrumentedGzSendReceive(implicit requestCounter: (HttpRequest, HttpResponse) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
-    instrument(gzSendReceive)
+  def instrumentedGzSendReceive(retryCount: Int = 0)(implicit requestCounter: (HttpRequest, HttpResponse, Boolean) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
+    instrument(gzSendReceive, retryCount)
 
   /**
     * Instruments [[gzSendReceive(timeout)]] by updating a given request counter and timer.
     */
-  def instrumentedGzSendReceive(timeout: Timeout)(implicit requestCounter: (HttpRequest, HttpResponse) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
-    instrument(gzSendReceive(timeout))
+  def instrumentedGzSendReceive(timeout: Timeout, retryCount: Int)(implicit requestCounter: (HttpRequest, HttpResponse, Boolean) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, executionContext: ExecutionContext): SendReceive =
+    instrument(gzSendReceive(timeout), retryCount)
 }

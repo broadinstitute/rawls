@@ -13,6 +13,7 @@ import spray.client.pipelining._
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
 import spray.httpx.UnsuccessfulResponseException
+import spray.httpx.unmarshalling.FromResponseUnmarshaller
 import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -29,16 +30,18 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
   private lazy implicit val baseMetricBuilder: ExpandedMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Agora)
 
+  private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo, retryCount: Int = 0) =
+    addAuthHeader(userInfo) ~> instrumentedSendReceive(retryCount) ~> unmarshal[A]
+
+
   private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedSendReceive ~> unmarshal[Option[AgoraEntity]]
-    retry(when500) { () => pipeline(Get(url)) } recover {
+    retry(when500) { count => pipeline[Option[AgoraEntity]](userInfo, count) apply Get(url) } recover {
       case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
     }
   }
 
   private def postAgoraEntity( url: String, agoraEntity: AgoraEntity, userInfo: UserInfo): Future[AgoraEntity] = {
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedSendReceive ~> unmarshal[AgoraEntity]
-    retry(when500) { () => pipeline(Post(url, agoraEntity)) }
+    retry(when500) { count => pipeline[AgoraEntity](userInfo, count) apply Post(url, agoraEntity) }
   }
 
   override def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {

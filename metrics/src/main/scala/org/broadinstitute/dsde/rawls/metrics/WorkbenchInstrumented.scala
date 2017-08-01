@@ -77,8 +77,8 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
       .expand(HttpResponseStatusCodeMetricKey, httpResponse.status)
   }
 
-  protected implicit def httpRequestCounter(implicit builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => Counter =
-    httpRequestMetricBuilder(builder)(_, _).asCounter("request")
+  protected implicit def httpRequestCounter(implicit builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse, Boolean) => Counter =
+    (request, response, retry) => httpRequestMetricBuilder(builder)(request, response).asCounter(if (retry) "retry" else "request")
 
   protected implicit def httpRequestTimer(implicit builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => Timer =
     httpRequestMetricBuilder(builder)(_, _).asTimer("latency")

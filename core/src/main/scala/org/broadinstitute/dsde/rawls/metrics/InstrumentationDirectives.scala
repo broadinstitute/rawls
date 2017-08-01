@@ -10,7 +10,7 @@ trait InstrumentationDirectives extends RawlsInstrumented {
   def instrumentRequest: Directive0 = requestInstance flatMap { request =>
     val timeStamp = System.currentTimeMillis
     mapHttpResponse { response =>
-      httpRequestCounter(ExpandedMetricBuilder.empty)(request, response).inc()
+      httpRequestCounter(ExpandedMetricBuilder.empty)(request, response, false).inc()
       httpRequestTimer(ExpandedMetricBuilder.empty)(request, response).update(System.currentTimeMillis - timeStamp, TimeUnit.MILLISECONDS)
       response
     }

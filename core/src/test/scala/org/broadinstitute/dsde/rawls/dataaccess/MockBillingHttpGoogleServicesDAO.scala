@@ -45,7 +45,8 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     billingPemEmail,
     billingPemFile,
     billingEmail,
-    bucketLogsMaxAge)(system, executionContext) {
+    bucketLogsMaxAge,
+    workbenchMetricBaseName = "test")(system, executionContext) {
 
   private var token: String = null
   private var tokenDate: DateTime = null
