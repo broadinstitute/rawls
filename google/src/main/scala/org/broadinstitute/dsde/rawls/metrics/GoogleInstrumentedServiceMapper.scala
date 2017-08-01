@@ -7,10 +7,13 @@ import com.google.api.services.pubsub.model.{Empty => PubSubEmpty, _}
 import com.google.api.services.storage.model._
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService._
 
+import scala.annotation.implicitNotFound
+
 /**
   * Typeclass which maps a Google request type (e.g. Topic, Bucket, etc) to a specific value of the
   * [[GoogleInstrumentedService]] enumeration.
   */
+@implicitNotFound(msg = "Cannot map type ${A} to a GoogleInstrumentedService. Please provide one explicitly.")
 sealed trait GoogleInstrumentedServiceMapper[A] {
   def service: GoogleInstrumentedService
 }

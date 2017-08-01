@@ -29,17 +29,18 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
   private implicit lazy val baseMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Cromwell)
 
+  private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo, retryCount: Int = 0) =
+    addAuthHeader(userInfo) ~> instrumentedGzSendReceive(retryCount) ~> unmarshal[A]
+
+  private def pipelineWithTimeout[A: FromResponseUnmarshaller](userInfo: UserInfo, timeout: Timeout, retryCount: Int = 0) =
+    addAuthHeader(userInfo) ~> instrumentedGzSendReceive(timeout, retryCount) ~> unmarshal[A]
+
   override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]] = {
     val timeout = Timeout(submissionTimeout)
     val url = executionServiceURL+"/workflows/v1/batch"
-
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedGzSendReceive(timeout, 0) ~> unmarshal[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]]
     val formData = Map("workflowSource" -> BodyPart(wdl), "workflowInputs" -> BodyPart(inputs.mkString("[", ",", "]"))) ++ options.map("workflowOptions" -> BodyPart(_))
-    pipeline(Post(url, MultipartFormData(formData)))
+    pipelineWithTimeout[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]](userInfo, timeout) apply (Post(url, MultipartFormData(formData)))
   }
-
-  private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo, retryCount: Int = 0) =
-    addAuthHeader(userInfo) ~> instrumentedGzSendReceive(retryCount) ~> unmarshal[A]
 
   override def status(id: String, userInfo: UserInfo): Future[ExecutionServiceStatus] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/status"
