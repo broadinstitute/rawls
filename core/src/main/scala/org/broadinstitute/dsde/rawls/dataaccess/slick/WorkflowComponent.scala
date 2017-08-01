@@ -9,6 +9,7 @@ import cats.instances.map._
 import cats.syntax.foldable._
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceId, SlickWorkspaceContext}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
@@ -43,7 +44,7 @@ trait WorkflowComponent {
     with EntityComponent
     with SubmissionComponent
     with AttributeComponent
-    with RawlsUserComponent =>
+    with JndiDirectoryDAO =>
 
   import driver.api._
 

@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
 
@@ -10,7 +11,7 @@ case class RawlsBillingProjectOperationRecord(projectName: String, operationName
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent
-    with RawlsUserComponent
+    with JndiDirectoryDAO
     with RawlsGroupComponent =>
 
   import driver.api._
@@ -141,22 +142,6 @@ trait RawlsBillingProjectComponent {
       query.result.map(_.map { case (project, projectGroup) =>
         RawlsBillingProjectMembership(RawlsBillingProjectName(project.projectName), ProjectRoles.withName(projectGroup.role), CreationStatuses.withName(project.creationStatus), project.message)
       })
-    }
-
-    // includes users who are not in any billing projects
-    def loadAllUsersAndTheirProjects: ReadAction[Map[RawlsUser, Iterable[RawlsBillingProjectName]]] = {
-      val usersAndProjects = for {
-        (project, user) <- rawlsBillingProjectQuery join rawlsBillingProjectGroupQuery on (_.projectName === _.projectName) join
-          groupUsersQuery on (_._2.groupName === _.groupName) joinRight rawlsUserQuery on (_._2.userSubjectId === _.userSubjectId)
-      } yield (user, project map (_._1._1))
-
-      usersAndProjects.result.map { results =>
-        results.groupBy { case (userRec, optProjectRec) => userRec } map {
-          case (userRec, userAndProjectOps) =>
-            val projects = userAndProjectOps.collect { case (_, Some(projectRec)) => RawlsBillingProjectName(projectRec.projectName) }
-            rawlsUserQuery.unmarshalRawlsUser(userRec) -> projects
-        }
-      }
     }
 
     /**

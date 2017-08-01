@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionParser
 import slick.driver.JdbcProfile
 
 trait DataAccess
   extends PendingBucketDeletionComponent
-  with RawlsUserComponent
   with RawlsGroupComponent
   with RawlsBillingProjectComponent
   with WorkspaceComponent
@@ -16,7 +16,9 @@ trait DataAccess
   with WorkflowComponent
   with ManagedGroupComponent
   with ExprEvalComponent
-  with SlickExpressionParser {
+  with SlickExpressionParser
+  with JndiDirectoryDAO {
+
 
   this: DriverComponent =>
 
@@ -55,7 +57,6 @@ trait DataAccess
       TableQuery[ManagedGroupTable].delete andThen                // FK to group
       TableQuery[RawlsBillingProjectTable].delete andThen
       TableQuery[RawlsGroupTable].delete andThen
-      TableQuery[RawlsUserTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen
       TableQuery[SubmissionAuditStatusTable].delete andThen
       TableQuery[PendingBucketDeletionTable].delete andThen

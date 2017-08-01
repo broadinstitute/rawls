@@ -55,7 +55,6 @@ object UserService {
   case class AdminDeleteUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class AdminAddToLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case class AdminRemoveFromLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
-  case object AdminListUsers extends UserServiceMessage
   case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
 
@@ -118,7 +117,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminDeleteUser(userRef) => asFCAdmin { deleteUser(userRef) } pipeTo sender
     case AdminAddToLDAP(userSubjectId) => asFCAdmin { addToLDAP(userSubjectId) } pipeTo sender
     case AdminRemoveFromLDAP(userSubjectId) => asFCAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
-    case AdminListUsers => asFCAdmin { listUsers() } pipeTo sender
     case ListGroupsForUser(userEmail) => listGroupsForUser(userEmail) pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
@@ -233,20 +231,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  import spray.json.DefaultJsonProtocol._
-  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsUserInfoListFormat
-
-  def listUsers(): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.loadAllUsersAndTheirProjects map { projectsByUser =>
-        val userInfoList = projectsByUser map {
-          case (user, projectNames) => RawlsUserInfo(user, projectNames.toSeq)
-        }
-        RequestComplete(RawlsUserInfoList(userInfoList.toSeq))
-      }
-    }
-  }
-
   def getUserGroup(rawlsGroupRef: RawlsGroupRef): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsGroupQuery.loadGroupIfMember(rawlsGroupRef, RawlsUser(userInfo)) map {
@@ -332,14 +316,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def deleteUserFromDB(userRef: RawlsUserRef): Future[Int] = {
+  private def deleteUserFromDB(userRef: RawlsUserRef): Future[Unit] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsUserQuery.findUserBySubjectId(userRef.userSubjectId.value).delete
-    } flatMap {
-      case 1 => Future.successful(1)
-      case rowsDeleted =>
-        val error = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Expected to delete 1 row from user table, but deleted $rowsDeleted"))
-        Future.failed(error)
+      dataAccess.rawlsUserQuery.deleteUser(userRef.userSubjectId)
     }
   }
 
@@ -797,7 +776,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield savedGroup
   }
 
-  private def loadMemberUsersAndGroups(memberList: RawlsGroupMemberList, dataAccess: DataAccess): ReadAction[(Set[RawlsUser], Set[RawlsGroup])] = {
+  private def loadMemberUsersAndGroups(memberList: RawlsGroupMemberList, dataAccess: DataAccess): ReadWriteAction[(Set[RawlsUser], Set[RawlsGroup])] = {
     val userQueriesByEmail = for {
       email <- memberList.userEmails.getOrElse(Seq.empty)
     } yield dataAccess.rawlsUserQuery.loadUserByEmail(RawlsUserEmail(email)).map((email, _))

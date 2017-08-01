@@ -8,6 +8,7 @@ import cats.instances.option._
 import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
@@ -52,7 +53,7 @@ trait WorkspaceComponent {
   this: DriverComponent
     with AttributeComponent
     with RawlsGroupComponent
-    with RawlsUserComponent
+    with JndiDirectoryDAO
     with EntityComponent
     with SubmissionComponent
     with WorkflowComponent
@@ -99,7 +100,6 @@ trait WorkspaceComponent {
     def accessLevel = column[String]("access_level", O.Length(254))
 
     def workspace = foreignKey("FK_PENDING_WS_ACCESS_WORKSPACE", workspaceId, workspaceQuery)(_.id)
-    def originUser = foreignKey("FK_PENDING_WS_ACCESS_ORIGIN_USER", originSubjectId, rawlsUserQuery)(_.userSubjectId)
 
     def pendingAccessPrimaryKey = primaryKey("PK_PENDING_WORKSPACE_ACCESS", (workspaceId, userEmail)) //only allow one invite per user per workspace
 
@@ -111,7 +111,6 @@ trait WorkspaceComponent {
     def userSubjectId = column[String]("user_subject_id")
 
     def workspace = foreignKey("FK_USER_SHARE_PERMS_WS", workspaceId, workspaceQuery)(_.id)
-    def user = foreignKey("FK_USER_SHARE_PERMS_USER", userSubjectId, rawlsUserQuery)(_.userSubjectId)
 
     def * = (workspaceId, userSubjectId) <> (WorkspaceUserShareRecord.tupled, WorkspaceUserShareRecord.unapply)
   }
@@ -131,7 +130,6 @@ trait WorkspaceComponent {
     def userSubjectId = column[String]("user_subject_id")
 
     def workspace = foreignKey("FK_USER_CATALOG_PERMS_WS", workspaceId, workspaceQuery)(_.id)
-    def user = foreignKey("FK_USER_CATALOG_PERMS_USER", userSubjectId, rawlsUserQuery)(_.userSubjectId)
 
     def * = (workspaceId, userSubjectId) <> (WorkspaceUserCatalogRecord.tupled, WorkspaceUserCatalogRecord.unapply)
   }

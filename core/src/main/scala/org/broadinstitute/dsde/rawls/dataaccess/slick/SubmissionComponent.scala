@@ -6,6 +6,7 @@ import java.util.UUID
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -39,7 +40,7 @@ case class SubmissionAuditStatusRecord(id: Long, submissionId: UUID, status: Str
 
 trait SubmissionComponent {
   this: DriverComponent
-    with RawlsUserComponent
+    with JndiDirectoryDAO
     with MethodConfigurationComponent
     with EntityComponent
     with AttributeComponent
