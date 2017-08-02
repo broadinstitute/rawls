@@ -1772,9 +1772,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   class PaginationTestData extends TestData {
     val userOwner = RawlsUser(UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345")))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
-    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set())
-    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set())
+    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
+    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set())
+    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set())
 
     val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),

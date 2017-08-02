@@ -42,7 +42,11 @@ trait DriverComponent {
 
   //in general, we only support alphanumeric, spaces, _, and - for user-input
   def validateUserDefinedString(s: String) = {
-    if(!s.matches("[A-z0-9_-]+")) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"""Invalid input: "$s". Input may only contain alphanumeric characters, underscores, and dashes.""", statusCode = StatusCodes.BadRequest))
+    if(!s.matches("[A-z0-9_-]+")) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: $s. Input may only contain alphanumeric characters, underscores, and dashes.", statusCode = StatusCodes.BadRequest))
+  }
+
+  def validateMaxStringLength(s: String, maxLength: Int) = {
+    if(s.length > maxLength) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: $s. Input may be a max of $maxLength characters.", statusCode = StatusCodes.BadRequest))
   }
 
   def validateAttributeName(an: AttributeName, entityType: String) = {

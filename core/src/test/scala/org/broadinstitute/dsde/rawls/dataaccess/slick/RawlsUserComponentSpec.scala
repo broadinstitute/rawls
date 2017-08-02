@@ -102,11 +102,11 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
      *
      * G4 - G1 - U1
      */
-    val group1 = makeRawlsGroup("Group One", Set(user1))
-    val group2 = makeRawlsGroup("Group Two", Set(user2)).copy(subGroups = Set(group1))
-    val group3 = makeRawlsGroup("Group Three", Set.empty).copy(subGroups = Set(group2))
-    val group4 = makeRawlsGroup("Group Four", Set.empty).copy(subGroups = Set(group1))
-    val group5 = makeRawlsGroup("Group Five", Set.empty).copy(subGroups = Set(group3))
+    val group1 = makeRawlsGroup("Group-One", Set(user1))
+    val group2 = makeRawlsGroup("Group-Two", Set(user2)).copy(subGroups = Set(group1))
+    val group3 = makeRawlsGroup("Group-Three", Set.empty).copy(subGroups = Set(group2))
+    val group4 = makeRawlsGroup("Group-Four", Set.empty).copy(subGroups = Set(group1))
+    val group5 = makeRawlsGroup("Group-Five", Set.empty).copy(subGroups = Set(group3))
 
 
 
@@ -118,7 +118,7 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     runAndWait(rawlsGroupQuery.save(group4))
     runAndWait(rawlsGroupQuery.save(group5))
 
-    assertResult(Set(RawlsGroupRef(RawlsGroupName("Group Two")),RawlsGroupRef(RawlsGroupName("Group Three")),RawlsGroupRef(RawlsGroupName("Group Five")))) {
+    assertResult(Set(RawlsGroupRef(RawlsGroupName("Group-Two")),RawlsGroupRef(RawlsGroupName("Group-Three")),RawlsGroupRef(RawlsGroupName("Group-Five")))) {
       runAndWait(rawlsGroupQuery.listGroupsForUser(user2))
     }
     
