@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.model._
 
 /**
@@ -13,7 +14,7 @@ case class ManagedGroupRecord(membersGroupName: String, adminsGroupName: String,
 
 trait ManagedGroupComponent {
   this: DriverComponent
-    with RawlsGroupComponent =>
+    with JndiDirectoryDAO =>
 
   import driver.api._
 
@@ -23,9 +24,6 @@ trait ManagedGroupComponent {
     def accessInstructions = column[Option[String]]("ACCESS_INSTRUCTIONS")
 
     def * = (membersGroupName, adminsGroupName, accessInstructions) <> (ManagedGroupRecord.tupled, ManagedGroupRecord.unapply)
-
-    def membersGroup = foreignKey("FK_MANAGED_GROUP_MEMBERS", membersGroupName, rawlsGroupQuery)(_.groupName)
-    def adminsGroup = foreignKey("FK_MANAGED_GROUP_ADMINS", adminsGroupName, rawlsGroupQuery)(_.groupName)
   }
 
   type ManagedGroupQuery = Query[ManagedGroupTable, ManagedGroupRecord, Seq]
@@ -39,7 +37,7 @@ trait ManagedGroupComponent {
       managedGroupQuery.filter(_.membersGroupName === managedGroupRef.membersGroupName.value).map(_.accessInstructions).update(Option(instructions.instructions))
     }
 
-    def load(managedGroupRef: ManagedGroupRef): ReadAction[Option[ManagedGroup]] = {
+    def load(managedGroupRef: ManagedGroupRef): ReadWriteAction[Option[ManagedGroup]] = {
       uniqueResult[ManagedGroupRecord](findManagedGroup(managedGroupRef)).flatMap {
         case Some(mg) =>
           for {
@@ -55,7 +53,7 @@ trait ManagedGroupComponent {
       }
     }
 
-    def listManagedGroupsForUser(userRef: RawlsUserRef): ReadAction[Set[ManagedGroupAccess]] = {
+    def listManagedGroupsForUser(userRef: RawlsUserRef): ReadWriteAction[Set[ManagedGroupAccess]] = {
       for {
         allManagedGroupRecs <- listAllManagedGroups()
         groupsForUser <- rawlsGroupQuery.listGroupsForUser(userRef)
