@@ -18,6 +18,7 @@ import com.typesafe.scalalogging.LazyLogging
 import slick.backend.DatabaseConfig
 import slick.driver.JdbcDriver
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor}
@@ -48,7 +49,14 @@ object Boot extends App with LazyLogging {
     // we need an ActorSystem to host our application in
     implicit val system = ActorSystem("rawls")
 
-    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcDriver]("slick", conf))
+    val directoryConfig = DirectoryConfig(
+      conf.getString("directory.url"),
+      conf.getString("directory.user"),
+      conf.getString("directory.password"),
+      conf.getString("directory.baseDn")
+    )
+
+    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcDriver]("slick", conf), directoryConfig)
 
     val liquibaseConf = conf.getConfig("liquibase")
     val liquibaseChangeLog = liquibaseConf.getString("changelog")

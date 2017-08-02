@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.jndi
 
+import java.sql.Timestamp
 import javax.naming._
 import javax.naming.directory._
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
 import slick.dbio.DBIO
@@ -27,6 +28,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     val givenName = "givenName"
     val sn = "sn"
     val cn = "cn"
+    val dn = "dn"
     val uid = "uid"
     val groupUpdatedTimestamp = "groupUpdatedTimestamp"
     val groupSynchronizedTimestamp = "groupSynchronizedTimestamp"
@@ -74,75 +76,179 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     schema.createSubcontext("ClassDefinition/workbenchGroup", attrs)
   }
 
-  def createGroup(group: RawlsGroup): ReadWriteAction[RawlsGroup] = withContext { ctx =>
-    try {
-      val groupContext = new BaseDirContext {
-        override def getAttributes(name: String): Attributes = {
-          val myAttrs = new BasicAttributes(true)  // Case ignore
+  object rawlsGroupQuery {
+    private def addMemberAttributes(users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef], myAttrs: BasicAttributes): Any = {
+      val memberDns = users.map(user => userDn(user.userSubjectId)) ++ subGroups.map(subGroup => groupDn(subGroup.groupName))
+      if (!memberDns.isEmpty) {
+        val members = new BasicAttribute(Attr.member)
+        memberDns.foreach(subject => members.add(subject))
+        myAttrs.put(members)
+      }
+    }
 
-          val oc = new BasicAttribute("objectclass")
-          Seq("top", "workbenchGroup").foreach(oc.add)
-          myAttrs.put(oc)
+    def save(group: RawlsGroup): ReadWriteAction[RawlsGroup] = withContext { ctx =>
+      try {
+        val groupContext = new BaseDirContext {
+          override def getAttributes(name: String): Attributes = {
+            val myAttrs = new BasicAttributes(true) // Case ignore
 
-          myAttrs.put(new BasicAttribute(Attr.email, group.groupEmail.value))
+            val oc = new BasicAttribute("objectclass")
+            Seq("top", "workbenchGroup").foreach(oc.add)
+            myAttrs.put(oc)
 
-          val memberDns = group.users.map(user => userDn(user.userSubjectId)) ++ group.subGroups.map(subGroup => groupDn(subGroup.groupName))
-          if (!memberDns.isEmpty) {
-            val members = new BasicAttribute(Attr.member)
-            memberDns.foreach(subject => members.add(subject))
-            myAttrs.put(members)
+            myAttrs.put(new BasicAttribute(Attr.email, group.groupEmail.value))
+
+            addMemberAttributes(group.users, group.subGroups, myAttrs)
+
+            myAttrs
           }
+        }
 
-          myAttrs
+        ctx.bind(groupDn(group.groupName), groupContext)
+
+      } catch {
+        case e: NameAlreadyBoundException =>
+          val myAttrs = new BasicAttributes(true) // Case ignore
+          addMemberAttributes(group.users, group.subGroups, myAttrs)
+          ctx.modifyAttributes(groupDn(group.groupName), DirContext.REPLACE_ATTRIBUTE, myAttrs)
+      }
+      group
+    }
+
+    def delete(groupRef: RawlsGroupRef): ReadWriteAction[Unit] = withContext { ctx =>
+      ctx.unbind(groupDn(groupRef.groupName))
+    }
+
+    def removeGroupMember(groupName: RawlsGroupName, removeMember: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>
+      ctx.modifyAttributes(groupDn(groupName), DirContext.REMOVE_ATTRIBUTE, new BasicAttributes(Attr.member, userDn(removeMember)))
+    }
+
+    def removeGroupMember(groupName: RawlsGroupName, removeMember: RawlsGroupName): ReadWriteAction[Unit] = withContext { ctx =>
+      ctx.modifyAttributes(groupDn(groupName), DirContext.REMOVE_ATTRIBUTE, new BasicAttributes(Attr.member, groupDn(removeMember)))
+    }
+
+    def addGroupMember(groupName: RawlsGroupName, addMember: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>
+      ctx.modifyAttributes(groupDn(groupName), DirContext.ADD_ATTRIBUTE, new BasicAttributes(Attr.member, userDn(addMember)))
+    }
+
+    def addGroupMember(groupName: RawlsGroupName, addMember: RawlsGroupName): ReadWriteAction[Unit] = withContext { ctx =>
+      ctx.modifyAttributes(groupDn(groupName), DirContext.ADD_ATTRIBUTE, new BasicAttributes(Attr.member, groupDn(addMember)))
+    }
+
+    def load(groupRef: RawlsGroupRef): ReadWriteAction[Option[RawlsGroup]] = withContext { ctx =>
+      Try {
+        val attributes = ctx.getAttributes(groupDn(groupRef.groupName))
+
+        Option(unmarshallGroup(attributes))
+
+      }.recover {
+        case e: NameNotFoundException => None
+
+      }.get
+    }
+
+    def flattenGroupMembership(groupRef: RawlsGroupRef): ReadWriteAction[Set[RawlsUserRef]] = withContext { ctx =>
+      ctx.search(peopleOu, new BasicAttributes(Attr.memberOf, groupDn(groupRef.groupName), true)).asScala.map { result =>
+        RawlsUserRef(unmarshalUser(result.getAttributes).userSubjectId)
+      }.toSet
+    }
+
+    def isGroupMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef): ReadWriteAction[Boolean] = {
+      flattenGroupMembership(groupRef).map(_.contains(userRef))
+    }
+
+    def loadGroupIfMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef): ReadWriteAction[Option[RawlsGroup]] = {
+      isGroupMember(groupRef, userRef).flatMap {
+        case true => load(groupRef)
+        case false => DBIO.successful(None)
+      }
+    }
+
+    def listGroupsForUser(userRef: RawlsUserRef): ReadWriteAction[Set[RawlsGroupRef]] = withContext { ctx =>
+      val groups = for (
+        attr <- ctx.getAttributes(userDn(userRef.userSubjectId), Array(Attr.memberOf)).getAll.asScala;
+        attrE <- attr.getAll.asScala
+      ) yield RawlsGroupRef(dnToGroupName(attrE.asInstanceOf[String]))
+
+      groups.toSet
+    }
+
+    def loadFromEmail(email: String): ReadWriteAction[Option[Either[RawlsUser, RawlsGroup]]] = withContext { ctx =>
+      val subjectResults = ctx.search(directoryConfig.baseDn, new BasicAttributes(Attr.email, email, true)).asScala.toSeq
+      val subjects = subjectResults.map { result =>
+        dnToSubject(result.getAttributes.get(Attr.dn).get().asInstanceOf[String]) match {
+          case Left(groupName) => Right(unmarshallGroup(result.getAttributes))
+          case Right(userSubjectId) => Left(unmarshalUser(result.getAttributes))
         }
       }
 
-      ctx.bind(groupDn(group.groupName), groupContext)
-      group
+      subjects match {
+        case Seq() => None
+        case Seq(subject) => Option(subject)
+        case _ => throw new RawlsException(s"Database error: email $email refers to too many subjects: $subjects")
+      }
+    }
 
-    } catch {
-      case e: NameAlreadyBoundException =>
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"group name ${group.groupName.value} already exists"))
+    def loadMemberEmails(groupRef: RawlsGroupRef): ReadWriteAction[Seq[String]] = {
+      load(groupRef).flatMap {
+        case Some(rawlsGroup) =>
+          val subGroupActions = rawlsGroup.subGroups.map(load(_).map(_.get.groupEmail.value))
+          val userActions = rawlsGroup.users.map(rawlsUserQuery.load(_).map(_.get.userEmail.value))
+          DBIO.sequence(subGroupActions.toSeq ++ userActions)
+        case None => DBIO.successful(Seq.empty)
+      }
+    }
+
+    def loadEmails(refs: Seq[RawlsGroupRef]): ReadWriteAction[Map[RawlsGroupRef, RawlsGroupEmail]] = {
+      DBIO.sequence(refs.map(load)).map { groups =>
+        groups.collect {
+          case Some(group) => RawlsGroup.toRef(group) -> group.groupEmail
+        }.toMap
+      }
+    }
+
+    def loadRefsFromEmails(emails: Seq[String]): ReadWriteAction[Map[String, Either[RawlsUserRef, RawlsGroupRef]]] = {
+      DBIO.sequence(emails.map(loadFromEmail)).map { subjects =>
+        subjects.collect {
+          case Some(Left(user)) => user.userEmail.value -> Left(RawlsUser.toRef(user))
+          case Some(Right(group)) => group.groupEmail.value -> Right(RawlsGroup.toRef(group))
+        }.toMap
+      }
+    }
+
+    def loadGroupByEmail(groupEmail: RawlsGroupEmail): ReadWriteAction[Option[RawlsGroup]] = withContext { ctx =>
+      val group = ctx.search(groupsOu, new BasicAttributes(Attr.email, groupEmail.value, true)).asScala.toSeq
+      group match {
+        case Seq() => None
+        case Seq(result) => Option(unmarshallGroup(result.getAttributes))
+        case _ => throw new RawlsException(s"Found more than one group for email ${groupEmail}")
+      }
+    }
+
+    def updateSynchronizedDate(rawlsGroupRef: RawlsGroupRef): ReadWriteAction[Unit] = withContext { ctx =>
+      ctx.modifyAttributes(groupDn(rawlsGroupRef.groupName), DirContext.REPLACE_ATTRIBUTE, new BasicAttributes(Attr.groupSynchronizedTimestamp, new Timestamp(System.currentTimeMillis()), true))
+    }
+
+    def overwriteGroupUsers(groupsWithUsers: Set[(RawlsGroupRef, Set[RawlsUserRef])]) = withContext { ctx =>
+      groupsWithUsers.map { case (groupRef, users) =>
+        val myAttrs = new BasicAttributes(true)
+        addMemberAttributes(users, Set.empty, myAttrs)
+        ctx.modifyAttributes(groupDn(groupRef.groupName), DirContext.REPLACE_ATTRIBUTE, myAttrs)
+        groupRef
+      }
     }
   }
 
-  def deleteGroup(groupName: RawlsGroupName): ReadWriteAction[Unit] = withContext { ctx =>
-    ctx.unbind(groupDn(groupName))
-  }
+  private def unmarshallGroup(attributes: Attributes) = {
+    val cn = getAttribute[String](attributes, Attr.cn).getOrElse(throw new RawlsException(s"${Attr.cn} attribute missing"))
+    val email = getAttribute[String](attributes, Attr.email).getOrElse(throw new RawlsException(s"${Attr.email} attribute missing"))
+    val memberDns = getAttributes[String](attributes, Attr.member).getOrElse(Set.empty).toSet
 
-  def removeGroupMember(groupName: RawlsGroupName, removeMember: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>
-    ctx.modifyAttributes(groupDn(groupName), DirContext.REMOVE_ATTRIBUTE, new BasicAttributes(Attr.member, userDn(removeMember)))
-  }
-
-  def removeGroupMember(groupName: RawlsGroupName, removeMember: RawlsGroupName): ReadWriteAction[Unit] = withContext { ctx =>
-    ctx.modifyAttributes(groupDn(groupName), DirContext.REMOVE_ATTRIBUTE, new BasicAttributes(Attr.member, groupDn(removeMember)))
-  }
-
-  def addGroupMember(groupName: RawlsGroupName, addMember: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>
-    ctx.modifyAttributes(groupDn(groupName), DirContext.ADD_ATTRIBUTE, new BasicAttributes(Attr.member, userDn(addMember)))
-  }
-
-  def addGroupMember(groupName: RawlsGroupName, addMember: RawlsGroupName): ReadWriteAction[Unit] = withContext { ctx =>
-    ctx.modifyAttributes(groupDn(groupName), DirContext.ADD_ATTRIBUTE, new BasicAttributes(Attr.member, groupDn(addMember)))
-  }
-
-  def loadGroup(groupName: RawlsGroupName): ReadWriteAction[Option[RawlsGroup]] = withContext { ctx =>
-    Try {
-      val attributes = ctx.getAttributes(groupDn(groupName))
-
-      val cn = getAttribute[String](attributes, Attr.cn).getOrElse(throw new RawlsException(s"${Attr.cn} attribute missing: $groupName"))
-      val email = getAttribute[String](attributes, Attr.email).getOrElse(throw new RawlsException(s"${Attr.email} attribute missing: $groupName"))
-      val memberDns = getAttributes[String](attributes, Attr.member).getOrElse(Set.empty).toSet
-
-      val members = memberDns.map(dnToSubject)
-      val users = members.collect{case Right(user) => RawlsUserRef(user)}
-      val groups = members.collect{case Left(group) => RawlsGroupRef(group)}
-      Option(RawlsGroup(RawlsGroupName(cn), RawlsGroupEmail(email), users, groups))
-
-    }.recover {
-      case e: NameNotFoundException => None
-
-    }.get
+    val members = memberDns.map(dnToSubject)
+    val users = members.collect { case Right(user) => RawlsUserRef(user) }
+    val groups = members.collect { case Left(group) => RawlsGroupRef(group) }
+    val group = RawlsGroup(RawlsGroupName(cn), RawlsGroupEmail(email), users, groups)
+    group
   }
 
   object rawlsUserQuery {
@@ -219,21 +325,6 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
 
   private def getAttributes[T](attributes: Attributes, key: String): Option[TraversableOnce[T]] = {
     Option(attributes.get(key)).map(_.getAll.asScala.map(_.asInstanceOf[T]))
-  }
-
-  def listUsersGroups(userId: RawlsUserSubjectId): ReadWriteAction[Set[RawlsGroupName]] = withContext { ctx =>
-    val groups = for (
-      attr <- ctx.getAttributes(userDn(userId), Array(Attr.memberOf)).getAll.asScala;
-      attrE <- attr.getAll.asScala
-    ) yield dnToGroupName(attrE.asInstanceOf[String])
-
-    groups.toSet
-  }
-
-  def listFlattenedGroupUsers(groupName: RawlsGroupName): ReadWriteAction[Set[RawlsUserSubjectId]] = withContext { ctx =>
-    ctx.search(peopleOu, new BasicAttributes(Attr.memberOf, groupDn(groupName), true)).asScala.map { result =>
-      unmarshalUser(result.getAttributes).userSubjectId
-    }.toSet
   }
 
   def listAncestorGroups(groupName: RawlsGroupName): ReadWriteAction[Set[RawlsGroupName]] = withContext { ctx =>

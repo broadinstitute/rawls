@@ -11,8 +11,7 @@ case class RawlsBillingProjectOperationRecord(projectName: String, operationName
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent
-    with JndiDirectoryDAO
-    with RawlsGroupComponent =>
+    with JndiDirectoryDAO =>
 
   import driver.api._
 
@@ -75,20 +74,20 @@ trait RawlsBillingProjectComponent {
       DBIO.sequence(projects.map(project => rawlsBillingProjectQuery.filter(_.projectName === project.projectName.value).update(marshalBillingProject(project))).toSeq)
     }
 
-    def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadAction[Seq[RawlsBillingProject]] = {
+    def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadWriteAction[Seq[RawlsBillingProject]] = {
       filter(_.creationStatus === status.toString).result.flatMap { projectRecords =>
         DBIO.sequence(projectRecords.map { projectRec => load(projectRec) })
       }
     }
 
-    def load(projectName: RawlsBillingProjectName): ReadAction[Option[RawlsBillingProject]] = {
+    def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
       uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).flatMap {
         case None => DBIO.successful(None)
         case Some(projectRec) => load(projectRec).map(Option(_))
       }
     }
 
-    def load(projectRec: RawlsBillingProjectRecord): ReadAction[RawlsBillingProject] = {
+    def load(projectRec: RawlsBillingProjectRecord): ReadWriteAction[RawlsBillingProject] = {
       findBillingProjectGroups(RawlsBillingProjectName(projectRec.projectName)).result.flatMap { groups =>
         DBIO.sequence(groups.map { group =>
           for {

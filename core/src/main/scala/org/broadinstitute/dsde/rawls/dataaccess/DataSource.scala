@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.sql.SQLTimeoutException
-import java.util.concurrent.{Executors, ExecutorService}
+import java.util.concurrent.{ExecutorService, Executors}
 
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcDriver
@@ -10,26 +10,25 @@ import _root_.slick.jdbc.meta.MTable
 import com.google.common.base.Throwables
 import com.typesafe.config.ConfigValueFactory
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, DataAccess, DataAccessComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, DataAccessComponent, ReadWriteAction}
 import sun.security.provider.certpath.SunCertPathBuilderException
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
-
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
-
 import liquibase.{Contexts, Liquibase}
 import liquibase.database.jvm.JdbcConnection
 import liquibase.resource.{ClassLoaderResourceAccessor, ResourceAccessor}
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 
 object DataSource {
-  def apply(databaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext): SlickDataSource = {
-    new SlickDataSource(databaseConfig)
+  def apply(databaseConfig: DatabaseConfig[JdbcDriver], directoryConfig: DirectoryConfig)(implicit executionContext: ExecutionContext): SlickDataSource = {
+    new SlickDataSource(databaseConfig, directoryConfig)
   }
 }
 
-class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext) extends LazyLogging {
-  val dataAccess = new DataAccessComponent(databaseConfig.driver, databaseConfig.config.getInt("batchSize"))
+class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver], directoryConfig: DirectoryConfig)(implicit executionContext: ExecutionContext) extends LazyLogging {
+  val dataAccess = new DataAccessComponent(databaseConfig.driver, databaseConfig.config.getInt("batchSize"), directoryConfig)
 
   val database = databaseConfig.db
 
