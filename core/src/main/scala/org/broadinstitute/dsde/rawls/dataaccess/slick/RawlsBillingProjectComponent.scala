@@ -107,11 +107,11 @@ trait RawlsBillingProjectComponent {
       for {
         roleGroupRecs <- rawlsBillingProjectGroupQuery.filter(_.projectName === rawlsProjectName.value).result
         roleGroups <- DBIO.sequence(roleGroupRecs.map { roleRec => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(roleRec.groupName))).map(roleRec -> _)})
-        users <- DBIO.sequence(roleGroups.map(_._2.get.users).flatMap(_.map(rawlsUserQuery.load)))
-        subGroups <- DBIO.sequence(roleGroups.map(_._2.get.subGroups).flatMap(_.map(rawlsGroupQuery.load)))
+        users <- rawlsUserQuery.load(roleGroups.flatMap(_._2.get.users))
+        subGroups <- rawlsGroupQuery.load(roleGroups.flatMap(_._2.get.subGroups))
       } yield {
-        val userEmailsById = users.map(u => u.get.userSubjectId -> u.get.userEmail).toMap
-        val groupEmailsById = subGroups.map(sg => sg.get.groupName -> sg.get.groupEmail).toMap
+        val userEmailsById = users.map(u => u.userSubjectId -> u.userEmail).toMap
+        val groupEmailsById = subGroups.map(sg => sg.groupName -> sg.groupEmail).toMap
 
         roleGroups.flatMap { case (roleRec, group) =>
           val subGroupMembers = group.get.subGroups.map(sg => RawlsBillingProjectMember(RawlsUserEmail(groupEmailsById(sg.groupName).value), ProjectRoles.withName(roleRec.role)))

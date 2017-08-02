@@ -147,6 +147,17 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }.get
     }
 
+    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[TraversableOnce[RawlsGroup]] = withContext { ctx =>
+      val filters = groupRefs.map { ref => s"(${Attr.dn}=${groupDn(ref.groupName)})"}
+      if (filters.isEmpty) {
+        Iterator.empty
+      } else {
+        ctx.search(groupsOu, s"(|${filters.mkString}", new SearchControls()).asScala.map { result =>
+          unmarshallGroup(result.getAttributes)
+        }
+      }
+    }
+
     def flattenGroupMembership(groupRef: RawlsGroupRef): ReadWriteAction[Set[RawlsUserRef]] = withContext { ctx =>
       ctx.search(peopleOu, new BasicAttributes(Attr.memberOf, groupDn(groupRef.groupName), true)).asScala.map { result =>
         RawlsUserRef(unmarshalUser(result.getAttributes).userSubjectId)
@@ -333,6 +344,17 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
         case e: NameNotFoundException => None
 
       }.get
+    }
+
+    def load(userRefs: TraversableOnce[RawlsUserRef]): ReadWriteAction[TraversableOnce[RawlsUser]] = withContext { ctx =>
+      val filters = userRefs.map { ref => s"(${Attr.dn}=${userDn(ref.userSubjectId)})"}
+      if (filters.isEmpty) {
+        Iterator.empty
+      } else {
+        ctx.search(peopleOu, s"(|${filters.mkString}", new SearchControls()).asScala.map { result =>
+          unmarshalUser(result.getAttributes)
+        }
+      }
     }
 
     def deleteUser(userId: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>
