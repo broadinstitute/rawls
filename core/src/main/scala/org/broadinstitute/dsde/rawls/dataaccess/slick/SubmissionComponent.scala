@@ -114,24 +114,27 @@ trait SubmissionComponent {
       }))
     }
 
-    def listWithSubmitter(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[SubmissionListResponse]] = {
+    def listWithSubmitter(workspaceContext: SlickWorkspaceContext): ReadWriteAction[Seq[SubmissionListResponse]] = {
       val query = for {
         submissionRec <- findByWorkspaceId(workspaceContext.workspaceId)
-        userRec <- rawlsUserQuery if (submissionRec.submitterId === userRec.userSubjectId)
         methodConfigRec <- methodConfigurationQuery if (submissionRec.methodConfigurationId === methodConfigRec.id)
         entityRec <- entityQuery if (submissionRec.submissionEntityId === entityRec.id)
-      } yield (submissionRec, userRec, methodConfigRec, entityRec)
+      } yield (submissionRec, methodConfigRec, entityRec)
 
-      GatherStatusesForWorkspaceSubmissionsQuery.gatherWorkflowStatuses(workspaceContext.workspaceId) flatMap { workflowStates =>
-        val states = workflowStates.groupBy(_.submissionId)
-        query.result.map { recs => recs.map {
-          case (submissionRec, userRec, methodConfigRec, entityRec) =>
-            val user = rawlsUserQuery.unmarshalRawlsUser(userRec)
-            val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
-            val subStatuses = states.getOrElse(submissionRec.id, Seq.empty).map(x => x.workflowStatus -> x.count).toMap
+      for {
+        workflowStates <- GatherStatusesForWorkspaceSubmissionsQuery.gatherWorkflowStatuses(workspaceContext.workspaceId)
+        states = workflowStates.groupBy(_.submissionId)
+        recs <- query.result
+        users <- rawlsUserQuery.load(recs.map { case (submissionRec, _, _) => RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId)) })
+      } yield {
+        val usersById = users.map(u => u.userSubjectId -> u).toMap
 
-            new SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.toReference, Seq.empty), user, subStatuses)
-        }
+        recs.map { case (submissionRec, methodConfigRec, entityRec) =>
+          val user = usersById(RawlsUserSubjectId(submissionRec.submitterId))
+          val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
+          val subStatuses = states.getOrElse(submissionRec.id, Seq.empty).map(x => x.workflowStatus -> x.count).toMap
+
+          new SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.toReference, Seq.empty), user, subStatuses)
         }
       }
     }
