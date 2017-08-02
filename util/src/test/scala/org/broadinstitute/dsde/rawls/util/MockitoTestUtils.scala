@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.util
 
 import org.mockito.ArgumentCaptor
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import scala.reflect.{ClassTag, classTag}
 
