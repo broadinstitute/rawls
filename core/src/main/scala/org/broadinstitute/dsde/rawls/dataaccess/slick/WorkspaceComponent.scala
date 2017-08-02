@@ -52,7 +52,6 @@ case class PendingWorkspaceAccessRecord(
 trait WorkspaceComponent {
   this: DriverComponent
     with AttributeComponent
-    with RawlsGroupComponent
     with JndiDirectoryDAO
     with EntityComponent
     with SubmissionComponent
@@ -85,7 +84,6 @@ trait WorkspaceComponent {
     def isAuthDomainAcl = column[Boolean]("is_auth_domain_acl")
 
     def workspace = foreignKey("FK_WS_ACCESS_WORKSPACE", workspaceId, workspaceQuery)(_.id)
-    def group = foreignKey("FK_WS_ACCESS_GROUP", groupName, rawlsGroupQuery)(_.groupName)
 
     def accessPrimaryKey = primaryKey("PK_WORKSPACE_ACCESS", (workspaceId, accessLevel, isAuthDomainAcl))
 
@@ -120,7 +118,6 @@ trait WorkspaceComponent {
     def groupName = column[String]("group_name")
 
     def workspace = foreignKey("FK_GROUP_SHARE_PERMS_WS", workspaceId, workspaceQuery)(_.id)
-    def group = foreignKey("FK_GROUP_SHARE_PERMS_GROUP", groupName, rawlsGroupQuery)(_.groupName)
 
     def * = (workspaceId, groupName) <> (WorkspaceGroupShareRecord.tupled, WorkspaceGroupShareRecord.unapply)
   }
@@ -139,7 +136,6 @@ trait WorkspaceComponent {
     def groupName = column[String]("group_name")
 
     def workspace = foreignKey("FK_GROUP_CATALOG_PERMS_WS", workspaceId, workspaceQuery)(_.id)
-    def group = foreignKey("FK_GROUP_CATALOG_PERMS_GROUP", groupName, rawlsGroupQuery)(_.groupName)
 
     def * = (workspaceId, groupName) <> (WorkspaceGroupCatalogRecord.tupled, WorkspaceGroupCatalogRecord.unapply)
   }
@@ -149,7 +145,6 @@ trait WorkspaceComponent {
     def groupName = column[String]("group_name")
 
     def workspace = foreignKey("FK_AUTH_DOMAIN_WS", workspaceId, workspaceQuery)(_.id)
-    def group = foreignKey("FK_AUTH_DOMAIN_GROUP", groupName, rawlsGroupQuery)(_.groupName)
 
     def uniqueWorkspaceAuthDomain = index("IDX_AD_WS_GROUP", (workspaceId, groupName), unique = true)
 
@@ -356,7 +351,7 @@ trait WorkspaceComponent {
         workspaceGroupShareQuery.filter(_.workspaceId === workspaceId).delete
     }
 
-    def getUserSharePermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Boolean] = {
+    def getUserSharePermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
       workspaceUserShareQuery.filter(rec => rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId).countDistinct.result.map(rows => rows > 0) flatMap { hasSharePermission =>
         if(hasSharePermission) DBIO.successful(hasSharePermission)
         else rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
@@ -391,7 +386,7 @@ trait WorkspaceComponent {
         workspaceGroupCatalogQuery.filter(_.workspaceId === workspaceId).delete
     }
 
-    def getUserCatalogPermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Boolean] = {
+    def getUserCatalogPermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
       workspaceUserCatalogQuery.filter(rec => rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId).countDistinct.result.map(
         rows => rows > 0) flatMap { hasCatalogPermission =>
         if(hasCatalogPermission) DBIO.successful(hasCatalogPermission)
@@ -467,7 +462,7 @@ trait WorkspaceComponent {
       workspaceAccessQuery.filter(_.workspaceId === workspaceId).delete
     }
 
-    def getAuthorizedAuthDomainGroups(workspaceIds: Seq[String], user: RawlsUserRef): ReadAction[Set[ManagedGroupRef]] = {
+    def getAuthorizedAuthDomainGroups(workspaceIds: Seq[String], user: RawlsUserRef): ReadWriteAction[Set[ManagedGroupRef]] = {
       val authDomainQuery = for {
         authDomainRecord <- workspaceAuthDomainQuery if authDomainRecord.workspaceId.inSetBind(workspaceIds.map(UUID.fromString))
       } yield authDomainRecord.groupName
@@ -653,27 +648,27 @@ trait WorkspaceComponent {
      * @param group group that has changed to trigger the recompute
      * @return
      */
-    def findAssociatedGroupsToIntersect(group: RawlsGroupRef): ReadAction[Seq[GroupsToIntersect]] = {
-      def findWorkspacesForGroups(groups: Set[RawlsGroupRecord]) = {
+    def findAssociatedGroupsToIntersect(group: RawlsGroupRef): ReadWriteAction[Seq[GroupsToIntersect]] = {
+      def findWorkspacesForGroups(groups: Set[RawlsGroupName]) = {
         for {
-          workspaceAccess <- workspaceAccessQuery if workspaceAccess.groupName.inSetBind(groups.map(_.groupName)) && workspaceAccess.isAuthDomainAcl === false
+          workspaceAccess <- workspaceAccessQuery if workspaceAccess.groupName.inSetBind(groups.map(_.value)) && workspaceAccess.isAuthDomainAcl === false
           workspaceAuthDomain <- workspaceAuthDomainQuery if workspaceAuthDomain.workspaceId === workspaceAccess.workspaceId
           workspace <- workspaceQuery if workspaceAccess.workspaceId === workspace.id && workspace.id === workspaceAuthDomain.workspaceId
         } yield workspace
       }
 
-      def findWorkspacesForAuthDomains(groups: Set[RawlsGroupRecord]) = {
+      def findWorkspacesForAuthDomains(groups: Set[RawlsGroupName]) = {
         for {
-          workspaceAuthDomain <- workspaceAuthDomainQuery if workspaceAuthDomain.groupName.inSetBind(groups.map(_.groupName))
+          workspaceAuthDomain <- workspaceAuthDomainQuery if workspaceAuthDomain.groupName.inSetBind(groups.map(_.value))
           workspace <- workspaceQuery if workspace.id === workspaceAuthDomain.workspaceId
         } yield workspace
       }
 
       for {
-        groupRecs <- rawlsGroupQuery.findGroupByName(group.groupName.value).result
+        groupRec <- rawlsGroupQuery.load(group).map(_.getOrElse(throw new RawlsException(s"group not found $group")))
         // the group in question may be an access group for a workspace, get the workspace access rec if it is
         workspaceAccessRec <- workspaceAccessQuery.filter(workspaceAccess => workspaceAccess.groupName === group.groupName.value && workspaceAccess.isAuthDomainAcl === false).result.headOption
-        allGroups <- rawlsGroupQuery.listParentGroupsRecursive(groupRecs.toSet, groupRecs.toSet)
+        allGroups <- rawlsGroupQuery.listAncestorGroups(groupRec.groupName)
         workspaceRecsForGroups <- findWorkspacesForGroups(allGroups).result
         workspaceRecsForAuthDomains <- findWorkspacesForAuthDomains(allGroups).result
         authDomainedWorkspaceRecs = workspaceRecsForGroups ++ workspaceRecsForAuthDomains

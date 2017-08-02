@@ -63,7 +63,6 @@ trait SubmissionComponent {
     def * = (id, workspaceId, submissionDate, submitterId, methodConfigurationId, submissionEntityId, status, useCallCache, workflowFailureMode) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
-    def submitter = foreignKey("FK_SUB_SUBMITTER", submitterId, rawlsUserQuery)(_.userSubjectId)
     def methodConfiguration = foreignKey("FK_SUB_METHOD_CONFIG", methodConfigurationId, methodConfigurationQuery)(_.id)
     def submissionEntity = foreignKey("FK_SUB_ENTITY", submissionEntityId, entityQuery)(_.id)
   }

@@ -30,7 +30,6 @@ trait RawlsBillingProjectComponent {
     def groupName = column[String]("GROUP_NAME", O.Length(254))
     def role = column[String]("PROJECT_ROLE", O.Length(254))
 
-    def groupRef = foreignKey("FK_PROJECT_GROUP", groupName, rawlsGroupQuery)(_.groupName)
     def projectRef = foreignKey("FK_PROJECT_NAME", projectName, rawlsBillingProjectQuery)(_.projectName)
     def pk = primaryKey("PK_BILLING_PROJECT_GROUP", (projectName, groupName, role))
 

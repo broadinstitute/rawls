@@ -237,6 +237,34 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
         groupRef
       }
     }
+
+    def removeUserFromAllGroups(userRef: RawlsUserRef): ReadWriteAction[Boolean] = withContext { ctx =>
+      val userAttributes = new BasicAttributes(Attr.member, userDn(userRef.userSubjectId), true)
+      val groupResults = ctx.search(groupsOu, userAttributes, Array(Attr.dn)).asScala
+
+      groupResults.foreach { result =>
+        ctx.modifyAttributes(result.getAttributes.get(Attr.dn).get().asInstanceOf[String], DirContext.REMOVE_ATTRIBUTE, userAttributes)
+      }
+
+      !groupResults.isEmpty
+    }
+
+    def listAncestorGroups(groupName: RawlsGroupName): ReadWriteAction[Set[RawlsGroupName]] = withContext { ctx =>
+      val groups = for (
+        attr <- ctx.getAttributes(groupDn(groupName), Array(Attr.memberOf)).getAll.asScala;
+        attrE <- attr.getAll.asScala
+      ) yield dnToGroupName(attrE.asInstanceOf[String])
+
+      groups.toSet
+    }
+
+    def intersectGroupMembership(groups: Set[RawlsGroupRef]): ReadWriteAction[Set[RawlsUserRef]] = withContext { ctx =>
+      val groupFilters = groups.map(g => s"(${Attr.memberOf}=${groupDn(g.groupName)})")
+      ctx.search(peopleOu, s"(&${groupFilters.mkString})", new SearchControls()).asScala.map { result =>
+        RawlsUserRef(dnToUserSubjectId(result.getAttributes.get(Attr.dn).get().asInstanceOf[String]))
+      }.toSet
+    }
+
   }
 
   private def unmarshallGroup(attributes: Attributes) = {
@@ -310,6 +338,11 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     def deleteUser(userId: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>
       ctx.unbind(userDn(userId))
     }
+
+    def countUsers(): ReadWriteAction[SingleStatistic] = {
+      loadAllUsers().map(users => SingleStatistic(users.size))
+    }
+
   }
 
   private def unmarshalUser(attributes: Attributes): RawlsUser = {
@@ -325,15 +358,6 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
 
   private def getAttributes[T](attributes: Attributes, key: String): Option[TraversableOnce[T]] = {
     Option(attributes.get(key)).map(_.getAll.asScala.map(_.asInstanceOf[T]))
-  }
-
-  def listAncestorGroups(groupName: RawlsGroupName): ReadWriteAction[Set[RawlsGroupName]] = withContext { ctx =>
-    val groups = for (
-      attr <- ctx.getAttributes(groupDn(groupName), Array(Attr.memberOf)).getAll.asScala;
-      attrE <- attr.getAll.asScala
-    ) yield dnToGroupName(attrE.asInstanceOf[String])
-
-    groups.toSet
   }
 
   private def withContext[T](op: InitialDirContext => T): ReadWriteAction[T] = DBIO.from(withContext(directoryConfig.directoryUrl, directoryConfig.user, directoryConfig.password)(op))

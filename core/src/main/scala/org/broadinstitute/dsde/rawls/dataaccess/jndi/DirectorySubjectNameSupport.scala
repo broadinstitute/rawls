@@ -28,4 +28,11 @@ trait DirectorySubjectNameSupport {
       case _ => throw new RawlsException(s"not a group dn [$dn]")
     }
   }
+
+  protected def dnToUserSubjectId(dn:String): RawlsUserSubjectId = {
+    dnToSubject(dn) match {
+      case Right(id) => id
+      case _ => throw new RawlsException(s"not a user dn [$dn]")
+    }
+  }
 }
