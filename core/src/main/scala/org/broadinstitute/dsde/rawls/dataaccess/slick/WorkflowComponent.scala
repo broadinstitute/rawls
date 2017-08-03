@@ -313,16 +313,15 @@ trait WorkflowComponent {
     }
 
     def countWorkflowsByQueueStatusByUser: ReadAction[Map[String, Map[String, Int]]] = {
-      // Run query for workflow counts, grouping by user email and workflow status.
+      // Run query for workflow counts, grouping by submitter and workflow status.
       // The query returns a Seq[(userEmail, workflowStatus, count)].
       val userWorkflowQuery = for {
         workflow <- findQueuedAndRunningWorkflows
         submission <- submissionQuery if workflow.submissionId === submission.id
-        user <- rawlsUserQuery if submission.submitterId === user.userSubjectId
-      } yield (user, workflow)
+      } yield (submission, workflow)
 
-      val groupedSeq = userWorkflowQuery.groupBy { case (user, workflow) =>
-        (user.userEmail, workflow.status)
+      val groupedSeq = userWorkflowQuery.groupBy { case (submission, workflow) =>
+        (submission.submitterId, workflow.status)
       }.map { case ((email, status), recs) =>
         (email, status, recs.length)
       }.result

@@ -290,9 +290,10 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   it should "count workflows by queue status by user" in withDefaultTestDatabase {
     // Create a new test user and some test submissions
     val testUserEmail = "testUser"
+    val testUserId = "0001"
     val testUserStatusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
     withWorkspaceContext(testData.workspace) { ctx =>
-      val testUser = RawlsUser(UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("0001")))
+      val testUser = RawlsUser(UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(testUserId)))
       runAndWait(rawlsUserQuery.save(testUser))
       testUserStatusCounts.flatMap { case (st, count) =>
         for (_ <- 0 until count) yield {
@@ -307,7 +308,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
     // Validate testUser counts
     val result = runAndWait(workflowQuery.countWorkflowsByQueueStatusByUser)
-    result should contain key (testUserEmail)
+    result should contain key testUserId
     testUserStatusCounts.foreach { case (st, count) =>
       result(testUserEmail)(st.toString) should be (count)
     }
