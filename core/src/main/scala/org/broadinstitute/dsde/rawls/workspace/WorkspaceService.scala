@@ -2015,7 +2015,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     else dataAccess.workspaceQuery.getUserSharePermissions(userInfo.userSubjectId, workspaceContext)
   }
 
-  def getUserCatalogPermissions(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[Boolean] = {
+  def getUserCatalogPermissions(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadWriteAction[Boolean] = {
     dataAccess.workspaceQuery.getUserCatalogPermissions(userInfo.userSubjectId, workspaceContext)
   }
 
