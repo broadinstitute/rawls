@@ -17,15 +17,17 @@ function make_jar()
 {
     echo "building jar..."
     bash ./docker/run-mysql.sh start
+    bash ./docker/run-opendj.sh start
 
     # Get the last commit hash of the model directory and set it as an environment variable
     GIT_MODEL_HASH=$(git log -n 1 --pretty=format:%h model)
 
     # make jar.  cache sbt dependencies.
-    docker run --rm --link mysql:mysql -e GIT_MODEL_HASH=$GIT_MODEL_HASH -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working
+    docker run --rm --link mysql:mysql --link opendj:opendj -e GIT_MODEL_HASH=$GIT_MODEL_HASH -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working
 
-    # stop mysql db
+    # stop mysql and opendj
     bash ./docker/run-mysql.sh stop
+    bash ./docker/run-opendj.sh stop
 }
 
 function artifactory_push()
