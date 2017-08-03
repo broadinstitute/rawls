@@ -114,7 +114,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def allowGoogleCloudStorageWrite(bucketName: String)(implicit retryCount: Int = 0): Unit = {
+  def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
     // add cloud-storage-analytics@google.com as a writer so it can write logs
     // do it as a separate call so bucket gets default permissions plus this one
     val storage = getStorage(getBucketServiceAccountCredential)
@@ -780,6 +780,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = {
+    implicit val service = GoogleInstrumentedService.Genomics
     val opId = s"operations/$jobId"
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
     val operationRequest = genomicsApi.operations().get(opId)
@@ -787,12 +788,12 @@ class HttpGoogleServicesDAO(
     retryWithRecoverWhen500orGoogleError(() => {
       // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
       // So, use Google's functionality to get the json string, then parse it back into a generic json object
-      Option(executeGoogleRequest(operationRequest))
+      Option(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
     }) {
       // Recover from Google 404 errors because it's an expected return status.
       // Here we use `None` to represent a 404 from Google.
       case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
-    } map(opt => opt.map(_.toPrettyString.parseJson.asJsObject))
+    }
   }
 
   override def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]] = {

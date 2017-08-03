@@ -8,12 +8,9 @@ import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
 import com.typesafe.scalalogging.LazyLogging
-import nl.grons.metrics.scala.Histogram
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
-import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, GoogleInstrumentedServiceMapper, InstrumentedRetry}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, JsonSupport, WorkspaceJsonSupport}
-import org.broadinstitute.dsde.rawls.util.Retry
 import spray.json.JsValue
 
 import scala.collection.JavaConversions._
@@ -44,19 +41,9 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
     retryExponentially(when500orGoogleError)(() => Future(blocking(op())))
   }
 
-//  protected def retryWhen500orGoogleError2[T](op: () => T)(implicit service: GoogleInstrumentedService): Future[T] = {
-//    implicit val consumer = updateRetryHistogram[T]
-//    retryExponentially(when500orGoogleError)(() => Future(blocking(op())))
-//  }
-
   protected def retryWithRecoverWhen500orGoogleError[T: GoogleInstrumentedServiceMapper](op: () => T)(recover: PartialFunction[Throwable, T]): Future[T] = {
     retryExponentially(when500orGoogleError)(() => Future(blocking(op())).recover(recover))
   }
-
-//  protected def retryWithRecoverWhen500orGoogleError2[T](op: () => T)(recover: PartialFunction[Throwable, T])(implicit service: GoogleInstrumentedService): Future[T] = {
-//    implicit val consumer = updateRetryHistogram[T]
-//    retryExponentially(when500orGoogleError)(() => Future(blocking(op())).recover(recover))
-//  }
 
   protected def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T])(implicit counters: GoogleCounters[T]): T = {
     executeGoogleCall(request) { response =>
