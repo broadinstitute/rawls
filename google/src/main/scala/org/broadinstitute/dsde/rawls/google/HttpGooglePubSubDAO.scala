@@ -9,7 +9,8 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.pubsub.model._
 import com.google.api.services.pubsub.{Pubsub, PubsubScopes}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
-import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented
+import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, GoogleInstrumentedService}
+import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedServiceMapper._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import spray.http.StatusCodes
@@ -25,7 +26,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
                           pemFile: String,
                           appName: String,
                           serviceProject: String,
-                          override val workbenchMetricBaseName: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends FutureSupport with GoogleUtilities with GooglePubSubDAO with GoogleInstrumented {
+                          override val workbenchMetricBaseName: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends FutureSupport with GoogleUtilities with GooglePubSubDAO {
 
   val pubSubScopes = Seq(PubsubScopes.PUBSUB)
 
@@ -33,9 +34,10 @@ class HttpGooglePubSubDAO(clientEmail: String,
   val jsonFactory = JacksonFactory.getDefaultInstance
 
   private val characterEncoding = "UTF-8"
+  implicit val service = GoogleInstrumentedService.PubSub
 
   override def createTopic(topicName: String) = {
-    retryWithRecoverWhen500orGoogleError(implicit count => {
+    retryWithRecoverWhen500orGoogleError(() => {
       executeGoogleRequest(getPubSubDirectory.projects().topics().create(topicToFullPath(topicName), new Topic()))
       true
     }) {
@@ -44,7 +46,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
   }
 
   override def deleteTopic(topicName: String): Future[Boolean] = {
-    retryWithRecoverWhen500orGoogleError(implicit count => {
+    retryWithRecoverWhen500orGoogleError(() => {
       executeGoogleRequest(getPubSubDirectory.projects().topics().delete(topicToFullPath(topicName)))
       true
     }) {
@@ -53,7 +55,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
   }
 
   override def getTopic(topicName: String)(implicit executionContext: ExecutionContext): Future[Option[Topic]] = {
-    retryWithRecoverWhen500orGoogleError(implicit count => {
+    retryWithRecoverWhen500orGoogleError(() => {
       Option(executeGoogleRequest(getPubSubDirectory.projects().topics().get(topicToFullPath(topicName))))
     }) {
       case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
@@ -61,7 +63,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
   }
 
   override def createSubscription(topicName: String, subscriptionName: String) = {
-    retryWithRecoverWhen500orGoogleError(implicit count => {
+    retryWithRecoverWhen500orGoogleError(() => {
       val subscription = new Subscription().setTopic(topicToFullPath(topicName))
       executeGoogleRequest(getPubSubDirectory.projects().subscriptions().create(subscriptionToFullPath(subscriptionName), subscription))
       true
@@ -71,7 +73,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
   }
 
   override def deleteSubscription(subscriptionName: String): Future[Boolean] = {
-    retryWithRecoverWhen500orGoogleError(implicit count => {
+    retryWithRecoverWhen500orGoogleError(() => {
       executeGoogleRequest(getPubSubDirectory.projects().subscriptions().delete(subscriptionToFullPath(subscriptionName)))
       true
     }) {
@@ -82,7 +84,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
   override def publishMessages(topicName: String, messages: Seq[String]) = {
     logger.debug(s"publishing to google pubsub topic $topicName, messages [${messages.mkString(", ")}]")
     Future.traverse(messages.grouped(1000)) { messageBatch =>
-      retryWhen500orGoogleError(implicit count => {
+      retryWhen500orGoogleError(() => {
         val pubsubMessages = messageBatch.map(text => new PubsubMessage().encodeData(text.getBytes(characterEncoding)))
         val pubsubRequest = new PublishRequest().setMessages(pubsubMessages)
         executeGoogleRequest(getPubSubDirectory.projects().topics().publish(topicToFullPath(topicName), pubsubRequest))
@@ -95,14 +97,14 @@ class HttpGooglePubSubDAO(clientEmail: String,
   }
 
   override def acknowledgeMessagesById(subscriptionName: String, ackIds: Seq[String]) = {
-    retryWhen500orGoogleError(implicit count => {
+    retryWhen500orGoogleError(() => {
       val ackRequest = new AcknowledgeRequest().setAckIds(ackIds)
       executeGoogleRequest(getPubSubDirectory.projects().subscriptions().acknowledge(subscriptionToFullPath(subscriptionName), ackRequest))
     })
   }
 
   override def pullMessages(subscriptionName: String, maxMessages: Int): Future[Seq[PubSubMessage]] = {
-    retryWhen500orGoogleError(implicit count => {
+    retryWhen500orGoogleError(() => {
       val pullRequest = new PullRequest().setReturnImmediately(true).setMaxMessages(maxMessages) //won't keep the connection open if there's no msgs available
       val messages = executeGoogleRequest(getPubSubDirectory.projects().subscriptions().pull(subscriptionToFullPath(subscriptionName), pullRequest)).getReceivedMessages
       if(messages == null)

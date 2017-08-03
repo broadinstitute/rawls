@@ -108,4 +108,18 @@ object GoogleInstrumentedServiceMapper {
   implicit object ListOperationsResponseMapper extends GoogleInstrumentedServiceMapper[ListOperationsResponse] {
     override def service: GoogleInstrumentedService = GoogleInstrumentedService.Genomics
   }
+
+  // Higher kinds
+
+  implicit def optionMapper[A: GoogleInstrumentedServiceMapper] = new GoogleInstrumentedServiceMapper[Option[A]] {
+    override def service: GoogleInstrumentedService = implicitly[GoogleInstrumentedServiceMapper[A]].service
+  }
+
+  implicit def listMapper[A: GoogleInstrumentedServiceMapper] = new GoogleInstrumentedServiceMapper[List[A]] {
+    override def service: GoogleInstrumentedService = implicitly[GoogleInstrumentedServiceMapper[A]].service
+  }
+
+  implicit def seqMapper[A: GoogleInstrumentedServiceMapper] = new GoogleInstrumentedServiceMapper[Seq[A]] {
+    override def service: GoogleInstrumentedService = implicitly[GoogleInstrumentedServiceMapper[A]].service
+  }
 }

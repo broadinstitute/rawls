@@ -8,7 +8,10 @@ import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
 import com.typesafe.scalalogging.LazyLogging
+import nl.grons.metrics.scala.Histogram
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
+import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService.GoogleInstrumentedService
+import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, GoogleInstrumentedServiceMapper, InstrumentedRetry}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, JsonSupport, WorkspaceJsonSupport}
 import org.broadinstitute.dsde.rawls.util.Retry
 import spray.json.JsValue
@@ -20,7 +23,7 @@ import scala.util.{Failure, Success, Try}
 /**
  * Created by mbemis on 5/10/16.
  */
-trait GoogleUtilities extends LazyLogging with Retry {
+trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInstrumented {
   implicit val executionContext: ExecutionContext
 
   protected def when500orGoogleError(throwable: Throwable): Boolean = {
@@ -37,21 +40,31 @@ trait GoogleUtilities extends LazyLogging with Retry {
     }
   }
 
-  protected def retryWhen500orGoogleError[T](op: Int => T): Future[T] = {
-    retryExponentially(when500orGoogleError)(count => Future(blocking(op(count))))
+  protected def retryWhen500orGoogleError[T: GoogleInstrumentedServiceMapper](op: () => T): Future[T] = {
+    retryExponentially(when500orGoogleError)(() => Future(blocking(op())))
   }
 
-  protected def retryWithRecoverWhen500orGoogleError[T](op: Int => T)(recover: PartialFunction[Throwable, T]): Future[T] = {
-    retryExponentially(when500orGoogleError)(count => Future(blocking(op(count))).recover(recover))
+//  protected def retryWhen500orGoogleError2[T](op: () => T)(implicit service: GoogleInstrumentedService): Future[T] = {
+//    implicit val consumer = updateRetryHistogram[T]
+//    retryExponentially(when500orGoogleError)(() => Future(blocking(op())))
+//  }
+
+  protected def retryWithRecoverWhen500orGoogleError[T: GoogleInstrumentedServiceMapper](op: () => T)(recover: PartialFunction[Throwable, T]): Future[T] = {
+    retryExponentially(when500orGoogleError)(() => Future(blocking(op())).recover(recover))
   }
 
-  protected def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T])(implicit counters: GoogleCounters[T], retryCount: Int = 0): T = {
+//  protected def retryWithRecoverWhen500orGoogleError2[T](op: () => T)(recover: PartialFunction[Throwable, T])(implicit service: GoogleInstrumentedService): Future[T] = {
+//    implicit val consumer = updateRetryHistogram[T]
+//    retryExponentially(when500orGoogleError)(() => Future(blocking(op())).recover(recover))
+//  }
+
+  protected def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T])(implicit counters: GoogleCounters[T]): T = {
     executeGoogleCall(request) { response =>
       response.parseAs(request.getResponseClass)
     }
   }
 
-  protected def executeGoogleFetch[A,B](request: AbstractGoogleClientRequest[A])(f: (InputStream) => B)(implicit counters: GoogleCounters[A], retryCount: Int = 0): B = {
+  protected def executeGoogleFetch[A,B](request: AbstractGoogleClientRequest[A])(f: (InputStream) => B)(implicit counters: GoogleCounters[A]): B = {
     executeGoogleCall(request) { response =>
       val stream = response.getContent
       try {
@@ -62,15 +75,14 @@ trait GoogleUtilities extends LazyLogging with Retry {
     }
   }
 
-  protected def executeGoogleCall[A,B](request: AbstractGoogleClientRequest[A])(processResponse: (com.google.api.client.http.HttpResponse) => B)(implicit counters: GoogleCounters[A], retryCount: Int = 0): B = {
+  protected def executeGoogleCall[A,B](request: AbstractGoogleClientRequest[A])(processResponse: (com.google.api.client.http.HttpResponse) => B)(implicit counters: GoogleCounters[A]): B = {
     val start = System.currentTimeMillis()
-    val isRetry = retryCount != 0
     Try {
       request.executeUnparsed()
     } match {
       case Success(response) =>
         logGoogleRequest(request, start, response)
-        instrumentGoogleRequest(request, start, Right(response), isRetry)
+        instrumentGoogleRequest(request, start, Right(response))
         try {
           processResponse(response)
         } finally {
@@ -78,7 +90,7 @@ trait GoogleUtilities extends LazyLogging with Retry {
         }
       case Failure(httpRegrets: HttpResponseException) =>
         logGoogleRequest(request, start, httpRegrets)
-        instrumentGoogleRequest(request, start, Left(httpRegrets), isRetry)
+        instrumentGoogleRequest(request, start, Left(httpRegrets))
         throw httpRegrets
       case Failure(regrets) =>
         logGoogleRequest(request, start, regrets)
@@ -119,8 +131,8 @@ trait GoogleUtilities extends LazyLogging with Retry {
     logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - startTime, statusCode, errorReport).toJson(GoogleRequestFormat).compactPrint)
   }
 
-  private def instrumentGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, responseOrException: Either[HttpResponseException, com.google.api.client.http.HttpResponse], isRetry: Boolean)(implicit counters: GoogleCounters[A]): Unit = {
-    val (counter, timer) = counters(request, responseOrException, isRetry)
+  private def instrumentGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, responseOrException: Either[HttpResponseException, com.google.api.client.http.HttpResponse])(implicit counters: GoogleCounters[A]): Unit = {
+    val (counter, timer) = counters(request, responseOrException)
     counter += 1
     timer.update(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS)
   }
