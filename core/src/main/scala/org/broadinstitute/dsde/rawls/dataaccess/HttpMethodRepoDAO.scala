@@ -35,13 +35,15 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
 
 
   private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    retry(when500) { () => pipeline[Option[AgoraEntity]](userInfo) apply Get(url) } recover {
-      case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
+    retryAccumulating(when500) { () =>
+      pipeline[Option[AgoraEntity]](userInfo) apply Get(url) recover {
+        case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
+      }
     }
   }
 
   private def postAgoraEntity( url: String, agoraEntity: AgoraEntity, userInfo: UserInfo): Future[AgoraEntity] = {
-    retry(when500) { () => pipeline[AgoraEntity](userInfo) apply Post(url, agoraEntity) }
+    retryAccumulating(when500) { () => pipeline[AgoraEntity](userInfo) apply Post(url, agoraEntity) }
   }
 
   override def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {

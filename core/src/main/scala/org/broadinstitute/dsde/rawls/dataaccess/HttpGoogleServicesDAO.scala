@@ -92,6 +92,7 @@ class HttpGoogleServicesDAO(
   initTokenBucket()
 
   protected def initTokenBucket(): Unit = {
+    implicit val service = GoogleInstrumentedService.Buckets
     try {
       getStorage(getBucketServiceAccountCredential).buckets().get(tokenBucketName).executeUsingHead()
     } catch {
@@ -115,6 +116,7 @@ class HttpGoogleServicesDAO(
   }
 
   def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
+    implicit val service = GoogleInstrumentedService.Buckets
     // add cloud-storage-analytics@google.com as a writer so it can write logs
     // do it as a separate call so bucket gets default permissions plus this one
     val storage = getStorage(getBucketServiceAccountCredential)
@@ -172,8 +174,8 @@ class HttpGoogleServicesDAO(
     }
 
     def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[String] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
-      val bucketName = getBucketName(workspaceId)
       implicit val service = GoogleInstrumentedService.Buckets
+      val bucketName = getBucketName(workspaceId)
       retryWhen500orGoogleError {
         () => {
 
@@ -217,6 +219,7 @@ class HttpGoogleServicesDAO(
     }
 
     def insertInitialStorageLog: (String) => Future[Unit] = { (bucketName) =>
+      implicit val service = GoogleInstrumentedService.Buckets
       retryWhen500orGoogleError {
         () => {
           // manually insert an initial storage log
@@ -374,6 +377,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.Groups
     val member = new Member().setEmail(user.userEmail.value).setRole(groupMemberRole)
     val inserter = getGroupDirectory.members.insert(toProxyFromUser(user.userSubjectId), member)
     retryWhen500orGoogleError(() => { executeGoogleRequest(inserter) }).mapTo[Unit]
@@ -390,6 +394,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean] = {
+    implicit val service = GoogleInstrumentedService.Groups
     val getter = getGroupDirectory.members.get(groupName, email)
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
       case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
@@ -397,6 +402,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] = {
+    implicit val service = GoogleInstrumentedService.Groups
     val getter = getGroupDirectory.groups().get(groupName)
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
       case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
@@ -450,6 +456,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = {
+    implicit val service = GoogleInstrumentedService.Buckets
     val aclGetter = getStorage(getBucketServiceAccountCredential).bucketAccessControls().list(bucketName)
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(aclGetter).getItems.toList) }) {
       case e: HttpResponseException => None
@@ -457,6 +464,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
+    implicit val service = GoogleInstrumentedService.Buckets
     val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
       case e: HttpResponseException => None
@@ -487,6 +495,7 @@ class HttpGoogleServicesDAO(
    * @return None if the group does not exist or a Members object for each page.
    */
   private def listGroupMembersRecursive(fetcher: Directory#Members#List, accumulated: Option[List[Members]] = Some(Nil)): Future[Option[List[Members]]] = {
+    implicit val service = GoogleInstrumentedService.Groups
     accumulated match {
       // when accumulated has a Nil list then this must be the first request
       case Some(Nil) => retryWithRecoverWhen500orGoogleError(() => {
@@ -526,6 +535,7 @@ class HttpGoogleServicesDAO(
   }
 
   def createProxyGroup(user: RawlsUser): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.Groups
     val directory = getGroupDirectory
     val groups = directory.groups
     retryWhen500orGoogleError (() => {
@@ -545,6 +555,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def createGoogleGroup(groupRef: RawlsGroupRef): Future[RawlsGroup] = {
+    implicit val service = GoogleInstrumentedService.Groups
     val newGroup = RawlsGroup(groupRef.groupName, RawlsGroupEmail(toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
     val directory = getGroupDirectory
     val groups = directory.groups
@@ -576,6 +587,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.Groups
     val inserter = getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(inserter)) }) {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => None // it is ok of the email is already there
@@ -640,6 +652,7 @@ class HttpGoogleServicesDAO(
   }
 
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]] = {
+    implicit val service = GoogleInstrumentedService.Buckets
     Future {
       val getter = getStorage(getUserCredential(userInfo)).buckets().get(bucketName)
       try {
@@ -674,6 +687,7 @@ class HttpGoogleServicesDAO(
   }
 
   protected def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[Seq[BillingAccount]] = {
+    implicit val service = GoogleInstrumentedService.Billing
     val fetcher = getCloudBillingManager(credential).billingAccounts().list()
     retryWithRecoverWhen500orGoogleError(() => {
       val list = blocking {
@@ -715,6 +729,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.Buckets
     retryWhen500orGoogleError(() => {
       val so = new StorageObject().setName(userInfo.userSubjectId.value)
       val encryptedToken = Aes256Cbc.encrypt(refreshToken.getBytes, tokenSecretKey).get
@@ -797,6 +812,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]] = {
+    implicit val service = GoogleInstrumentedService.Genomics
     val opId = "operations"
     val filter = s"projectId = $serviceProject"
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
@@ -1083,7 +1099,10 @@ class HttpGoogleServicesDAO(
   def toProxyFromUser(rawlsUser: RawlsUser): String = toProxyFromUser(rawlsUser.userSubjectId)
   def toProxyFromUser(userInfo: UserInfo): String = toProxyFromUser(userInfo.userSubjectId)
   def toProxyFromUser(subjectId: RawlsUserSubjectId): String = s"PROXY_${subjectId.value}@${appsDomain}"
-  def toUserFromProxy(proxy: String) = executeGoogleRequest(getGroupDirectory.groups().get(proxy)).getName
+  def toUserFromProxy(proxy: String): String = {
+    implicit val service = GoogleInstrumentedService.Groups
+    executeGoogleRequest(getGroupDirectory.groups().get(proxy)).getName
+  }
   def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"

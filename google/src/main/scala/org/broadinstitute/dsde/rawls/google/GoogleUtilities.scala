@@ -8,8 +8,9 @@ import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
 import com.typesafe.scalalogging.LazyLogging
+import nl.grons.metrics.scala.Histogram
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
-import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, GoogleInstrumentedServiceMapper, InstrumentedRetry}
+import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, InstrumentedRetry}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, JsonSupport, WorkspaceJsonSupport}
 import spray.json.JsValue
 
@@ -37,21 +38,21 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
     }
   }
 
-  protected def retryWhen500orGoogleError[T: GoogleInstrumentedServiceMapper](op: () => T): Future[T] = {
-    retryExponentially(when500orGoogleError)(() => Future(blocking(op())))
+  protected def retryWhen500orGoogleError[T](op: () => T)(implicit histo: Histogram): Future[T] = {
+    retryExponentiallyAccumulating(when500orGoogleError)(() => Future(blocking(op())))
   }
 
-  protected def retryWithRecoverWhen500orGoogleError[T: GoogleInstrumentedServiceMapper](op: () => T)(recover: PartialFunction[Throwable, T]): Future[T] = {
+  protected def retryWithRecoverWhen500orGoogleError[T](op: () => T)(recover: PartialFunction[Throwable, T])(implicit histo: Histogram): Future[T] = {
     retryExponentially(when500orGoogleError)(() => Future(blocking(op())).recover(recover))
   }
 
-  protected def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T])(implicit counters: GoogleCounters[T]): T = {
+  protected def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T])(implicit counters: GoogleCounters): T = {
     executeGoogleCall(request) { response =>
       response.parseAs(request.getResponseClass)
     }
   }
 
-  protected def executeGoogleFetch[A,B](request: AbstractGoogleClientRequest[A])(f: (InputStream) => B)(implicit counters: GoogleCounters[A]): B = {
+  protected def executeGoogleFetch[A,B](request: AbstractGoogleClientRequest[A])(f: (InputStream) => B)(implicit counters: GoogleCounters): B = {
     executeGoogleCall(request) { response =>
       val stream = response.getContent
       try {
@@ -62,7 +63,7 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
     }
   }
 
-  protected def executeGoogleCall[A,B](request: AbstractGoogleClientRequest[A])(processResponse: (com.google.api.client.http.HttpResponse) => B)(implicit counters: GoogleCounters[A]): B = {
+  protected def executeGoogleCall[A,B](request: AbstractGoogleClientRequest[A])(processResponse: (com.google.api.client.http.HttpResponse) => B)(implicit counters: GoogleCounters): B = {
     val start = System.currentTimeMillis()
     Try {
       request.executeUnparsed()
@@ -118,7 +119,7 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
     logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - startTime, statusCode, errorReport).toJson(GoogleRequestFormat).compactPrint)
   }
 
-  private def instrumentGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, responseOrException: Either[HttpResponseException, com.google.api.client.http.HttpResponse])(implicit counters: GoogleCounters[A]): Unit = {
+  private def instrumentGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, responseOrException: Either[HttpResponseException, com.google.api.client.http.HttpResponse])(implicit counters: GoogleCounters): Unit = {
     val (counter, timer) = counters(request, responseOrException)
     counter += 1
     timer.update(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS)

@@ -44,32 +44,32 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
 
   override def status(id: String, userInfo: UserInfo): Future[ExecutionServiceStatus] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/status"
-    retry(when500) { () => pipeline[ExecutionServiceStatus](userInfo) apply Get(url) }
+    retryAccumulating(when500) { () => pipeline[ExecutionServiceStatus](userInfo) apply Get(url) }
   }
 
   override def callLevelMetadata(id: String, userInfo: UserInfo): Future[JsObject] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/metadata"
-    retry(when500) { () => pipeline[JsObject](userInfo) apply Get(url) }
+    retryAccumulating(when500) { () => pipeline[JsObject](userInfo) apply Get(url) }
   }
 
   override def outputs(id: String, userInfo: UserInfo): Future[ExecutionServiceOutputs] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/outputs"
-    retry(when500) { () => pipeline[ExecutionServiceOutputs](userInfo) apply Get(url) }
+    retryAccumulating(when500) { () => pipeline[ExecutionServiceOutputs](userInfo) apply Get(url) }
   }
 
   override def logs(id: String, userInfo: UserInfo): Future[ExecutionServiceLogs] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/logs"
-    retry(when500) { () => pipeline[ExecutionServiceLogs](userInfo) apply Get(url) }
+    retryAccumulating(when500) { () => pipeline[ExecutionServiceLogs](userInfo) apply Get(url) }
   }
 
   override def abort(id: String, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/abort"
-    retry(when500) { () => toFutureTry(pipeline[ExecutionServiceStatus](userInfo) apply Post(url)) }
+    retryAccumulating(when500) { () => toFutureTry(pipeline[ExecutionServiceStatus](userInfo) apply Post(url)) }
   }
 
   override def version(userInfo: UserInfo): Future[ExecutionServiceVersion] = {
     val url = executionServiceURL + s"/engine/v1/version"
-    retry(when500) { () => pipeline[ExecutionServiceVersion](userInfo) apply Get(url) }
+    retryAccumulating(when500) { () => pipeline[ExecutionServiceVersion](userInfo) apply Get(url) }
   }
 
   private def when500( throwable: Throwable ): Boolean = {

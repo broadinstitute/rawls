@@ -12,10 +12,10 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService._
 trait GoogleInstrumented extends WorkbenchInstrumented {
   final val GoogleServiceMetricKey = "googleService"
 
-  protected implicit def googleCounters[A: GoogleInstrumentedServiceMapper]: GoogleCounters[A] =
+  protected implicit def googleCounters(implicit service: GoogleInstrumentedService): GoogleCounters =
     (request, responseOrException) => {
       val base = ExpandedMetricBuilder
-        .expand(GoogleServiceMetricKey, implicitly[GoogleInstrumentedServiceMapper[A]].service)
+        .expand(GoogleServiceMetricKey, service)
         .expand(HttpRequestMethodMetricKey, request.getRequestMethod.toLowerCase)
         .expand(HttpResponseStatusCodeMetricKey, responseOrException.fold(_.getStatusCode, _.getStatusCode))
       val counter = base.asCounter("request")
@@ -23,15 +23,12 @@ trait GoogleInstrumented extends WorkbenchInstrumented {
       (counter, timer)
     }
 
-  protected implicit def googleRetryHistogram[A: GoogleInstrumentedServiceMapper]: Histogram =
+  protected implicit def googleRetryHistogram(implicit service: GoogleInstrumentedService): Histogram =
     ExpandedMetricBuilder
-      .expand(GoogleServiceMetricKey, implicitly[GoogleInstrumentedServiceMapper[A]].service)
+      .expand(GoogleServiceMetricKey, service)
       .asHistogram("retry")
-
-  protected implicit def serviceMapperFromService[A](implicit service: GoogleInstrumentedService): GoogleInstrumentedServiceMapper[A] =
-    GoogleInstrumentedServiceMapper[A](service)
 }
 
 object GoogleInstrumented {
-  type GoogleCounters[A] = (AbstractGoogleClientRequest[A], Either[HttpResponseException, HttpResponse]) => (Counter, Timer)
+  type GoogleCounters = (AbstractGoogleClientRequest[_], Either[HttpResponseException, HttpResponse]) => (Counter, Timer)
 }

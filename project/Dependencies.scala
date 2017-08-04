@@ -101,6 +101,7 @@ object Dependencies {
   val utilDependencies = Seq(
     scalaLogging,
     akkaActor,
+    cats,
     akkaTestkit,
     scalatest,
     mockito
