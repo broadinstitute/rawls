@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.rawls.metrics.{InstrumentedRetry, RawlsInstrument
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus, MethodConfiguration, Subsystems, UserInfo}
-import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
 import spray.client.pipelining._
 import spray.http.StatusCodes
@@ -35,7 +34,7 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
 
 
   private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    retryAccumulating(when500) { () =>
+    retry(when500) { () =>
       pipeline[Option[AgoraEntity]](userInfo) apply Get(url) recover {
         case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
       }
@@ -43,7 +42,7 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
   }
 
   private def postAgoraEntity( url: String, agoraEntity: AgoraEntity, userInfo: UserInfo): Future[AgoraEntity] = {
-    retryAccumulating(when500) { () => pipeline[AgoraEntity](userInfo) apply Post(url, agoraEntity) }
+    retry(when500) { () => pipeline[AgoraEntity](userInfo) apply Post(url, agoraEntity) }
   }
 
   override def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {

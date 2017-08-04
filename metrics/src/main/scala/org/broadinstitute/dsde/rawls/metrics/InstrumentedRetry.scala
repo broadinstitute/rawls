@@ -12,15 +12,17 @@ import scala.concurrent.{ExecutionContext, Future}
 trait InstrumentedRetry extends Retry {
   this: WorkbenchInstrumented with LazyLogging =>
 
-  protected implicit def instrumentAccumulatingFuture[A](af: AccumulatingFuture[A])(implicit histo: Histogram, executionContext: ExecutionContext): Future[A] = {
+  /**
+    * Converts an AccumulatingFuture[A] to a Future[A].
+    * Given an implicit Histogram, instruments the number of failures in the histogram.
+    */
+  protected implicit def accumulatingFutureToFuture[A](af: AccumulatingFuture[A])(implicit histo: Histogram, executionContext: ExecutionContext): Future[A] = {
     af.flatMap {
       case Left(errors) =>
-        histo += (errors.tail.size + 1)
+        histo += errors.toList.size
         Future.failed(errors.head)
       case Right((errors, a)) =>
-        if (errors.nonEmpty) {
-          histo += errors.size
-        }
+        histo += errors.size
         Future.successful(a)
     }
   }

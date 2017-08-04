@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.metrics.{InstrumentedRetry, RawlsInstrument
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
+import org.broadinstitute.dsde.rawls.util.FutureSupport
 import spray.client.pipelining._
 import spray.http.{BodyPart, MultipartFormData}
 import spray.httpx.SprayJsonSupport._
@@ -44,32 +44,32 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
 
   override def status(id: String, userInfo: UserInfo): Future[ExecutionServiceStatus] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/status"
-    retryAccumulating(when500) { () => pipeline[ExecutionServiceStatus](userInfo) apply Get(url) }
+    retry(when500) { () => pipeline[ExecutionServiceStatus](userInfo) apply Get(url) }
   }
 
   override def callLevelMetadata(id: String, userInfo: UserInfo): Future[JsObject] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/metadata"
-    retryAccumulating(when500) { () => pipeline[JsObject](userInfo) apply Get(url) }
+    retry(when500) { () => pipeline[JsObject](userInfo) apply Get(url) }
   }
 
   override def outputs(id: String, userInfo: UserInfo): Future[ExecutionServiceOutputs] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/outputs"
-    retryAccumulating(when500) { () => pipeline[ExecutionServiceOutputs](userInfo) apply Get(url) }
+    retry(when500) { () => pipeline[ExecutionServiceOutputs](userInfo) apply Get(url) }
   }
 
   override def logs(id: String, userInfo: UserInfo): Future[ExecutionServiceLogs] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/logs"
-    retryAccumulating(when500) { () => pipeline[ExecutionServiceLogs](userInfo) apply Get(url) }
+    retry(when500) { () => pipeline[ExecutionServiceLogs](userInfo) apply Get(url) }
   }
 
   override def abort(id: String, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/abort"
-    retryAccumulating(when500) { () => toFutureTry(pipeline[ExecutionServiceStatus](userInfo) apply Post(url)) }
+    retry(when500) { () => toFutureTry(pipeline[ExecutionServiceStatus](userInfo) apply Post(url)) }
   }
 
   override def version(userInfo: UserInfo): Future[ExecutionServiceVersion] = {
     val url = executionServiceURL + s"/engine/v1/version"
-    retryAccumulating(when500) { () => pipeline[ExecutionServiceVersion](userInfo) apply Get(url) }
+    retry(when500) { () => pipeline[ExecutionServiceVersion](userInfo) apply Get(url) }
   }
 
   private def when500( throwable: Throwable ): Boolean = {

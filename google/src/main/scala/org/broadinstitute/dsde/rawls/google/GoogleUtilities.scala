@@ -39,7 +39,7 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
   }
 
   protected def retryWhen500orGoogleError[T](op: () => T)(implicit histo: Histogram): Future[T] = {
-    retryExponentiallyAccumulating(when500orGoogleError)(() => Future(blocking(op())))
+    retryExponentially(when500orGoogleError)(() => Future(blocking(op())))
   }
 
   protected def retryWithRecoverWhen500orGoogleError[T](op: () => T)(recover: PartialFunction[Throwable, T])(implicit histo: Histogram): Future[T] = {
