@@ -232,7 +232,7 @@ class HttpGoogleServicesDAO(
           val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(getStorageLogsBucketName(project.projectName), storageObject, stream)
           executeGoogleRequest(objectInserter)
         }
-      }.mapTo[Unit]
+      }
     }
 
     // setupWorkspace main logic
@@ -380,7 +380,7 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.Groups
     val member = new Member().setEmail(user.userEmail.value).setRole(groupMemberRole)
     val inserter = getGroupDirectory.members.insert(toProxyFromUser(user.userSubjectId), member)
-    retryWhen500orGoogleError(() => { executeGoogleRequest(inserter) }).mapTo[Unit]
+    retryWhen500orGoogleError(() => { executeGoogleRequest(inserter) })
   }
 
   override def removeUserFromProxyGroup(user: RawlsUser): Future[Unit] = {
@@ -541,7 +541,7 @@ class HttpGoogleServicesDAO(
     retryWhen500orGoogleError (() => {
       val inserter = groups.insert(new Group().setEmail(toProxyFromUser(user.userSubjectId)).setName(user.userEmail.value))
       executeGoogleRequest(inserter)
-    }).mapTo[Unit]
+    })
   }
 
   def deleteProxyGroup(user: RawlsUser): Future[Unit] = {
@@ -591,8 +591,8 @@ class HttpGoogleServicesDAO(
     val inserter = getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(inserter)) }) {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => None // it is ok of the email is already there
-    }
-  }.mapTo[Unit]
+    }.mapTo[Unit]
+  }
 
   override def removeMemberFromGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
     val memberEmail = memberToAdd match {
@@ -738,7 +738,7 @@ class HttpGoogleServicesDAO(
       val inserter = getStorage(getBucketServiceAccountCredential).objects().insert(tokenBucketName, so, media)
       inserter.getMediaHttpUploader().setDirectUploadEnabled(true)
       executeGoogleRequest(inserter)
-    }).mapTo[Unit]
+    })
   }
 
   override def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]] = {
