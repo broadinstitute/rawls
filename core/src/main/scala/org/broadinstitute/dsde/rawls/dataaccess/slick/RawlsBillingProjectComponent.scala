@@ -204,7 +204,7 @@ trait RawlsBillingProjectComponent {
       for {
         projectGroup <- rawlsBillingProjectGroupQuery if projectGroup.projectName === projectName.value
         groupSubgroup <- groupSubgroupsQuery if groupSubgroup.parentGroupName === projectGroup.groupName
-        subgroup <- rawlsGroupQuery if subgroup.groupName === groupSubgroup.parentGroupName
+        subgroup <- rawlsGroupQuery if subgroup.groupName === groupSubgroup.childGroupName
       } yield (subgroup.groupEmail, projectGroup.role)
     }
 
