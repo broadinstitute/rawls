@@ -545,9 +545,9 @@ class HttpGoogleServicesDAO(
   }
 
   def deleteProxyGroup(user: RawlsUser): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.Groups
     val directory = getGroupDirectory
     val groups = directory.groups
-    implicit val service = GoogleInstrumentedService.Groups
     retryWhen500orGoogleError (() => {
       val deleter = groups.delete(toProxyFromUser(user.userSubjectId))
       executeGoogleRequest(deleter)
@@ -589,9 +589,9 @@ class HttpGoogleServicesDAO(
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Groups
     val inserter = getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(inserter)) }) {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => None // it is ok of the email is already there
-    }.mapTo[Unit]
+    retryWithRecoverWhen500orGoogleError[Unit](() => { Option(executeGoogleRequest(inserter)) }) {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => () // it is ok of the email is already there
+    }
   }
 
   override def removeMemberFromGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
@@ -605,9 +605,9 @@ class HttpGoogleServicesDAO(
   override def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Groups
     val deleter = getGroupDirectory.members.delete(groupEmail, emailToRemove)
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(deleter)) }) {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None // it is ok of the email is already missing
-    }.mapTo[Unit]
+    retryWithRecoverWhen500orGoogleError[Unit](() => { Option(executeGoogleRequest(deleter)) }) {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // it is ok of the email is already missing
+    }
   }
 
   override def deleteGoogleGroup(group: RawlsGroup): Future[Unit] = {
@@ -615,9 +615,9 @@ class HttpGoogleServicesDAO(
     val directory = getGroupDirectory
     val groups = directory.groups
     val deleter = groups.delete(group.groupEmail.value)
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(deleter)) }) {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None // if the group is already gone, don't fail
-    }.mapTo[Unit]
+    retryWithRecoverWhen500orGoogleError[Unit](() => { Option(executeGoogleRequest(deleter)) }) {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // if the group is already gone, don't fail
+    }
   }
 
   //add a file to the bucket as the specified user, then remove it
@@ -800,10 +800,10 @@ class HttpGoogleServicesDAO(
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
     val operationRequest = genomicsApi.operations().get(opId)
 
-    retryWithRecoverWhen500orGoogleError(() => {
+    retryWithRecoverWhen500orGoogleError[Option[JsObject]](() => {
       // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
       // So, use Google's functionality to get the json string, then parse it back into a generic json object
-      Option(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
+      Some(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
     }) {
       // Recover from Google 404 errors because it's an expected return status.
       // Here we use `None` to represent a 404 from Google.
@@ -819,7 +819,7 @@ class HttpGoogleServicesDAO(
     val operationRequest = genomicsApi.operations().list(opId).setFilter(filter)
     retryWhen500orGoogleError(() => {
       val list = executeGoogleRequest(operationRequest)
-      list.getOperations.toSeq
+      list.getOperations
     })
   }
 
