@@ -1860,6 +1860,25 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "allow a granter to revoke share permissions of another granter" in withTestDataApiServicesAndUser("reader-access-via-group") { services =>
+    import WorkspaceACLJsonSupport._
+    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false))))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) {
+          status
+        }
+        responseAs[WorkspaceACL].acl should contain(testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false))
+      }
+  }
+
   it should "allow a writer with share permissions to share equal to and below their access level" in withTestDataApiServicesAndUser("writer-access") { services =>
     import WorkspaceACLJsonSupport._
     Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
