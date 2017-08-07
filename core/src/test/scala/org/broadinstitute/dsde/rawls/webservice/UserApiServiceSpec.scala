@@ -767,6 +767,30 @@ class UserApiServiceSpec extends ApiServiceSpec {
     assert(testGroup.membersGroup.users.isEmpty)
   }
 
+  it should "400 when creating a group with a name longer than 50 characters" in withUsersTestDataApiServices() { services =>
+    val testGroupName = "111111111122222222223333333333444444444455555555556666666666" //60 characters
+
+    Post(s"/groups/$testGroupName") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, response.entity.asString) {
+          status
+        }
+      }
+  }
+
+  it should "400 when creating a group with invalid characters in the name" in withUsersTestDataApiServices() { services =>
+    val testGroupName = "(*#&$(*&#$@"
+
+    Post(s"/groups/$testGroupName") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, response.entity.asString) {
+          status
+        }
+      }
+  }
+
   it should "409 creating an existing group" in withUsersTestDataApiServices() { services =>
     val testGroupName = "testGroup"
     createManagedGroup(services, testGroupName)
