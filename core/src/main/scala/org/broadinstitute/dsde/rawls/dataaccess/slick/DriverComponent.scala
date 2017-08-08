@@ -7,17 +7,18 @@ import java.util.UUID
 import akka.util.ByteString
 import org.apache.commons.codec.binary.Base64
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.driver.JdbcDriver
 import slick.jdbc.{GetResult, PositionedParameters, SQLActionBuilder, SetParameter}
 import spray.http.StatusCodes
 
 import scala.concurrent.ExecutionContext
 
-trait DriverComponent {
+trait DriverComponent extends StringValidationUtils {
   val driver: JdbcDriver
   val batchSize: Int
   implicit val executionContext: ExecutionContext
+  override implicit val errorReportSource = ErrorReportSource("rawls")
 
   // needed by MySQL but not actually used; we will always overwrite
   val defaultTimeStamp = Timestamp.valueOf("2001-01-01 01:01:01.0")
@@ -37,23 +38,6 @@ trait DriverComponent {
       case Seq() => None
       case Seq(one) => Option(one)
       case tooMany => throw new RawlsException(s"Expected 0 or 1 result but found all of these: $tooMany")
-    }
-  }
-
-  //in general, we only support alphanumeric, spaces, _, and - for user-input
-  def validateUserDefinedString(s: String) = {
-    if(!s.matches("[A-z0-9_-]+")) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: $s. Input may only contain alphanumeric characters, underscores, and dashes.", statusCode = StatusCodes.BadRequest))
-  }
-
-  def validateMaxStringLength(s: String, maxLength: Int) = {
-    if(s.length > maxLength) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: $s. Input may be a max of $maxLength characters.", statusCode = StatusCodes.BadRequest))
-  }
-
-  def validateAttributeName(an: AttributeName, entityType: String) = {
-    if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an.name)) ||
-      AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix).equalsIgnoreCase(an)) {
-
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Attribute name ${an.name} is reserved", statusCode = StatusCodes.BadRequest))
     }
   }
 
