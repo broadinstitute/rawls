@@ -252,7 +252,8 @@ case class MethodRepoConfigurationExport(
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspace: Workspace,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
-                                 owners: Seq[String])
+                                 owners: Seq[String],
+                                 public: Option[Boolean])
 
 case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
                              canShare: Boolean,
@@ -424,7 +425,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 
-  implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
+  implicit val WorkspaceListResponseFormat = jsonFormat5(WorkspaceListResponse)
 
   implicit val WorkspaceResponseFormat = jsonFormat6(WorkspaceResponse)
 
