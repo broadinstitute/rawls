@@ -7,17 +7,14 @@ import akka.testkit.{TestActorRef, TestKit}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{SubmissionRecord, TestDriverComponent, WorkflowRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{ExecutionServiceStatusResponse, StatusCheckComplete}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.metrics.{RawlsStatsDTestUtils, StatsDTestUtils}
+import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import spray.http.OAuth2BearerToken
-
-import scala.collection.immutable.IndexedSeq
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -408,6 +405,61 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
+      }
+    }
+  }
+
+  it should "fail workflows with invalid output expressions" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+
+    val badExprs = Seq(
+      "this.",
+      "this.bad|character",
+      "this.case_sample.attribute",
+      "workspace.",
+      "workspace........",
+      "workspace.nope.nope.nope",
+      "where_does_this_even_go",
+      "",
+      "*")
+
+    badExprs foreach { badExpr =>
+      val mcBadExprs = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), Map("bad1" -> AttributeString(badExpr)), MethodRepoMethod("ns-config", "meth1", 1))
+
+      val subBadExprs = createTestSubmission(testData.workspace, mcBadExprs, testData.indiv1, testData.userOwner,
+        Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
+        Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
+
+      withWorkspaceContext(testData.workspace) { context =>
+        runAndWait(methodConfigurationQuery.create(context, mcBadExprs))
+        runAndWait(submissionQuery.create(context, subBadExprs))
+      }
+
+      val monitor = createSubmissionMonitor(dataSource, subBadExprs, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+      val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(subBadExprs.submissionId)))
+
+      runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("bad1" -> Left(AttributeString("result")))))), this))
+
+      // the entity was not updated
+      assertResult(Seq(testData.indiv1)) {
+        subBadExprs.workflows.map { wf =>
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
+        }
+      }
+
+      val resultWorkflow = withWorkspaceContext(testData.workspace) { context =>
+        runAndWait(workflowQuery.get(context, subBadExprs.submissionId, testData.indiv1.entityType, testData.indiv1.name))
+      }.get
+
+      // the workflow was marked as failed
+      assertResult(WorkflowStatuses.Failed) {
+        resultWorkflow.status
+      }
+
+      // the error was recorded
+      assert {
+        resultWorkflow.messages.exists {
+          _.value.contains("Invalid")
+        }
       }
     }
   }

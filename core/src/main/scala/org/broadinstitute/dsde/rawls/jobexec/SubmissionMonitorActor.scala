@@ -10,6 +10,7 @@ import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
+import org.broadinstitute.dsde.rawls.expressions.{OutputExpression, ThisEntityTarget, WorkspaceTarget}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -299,12 +300,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     } else {
       for {
         // load all the starting data
-        entitiesById <-      listWorkflowEntitiesById(workflowsWithOutputs, dataAccess)
-        outputExpressions <- listMethodConfigOutputsForSubmission(dataAccess)
-        workspace <-         getWorkspace(dataAccess).map(_.getOrElse(throw new RawlsException(s"workspace for submission $submissionId not found")))
+        entitiesById <-         listWorkflowEntitiesById(workflowsWithOutputs, dataAccess)
+        outputExpressionMap <-  listMethodConfigOutputsForSubmission(dataAccess)
+        workspace <-            getWorkspace(dataAccess).map(_.getOrElse(throw new RawlsException(s"workspace for submission $submissionId not found")))
 
         // update the appropriate entities and workspace (in memory)
-        updatedEntitiesAndWorkspace = attachOutputs(workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+        updatedEntitiesAndWorkspace = attachOutputs(workspace, workflowsWithOutputs, entitiesById, outputExpressionMap)
 
         // save everything to the db
         _ <- saveWorkspace(dataAccess, updatedEntitiesAndWorkspace)
@@ -339,14 +340,16 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     else dataAccess.entityQuery.save(SlickWorkspaceContext(workspace), entities)
   }
 
-  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressions: Map[String, String]): Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
+  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressionMap: Map[String, String]): Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
       logger.debug(s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs}")
-      logger.debug(s"output expressions for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputExpressions}")
+      logger.debug(s"output expressions for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputExpressionMap}")
 
-      val attributes = outputExpressions.map { case (outputName, outputExpr) =>
+      val attributes = outputExpressionMap.map { case (outputName, outputExprStr) =>
         Try {
+          // parse and validate the output expression strings
+          val outputExpr = OutputExpression(outputExprStr)
           outputs.get(outputName) match {
             case None => throw new RawlsException(s"output named ${outputName} does not exist")
             case Some(Right(uot: UnsupportedOutputType)) => throw new RawlsException(s"output named ${outputName} is not a supported type, received json u${uot.json.compactPrint}")
@@ -367,12 +370,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
-  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Map[String, Attribute]): (Option[Entity], Option[Workspace]) = {
-    //Partition outputs by whether their attributes are entity attributes (begin with "this.") or workspace ones (implicitly; begin with "workspace.")
-    //This assumption (that it's either "this." or "workspace.") will be guaranteed by checking of the method config when it's imported; see DSDEEPB-1603.
-    val (partitionEntity, partitionWorkspace) = workflowOutputs.partition({ case (k, v) => k.startsWith("this.") })
-    val entityAttributes = partitionEntity.map({ case (k, v) => (AttributeName.fromDelimitedName(k.stripPrefix("this.")), v) })
-    val workspaceAttributes = partitionWorkspace.map({ case (k, v) => (AttributeName.fromDelimitedName(k.stripPrefix("workspace.")), v) })
+  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Map[OutputExpression, Attribute]): (Option[Entity], Option[Workspace]) = {
+    val entityAttributes = workflowOutputs.collect({ case (OutputExpression(ThisEntityTarget, attrName), attr) => (attrName, attr) })
+    val workspaceAttributes = workflowOutputs.collect({ case (OutputExpression(WorkspaceTarget, attrName), attr) => (attrName, attr) })
 
     val updatedEntity = if (entityAttributes.isEmpty) None else Option(entity.copy(attributes = entity.attributes ++ entityAttributes))
     val updatedWorkspace = if (workspaceAttributes.isEmpty) None else Option(workspace.copy(attributes = workspace.attributes ++ workspaceAttributes))
