@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.joda.time.DateTime
+import slick.lifted.QueryBase
 /**
  * Created by dvoet on 2/4/16.
  */
@@ -512,6 +513,22 @@ trait WorkspaceComponent {
       (subGroupEmailQuery union userEmailQuery).result.map { wsIdAndEmails =>
         wsIdAndEmails.groupBy { case (wsId, email) => wsId }.
           mapValues(_.map { case (wsId, email) => email }) }
+    }
+
+    /**
+      * List all workspaces that have a sub-group child name. Useful for determining if workspaces
+      * are in the "All_Users" group.
+      *
+      * @param workspaceIds Seq of UUIDs to check
+      * @param groupRef The GroupSubgroup to check
+      * @return Seq of UUIDs that match
+      */
+    def listWorkspacesWithGroupAccess(workspaceIds: Seq[UUID], groupRef: RawlsGroupRef): ReadAction[Seq[UUID]] = {
+      val accessQuery = workspaceAccessQuery.filter(access => access.workspaceId.inSetBind(workspaceIds) && access.isAuthDomainAcl === false && access.accessLevel === WorkspaceAccessLevels.Read.toString)
+      val subGroupQuery = accessQuery join groupSubgroupsQuery on { case (wsAccess, subGroup) =>
+        wsAccess.groupName === subGroup.parentGroupName && subGroup.childGroupName === groupRef.groupName.value
+      }
+      subGroupQuery.result.map { wsAndGroups => wsAndGroups.map(_._1.workspaceId) }
     }
 
     def loadAccessGroup(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) = {

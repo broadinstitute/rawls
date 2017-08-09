@@ -404,12 +404,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
         authDomainsForUser <- dataAccess.workspaceQuery.getAuthorizedAuthDomainGroups(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo))
         ownerEmails <- dataAccess.workspaceQuery.listAccessGroupMemberEmails(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), WorkspaceAccessLevels.Owner)
-        readerEmails <- dataAccess.workspaceQuery.listAccessGroupMemberEmails(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), WorkspaceAccessLevels.Read)
+        publicWorkspaces <- dataAccess.workspaceQuery.listWorkspacesWithGroupAccess(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), UserService.allUsersGroupRef)
         submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
         workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
-      } yield (permissionsPairs, authDomainsForUser, ownerEmails, readerEmails, submissionSummaryStats, workspaces)
+      } yield (permissionsPairs, authDomainsForUser, ownerEmails, publicWorkspaces, submissionSummaryStats, workspaces)
 
-      val results = query.map { case (permissionsPairs, authDomainsForUser, ownerEmails, readerEmails, submissionSummaryStats, workspaces) =>
+      val results = query.map { case (permissionsPairs, authDomainsForUser, ownerEmails, publicWorkspaces, submissionSummaryStats, workspaces) =>
         val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
         permissionsPairs.map { permissionsPair =>
           workspacesById.get(permissionsPair.workspaceId).map { workspace =>
@@ -418,8 +418,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               else permissionsPair.accessLevel
             }
             val wsId = UUID.fromString(workspace.workspaceId)
-            val isPublic: Boolean = readerEmails.getOrElse(wsId, Seq.empty[String]).exists(_.contains(UserService.allUsersGroupRef))
-            WorkspaceListResponse(trueAccessLevel, workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId, Seq.empty), Some(isPublic))
+            val public: Boolean = publicWorkspaces.contains(wsId)
+            WorkspaceListResponse(trueAccessLevel, workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId, Seq.empty), Some(public))
           }
         }
       }
