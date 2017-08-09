@@ -29,8 +29,7 @@ case class WorkflowRecord(id: Long,
                           statusLastChangedDate: Timestamp,
                           workflowEntityId: Long,
                           recordVersion: Long,
-                          executionServiceKey: Option[String],
-                          rawls_hostname: String
+                          executionServiceKey: Option[String]
                          )
 
 case class WorkflowMessageRecord(workflowId: Long, message: String)
@@ -57,9 +56,8 @@ trait WorkflowComponent {
     def workflowEntityId = column[Long]("ENTITY_ID")
     def version = column[Long]("record_version")
     def executionServiceKey = column[Option[String]]("EXEC_SERVICE_KEY")
-    def hostname = column[String]("rawls_hostname", O.Length(255))
 
-    def * = (id, externalId, submissionId, status, statusLastChangedDate, workflowEntityId, version, executionServiceKey, hostname) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
+    def * = (id, externalId, submissionId, status, statusLastChangedDate, workflowEntityId, version, executionServiceKey) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
     def submission = foreignKey("FK_WF_SUB", submissionId, submissionQuery)(_.id)
     def workflowEntity = foreignKey("FK_WF_ENTITY", workflowEntityId, entityQuery)(_.id)
@@ -510,8 +508,7 @@ trait WorkflowComponent {
         new Timestamp(workflow.statusLastChangedDate.toDate.getTime),
         entityId,
         0,
-        None,
-        ""
+        None
       )
     }
 
