@@ -524,7 +524,7 @@ trait WorkspaceComponent {
       * @return Seq of UUIDs that match
       */
     def listWorkspacesWithGroupAccess(workspaceIds: Seq[UUID], groupRef: RawlsGroupRef): ReadAction[Seq[UUID]] = {
-      val accessQuery = workspaceAccessQuery.filter(access => access.workspaceId.inSetBind(workspaceIds) && access.isAuthDomainAcl === false && access.accessLevel === WorkspaceAccessLevels.Read.toString)
+      val accessQuery = workspaceAccessQuery.filter(access => access.workspaceId.inSetBind(workspaceIds))
       val subGroupQuery = accessQuery join groupSubgroupsQuery on { case (wsAccess, subGroup) =>
         wsAccess.groupName === subGroup.parentGroupName && subGroup.childGroupName === groupRef.groupName.value
       }
