@@ -41,6 +41,14 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Use
         entity(as[MethodConfiguration]) { newMethodConfiguration =>
           requestContext => {
             perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.OverwriteMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName, newMethodConfiguration))
+          }
+        }
+      } ~
+      post {
+        entity(as[MethodConfiguration]) { newMethodConfiguration =>
+          requestContext => {
+            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
               WorkspaceService.UpdateMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName, newMethodConfiguration))
           }
         }
@@ -58,9 +66,9 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Use
     } ~
     path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) =>
       post {
-        entity(as[MethodConfigurationName]) { newEntityName =>
+        entity(as[MethodConfigurationName]) { newName =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.RenameMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigurationName, newEntityName.name))
+            WorkspaceService.RenameMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigurationName, newName))
         }
       }
     } ~

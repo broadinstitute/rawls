@@ -86,9 +86,10 @@ object WorkspaceService {
 
   case class CreateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
   case class GetMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
+  case class OverwriteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
   case class UpdateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
   case class DeleteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
-  case class RenameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String) extends WorkspaceServiceMessage
+  case class RenameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: MethodConfigurationName) extends WorkspaceServiceMessage
   case class CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) extends WorkspaceServiceMessage
   case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationImport) extends WorkspaceServiceMessage
   case class CopyMethodConfigurationToMethodRepo(query: MethodRepoConfigurationExport) extends WorkspaceServiceMessage
@@ -171,6 +172,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case RenameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName) => pipe(renameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)) to sender
     case DeleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(deleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to sender
     case GetMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(getMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to sender
+    case OverwriteMethodConfiguration(workspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration) => pipe(overwriteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newMethodConfiguration)) to sender
     case UpdateMethodConfiguration(workspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration) => pipe(updateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newMethodConfiguration)) to sender
     case CopyMethodConfiguration(methodConfigNamePair) => pipe(copyMethodConfiguration(methodConfigNamePair)) to sender
     case CopyMethodConfigurationFromMethodRepo(query) => pipe(copyMethodConfigurationFromMethodRepo(query)) to sender
@@ -1171,13 +1173,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def createAndValidateMCExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
+  def createMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration) map { _ =>
       validateMCExpressions(methodConfiguration, dataAccess)
     }
   }
 
-  def updateAndValidateMCExpressions(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
+  def updateMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration) map { _ =>
       validateMCExpressions(methodConfiguration, dataAccess)
     }
@@ -1212,7 +1214,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
             case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")))
-            case None => createAndValidateMCExpressions(workspaceContext, methodConfiguration, dataAccess)
+            case None => createMCAndValidateExpressions(workspaceContext, methodConfiguration, dataAccess)
           } map { validatedMethodConfiguration =>
             RequestCompleteWithLocation((StatusCodes.Created, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
           }
@@ -1230,20 +1232,45 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def renameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String): Future[PerRequestMessage] =
+  def renameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: MethodConfigurationName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfiguration =>
-          //Check if there are any other method configs that already possess the new name
-          dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfigurationNamespace, newName) flatMap {
+          //If a different MC exists at the target location, return 409. But it's okay to want to overwrite your own MC.
+          dataAccess.methodConfigurationQuery.get(workspaceContext, newName.namespace, newName.name) flatMap {
+            case Some(_) if methodConfigurationNamespace != newName.namespace || methodConfigurationName != newName.name =>
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport =
+                ErrorReport(StatusCodes.Conflict, s"There is already a method configuration at ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}.")))
+            case Some(_) => DBIO.successful(()) //renaming self to self: no-op
             case None =>
-              dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration.copy(name = newName))
-            case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Destination ${newName} already exists")))
-          } map(_ => RequestComplete(StatusCodes.NoContent))
+              dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration.copy(name = newName.name, namespace = newName.namespace))
+          } map (_ => RequestComplete(StatusCodes.NoContent))
         }
       }
     }
 
+  //Overwrite the method configuration at methodConfiguration[namespace|name] with the new method configuration.
+  def overwriteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] = {
+    withAttributeNamespaceCheck(methodConfiguration) {
+      // create transaction
+      dataSource.inTransaction { dataAccess =>
+        // check permissions
+        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+          if(methodConfiguration.namespace != methodConfigurationNamespace || methodConfiguration.name != methodConfigurationName) {
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest,
+              s"The method configuration name and namespace in the URI should match the method configuration name and namespace in the request body. If you want to move this method configuration, use POST.")))
+          } else {
+            createMCAndValidateExpressions(workspaceContext, methodConfiguration, dataAccess) map { validatedMethodConfiguration =>
+              RequestCompleteWithLocation((StatusCodes.Created, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  //Move the method configuration at methodConfiguration[namespace|name] to the location specified in methodConfiguration, _and_ update it.
+  //It's like a rename and upsert all rolled into one.
   def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] = {
     withAttributeNamespaceCheck(methodConfiguration) {
      // create transaction
@@ -1252,10 +1279,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           // get old method configuration
           dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfigurationNamespace, methodConfigurationName) flatMap {
-            // if old method config exists, save the new one
-            case Some(_) => updateAndValidateMCExpressions(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration, dataAccess)
-            // if old method config does not exist, fail
-            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"There is no method configuration named ${methodConfigurationNamespace}/${methodConfigurationName} in ${workspaceName}.")))
+            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport =
+              ErrorReport(StatusCodes.NotFound, s"There is no method configuration named ${methodConfigurationNamespace}/${methodConfigurationName} in ${workspaceName}.")))
+            case Some(_) =>
+              dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
+                //If a different MC exists at the target location, return 409. But it's okay to want to overwrite your own MC.
+                case Some(_) if methodConfigurationNamespace != methodConfiguration.namespace || methodConfigurationName != methodConfiguration.name =>
+                  DBIO.failed(new RawlsExceptionWithErrorReport(errorReport =
+                    ErrorReport(StatusCodes.Conflict, s"There is already a method configuration at ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}.")))
+                case _ =>
+                  updateMCAndValidateExpressions(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration, dataAccess)
+              }
+
           } map (RequestComplete(StatusCodes.OK, _))
         }
       }
@@ -1351,7 +1386,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     dataAccess.methodConfigurationQuery.get(destContext, dest.namespace, dest.name).flatMap {
       case Some(existingMethodConfig) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"A method configuration named ${dest.namespace}/${dest.name} already exists in ${dest.workspaceName}")))
-      case None => createAndValidateMCExpressions(destContext, target, dataAccess)
+      case None => createMCAndValidateExpressions(destContext, target, dataAccess)
     }.map(validatedTarget => RequestCompleteWithLocation((StatusCodes.Created, validatedTarget), target.path(dest.workspaceName)))
   }
 

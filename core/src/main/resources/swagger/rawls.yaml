@@ -2500,6 +2500,61 @@ paths:
           description: Successful Request
           schema:
             $ref: '#/definitions/ValidatedMethodConfiguration'
+        '400':
+          description: Method configuration name and namespace in URI do not match those in JSON body
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '403':
+          description: Invalid attribute namespace(s) in outputs
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Add or overwrite method configuration in a workspace
+      tags:
+        - methodconfigs
+      summary: Add or overwrite method configuration in a workspace
+      operationId: overwrite_method_configuration
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Namespace
+          name: configNamespace
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Name
+          name: configName
+          required: true
+          type: string
+        - in: body
+          description: New Method Configuration contents
+          name: newMethodConfigJson
+          required: true
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+    post:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/ValidatedMethodConfiguration'
         '403':
           description: Invalid attribute namespace(s) in outputs
           schema:
@@ -2508,11 +2563,20 @@ paths:
           description: Workspace or method configuration not found
           schema:
             $ref: '#/definitions/ErrorReport'
+        '409':
+          description: Method config with the new name already exists in workspace
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: Update method configuration in a workspace
+      description: |
+        Update method configuration.
+        Updates and moves the method configuration at the URI to the location in the request body.
+        The location in the URI may be the same as the location in the request body.
+        If the location in the request body matches the location in the URI, it is overwritten.
+        If the location in the request body is different to the location in the URI, and there is a method config already at that location, 409 is returned.
       tags:
         - methodconfigs
       summary: Update method configuration in a workspace
@@ -2566,7 +2630,9 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: Rename method configuration
+      description: |
+        Rename method configuration.
+        The workspace name and namespace in the HTTP body are ignored.
       tags:
         - methodconfigs
       summary: rename method configuration in a workspace

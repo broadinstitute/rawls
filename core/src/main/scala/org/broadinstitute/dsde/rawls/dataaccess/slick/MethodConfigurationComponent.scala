@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -101,43 +102,54 @@ trait MethodConfigurationComponent {
       the core methods
      */
 
+    //For readability in tests and whatnot.
+    def create(workspaceContext: SlickWorkspaceContext, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = upsert(workspaceContext, newMethodConfig)
 
-    //Create is used when importing a new method config or cloning a method config from a different workspace.
-    // It will first check to see if another method config with that namespace and name exist.
-    //    If it does, it will archive the existing and save the given one.
-    //    If it does not, it will simply add the given method config
-    def create(workspaceContext: SlickWorkspaceContext, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
+    //Looks for an existing method config with the same namespace and name.
+    //If it exists, archives it.
+    //In either case, saves the new method configuration.
+    def upsert(workspaceContext: SlickWorkspaceContext, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
       uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceId, newMethodConfig.namespace, newMethodConfig.name)) flatMap {
         case None =>
-          val configInsert = (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) +=  marshalMethodConfig(workspaceContext.workspaceId, newMethodConfig))
-          configInsert flatMap { configId =>
-            saveMaps(newMethodConfig, configId)
-          }
+          saveWithoutArchive(workspaceContext, newMethodConfig)
         case Some(currentMethodConfigRec) =>
-         save(workspaceContext, currentMethodConfigRec, newMethodConfig)
+          archive(workspaceContext, currentMethodConfigRec) andThen
+            saveWithoutArchive(workspaceContext, newMethodConfig, currentMethodConfigRec.methodConfigVersion + 1)
       }
     } map { _ => newMethodConfig }
 
-    //Update is used when an existing method config is editted, including any renaming of the method config.
-    //The old method config namespace and name are specified because we cannot trust that they are the same as the new method config
-    //First, check if old method config info yields an existing method config
-    //    If it does, archive this existing method config and add the new method config
-    //    If it does not, fail
+    //"Update" the method config at oldMethodConfig[name|namespace] to be the MC - including potential new location - in newMethodConfig.
+    //It's like a rename and upsert all in one.
+    //The MC at oldMethodConfig[name|namespace] MUST exist. It will be archived.
+    //If there's a method config at the location specified in newMethodConfig that will be archived too.
     def update(workspaceContext: SlickWorkspaceContext, oldMethodConfigNamespace: String, oldMethodConfigName: String, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
+      //Look up the MC we're moving.
       uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceId, oldMethodConfigNamespace, oldMethodConfigName)) flatMap {
-        case None => DBIO.successful(false)
+        case None => DBIO.failed(new RawlsException(s"Can't find method config $oldMethodConfigNamespace/$oldMethodConfigName."))
         case Some(currentMethodConfigRec) =>
-          save(workspaceContext, currentMethodConfigRec, newMethodConfig)
+          //if we're moving the MC to a new location, archive the one at the old location.
+          val maybeArchive = if( oldMethodConfigNamespace != currentMethodConfigRec.namespace || oldMethodConfigName != currentMethodConfigRec.name ) {
+            archive(workspaceContext, currentMethodConfigRec)
+          } else {
+            DBIO.successful(())
+          }
+          //Once we've archived the old location we just upsert on top of the new location.
+          maybeArchive andThen upsert(workspaceContext, newMethodConfig)
       }
     } map { _ => newMethodConfig }
 
-    //hides the current method config and adds the new one
-    private def save(workspaceContext: SlickWorkspaceContext, currentMethodConfigRec: MethodConfigurationRecord, newMethodConfig: MethodConfiguration) = {
+    def archive(workspaceContext: SlickWorkspaceContext, methodConfigRec: MethodConfigurationRecord): ReadWriteAction[Int] = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-        hideMethodConfigurationAction(currentMethodConfigRec.id, currentMethodConfigRec.name) andThen
-        (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfig(workspaceContext.workspaceId,
-          newMethodConfig.copy(methodConfigVersion=currentMethodConfigRec.methodConfigVersion + 1))) flatMap { configId =>
-            saveMaps(newMethodConfig, configId)
+        hideMethodConfigurationAction(methodConfigRec.id, methodConfigRec.name)
+    }
+
+    //Adds the new method configuration with the given version.
+    //It's up to you to call archive on the previous one!
+    private def saveWithoutArchive(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, version: Int = 1) = {
+      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+        (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) +=
+          marshalMethodConfig(workspaceContext.workspaceId, methodConfig.copy(methodConfigVersion=version))) flatMap { configId =>
+            saveMaps(methodConfig, configId)
           }
     }
 
