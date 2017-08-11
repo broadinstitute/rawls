@@ -50,4 +50,5 @@
     <include file="changesets/20170517_rename_tcga_group.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170616_submission_workflow_failure_mode_column.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170626_multiple_auth_domains.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20170811_index_scratch_tables.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
