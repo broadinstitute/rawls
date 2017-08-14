@@ -82,6 +82,7 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
         throw httpRegrets
       case Failure(regrets) =>
         logGoogleRequest(request, start, regrets)
+        instrumentGoogleRequest(request, start, Left(regrets))
         throw regrets
     }
   }
@@ -119,7 +120,7 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
     logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - startTime, statusCode, errorReport).toJson(GoogleRequestFormat).compactPrint)
   }
 
-  private def instrumentGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, responseOrException: Either[HttpResponseException, com.google.api.client.http.HttpResponse])(implicit counters: GoogleCounters): Unit = {
+  private def instrumentGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, responseOrException: Either[Throwable, com.google.api.client.http.HttpResponse])(implicit counters: GoogleCounters): Unit = {
     val (counter, timer) = counters(request, responseOrException)
     counter += 1
     timer.update(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS)

@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.rawls.util
 
 import akka.actor.ActorSystem
-import com.typesafe.scalalogging.LazyLogging
-
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration._
 import akka.pattern._
 import cats.data.NonEmptyList
+import com.typesafe.scalalogging.LazyLogging
+
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * Created by tsharpe on 9/21/15.
@@ -27,7 +27,7 @@ trait Retry {
     * 3. The future succeeded the first time.
     *   - This is represented as {{{Right(List.empty, A)}}}
     */
-  type AccumulatingFuture[A] = Future[Either[NonEmptyList[Throwable], (List[Throwable], A)]]
+  type RetryableFuture[A] = Future[Either[NonEmptyList[Throwable], (List[Throwable], A)]]
 
   def always[A]: Predicate[A] = _ => true
 
@@ -60,18 +60,18 @@ trait Retry {
                                pred: Predicate[Throwable],
                                failureLogMessage: String)
                               (op: () => Future[T])
-                              (implicit executionContext: ExecutionContext): AccumulatingFuture[T] = {
+                              (implicit executionContext: ExecutionContext): RetryableFuture[T] = {
 
-    def inner(remainingBackoffIntervales: Seq[FiniteDuration], errors: => List[Throwable]): AccumulatingFuture[T] = {
+    def loop(remainingBackoffIntervals: Seq[FiniteDuration], errors: => List[Throwable]): RetryableFuture[T] = {
       op().map(Right(errors, _)).recoverWith {
-        case t if pred(t) && !remainingBackoffIntervales.isEmpty =>
-          logger.info(s"$failureLogMessage: ${remainingBackoffIntervales.size} retries remaining, retrying in ${remainingBackoffIntervales.head}", t)
-          after(remainingBackoffIntervales.head, system.scheduler) {
-            inner(remainingBackoffIntervales.tail, t :: errors)
+        case t if pred(t) && !remainingBackoffIntervals.isEmpty =>
+          logger.info(s"$failureLogMessage: ${remainingBackoffIntervals.size} retries remaining, retrying in ${remainingBackoffIntervals.head}", t)
+          after(remainingBackoffIntervals.head, system.scheduler) {
+            loop(remainingBackoffIntervals.tail, t :: errors)
           }
 
         case t =>
-          if (remainingBackoffIntervales.isEmpty) {
+          if (remainingBackoffIntervals.isEmpty) {
             logger.info(s"$failureLogMessage: no retries remaining", t)
           } else {
             logger.info(s"$failureLogMessage: retries remain but predicate failed, not retrying", t)
@@ -81,7 +81,7 @@ trait Retry {
       }
     }
 
-    inner(backoffIntervals, List.empty)
+    loop(backoffIntervals, List.empty)
   }
 
   private val allBackoffIntervals = Seq(100 milliseconds, 1 second, 3 seconds)
@@ -92,9 +92,9 @@ trait Retry {
   }
 
   /**
-    * Converts an AccumulatingFuture[A] to a Future[A].
+    * Converts an RetryableFuture[A] to a Future[A].
     */
-  protected implicit def accumulatingFutureToFuture[A](af: AccumulatingFuture[A])(implicit executionContext: ExecutionContext): Future[A] = {
+  protected implicit def retryableFutureToFuture[A](af: RetryableFuture[A])(implicit executionContext: ExecutionContext): Future[A] = {
     af.flatMap {
       // take the head (most recent) error
       case Left(NonEmptyList(t, _)) => Future.failed(t)

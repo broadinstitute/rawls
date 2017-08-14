@@ -92,7 +92,7 @@ class HttpGoogleServicesDAO(
   initTokenBucket()
 
   protected def initTokenBucket(): Unit = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     try {
       getStorage(getBucketServiceAccountCredential).buckets().get(tokenBucketName).executeUsingHead()
     } catch {
@@ -116,7 +116,7 @@ class HttpGoogleServicesDAO(
   }
 
   def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     // add cloud-storage-analytics@google.com as a writer so it can write logs
     // do it as a separate call so bucket gets default permissions plus this one
     val storage = getStorage(getBucketServiceAccountCredential)
@@ -174,7 +174,7 @@ class HttpGoogleServicesDAO(
     }
 
     def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[String] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
-      implicit val service = GoogleInstrumentedService.Buckets
+      implicit val service = GoogleInstrumentedService.Storage
       val bucketName = getBucketName(workspaceId)
       retryWhen500orGoogleError {
         () => {
@@ -219,7 +219,7 @@ class HttpGoogleServicesDAO(
     }
 
     def insertInitialStorageLog: (String) => Future[Unit] = { (bucketName) =>
-      implicit val service = GoogleInstrumentedService.Buckets
+      implicit val service = GoogleInstrumentedService.Storage
       retryWhen500orGoogleError {
         () => {
           // manually insert an initial storage log
@@ -278,7 +278,7 @@ class HttpGoogleServicesDAO(
   }
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long): Future[String] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     val bucketName = getCromwellAuthBucketName(billingProject)
     retryWithRecoverWhen500orGoogleError(
       () => {
@@ -293,7 +293,7 @@ class HttpGoogleServicesDAO(
   }
 
   def createStorageLogsBucket(billingProject: RawlsBillingProjectName): Future[String] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     val bucketName = getStorageLogsBucketName(billingProject)
     logger debug s"storage log bucket: $bucketName"
 
@@ -320,7 +320,7 @@ class HttpGoogleServicesDAO(
     new ObjectAccessControl().setEntity(entity).setRole(accessLevel)
 
   override def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     val buckets = getStorage(getBucketServiceAccountCredential).buckets
     val deleter = buckets.delete(bucketName)
     retryWithRecoverWhen500orGoogleError(() => {
@@ -410,7 +410,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def getBucketUsage(projectName: RawlsBillingProjectName, bucketName: String, maxResults: Option[Long]): Future[BigInt] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
 
     def usageFromLogObject(o: StorageObject): Future[BigInt] = {
       streamObject(o.getBucket, o.getName) { inputStream =>
@@ -456,7 +456,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     val aclGetter = getStorage(getBucketServiceAccountCredential).bucketAccessControls().list(bucketName)
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(aclGetter).getItems.toList) }) {
       case e: HttpResponseException => None
@@ -464,7 +464,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
       case e: HttpResponseException => None
@@ -623,7 +623,7 @@ class HttpGoogleServicesDAO(
   //add a file to the bucket as the specified user, then remove it
   //returns an ErrorReport if something went wrong, otherwise returns None
   override def diagnosticBucketWrite(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     val uuid = UUID.randomUUID.toString
     val so = new StorageObject().setName(uuid)
     val media = new InputStreamContent("text/plain",
@@ -652,7 +652,7 @@ class HttpGoogleServicesDAO(
   }
 
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     Future {
       val getter = getStorage(getUserCredential(userInfo)).buckets().get(bucketName)
       try {
@@ -729,7 +729,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     retryWhen500orGoogleError(() => {
       val so = new StorageObject().setName(userInfo.userSubjectId.value)
       val encryptedToken = Aes256Cbc.encrypt(refreshToken.getBytes, tokenSecretKey).get
@@ -758,7 +758,7 @@ class HttpGoogleServicesDAO(
   }
 
   private def getTokenAndDate(userSubjectID: String): Future[Option[(String, time.DateTime)]] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     retryWhen500orGoogleError(() => {
       val get = getStorage(getBucketServiceAccountCredential).objects().get(tokenBucketName, userSubjectID)
       get.getMediaHttpDownloader.setDirectDownloadEnabled(true)
@@ -788,7 +788,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     retryWhen500orGoogleError(() => {
       executeGoogleRequest(getStorage(getBucketServiceAccountCredential).objects().delete(tokenBucketName, rawlsUserRef.userSubjectId.value))
     } )
@@ -800,10 +800,10 @@ class HttpGoogleServicesDAO(
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
     val operationRequest = genomicsApi.operations().get(opId)
 
-    retryWithRecoverWhen500orGoogleError[Option[JsObject]](() => {
+    retryWithRecoverWhen500orGoogleError(() => {
       // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
       // So, use Google's functionality to get the json string, then parse it back into a generic json object
-      Some(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
+      Option(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
     }) {
       // Recover from Google 404 errors because it's an expected return status.
       // Here we use `None` to represent a 404 from Google.
@@ -1146,7 +1146,7 @@ class HttpGoogleServicesDAO(
   }
 
   private def streamObject[A](bucketName: String, objectName: String)(f: (InputStream) => A): Future[A] = {
-    implicit val service = GoogleInstrumentedService.Buckets
+    implicit val service = GoogleInstrumentedService.Storage
     val getter = getStorage(getBucketServiceAccountCredential).objects().get(bucketName, objectName).setAlt("media")
     retryWhen500orGoogleError(() => { executeGoogleFetch(getter) { is => f(is) } })
   }

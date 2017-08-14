@@ -17,9 +17,11 @@ trait GoogleInstrumented extends WorkbenchInstrumented {
       val base = ExpandedMetricBuilder
         .expand(GoogleServiceMetricKey, service)
         .expand(HttpRequestMethodMetricKey, request.getRequestMethod.toLowerCase)
-        .expand(HttpResponseStatusCodeMetricKey, responseOrException.fold(_.getStatusCode, _.getStatusCode))
-      val counter = base.asCounter("request")
-      val timer = base.asTimer("latency")
+      val baseWithStatusCode = extractStatusCode(responseOrException).map(s =>
+        base.expand(HttpResponseStatusCodeMetricKey, s)
+      ).getOrElse(base)
+      val counter = baseWithStatusCode.asCounter("request")
+      val timer = baseWithStatusCode.asTimer("latency")
       (counter, timer)
     }
 
@@ -30,5 +32,13 @@ trait GoogleInstrumented extends WorkbenchInstrumented {
 }
 
 object GoogleInstrumented {
-  type GoogleCounters = (AbstractGoogleClientRequest[_], Either[HttpResponseException, HttpResponse]) => (Counter, Timer)
+  type GoogleCounters = (AbstractGoogleClientRequest[_], Either[Throwable, HttpResponse]) => (Counter, Timer)
+
+  private def extractStatusCode(responseOrException: Either[Throwable, HttpResponse]): Option[Int] = {
+    responseOrException match {
+      case Left(t: HttpResponseException) => Some(t.getStatusCode)
+      case Left(_) => None
+      case Right(response) => Some(response.getStatusCode)
+    }
+  }
 }

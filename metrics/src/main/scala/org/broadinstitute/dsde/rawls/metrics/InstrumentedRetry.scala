@@ -5,6 +5,7 @@ import nl.grons.metrics.scala.Histogram
 import org.broadinstitute.dsde.rawls.util.Retry
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Success
 
 /**
   * Created by rtitle on 8/3/17.
@@ -13,18 +14,16 @@ trait InstrumentedRetry extends Retry {
   this: WorkbenchInstrumented with LazyLogging =>
 
   /**
-    * Converts an AccumulatingFuture[A] to a Future[A].
+    * Converts an RetryableFuture[A] to a Future[A].
     * Given an implicit Histogram, instruments the number of failures in the histogram.
     */
-  protected implicit def accumulatingFutureToFuture[A](af: AccumulatingFuture[A])(implicit histo: Histogram, executionContext: ExecutionContext): Future[A] = {
-    af.flatMap {
-      case Left(errors) =>
+  protected implicit def retryableFutureToFuture[A](af: RetryableFuture[A])(implicit histo: Histogram, executionContext: ExecutionContext): Future[A] = {
+    val instrumentedAf = af.andThen {
+      case Success(Left(errors)) =>
         histo += errors.toList.size
-        Future.failed(errors.head)
-      case Right((errors, a)) =>
+      case Success(Right((errors, _))) =>
         histo += errors.size
-        Future.successful(a)
     }
+    super.retryableFutureToFuture(instrumentedAf)
   }
-
 }
