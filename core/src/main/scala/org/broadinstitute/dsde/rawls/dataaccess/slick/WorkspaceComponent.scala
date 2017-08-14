@@ -749,19 +749,24 @@ trait WorkspaceComponent {
         val groupNames = subGroupsInWorkspace.map{ case (_, groupName, _) => groupName.value }
         workspaceGroupShareQuery.filter(share => share.workspaceId === workspaceId && share.groupName.inSetBind(groupNames)).map(_.groupName).result
       }
-      for {
-        user <- userQuery.map{usersOnWorkspace =>
-          usersOnWorkspace.map{case (_, subjectId, accessLevel) =>
-            val isShare = userShareQuery.map(_.contains(subjectId.toString))
-            (Left(RawlsUserRef(subjectId)), (WorkspaceAccessLevels.withName(accessLevel), isShare.map{case b: Boolean => b}))}
+      val users = for {
+        user <- userQuery
+        canShare <- userShareQuery
+      } yield user.map { case (_, subjectId, accessLevel) =>
+        (Left(RawlsUserRef(subjectId)), (WorkspaceAccessLevels.withName(accessLevel), canShare.contains(subjectId.value)))
+      }
+
+      val groups = for {
+        group <- subGroupQuery
+        canShare <- subGroupShareQuery
+      } yield group.map { case (_, groupName, accessLevel) =>
+        (Right(RawlsGroupRef(groupName)), (WorkspaceAccessLevels.withName(accessLevel), canShare.contains(groupName.value)))
+      }
+
+      users.flatMap { usersResult =>
+        groups.map { groupsResult =>
+          (usersResult ++ groupsResult).toSet
         }
-        subGroup <- subGroupQuery.map{subgroupsOnWorkspace =>
-          subgroupsOnWorkspace.map{case (_, groupName, accessLevel) =>
-            val isShare = subGroupShareQuery.map(_.contains(groupName.toString))
-            (Right(RawlsGroupRef(groupName)), (WorkspaceAccessLevels.withName(accessLevel), isShare.map{case b: Boolean => b}))}
-        }
-      } yield {
-        (user ++ subGroup).toSet
       }
     }
 
