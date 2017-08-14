@@ -2512,7 +2512,9 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: Add or overwrite method configuration in a workspace
+      description: |
+        Add or overwrite a method configuration in a workspace.
+        The method configuration name and namespace in the URI must match the values in the JSON.
       tags:
         - methodconfigs
       summary: Add or overwrite method configuration in a workspace
@@ -2630,9 +2632,9 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: |
-        Rename method configuration.
+      description: | Rename method configuration.
         The workspace name and namespace in the HTTP body are ignored.
+        409 may be returned if there's already a method configuration at the target location.
       tags:
         - methodconfigs
       summary: rename method configuration in a workspace

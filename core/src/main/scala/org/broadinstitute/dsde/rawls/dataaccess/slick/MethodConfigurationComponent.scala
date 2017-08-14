@@ -110,8 +110,9 @@ trait MethodConfigurationComponent {
     //In either case, saves the new method configuration.
     def upsert(workspaceContext: SlickWorkspaceContext, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
       uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceId, newMethodConfig.namespace, newMethodConfig.name)) flatMap {
+        //note that we don't do anything with the version in newMethodConfig. version is a function of location, not the config itself
         case None =>
-          saveWithoutArchive(workspaceContext, newMethodConfig)
+          saveWithoutArchive(workspaceContext, newMethodConfig, 1)
         case Some(currentMethodConfigRec) =>
           archive(workspaceContext, currentMethodConfigRec) andThen
             saveWithoutArchive(workspaceContext, newMethodConfig, currentMethodConfigRec.methodConfigVersion + 1)
@@ -128,7 +129,7 @@ trait MethodConfigurationComponent {
         case None => DBIO.failed(new RawlsException(s"Can't find method config $oldMethodConfigNamespace/$oldMethodConfigName."))
         case Some(currentMethodConfigRec) =>
           //if we're moving the MC to a new location, archive the one at the old location.
-          val maybeArchive = if( oldMethodConfigNamespace != currentMethodConfigRec.namespace || oldMethodConfigName != currentMethodConfigRec.name ) {
+          val maybeArchive = if( currentMethodConfigRec.namespace != newMethodConfig.namespace || currentMethodConfigRec.name != newMethodConfig.name ) {
             archive(workspaceContext, currentMethodConfigRec)
           } else {
             DBIO.successful(())

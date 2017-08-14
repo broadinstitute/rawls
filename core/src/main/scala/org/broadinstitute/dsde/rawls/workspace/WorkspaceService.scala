@@ -1277,11 +1277,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       dataSource.inTransaction { dataAccess =>
        // check permissions
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-          // get old method configuration
-          dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfigurationNamespace, methodConfigurationName) flatMap {
-            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport =
-              ErrorReport(StatusCodes.NotFound, s"There is no method configuration named ${methodConfigurationNamespace}/${methodConfigurationName} in ${workspaceName}.")))
-            case Some(_) =>
+          withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { oldMethodConfig =>
               dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
                 //If a different MC exists at the target location, return 409. But it's okay to want to overwrite your own MC.
                 case Some(_) if methodConfigurationNamespace != methodConfiguration.namespace || methodConfigurationName != methodConfiguration.name =>
@@ -1289,9 +1285,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                     ErrorReport(StatusCodes.Conflict, s"There is already a method configuration at ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}.")))
                 case _ =>
                   updateMCAndValidateExpressions(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration, dataAccess)
-              }
-
-          } map (RequestComplete(StatusCodes.OK, _))
+              } map (RequestComplete(StatusCodes.OK, _))
+          }
         }
       }
     }
