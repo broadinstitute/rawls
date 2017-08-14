@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.joda.time.DateTime
-import slick.lifted.QueryBase
 /**
  * Created by dvoet on 2/4/16.
  */
