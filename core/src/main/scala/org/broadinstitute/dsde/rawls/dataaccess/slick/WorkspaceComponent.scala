@@ -430,16 +430,16 @@ trait WorkspaceComponent {
     }
 
     def listEmailsWithCatalogAccess(workspaceContext: SlickWorkspaceContext)  = {
-      for {
+
+      val emails = for {
         catalogUserQuery <- workspaceUserCatalogQuery.filter(_.workspaceId === workspaceContext.workspaceId).result
-        users <- DBIO.sequence(catalogUserQuery.map{result => rawlsUserQuery.load(RawlsUserRef((RawlsUserSubjectId(result.subjectId))))})
+        users <- DBIO.sequence(catalogUserQuery.map(result => rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(result.subjectId)))))
         catalogGroupQuery <- workspaceGroupCatalogQuery.filter(_.workspaceId === workspaceContext.workspaceId).result
-        groups <- DBIO.sequence(catalogGroupQuery.map{result => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(result.groupName)))})
-      } yield {
-        val userEmails = users.flatMap{user => user.map(u => u.userEmail)}
-        val groupEmails = groups.flatMap{group => group.map(g => g.groupEmail)}
-        (userEmails ++ groupEmails).map {case (email:String) => WorkspaceCatalog(email, true)}
+        groups <- DBIO.sequence(catalogGroupQuery.map(result => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(result.groupName)))))
+      }yield {
+        users.map(_.get.userEmail.toString) ++ groups.map(_.get.groupEmail.toString)
       }
+      emails.map{_.map{ case (email: String) => WorkspaceCatalog(email, true)}}
     }
 
     def listEmailsAndAccessLevel(workspaceContext: SlickWorkspaceContext) = {
@@ -452,13 +452,15 @@ trait WorkspaceComponent {
         userShareQuery <- workspaceUserShareQuery.filter(_.workspaceId === workspaceContext.workspaceId).result
         usersWithShare <- DBIO.sequence(userShareQuery.map{result => rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(result.subjectId)))})
         userResults <- accessAndUserEmail.map(results => results.map(r =>
-          (r._2, WorkspaceAccessLevels.withName(r._1), usersWithShare.map(u => u.get.userSubjectId).contains(r._3))))
+          (r._2.toString, r._1, usersWithShare.map(u => u.get.userSubjectId).contains(r._3))))
         groupShareQuery <- workspaceGroupShareQuery.filter(_.workspaceId === workspaceContext.workspaceId).result
         groupsWithShare <- DBIO.sequence(groupShareQuery.map{result => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(result.groupName)))})
         groupResults <- accessAndSubGroupEmail.map(results => results.map(r =>
-          (r._2, WorkspaceAccessLevels.withName(r._1), groupsWithShare.map(g => g.get.groupName).contains(r._3))))
+          (r._2.toString, r._1, groupsWithShare.map(g => g.get.groupName).contains(r._3))))
       } yield {
-        userResults ++ groupResults
+        (userResults ++ groupResults).map{ case (email, access, hasShare) =>
+        val accessLevel = WorkspaceAccessLevels.withName(access)
+          (email, accessLevel, hasShare)}
       }
     }
 
@@ -494,27 +496,28 @@ trait WorkspaceComponent {
         workspace <- workspaceQuery if workspace.id === attribute.ownerId
       } yield workspace
     }
-//Get access query
-    //get subgroups from access.groupname == parentGroupName
-    //and return the access.workspaceId, subgroupEmail (for each)
-    //do same for users
-    //return Map of (workspaceId -> (seq of (all emails (subgroup && user)))
-    def listAccessGroupMemberEmails(workspaceIds: Seq[UUID], accessLevel: WorkspaceAccessLevel): ReadAction[Map[UUID, Seq[String]]] = {
-      
+
+    def listAccessGroupMemberEmails(workspaceIds: Seq[UUID], accessLevel: WorkspaceAccessLevel): ReadWriteAction[Map[UUID, Seq[String]]] = {
+
       for {
         accessQuery <- workspaceAccessQuery.filter(access => access.workspaceId.inSetBind(workspaceIds) && access.isAuthDomainAcl === false && access.accessLevel === accessLevel.toString).result
-        groups <- DBIO.sequence(accessQuery.map {result => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(result.groupName)))})
-        subgroups <- rawlsGroupQuery.load(groups.flatMap(_.get.subGroups))
-        users <- rawlsUserQuery.load(groups.flatMap(_.get.users))
-        subGroupEmail <- rawlsGroupQuery.loadEmails(subgroups)
+        groups <- DBIO.sequence(accessQuery.map { result => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(result.groupName))).map(_ -> result) })
+        users <- rawlsUserQuery.load(groups.flatMap(_._1.get.users))
+        subGroups <- rawlsGroupQuery.load(groups.flatMap(_._1.get.subGroups))
       } yield {
+        groups.flatMap { case (group, access) =>
+          val idUsers = group.get.users.map { user =>
+            val userObj = users.find(u => u.userSubjectId == user.userSubjectId)
+            (access.workspaceId, userObj.get.userEmail.toString)
+          }
+            val idSubGroups = group.get.subGroups.map { g =>
+              val groupObj = subGroups.find(_.groupName == g.groupName)
+              (access.workspaceId, groupObj.get.groupEmail.toString)
+            }
+          (idUsers ++ idSubGroups)
+        }
+      }.groupBy{case (wsid, email) => wsid}.mapValues(_.map { case (wsid, email) => email})
 
-        val accessQuery = workspaceAccessQuery.filter(access => access.workspaceId.inSetBind(workspaceIds) && access.isAuthDomainAcl === false && access.accessLevel === accessLevel.toString)
-        val subGroupEmailQuery = rawlsGroupQuery.loadEmails(subGroups)
-      }
-//      (subGroupEmailQuery union userEmailQuery).result.map { wsIdAndEmails =>
-//        wsIdAndEmails.groupBy { case (wsId, email) => wsId }.
-//          mapValues(_.map { case (wsId, email) => email }) }
     }
 
     def loadAccessGroup(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) = {
@@ -734,28 +737,31 @@ trait WorkspaceComponent {
       (userQuery, subGroupQuery)
     }
 
-    def findWorkspaceUsersAndAccessLevel(workspaceId: UUID): ReadAction[Set[(Either[RawlsUserRef, RawlsGroupRef], (WorkspaceAccessLevel, Boolean))]] = {
+    def findWorkspaceUsersAndAccessLevel(workspaceId: UUID): ReadWriteAction[Set[(Either[RawlsUserRef, RawlsGroupRef], (WorkspaceAccessLevel, Boolean))]] = {
+
 
       val (userQuery, subGroupQuery) = findWorkspaceUsers(workspaceId)
       val userShareQuery = userQuery.flatMap { usersInWorkspace =>
         val userIds = usersInWorkspace.map{ case (_, userSubjectId, _) => userSubjectId.value }
-        workspaceUserShareQuery.filter(share => share.workspaceId === workspaceId && share.userSubjectId.inSetBind(userIds)).result
+        workspaceUserShareQuery.filter(share => share.workspaceId === workspaceId && share.userSubjectId.inSetBind(userIds)).map(_.userSubjectId).result
       }
-
       val subGroupShareQuery = subGroupQuery.flatMap { subGroupsInWorkspace =>
         val groupNames = subGroupsInWorkspace.map{ case (_, groupName, _) => groupName.value }
-        workspaceGroupShareQuery.filter(share => share.workspaceId === workspaceId && share.groupName.inSetBind(groupNames)).result
+        workspaceGroupShareQuery.filter(share => share.workspaceId === workspaceId && share.groupName.inSetBind(groupNames)).map(_.groupName).result
       }
-
       for {
-        usersWithShare <- userShareQuery.map{users => users.map{user => user.subjectId}}
-        users <- userQuery.map{_.map {case (uuid, userSubjectId, accessLevel) =>
-          (Left(RawlsUserRef(RawlsUserSubjectId(userSubjectId))), (WorkspaceAccessLevels.withName(accessLevel), usersWithShare.contains(userSubjectId.toString)}}
-        groupsWithShare <- subGroupShareQuery.map{groups => groups.map(group => group.groupName)}
-        subGroups <- subGroupQuery.map{_.map{case (uuid, groupName, accessLevel) =>
-          (Right(RawlsGroupRef(RawlsGroupName(groupName))), (WorkspaceAccessLevels.withName(accessLevel), groupsWithShare.contains(groupName)))}}
+        user <- userQuery.map{usersOnWorkspace =>
+          usersOnWorkspace.map{case (_, subjectId, accessLevel) =>
+            val isShare = userShareQuery.map(_.contains(subjectId.toString))
+            (Left(RawlsUserRef(subjectId)), (WorkspaceAccessLevels.withName(accessLevel), isShare.map{case b: Boolean => b}))}
+        }
+        subGroup <- subGroupQuery.map{subgroupsOnWorkspace =>
+          subgroupsOnWorkspace.map{case (_, groupName, accessLevel) =>
+            val isShare = subGroupShareQuery.map(_.contains(groupName.toString))
+            (Right(RawlsGroupRef(groupName)), (WorkspaceAccessLevels.withName(accessLevel), isShare.map{case b: Boolean => b}))}
+        }
       } yield {
-        (users ++ subGroups).toSet
+        (user ++ subGroup).toSet
       }
     }
 
