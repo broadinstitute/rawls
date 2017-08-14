@@ -10,6 +10,7 @@ import slick.backend.DatabaseConfig
 import slick.driver.JdbcDriver
 import slick.driver.MySQLDriver.api._
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.Owner
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
@@ -30,13 +31,20 @@ object DbResource {
   // to override, e.g. to run against mysql:
   // $ sbt -Dtestdb=mysql test
   private val testdb = ConfigFactory.load.getStringOr("testdb", "mysql")
+  private val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
 
-  val config = DatabaseConfig.forConfig[JdbcDriver](testdb)
+  val dataConfig = DatabaseConfig.forConfig[JdbcDriver](testdb)
+  val dirConfig = DirectoryConfig(
+    conf.getString("directory.url"),
+    conf.getString("directory.user"),
+    conf.getString("directory.password"),
+    conf.getString("directory.baseDn")
+  )
 
   private val liquibaseConf = ConfigFactory.load().getConfig("liquibase")
   private val liquibaseChangeLog = liquibaseConf.getString("changelog")
 
-  val dataSource = new SlickDataSource(config)(TestExecutionContext.testExecutionContext)
+  val dataSource = new SlickDataSource(dataConfig, dirConfig)(TestExecutionContext.testExecutionContext)
   dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
 }
 
@@ -53,7 +61,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   implicit def wfStatusCounter(wfStatus: WorkflowStatus): Counter = metrics.counter(s"${wfStatus.toString}")
   implicit def subStatusCounter(subStatus: SubmissionStatus): Counter = metrics.counter(s"${subStatus.toString}")
 
-  val databaseConfig = DbResource.config
+  val databaseConfig = DbResource.dataConfig
   val slickDataSource = DbResource.dataSource
 
   override val driver: JdbcDriver = databaseConfig.driver

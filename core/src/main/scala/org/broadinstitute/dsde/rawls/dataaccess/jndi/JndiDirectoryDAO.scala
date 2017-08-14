@@ -4,6 +4,7 @@ import java.sql.Timestamp
 import javax.naming._
 import javax.naming.directory._
 
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
@@ -18,7 +19,14 @@ import scala.util.Try
  * Created by dvoet on 11/5/15.
  */
 trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
-  protected val directoryConfig: DirectoryConfig
+  private val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
+
+  val directoryConfig = DirectoryConfig(
+    conf.getString("directory.url"),
+    conf.getString("directory.user"),
+    conf.getString("directory.password"),
+    conf.getString("directory.baseDn")
+  )
   implicit val executionContext: ExecutionContext
   /** a bunch of attributes used in directory entries */
   private object Attr {
