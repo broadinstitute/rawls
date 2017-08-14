@@ -101,12 +101,12 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   private def initGauge(workspaceName: WorkspaceName, submissionId: UUID): Unit = {
     try {
       WorkflowStatuses.allStatuses.foreach { status =>
-        workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).asGauge("current") {
+        workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).asGaugeIfAbsent("current") {
           currentWorkflowStatusCounts.getOrElse(status, 0)
         }
       }
       SubmissionStatuses.allStatuses.foreach { status =>
-        workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).asGauge("current") {
+        workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).asGaugeIfAbsent("current") {
           currentSubmissionStatusCounts.getOrElse(status, 0)
         }
       }
