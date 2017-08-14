@@ -404,11 +404,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
         authDomainsForUser <- dataAccess.workspaceQuery.getAuthorizedAuthDomainGroups(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo))
         ownerEmails <- dataAccess.workspaceQuery.listAccessGroupMemberEmails(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), WorkspaceAccessLevels.Owner)
+        publicWorkspaces <- dataAccess.workspaceQuery.listWorkspacesWithGroupAccess(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), UserService.allUsersGroupRef)
         submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
         workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
-      } yield (permissionsPairs, authDomainsForUser, ownerEmails, submissionSummaryStats, workspaces)
+      } yield (permissionsPairs, authDomainsForUser, ownerEmails, publicWorkspaces, submissionSummaryStats, workspaces)
 
-      val results = query.map { case (permissionsPairs, authDomainsForUser, ownerEmails, submissionSummaryStats, workspaces) =>
+      val results = query.map { case (permissionsPairs, authDomainsForUser, ownerEmails, publicWorkspaces, submissionSummaryStats, workspaces) =>
         val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
         permissionsPairs.map { permissionsPair =>
           workspacesById.get(permissionsPair.workspaceId).map { workspace =>
@@ -417,7 +418,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               else permissionsPair.accessLevel
             }
             val wsId = UUID.fromString(workspace.workspaceId)
-            WorkspaceListResponse(trueAccessLevel, workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId, Seq.empty))
+            val public: Boolean = publicWorkspaces.contains(wsId)
+            WorkspaceListResponse(trueAccessLevel, workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId, Seq.empty), Some(public))
           }
         }
       }
