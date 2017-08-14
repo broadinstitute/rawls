@@ -6,7 +6,7 @@ import java.sql.SQLException
 class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   "RawlsGroupComponent" should "save, load and delete" in withEmptyTestDatabase {
-    val groupName = RawlsGroupName("The Avengers")
+    val groupName = RawlsGroupName("The-Avengers")
     val groupEmail = RawlsGroupEmail("avengers@marvel.net")
 
     val group = RawlsGroup(groupName, groupEmail, Set.empty, Set.empty)
@@ -90,12 +90,12 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     runAndWait(rawlsUserQuery.save(user2))
     runAndWait(rawlsUserQuery.save(user3))
 
-    val groupName1 = RawlsGroupName("The Justice League")
+    val groupName1 = RawlsGroupName("The-Justice-League")
     val groupEmail1 = RawlsGroupEmail("justice@dc.org")
     val group1 = RawlsGroup(groupName1, groupEmail1, Set(userRef1, userRef2), Set.empty)
     val groupRef1 = RawlsGroupRef(groupName1)
 
-    val groupName2 = RawlsGroupName("Another Larger Group")
+    val groupName2 = RawlsGroupName("Another-Larger-Group")
     val groupEmail2 = RawlsGroupEmail("everyone@army.mil")
     val group2 = RawlsGroup(groupName2, groupEmail2, Set(userRef3), Set(groupRef1))
     val groupRef2 = RawlsGroupRef(groupName2)
@@ -165,17 +165,17 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     runAndWait(rawlsUserQuery.save(user1))
     runAndWait(rawlsUserQuery.save(user2))
 
-    val groupName1 = RawlsGroupName("Group 1")
+    val groupName1 = RawlsGroupName("Group-1")
     val groupEmail1 = RawlsGroupEmail("g1@broad.mit.edu")
     val group1 = RawlsGroup(groupName1, groupEmail1, Set(userRef1), Set.empty)
     val groupRef1 = RawlsGroupRef(groupName1)
 
-    val groupName2 = RawlsGroupName("Group 2")
+    val groupName2 = RawlsGroupName("Group-2")
     val groupEmail2 = RawlsGroupEmail("g2@broadinstitute.org")
     val group2 = RawlsGroup(groupName2, groupEmail2, Set(userRef2), Set(groupRef1))
     val groupRef2 = RawlsGroupRef(groupName2)
 
-    val groupName3 = RawlsGroupName("Group 3")
+    val groupName3 = RawlsGroupName("Group-3")
     val groupEmail3 = RawlsGroupEmail("g3@broad.apple.com")
     val group3 = RawlsGroup(groupName3, groupEmail3, Set.empty, Set(groupRef2))
     val groupRef3 = RawlsGroupRef(groupName3)
@@ -222,13 +222,13 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     runAndWait(rawlsUserQuery.save(user1))
     runAndWait(rawlsUserQuery.save(user2))
 
-    val groupName1 = RawlsGroupName("Group 1")
+    val groupName1 = RawlsGroupName("Group-1")
     val groupEmail1 = RawlsGroupEmail("g1@broad.mit.edu")
 
-    val groupName2 = RawlsGroupName("Group 2")
+    val groupName2 = RawlsGroupName("Group-2")
     val groupEmail2 = RawlsGroupEmail("g2@broadinstitute.org")
 
-    val groupName3 = RawlsGroupName("Group 3")
+    val groupName3 = RawlsGroupName("Group-3")
     val groupEmail3 = RawlsGroupEmail("g3@broad.apple.com")
 
     val group1NoCycle = RawlsGroup(groupName1, groupEmail1, Set(user1), Set.empty)
@@ -266,8 +266,8 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   it should "save a User to multiple Groups but not save two copies of the same User" in withEmptyTestDatabase {
 
-    val group1 = makeRawlsGroup("Group 1 For User", Set(testUser))
-    val group2 = makeRawlsGroup("Group 2 For User", Set(testUser))
+    val group1 = makeRawlsGroup("Group-1-For-User", Set(testUser))
+    val group2 = makeRawlsGroup("Group-2-For-User", Set(testUser))
 
     runAndWait(rawlsUserQuery.save(testUser))
     runAndWait(rawlsGroupQuery.save(group1))
@@ -289,7 +289,7 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   it should "not save a new Group with missing users" in withEmptyTestDatabase {
     val user1 = userFromId("subjectId1")
     val user2 = userFromId("subjectId2")
-    val group = makeRawlsGroup("Two User Group", Set(user1, user2))
+    val group = makeRawlsGroup("Two-User-Group", Set(user1, user2))
 
     intercept[SQLException] {
       // note that the users have not first been saved
@@ -302,8 +302,8 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   }
 
   it should "not save a new Group with missing groups" in withEmptyTestDatabase {
-    val group1 = makeRawlsGroup("Group One", Set.empty)
-    val group2 = makeRawlsGroup("Group Two", Set.empty).copy(subGroups = Set(group1))
+    val group1 = makeRawlsGroup("Group-One", Set.empty)
+    val group2 = makeRawlsGroup("Group-Two", Set.empty).copy(subGroups = Set(group1))
 
     intercept[SQLException] {
       // note that group1 has not first been saved
@@ -317,11 +317,11 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   it should "flatten group membership" in withEmptyTestDatabase {
     val testUser2 = testUser.copy(userSubjectId = RawlsUserSubjectId("dummy-ID2"), userEmail = RawlsUserEmail("dummy-email2@example.com"))
-    val group1 = makeRawlsGroup("Group One", Set(testUser))
-    val group2 = makeRawlsGroup("Group Two", Set(testUser2)).copy(subGroups = Set(group1))
-    val group3 = makeRawlsGroup("Group Three", Set.empty).copy(subGroups = Set(group2))
-    val group4 = makeRawlsGroup("Group Four", Set.empty).copy(subGroups = Set(group3))
-    val group5 = makeRawlsGroup("Group Five", Set.empty).copy(subGroups = Set(group3))
+    val group1 = makeRawlsGroup("Group-One", Set(testUser))
+    val group2 = makeRawlsGroup("Group-Two", Set(testUser2)).copy(subGroups = Set(group1))
+    val group3 = makeRawlsGroup("Group-Three", Set.empty).copy(subGroups = Set(group2))
+    val group4 = makeRawlsGroup("Group-Four", Set.empty).copy(subGroups = Set(group3))
+    val group5 = makeRawlsGroup("Group-Five", Set.empty).copy(subGroups = Set(group3))
 
     runAndWait(rawlsUserQuery.save(testUser))
     runAndWait(rawlsUserQuery.save(testUser2))
@@ -346,7 +346,7 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val group = makeRawlsGroup("Good", Set(obama, bernie))
     val group2 = makeRawlsGroup("Evil", Set(trump, arod))
     val group3 = makeRawlsGroup("Other", Set(clinton))
-    val group4 = makeRawlsGroup("Good & Evil", Set.empty).copy(subGroups =  Set(group, group2, group3))
+    val group4 = makeRawlsGroup("Good-And-Evil", Set.empty).copy(subGroups =  Set(group, group2, group3))
     val realm = makeRawlsGroup("Politicos", Set(obama, trump, bernie)).copy(subGroups = Set(group3))
 
     runAndWait(rawlsUserQuery.save(obama))

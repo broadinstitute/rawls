@@ -142,13 +142,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val intersectionGroupsByLevel = if(authDomain.isEmpty) None else {
       Option(usersByLevel.map { case (level, users) =>
-        level -> makeRawlsGroup(s"${project.projectName.value}/${name} IG ${level.toString}", users, groupsByLevel(level))
-      } + (ProjectOwner -> makeRawlsGroup(s"${project.projectName.value}/${name} IG ${ProjectOwner.toString}", project.groups(Owner).users, Set.empty)))
+        level -> makeRawlsGroup(s"${project.projectName.value}-${name}-IG-${level.toString}", users, groupsByLevel(level))
+      } + (ProjectOwner -> makeRawlsGroup(s"${project.projectName.value}-${name}-IG-${ProjectOwner.toString}", project.groups(Owner).users, Set.empty)))
     }
 
 
     val newAccessGroupsByLevel = usersByLevel.map { case (level, users) =>
-      level -> makeRawlsGroup(s"${project.projectName.value}/${name} ${level.toString}", users, groupsByLevel(level))
+      level -> makeRawlsGroup(s"${project.projectName.value}-${name}-${level.toString}", users, groupsByLevel(level))
     }
 
     val accessGroupsByLevel = newAccessGroupsByLevel + (ProjectOwner -> project.groups(Owner))
@@ -165,9 +165,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
-    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
-    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
+    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
+    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
+    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
     val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
@@ -191,9 +191,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
-    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
-    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
+    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
+    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
+    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
     val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
@@ -221,19 +221,19 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val userReaderViaGroup = RawlsUser(UserInfo(RawlsUserEmail("reader-access-via-group"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212349")))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
-    val wsName3 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigs")
-    val wsName4 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsSuccessfulSubmission")
-    val wsName5 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsFailedSubmission")
-    val wsName6 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsSubmittedSubmission")
-    val wsName7 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSubmission")
-    val wsName8 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSuccessfulSubmission")
-    val wsName9 = WorkspaceName("myNamespace", "myWorkspaceToTestGrantPermissions")
+    val wsName3 = WorkspaceName("myNamespace", "myWSwithADsMethodConfigs")
+    val wsName4 = WorkspaceName("myNamespace", "myWSwithADsMCSuccessfulSubmission")
+    val wsName5 = WorkspaceName("myNamespace", "myWSwithADsMCFailedSubmission")
+    val wsName6 = WorkspaceName("myNamespace", "myWSwithADsMCSubmittedSubmission")
+    val wsName7 = WorkspaceName("myNamespace", "myWSwithADsMCAbortedSubmission")
+    val wsName8 = WorkspaceName("myNamespace", "myWSwithADsMCAbortedSuccessfulSub")
+    val wsName9 = WorkspaceName("myNamespace", "myWSToTestGrantPermissions")
     val wsName10 = WorkspaceName("myNamespace", "myMultiGroupADWorkspace")
-    val wsInterleaved = WorkspaceName("myNamespace", "myWorkspaceToTestInterleavedSubmissions")
-    val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWorkspaceToTestWorkflowFailureMode")
+    val wsInterleaved = WorkspaceName("myNamespace", "myWSToTestInterleavedSubs")
+    val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWSToTestWFFailureMode")
     val workspaceToTestGrantId = UUID.randomUUID()
 
-    val nestedProjectGroup = makeRawlsGroup("nested project group", Set(userOwner))
+    val nestedProjectGroup = makeRawlsGroup("nested_project_group", Set(userOwner))
     val dbGapAuthorizedUsersGroup = makeManagedGroup("dbGapAuthorizedUsers", Set(userOwner, userReaderViaGroup))
 
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner, userOwner), ProjectRoles.User -> Set.empty), Map.empty), "testBucketUrl", CreationStatuses.Ready, None, None)
@@ -734,12 +734,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   class MinimalTestData() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsName2 = WorkspaceName("myNamespace2", "myWorkspace2")
-    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set.empty)
-    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set.empty)
-    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set.empty)
-    val ownerGroup2 = makeRawlsGroup(s"${wsName2} OWNER", Set.empty)
-    val writerGroup2 = makeRawlsGroup(s"${wsName2} WRITER", Set.empty)
-    val readerGroup2 = makeRawlsGroup(s"${wsName2} READER", Set.empty)
+    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set.empty)
+    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set.empty)
+    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set.empty)
+    val ownerGroup2 = makeRawlsGroup(s"${wsName2.namespace}-${wsName2.name}-OWNER", Set.empty)
+    val writerGroup2 = makeRawlsGroup(s"${wsName2.namespace}-${wsName2.name}-WRITER", Set.empty)
+    val readerGroup2 = makeRawlsGroup(s"${wsName2.namespace}-${wsName2.name}-READER", Set.empty)
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map.empty, Map.empty), "testBucketUrl", CreationStatuses.Ready, None, None)
     val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
@@ -774,9 +774,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
-    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
-    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
-    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
+    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
+    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
+    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(RawlsUser(userInfo))), Map.empty), "testBucketUrl", CreationStatuses.Ready, None, None)
 

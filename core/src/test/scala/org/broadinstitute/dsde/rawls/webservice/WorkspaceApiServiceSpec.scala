@@ -93,7 +93,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     val workspace3Name = WorkspaceName(billingProject.projectName.value, "testworkspace3")
 
-    val defaultRealmGroup = makeManagedGroup(s"Default Realm", Set.empty)
+    val defaultRealmGroup = makeManagedGroup(s"DefaultRealm", Set.empty)
 
     val workspace1Id = UUID.randomUUID().toString
     val makeWorkspace1 = makeWorkspaceWithUsers(Map(

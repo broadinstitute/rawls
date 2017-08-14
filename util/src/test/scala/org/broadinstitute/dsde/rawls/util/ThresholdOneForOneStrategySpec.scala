@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props, SupervisorStrategy}
 import akka.actor.SupervisorStrategy.{Directive, Restart}
 import akka.testkit.TestKit
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import org.scalatest.time.{Seconds, Span}
 import akka.pattern.ask

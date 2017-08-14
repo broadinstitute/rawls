@@ -60,6 +60,9 @@ trait RawlsGroupComponent {
 
     def save(rawlsGroup: RawlsGroup): WriteAction[RawlsGroup] = {
       val groupName = rawlsGroup.groupName.value
+      validateUserDefinedString(groupName)
+      validateMaxStringLength(groupName, 64)
+
       val groupInsert = rawlsGroupQuery insertOrUpdate marshalRawlsGroup(rawlsGroup)
 
       val userDeletes = findUsersByGroupName(groupName).delete

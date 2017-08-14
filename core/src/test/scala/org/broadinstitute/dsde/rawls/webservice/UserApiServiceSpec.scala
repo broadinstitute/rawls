@@ -483,6 +483,46 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 200 when adding a group to a billing project that the caller owns" in withTestDataApiServices { services =>
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
+    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+
+    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+    Post(s"/billing", httpJson(createRequest)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
+
+    Put(s"/billing/${project1.projectName.value}/user/${testData.dbGapAuthorizedUsersGroup.membersGroup.groupEmail.value}") ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) {
+          status
+        }
+        assert {
+          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
+          loadedProject.groups(ProjectRoles.User).subGroups.contains(testData.dbGapAuthorizedUsersGroup.membersGroup) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+        }
+      }
+
+    Get(s"/billing/${project1.projectName.value}/members") ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMemberFormat
+        val response = responseAs[Seq[RawlsBillingProjectMember]].toSet
+        assert(response.contains(RawlsBillingProjectMember(RawlsUserEmail(testData.dbGapAuthorizedUsersGroup.membersGroup.groupEmail.value), ProjectRoles.User)))
+      }
+  }
+
   it should "return 200 when removing a user from a billing project that the caller owns" in withTestDataApiServices { services =>
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
     val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
@@ -725,6 +765,30 @@ class UserApiServiceSpec extends ApiServiceSpec {
     assertResult(Set(RawlsGroup.toRef(testGroup.adminsGroup))) { testGroup.membersGroup.subGroups }
     assert(testGroup.adminsGroup.subGroups.isEmpty)
     assert(testGroup.membersGroup.users.isEmpty)
+  }
+
+  it should "400 when creating a group with a name longer than 50 characters" in withUsersTestDataApiServices() { services =>
+    val testGroupName = "111111111122222222223333333333444444444455555555556666666666" //60 characters
+
+    Post(s"/groups/$testGroupName") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, response.entity.asString) {
+          status
+        }
+      }
+  }
+
+  it should "400 when creating a group with invalid characters in the name" in withUsersTestDataApiServices() { services =>
+    val testGroupName = "(*#&$(*&#$@"
+
+    Post(s"/groups/$testGroupName") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, response.entity.asString) {
+          status
+        }
+      }
   }
 
   it should "409 creating an existing group" in withUsersTestDataApiServices() { services =>
