@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
 
+import _root_.slick.jdbc.TransactionIsolation
 import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
@@ -236,9 +237,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     // and will be re-processed next time we call queryForWorkflowStatus().
     // This is why it's important to attach the outputs before updating the status -- if you update the status to Successful first, and the attach
     // outputs fails, we'll stop querying for the workflow status and never attach the outputs.
-    datasource.inTransaction { dataAccess =>
+    datasource.inTransaction ({ dataAccess =>
       handleOutputs(workflowsWithOutputs, dataAccess)
-    } flatMap { _ =>
+    }, TransactionIsolation.ReadCommitted) //This txn is read committed because it's highly deadlocky.
+      .flatMap { _ =>
       // NEW TXN! Update statuses for workflows and submission.
       datasource.inTransaction { dataAccess =>
 
