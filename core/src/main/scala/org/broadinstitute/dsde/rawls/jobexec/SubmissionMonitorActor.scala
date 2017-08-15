@@ -2,13 +2,13 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
 
-import _root_.slick.jdbc.TransactionIsolation
 import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
+import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.expressions.{OutputExpression, ThisEntityTarget, WorkspaceTarget}
