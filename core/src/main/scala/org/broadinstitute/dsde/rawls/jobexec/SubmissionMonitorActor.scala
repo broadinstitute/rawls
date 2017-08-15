@@ -357,7 +357,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       }
 
       if (parsedExpressions.forall(_.isSuccess)) {
-        val boundExpressions = parsedExpressions.collect { case Success(BoundOutputExpression(target, name, attr)) => BoundOutputExpression(target, name, attr) }
+        val boundExpressions = parsedExpressions.collect { case Success(boe @ BoundOutputExpression(target, name, attr)) => boe }
         val updates = updateEntityAndWorkspace(entitiesById(workflowRecord.workflowEntityId), workspace, boundExpressions)
         val (optEnt, optWs) = updates
         logger.debug(s"updated entityattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optEnt.map(_.attributes)}")
