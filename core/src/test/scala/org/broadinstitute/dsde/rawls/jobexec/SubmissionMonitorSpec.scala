@@ -10,11 +10,14 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{ExecutionServiceStatusResponse, StatusCheckComplete}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -409,6 +412,60 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
+  it should "handleOutputs which are unbound by ignoring them" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+
+    val unboundExprStr = AttributeString("")
+    val unboundAttr = AttributeString("result1")
+    val boundExprStr = AttributeString("this.ok")
+    val boundAttr = AttributeString("result2")
+    val outputExpressions = Map("unbound" -> unboundExprStr, "bound" ->  boundExprStr)
+    val execOutputs = Map("unbound" -> Left(unboundAttr), "bound" ->  Left(boundAttr))
+
+    val parsedExpr = OutputExpression(boundExprStr.value, boundAttr)
+    parsedExpr shouldBe a[BoundOutputExpression]
+    val boundExpr = parsedExpr.asInstanceOf[BoundOutputExpression]
+    val expectedAttributeUpdate = boundExpr.attributeName -> boundExpr.attribute
+
+    val mcUnboundExpr = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), outputExpressions, MethodRepoMethod("ns-config", "meth1", 1))
+
+    val subUnboundExpr = createTestSubmission(testData.workspace, mcUnboundExpr, testData.indiv1, testData.userOwner,
+      Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
+      Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
+
+    withWorkspaceContext(testData.workspace) { context =>
+      runAndWait(methodConfigurationQuery.create(context, mcUnboundExpr))
+      runAndWait(submissionQuery.create(context, subUnboundExpr))
+    }
+
+    val monitor = createSubmissionMonitor(dataSource, subUnboundExpr, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val workflowRec = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(subUnboundExpr.submissionId))).head
+
+    runAndWait(monitor.handleOutputs(Seq((workflowRec, ExecutionServiceOutputs(workflowRec.externalId.get, execOutputs))), this))
+
+    // only the bound attribute was updated
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + expectedAttributeUpdate))) {
+      subUnboundExpr.workflows.map { wf =>
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
+      }
+    }
+
+    val resultWorkflow = withWorkspaceContext(testData.workspace) { context =>
+      runAndWait(workflowQuery.get(context, subUnboundExpr.submissionId, testData.indiv1.entityType, testData.indiv1.name))
+    }.get
+
+    // the workflow status was not changed
+    assertResult(workflowRec.status) {
+      resultWorkflow.status.toString
+    }
+
+    // no error was recorded
+    assert {
+      ! resultWorkflow.messages.exists {
+        _.value.contains("Invalid")
+      }
+    }
+  }
+
   it should "fail workflows with invalid output expressions" in withDefaultTestDatabase { dataSource: SlickDataSource =>
 
     val badExprs = Seq(
@@ -419,7 +476,6 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       "workspace........",
       "workspace.nope.nope.nope",
       "where_does_this_even_go",
-      "",
       "*")
 
     badExprs foreach { badExpr =>

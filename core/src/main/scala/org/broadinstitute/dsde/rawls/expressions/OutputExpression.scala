@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.expressions
 
 import org.broadinstitute.dsde.rawls.{RawlsException, StringValidationUtils}
-import org.broadinstitute.dsde.rawls.model.{AttributeName, ErrorReportSource}
+import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeName, ErrorReportSource}
 
 sealed trait OutputExpressionTarget {
   val prefix: String
@@ -10,22 +10,27 @@ sealed trait OutputExpressionTarget {
 case object ThisEntityTarget extends OutputExpressionTarget { override val prefix = "this." }
 case object WorkspaceTarget extends OutputExpressionTarget { override val prefix = "workspace." }
 
-case class OutputExpression(target: OutputExpressionTarget, attributeName: AttributeName)
+sealed trait OutputExpression
+case object UnboundOutputExpression extends OutputExpression
+case class BoundOutputExpression(target: OutputExpressionTarget, attributeName: AttributeName, attribute: Attribute) extends OutputExpression
 
 object OutputExpression extends StringValidationUtils {
   override implicit val errorReportSource = ErrorReportSource("rawls")
 
-  def apply(s: String): OutputExpression = {
-    val target = if(s.startsWith(ThisEntityTarget.prefix))
-      ThisEntityTarget
-    else if(s.startsWith(WorkspaceTarget.prefix))
-      WorkspaceTarget
-    else
-      throw new RawlsException(s"Invalid output expression: $s")
+  def apply(expr: String, attribute: Attribute): OutputExpression = {
+    if (expr.isEmpty) UnboundOutputExpression
+    else {
+      val target = if (expr.startsWith(ThisEntityTarget.prefix))
+        ThisEntityTarget
+      else if (expr.startsWith(WorkspaceTarget.prefix))
+        WorkspaceTarget
+      else
+        throw new RawlsException(s"Invalid output expression: $expr")
 
-    val attributeName = AttributeName.fromDelimitedName(target.remainder(s))
-    validateUserDefinedString(attributeName.name)
+      val attributeName = AttributeName.fromDelimitedName(target.remainder(expr))
+      validateUserDefinedString(attributeName.name)
 
-    OutputExpression(target, attributeName)
+      BoundOutputExpression(target, attributeName, attribute)
+    }
   }
 }
