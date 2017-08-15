@@ -33,11 +33,11 @@ trait Retry {
 
   val defaultErrorMessage = "retry-able operation failed"
 
-  def retry[T](pred: Predicate[Throwable] = always, failureLogMessage: String = defaultErrorMessage)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
+  def retry[T](pred: Predicate[Throwable] = always, failureLogMessage: String = defaultErrorMessage)(op: () => Future[T])(implicit executionContext: ExecutionContext): RetryableFuture[T] = {
     retryInternal(allBackoffIntervals, pred, failureLogMessage)(op)
   }
 
-  def retryExponentially[T](pred: Predicate[Throwable] = always, failureLogMessage: String = defaultErrorMessage)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
+  def retryExponentially[T](pred: Predicate[Throwable] = always, failureLogMessage: String = defaultErrorMessage)(op: () => Future[T])(implicit executionContext: ExecutionContext): RetryableFuture[T] = {
     retryInternal(exponentialBackOffIntervals, pred, failureLogMessage)(op)
   }
 
@@ -51,7 +51,7 @@ trait Retry {
    * @tparam T
    * @return
    */
-  def retryUntilSuccessOrTimeout[T](pred: Predicate[Throwable] = always, failureLogMessage: String = defaultErrorMessage)(interval: FiniteDuration, timeout: FiniteDuration)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
+  def retryUntilSuccessOrTimeout[T](pred: Predicate[Throwable] = always, failureLogMessage: String = defaultErrorMessage)(interval: FiniteDuration, timeout: FiniteDuration)(op: () => Future[T])(implicit executionContext: ExecutionContext): RetryableFuture[T] = {
     val trialCount = Math.ceil(timeout / interval).toInt
     retryInternal(Seq.fill(trialCount)(interval), pred, failureLogMessage)(op)
   }
@@ -86,7 +86,7 @@ trait Retry {
 
   private val allBackoffIntervals = Seq(100 milliseconds, 1 second, 3 seconds)
 
-  private def exponentialBackOffIntervals: Seq[FiniteDuration] = {
+  protected def exponentialBackOffIntervals: Seq[FiniteDuration] = {
     val plainIntervals = Seq(1000 milliseconds, 2000 milliseconds, 4000 milliseconds, 8000 milliseconds, 16000 milliseconds, 32000 milliseconds)
     plainIntervals.map(i => addJitter(i, 1000 milliseconds))
   }
@@ -94,7 +94,7 @@ trait Retry {
   /**
     * Converts an RetryableFuture[A] to a Future[A].
     */
-  protected implicit def retryableFutureToFuture[A](af: RetryableFuture[A])(implicit executionContext: ExecutionContext): Future[A] = {
+  protected[util] implicit def retryableFutureToFuture[A](af: RetryableFuture[A])(implicit executionContext: ExecutionContext): Future[A] = {
     af.flatMap {
       // take the head (most recent) error
       case Left(NonEmptyList(t, _)) => Future.failed(t)

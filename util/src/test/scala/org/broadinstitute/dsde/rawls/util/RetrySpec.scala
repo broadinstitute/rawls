@@ -34,8 +34,9 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
 
   "Retry" should "retry 3 times by default" in {
     val testable = new TestRetry(system, setUpMockLogger)
+    import testable._
 
-    val result = testable.retry()(() => testable.failure)
+    val result: Future[Int] = testable.retry()(() => testable.failure)
 
     // result should be a failure
     // invocationCount should be 4 (1 initial run plus 3 retries)
@@ -55,8 +56,9 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
 
   it should "not retry upon success" in {
     val testable = new TestRetry(system, setUpMockLogger)
+    import testable._
 
-    val result = testable.retry()(() => testable.success)
+    val result: Future[Int] = testable.retry()(() => testable.success)
 
     // result should a success
     // invocationCount should be 1
@@ -70,8 +72,9 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
 
   it should "not retry if the predicate returns false" in {
     val testable = new TestRetry(system, setUpMockLogger)
+    import testable._
 
-    val result = testable.retry(_ => false)(() => testable.failure)
+    val result: Future[Int] = testable.retry(_ => false)(() => testable.failure)
 
     // result should be a failure
     // invocationCount should be 1
@@ -86,9 +89,10 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
 
   it should "log a custom error message" in {
     val testable = new TestRetry(system, setUpMockLogger)
+    import testable._
     val customLogMsg = "custom"
 
-    val result = testable.retry(failureLogMessage = customLogMsg)(() => testable.failure)
+    val result: Future[Int] = testable.retry(failureLogMessage = customLogMsg)(() => testable.failure)
 
     // result should be a failure
     // invocationCount should be 4 (1 initial run plus 3 retries)
@@ -110,8 +114,9 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
     implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(2, Minutes)))
 
     val testable = new TestRetry(system, setUpMockLogger)
+    import testable._
 
-    val result = testable.retryExponentially()(() => testable.failure)
+    val result: Future[Int] = testable.retryExponentially()(() => testable.failure)
 
     // result should be a failure
     // invocationCount should be 7 (1 initial run plus 6 retries)
@@ -126,8 +131,9 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
 
   it should "retry until a success" in {
     val testable = new TestRetry(system, setUpMockLogger)
+    import testable._
 
-    val result = testable.retryUntilSuccessOrTimeout()(100 milliseconds, 1 minute)(() => testable.failureNTimes(10))
+    val result: Future[Int] = testable.retryUntilSuccessOrTimeout()(100 milliseconds, 1 minute)(() => testable.failureNTimes(10))
 
     // result should be a success
     // invocationCount should be 11 (10 failures and 1 success)
@@ -141,8 +147,9 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with FlatSpecLike with Be
 
   it should "retry until a timeout" in {
     val testable = new TestRetry(system, setUpMockLogger)
+    import testable._
 
-    val result = testable.retryUntilSuccessOrTimeout()(100 milliseconds, 1 second)(() => testable.failure)
+    val result: Future[Int] = testable.retryUntilSuccessOrTimeout()(100 milliseconds, 1 second)(() => testable.failure)
 
     // result should be a failure
     // invocationCounts should be 11
@@ -180,7 +187,7 @@ class TestRetry(val system: ActorSystem, val slf4jLogger: SLF4JLogger) extends R
   }
   def failure = {
     increment
-    Future.failed(new Exception("test exception"))
+    Future.failed[Int](new Exception("test exception"))
   }
   def failureNTimes(n: Int) = {
     if (invocationCount < n) failure

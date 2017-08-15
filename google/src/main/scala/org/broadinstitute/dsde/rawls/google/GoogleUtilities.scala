@@ -125,11 +125,11 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
     counter += 1
     timer.update(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS)
   }
+}
 
-  protected case class GoogleRequest(method: String, url: String, payload: Option[JsValue], time_ms: Long, statusCode: Option[Int], errorReport: Option[ErrorReport])
-  protected object GoogleRequestJsonSupport extends JsonSupport {
-    import WorkspaceJsonSupport.ErrorReportFormat
-    import spray.json.DefaultJsonProtocol._
-    val GoogleRequestFormat = jsonFormat6(GoogleRequest)
-  }
+protected[google] case class GoogleRequest(method: String, url: String, payload: Option[JsValue], time_ms: Long, statusCode: Option[Int], errorReport: Option[ErrorReport])
+protected[google] object GoogleRequestJsonSupport extends JsonSupport {
+  import WorkspaceJsonSupport.ErrorReportFormat
+  import spray.json.DefaultJsonProtocol._
+  implicit val GoogleRequestFormat = jsonFormat6(GoogleRequest)
 }

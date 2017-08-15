@@ -16,7 +16,7 @@ import scala.concurrent.duration._
   */
 trait StatsDTestUtils { this: Eventually with MockitoTestUtils =>
 
-  protected def workbenchMetricBaseName = "test"
+  protected val workbenchMetricBaseName = "test"
   def clearRegistries(): Unit = SharedMetricRegistries.getOrCreate("default").removeMatching(MetricFilter.ALL)
 
   protected def withStatsD[T](testCode: => T)(verify: Seq[(String, String)] => Unit = _ => ()): T = {

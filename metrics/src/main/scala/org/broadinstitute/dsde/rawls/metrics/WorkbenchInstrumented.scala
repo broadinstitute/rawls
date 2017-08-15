@@ -51,7 +51,8 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
     def asHistogram(name: String): Histogram =
       metrics.histogram(makeName(name))
 
-    private def makeName(name: String): String = s"$m.$name"
+    private def makeName(name: String): String =
+      if (m.nonEmpty) s"$m.$name" else name
 
     override def toString: String = m
   }
