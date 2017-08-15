@@ -3,16 +3,16 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
-import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.metrics.{InstrumentedRetry, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus, MethodConfiguration, Subsystems, UserInfo}
-import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
 import spray.client.pipelining._
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
 import spray.httpx.UnsuccessfulResponseException
+import spray.httpx.unmarshalling.FromResponseUnmarshaller
 import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 /**
  * @author tsharpe
  */
-class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", override val workbenchMetricBaseName: String)(implicit val system: ActorSystem) extends MethodRepoDAO with DsdeHttpDAO with Retry with LazyLogging with RawlsInstrumented {
+class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", override val workbenchMetricBaseName: String)(implicit val system: ActorSystem) extends MethodRepoDAO with DsdeHttpDAO with InstrumentedRetry with LazyLogging with RawlsInstrumented {
   import system.dispatcher
 
   private val methodRepoServiceURL = baseMethodRepoServiceURL + apiPath
@@ -29,16 +29,20 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
   private lazy implicit val baseMetricBuilder: ExpandedMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Agora)
 
+  private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =
+    addAuthHeader(userInfo) ~> instrumentedSendReceive ~> unmarshal[A]
+
+
   private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedSendReceive ~> unmarshal[Option[AgoraEntity]]
-    retry(when500) { () => pipeline(Get(url)) } recover {
-      case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
+    retry(when500) { () =>
+      pipeline[Option[AgoraEntity]](userInfo) apply Get(url) recover {
+        case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
+      }
     }
   }
 
   private def postAgoraEntity( url: String, agoraEntity: AgoraEntity, userInfo: UserInfo): Future[AgoraEntity] = {
-    val pipeline = addAuthHeader(userInfo) ~> instrumentedSendReceive ~> unmarshal[AgoraEntity]
-    retry(when500) { () => pipeline(Post(url, agoraEntity)) }
+    retry(when500) { () => pipeline[AgoraEntity](userInfo) apply Post(url, agoraEntity) }
   }
 
   override def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {

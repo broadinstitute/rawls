@@ -1,15 +1,17 @@
 package org.broadinstitute.dsde.rawls.google
 
 import java.io.{ByteArrayOutputStream, IOException, InputStream}
+import java.util.concurrent.TimeUnit
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, ErrorReportSource, JsonSupport, WorkspaceJsonSupport}
-import org.broadinstitute.dsde.rawls.util.Retry
-import spray.http.StatusCodes
+import nl.grons.metrics.scala.Histogram
+import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
+import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, InstrumentedRetry}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, JsonSupport, WorkspaceJsonSupport}
 import spray.json.JsValue
 
 import scala.collection.JavaConversions._
@@ -19,7 +21,7 @@ import scala.util.{Failure, Success, Try}
 /**
  * Created by mbemis on 5/10/16.
  */
-trait GoogleUtilities extends LazyLogging with Retry {
+trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInstrumented {
   implicit val executionContext: ExecutionContext
 
   protected def when500orGoogleError(throwable: Throwable): Boolean = {
@@ -36,21 +38,21 @@ trait GoogleUtilities extends LazyLogging with Retry {
     }
   }
 
-  protected def retryWhen500orGoogleError[T](op: () => T): Future[T] = {
+  protected def retryWhen500orGoogleError[T](op: () => T)(implicit histo: Histogram): Future[T] = {
     retryExponentially(when500orGoogleError)(() => Future(blocking(op())))
   }
 
-  protected def retryWithRecoverWhen500orGoogleError[T](op: () => T)(recover: PartialFunction[Throwable, T]): Future[T] = {
+  protected def retryWithRecoverWhen500orGoogleError[T](op: () => T)(recover: PartialFunction[Throwable, T])(implicit histo: Histogram): Future[T] = {
     retryExponentially(when500orGoogleError)(() => Future(blocking(op())).recover(recover))
   }
 
-  protected def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T]): T = {
+  protected def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T])(implicit counters: GoogleCounters): T = {
     executeGoogleCall(request) { response =>
       response.parseAs(request.getResponseClass)
     }
   }
 
-  protected def executeGoogleFetch[A,B](request: AbstractGoogleClientRequest[A])(f: (InputStream) => B): B = {
+  protected def executeGoogleFetch[A,B](request: AbstractGoogleClientRequest[A])(f: (InputStream) => B)(implicit counters: GoogleCounters): B = {
     executeGoogleCall(request) { response =>
       val stream = response.getContent
       try {
@@ -61,13 +63,14 @@ trait GoogleUtilities extends LazyLogging with Retry {
     }
   }
 
-  protected def executeGoogleCall[A,B](request: AbstractGoogleClientRequest[A])(processResponse: (com.google.api.client.http.HttpResponse) => B): B = {
+  protected def executeGoogleCall[A,B](request: AbstractGoogleClientRequest[A])(processResponse: (com.google.api.client.http.HttpResponse) => B)(implicit counters: GoogleCounters): B = {
     val start = System.currentTimeMillis()
     Try {
       request.executeUnparsed()
     } match {
       case Success(response) =>
         logGoogleRequest(request, start, response)
+        instrumentGoogleRequest(request, start, Right(response))
         try {
           processResponse(response)
         } finally {
@@ -75,9 +78,11 @@ trait GoogleUtilities extends LazyLogging with Retry {
         }
       case Failure(httpRegrets: HttpResponseException) =>
         logGoogleRequest(request, start, httpRegrets)
+        instrumentGoogleRequest(request, start, Left(httpRegrets))
         throw httpRegrets
       case Failure(regrets) =>
         logGoogleRequest(request, start, regrets)
+        instrumentGoogleRequest(request, start, Left(regrets))
         throw regrets
     }
   }
@@ -115,10 +120,16 @@ trait GoogleUtilities extends LazyLogging with Retry {
     logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - startTime, statusCode, errorReport).toJson(GoogleRequestFormat).compactPrint)
   }
 
-  protected case class GoogleRequest(method: String, url: String, payload: Option[JsValue], time_ms: Long, statusCode: Option[Int], errorReport: Option[ErrorReport])
-  protected object GoogleRequestJsonSupport extends JsonSupport {
-    import WorkspaceJsonSupport.ErrorReportFormat
-    import spray.json.DefaultJsonProtocol._
-    val GoogleRequestFormat = jsonFormat6(GoogleRequest)
+  private def instrumentGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, responseOrException: Either[Throwable, com.google.api.client.http.HttpResponse])(implicit counters: GoogleCounters): Unit = {
+    val (counter, timer) = counters(request, responseOrException)
+    counter += 1
+    timer.update(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS)
   }
+}
+
+protected[google] case class GoogleRequest(method: String, url: String, payload: Option[JsValue], time_ms: Long, statusCode: Option[Int], errorReport: Option[ErrorReport])
+protected[google] object GoogleRequestJsonSupport extends JsonSupport {
+  import WorkspaceJsonSupport.ErrorReportFormat
+  import spray.json.DefaultJsonProtocol._
+  implicit val GoogleRequestFormat = jsonFormat6(GoogleRequest)
 }
