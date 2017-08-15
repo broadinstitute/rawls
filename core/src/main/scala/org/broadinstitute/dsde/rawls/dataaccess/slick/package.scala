@@ -10,4 +10,8 @@ package object slick {
   type ReadAction[T] = DBIOAction[T, NoStream, Read]
   type WriteAction[T] = DBIOAction[T, NoStream, Write]
   type ReadWriteAction[T] = DBIOAction[T, NoStream, Read with Write]
+
+  def getHostName :String = {
+    sys.env.getOrElse("HOSTNAME","NA")
+  }
 }
