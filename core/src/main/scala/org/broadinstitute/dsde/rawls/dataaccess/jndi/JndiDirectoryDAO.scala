@@ -19,14 +19,7 @@ import scala.util.Try
  * Created by dvoet on 11/5/15.
  */
 trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
-  private val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
 
-  val directoryConfig = DirectoryConfig(
-    conf.getString("directory.url"),
-    conf.getString("directory.user"),
-    conf.getString("directory.password"),
-    conf.getString("directory.baseDn")
-  )
   implicit val executionContext: ExecutionContext
   /** a bunch of attributes used in directory entries */
   private object Attr {
