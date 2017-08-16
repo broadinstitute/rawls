@@ -422,7 +422,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val execOutputs = Map("unbound" -> Left(unboundAttr), "bound" ->  Left(boundAttr))
 
     val parsedExpr = OutputExpression(boundExprStr.value, boundAttr)
-    parsedExpr shouldBe a[BoundOutputExpression]
+    parsedExpr shouldBe a [BoundOutputExpression]
     val boundExpr = parsedExpr.asInstanceOf[BoundOutputExpression]
     val expectedAttributeUpdate = boundExpr.attributeName -> boundExpr.attribute
 
