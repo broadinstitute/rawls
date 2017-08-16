@@ -63,7 +63,10 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
 
   import context._
 
-  self ! ScheduleNextWorkflow
+  override def preStart(): Unit = {
+    super.preStart()
+    scheduleNextWorkflowQuery(addJitter(0 seconds, pollInterval))
+  }
 
   override def receive = {
     case ScheduleNextWorkflow =>
