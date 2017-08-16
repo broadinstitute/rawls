@@ -624,7 +624,6 @@ trait WorkflowComponent {
   private object UpdateWorkflowStatusRawSql extends RawSqlQuery {
     val driver: JdbcDriver = WorkflowComponent.this.driver
 
-    val hostname = sys.env("HOSTNAME")
     private def update(newStatus: WorkflowStatus) = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${getHostName} "
 
     def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus) = {
@@ -644,8 +643,6 @@ trait WorkflowComponent {
 
   private object UpdateWorkflowStatusAndExecutionIdRawSql extends RawSqlQuery {
     val driver: JdbcDriver = WorkflowComponent.this.driver
-
-    val hostname = sys.env("HOSTNAME")
 
     private def update(newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = sql"update WORKFLOW set status = ${newStatus.toString}, exec_service_key = ${executionServiceId.id}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${getHostName} "
 
