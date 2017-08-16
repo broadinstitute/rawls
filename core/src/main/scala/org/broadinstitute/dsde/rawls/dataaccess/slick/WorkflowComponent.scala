@@ -543,7 +543,7 @@ trait WorkflowComponent {
       val submissionValues = resolutionsByInput map { case (inputName, recTuples: Seq[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])]) =>
         val attr = if (recTuples.forall { case (submissionRec, attrRecOpt) => attrRecOpt.isDefined }) {
           //all attributes are real
-          val attrRecsWithRefs = recTuples map { case (rec, Some(attrOpt)) => ((workflowId, attrOpt), None) }
+          val attrRecsWithRefs = recTuples collect { case (rec, Some(attrOpt)) => ((workflowId, attrOpt), None) }
 
           // note: the concept of namespace does not apply to Submission "attributes" because they are really input names
           val inputAttrName = AttributeName.withDefaultNS(inputName)

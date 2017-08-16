@@ -421,10 +421,10 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val outputExpressions = Map("unbound" -> unboundExprStr, "bound" ->  boundExprStr)
     val execOutputs = Map("unbound" -> Left(unboundAttr), "bound" ->  Left(boundAttr))
 
-    val parsedExpr = OutputExpression.build(boundExprStr.value, boundAttr)
-    parsedExpr shouldBe a [scala.util.Success[BoundOutputExpression]]
-    val boundExpr = parsedExpr.get.asInstanceOf[BoundOutputExpression]
-    val expectedAttributeUpdate = boundExpr.attributeName -> boundExpr.attribute
+    val expectedAttributeUpdate = OutputExpression.build(boundExprStr.value, boundAttr) match {
+      case scala.util.Success(BoundOutputExpression(_, attrName, attr)) => attrName -> attr
+      case _ => fail
+    }
 
     val mcUnboundExpr = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), outputExpressions, MethodRepoMethod("ns-config", "meth1", 1))
 
