@@ -11,10 +11,13 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, Work
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{ExecutionServiceStatusResponse, StatusCheckComplete}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import spray.json.JsObject
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -535,7 +538,14 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attach outputs and not deadlock with multiple submissions all updating the same entity at once" in withCustomTestDatabase(manySubmissionsTestData) { dataSource: SlickDataSource =>
     val submissions = manySubmissionsTestData.submissions
     val numSubmissions = submissions.length
-    submissions.foreach ( sub => createSubmissionMonitorActor(dataSource, sub, manySubmissionsTestData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)) )
+
+    val execDAO = new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+    val execCluster = MockShardedExecutionServiceCluster.fromDAO(execDAO, dataSource)
+    val supervisor = createSubmissionSupervisorActor(dataSource, execCluster)
+
+    submissions.foreach { sub =>
+      supervisor ! SubmissionStarted(manySubmissionsTestData.wsName, UUID.fromString(sub.submissionId), new Builder().build())
+    }
 
     //they're all being monitored. they should all complete just fine, without deadlocking or otherwise barfing
     awaitCond({
@@ -581,6 +591,12 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         }
       }
     }
+  }
+
+  def createSubmissionSupervisorActor(dataSource: SlickDataSource, execSvcCluster: ExecutionServiceCluster): TestActorRef[SubmissionSupervisor] = {
+    TestActorRef[SubmissionSupervisor](SubmissionSupervisor.props(
+      execSvcCluster, dataSource, 0.5 seconds, "subMetricBlah"
+    ))
   }
 
   def createSubmissionMonitorActor(dataSource: SlickDataSource, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO): TestActorRef[SubmissionMonitorActor] = {
