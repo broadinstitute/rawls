@@ -216,22 +216,6 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return 409 on method configuration rename when rename already exists" in withTestDataApiServices { services =>
-    withStatsD {
-      Post(s"${testData.methodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
-        services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.Conflict) {
-            status
-          }
-        }
-    } {capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
-      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}.rename", StatusCodes.Conflict.intValue, 1)
-      assertSubsetOf(expected, capturedMetrics)
-    }
-  }
-
   it should "return 204 on method configuration rename" in withTestDataApiServices { services =>
     Post(s"${testData.methodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -246,6 +230,38 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name))
         }
       }
+  }
+
+  it should "return 204 on method configuration rename on top of yourself" in withTestDataApiServices { services =>
+    withStatsD {
+      Post(s"${testData.methodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}.rename", StatusCodes.NoContent.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
+  }
+
+  it should "return 409 on method configuration rename when rename already exists" in withTestDataApiServices { services =>
+    withStatsD {
+      Post(s"${testData.methodConfig2.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Conflict) {
+            status
+          }
+        }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig2.namespace}.${testData.methodConfig2.name}.rename", StatusCodes.Conflict.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "update the workspace last modified date on method configuration rename" in withTestDataApiServices { services =>
