@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.expressions
 import org.broadinstitute.dsde.rawls.{RawlsException, StringValidationUtils}
 import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeName, ErrorReportSource}
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 sealed trait OutputExpressionTarget { val root: String }
 case object ThisEntityTarget extends OutputExpressionTarget { override val root = "this." }
@@ -26,15 +26,14 @@ object BoundOutputExpression extends StringValidationUtils {
     else Failure(new RawlsException(s"Invalid output expression: $expr"))
   }
 
-  def apply(expr: String, attribute: Attribute): BoundOutputExpression = {
-    val parseResult = tryParse(ThisEntityTarget, expr, attribute) recoverWith { case _ => tryParse(WorkspaceTarget, expr, attribute) }
-    parseResult.get
+  def build(expr: String, attribute: Attribute): Try[BoundOutputExpression] = {
+    tryParse(ThisEntityTarget, expr, attribute) recoverWith { case _ => tryParse(WorkspaceTarget, expr, attribute) }
   }
 }
 
 object OutputExpression {
-  def apply(expr: String, attribute: Attribute): OutputExpression = {
-    if (expr.isEmpty) UnboundOutputExpression
-    else BoundOutputExpression(expr, attribute)
+  def build(expr: String, attribute: Attribute): Try[OutputExpression] = {
+    if (expr.isEmpty) Success(UnboundOutputExpression)
+    else BoundOutputExpression.build(expr, attribute)
   }
 }
