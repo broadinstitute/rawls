@@ -624,7 +624,7 @@ trait WorkflowComponent {
   private object UpdateWorkflowStatusRawSql extends RawSqlQuery {
     val driver: JdbcDriver = WorkflowComponent.this.driver
 
-    private def update(newStatus: WorkflowStatus) = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${getHostName} "
+    private def update(newStatus: WorkflowStatus) = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
 
     def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus) = {
       val where = sql"where (id, record_version) in ("
@@ -644,7 +644,7 @@ trait WorkflowComponent {
   private object UpdateWorkflowStatusAndExecutionIdRawSql extends RawSqlQuery {
     val driver: JdbcDriver = WorkflowComponent.this.driver
 
-    private def update(newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = sql"update WORKFLOW set status = ${newStatus.toString}, exec_service_key = ${executionServiceId.id}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${getHostName} "
+    private def update(newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = sql"update WORKFLOW set status = ${newStatus.toString}, exec_service_key = ${executionServiceId.id}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
 
     def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = {
       val where = sql"where (id, record_version) in ("
