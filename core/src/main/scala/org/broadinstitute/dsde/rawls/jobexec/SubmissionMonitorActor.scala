@@ -75,7 +75,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
 
   override def preStart(): Unit = {
     super.preStart()
-    scheduleNextMonitorPass
+    scheduleInitialMonitorPass
   }
 
   override def receive = {
@@ -98,6 +98,11 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       checkCurrentWorkflowStatusCounts(true) pipeTo parent
 
     case Status.Failure(t) => throw t // an error happened in some future, let the supervisor handle it
+  }
+
+  private def scheduleInitialMonitorPass: Cancellable = {
+    //Wait anything _up to_ the poll interval for a much wider distribution of submission monitor start times when Rawls starts up
+    system.scheduler.scheduleOnce(addJitter(0 seconds, submissionPollInterval), self, StartMonitorPass)
   }
 
   private def scheduleNextMonitorPass: Cancellable = {
