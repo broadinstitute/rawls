@@ -2496,7 +2496,7 @@ paths:
             - profile
     put:
       responses:
-        '201':
+        '200':
           description: Successful Request
           schema:
             $ref: '#/definitions/ValidatedMethodConfiguration'
@@ -2632,7 +2632,8 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: | Rename method configuration.
+      description: |
+        Rename method configuration.
         The workspace name and namespace in the HTTP body are ignored.
         409 may be returned if there's already a method configuration at the target location.
       tags:

@@ -1261,7 +1261,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               s"The method configuration name and namespace in the URI should match the method configuration name and namespace in the request body. If you want to move this method configuration, use POST.")))
           } else {
             createMCAndValidateExpressions(workspaceContext, methodConfiguration, dataAccess) map { validatedMethodConfiguration =>
-              RequestCompleteWithLocation((StatusCodes.Created, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
+              RequestCompleteWithLocation((StatusCodes.OK, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
             }
           }
         }
