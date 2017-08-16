@@ -298,6 +298,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   /*
    * test disabled until we decide what to do with submissions that reference deleted configs
    */
+  /*
   ignore should "*DISABLED* return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(testData.methodConfig.path(testData.workspace)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -309,7 +310,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name))
         }
       }
-  }
+  } */
 
   it should "return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(testData.methodConfig3.path(testData.workspace)) ~>
@@ -364,12 +365,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 on update method configuration" in withTestDataApiServices { services =>
+  it should "return 201 on update method configuration" in withTestDataApiServices { services =>
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
     Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(modifiedMethodConfig) {
@@ -387,7 +388,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
         services.sealedInstrumentedRoutes ~>
         check {
-          assertResult(StatusCodes.OK) {
+          assertResult(StatusCodes.Created) {
             status
           }
         }
@@ -398,7 +399,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         }
     } { capturedMetrics =>
       val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
-      val expected = expectedHttpRequestMetrics("put", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}", StatusCodes.OK.intValue, 1) ++
+      val expected = expectedHttpRequestMetrics("put", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}", StatusCodes.Created.intValue, 1) ++
         expectedHttpRequestMetrics("get", s"${wsPathForRequestMetrics}", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
@@ -418,7 +419,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(ValidatedMethodConfiguration(modifiedMethodConfig, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {
@@ -469,6 +470,17 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 on update method configuration if the location differs between URI and JSON body" in withTestDataApiServices { services =>
+    val modifiedMethodConfig = testData.methodConfig.copy(name = "different", inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
+    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
           status
         }
       }

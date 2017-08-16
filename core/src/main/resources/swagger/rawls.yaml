@@ -2496,7 +2496,7 @@ paths:
             - profile
     put:
       responses:
-        '200':
+        '201':
           description: Successful Request
           schema:
             $ref: '#/definitions/ValidatedMethodConfiguration'
