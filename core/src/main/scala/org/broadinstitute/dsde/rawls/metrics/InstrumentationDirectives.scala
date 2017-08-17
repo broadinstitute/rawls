@@ -10,14 +10,7 @@ import spray.routing.directives.MiscDirectives.requestInstance
 trait InstrumentationDirectives extends RawlsInstrumented {
   // Strip out workflow IDs from metrics by providing an implicit redactedUriExpansion
   private val WorkflowIdRegex = """^.*workflows\.(.*)\..*$""".r
-  implicit val UriExpansion: Expansion[Uri] = Expansion.redactedUriExpansion(WorkflowIdRegex)
-
-  override def httpRequestMetricBuilder(builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => ExpandedMetricBuilder = {
-    (httpRequest, httpResponse) => builder
-      .expand(HttpRequestMethodMetricKey, httpRequest.method)
-      .expand(HttpRequestUriMetricKey, httpRequest.uri)
-      .expand(HttpResponseStatusCodeMetricKey, httpResponse.status)
-  }
+  override protected val UriExpansion: Expansion[Uri] = Expansion.redactedUriExpansion(WorkflowIdRegex)
 
   def instrumentRequest: Directive0 = requestInstance flatMap { request =>
     val timeStamp = System.currentTimeMillis

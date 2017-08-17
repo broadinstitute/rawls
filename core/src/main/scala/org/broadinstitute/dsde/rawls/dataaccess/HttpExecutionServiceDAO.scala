@@ -31,14 +31,7 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
 
   // Strip out workflow IDs from metrics by providing an implicit redactedUriExpansion
   private val WorkflowIdRegex = """^.*workflows\.v1\.(.*)\..*$""".r
-  private implicit val UriExpansion: Expansion[Uri] = Expansion.redactedUriExpansion(WorkflowIdRegex)
-
-  override def httpRequestMetricBuilder(builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => ExpandedMetricBuilder = {
-    (httpRequest, httpResponse) => builder
-      .expand(HttpRequestMethodMetricKey, httpRequest.method)
-      .expand(HttpRequestUriMetricKey, httpRequest.uri)
-      .expand(HttpResponseStatusCodeMetricKey, httpResponse.status)
-  }
+  override protected val UriExpansion: Expansion[Uri] = Expansion.redactedUriExpansion(WorkflowIdRegex)
 
   private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =
     addAuthHeader(userInfo) ~> instrumentedGzSendReceive ~> unmarshal[A]

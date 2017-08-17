@@ -3,8 +3,9 @@ package org.broadinstitute.dsde.rawls.metrics
 import com.codahale.metrics.{Gauge => DropwizardGauge}
 import nl.grons.metrics.scala._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
+
 import scala.collection.JavaConverters._
-import spray.http.{HttpRequest, HttpResponse}
+import spray.http.{HttpRequest, HttpResponse, Uri}
 
 /**
   * Mixin trait for instrumentation.
@@ -93,7 +94,7 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
   protected def httpRequestMetricBuilder(builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => ExpandedMetricBuilder = {
     (httpRequest, httpResponse) => builder
       .expand(HttpRequestMethodMetricKey, httpRequest.method)
-      .expand(HttpRequestUriMetricKey, httpRequest.uri)
+      .expand(HttpRequestUriMetricKey, httpRequest.uri)(UriExpansion)
       .expand(HttpResponseStatusCodeMetricKey, httpResponse.status)
   }
 
@@ -105,4 +106,8 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
 
   protected implicit def httpRetryHistogram(implicit builder: ExpandedMetricBuilder): Histogram =
     builder.asHistogram("retry")
+
+  // Let subclasses override the UriExpansion if desired
+
+  protected val UriExpansion: Expansion[Uri] = implicitly
 }

@@ -20,27 +20,7 @@ trait Expansion[A] {
     s"$key.${makeName(a)}"
 }
 
-trait LowPriorityImplicits {
-  /**
-    * Implicit expansion for Uri.
-    * Statsd doesn't allow slashes in metric names, so we override makeName to override
-    * the default toString based implementation.
-    */
-  implicit object UriExpansion extends Expansion[Uri] {
-    override def makeName(uri: Uri): String = {
-      val path = if (uri.path.startsWithSlash) uri.path.tail.toString else uri.path
-      path.toString.replace('/', '.')
-    }
-  }
-
-  // Implicit expansions for String and Int.
-  // It's preferable to use more specific types when possible, but sometimes expanding
-  // primitive types into metric names is needed.
-  implicit object StringExpansion extends Expansion[String]
-  implicit object IntExpansion extends Expansion[Int]
-}
-
-object Expansion extends LowPriorityImplicits {
+object Expansion {
 
   // Typeclass instances:
 
@@ -57,12 +37,24 @@ object Expansion extends LowPriorityImplicits {
   }
 
   /**
-    * An implicit expansion for Uri which redacts a piece of the Uri matched by the provided regex.
+    * Implicit expansion for Uri.
+    * Statsd doesn't allow slashes in metric names, so we override makeName to override
+    * the default toString based implementation.
+    */
+  implicit object UriExpansion extends Expansion[Uri] {
+    override def makeName(uri: Uri): String = {
+      val path = if (uri.path.startsWithSlash) uri.path.tail.toString else uri.path
+      path.toString.replace('/', '.')
+    }
+  }
+
+  /**
+    * Creates an expansion for Uri which redacts a piece of the Uri matched by the provided regex.
     * @param regex will be matched against the String resulting from calling UriExpansion.makeName(uri).
     *              The regex is expected to have 1 capturing group, which will be redacted from the Uri.
     * @return Uri Expansion instance
     */
-  implicit def redactedUriExpansion(regex: Regex): Expansion[Uri] = new Expansion[Uri] {
+  def redactedUriExpansion(regex: Regex): Expansion[Uri] = new Expansion[Uri] {
     override def makeName(uri: Uri): String = {
       val name = UriExpansion.makeName(uri)
       name match {
@@ -78,5 +70,11 @@ object Expansion extends LowPriorityImplicits {
   implicit object StatusCodeExpansion extends Expansion[StatusCode] {
     override def makeName(statusCode: StatusCode): String = statusCode.intValue.toString
   }
+
+  // Implicit expansions for String and Int.
+  // It's preferable to use more specific types when possible, but sometimes expanding
+  // primitive types into metric names is needed.
+  implicit object StringExpansion extends Expansion[String]
+  implicit object IntExpansion extends Expansion[Int]
 
 }
