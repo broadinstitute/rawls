@@ -4,13 +4,13 @@ import akka.actor.ActorSystem
 import akka.util.Timeout
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
-import org.broadinstitute.dsde.rawls.metrics.{InstrumentedRetry, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
 import spray.client.pipelining._
-import spray.http.{BodyPart, MultipartFormData}
+import spray.http._
 import spray.httpx.SprayJsonSupport._
 import spray.httpx.unmarshalling.FromResponseUnmarshaller
 import spray.json.DefaultJsonProtocol._
@@ -28,6 +28,17 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
 
   private implicit lazy val baseMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Cromwell)
+
+  // Strip out workflow IDs from metrics by providing an implicit redactedUriExpansion
+  private val WorkflowIdRegex = """^.*workflows\.v1\.(.*)\..*$""".r
+  private implicit val UriExpansion: Expansion[Uri] = Expansion.redactedUriExpansion(WorkflowIdRegex)
+
+  override def httpRequestMetricBuilder(builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => ExpandedMetricBuilder = {
+    (httpRequest, httpResponse) => builder
+      .expand(HttpRequestMethodMetricKey, httpRequest.method)
+      .expand(HttpRequestUriMetricKey, httpRequest.uri)
+      .expand(HttpResponseStatusCodeMetricKey, httpResponse.status)
+  }
 
   private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =
     addAuthHeader(userInfo) ~> instrumentedGzSendReceive ~> unmarshal[A]

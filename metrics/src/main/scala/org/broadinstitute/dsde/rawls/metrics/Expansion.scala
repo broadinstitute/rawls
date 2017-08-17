@@ -1,8 +1,11 @@
 package org.broadinstitute.dsde.rawls.metrics
 
 import java.util.UUID
+
 import spray.http.{HttpMethod, StatusCode, Uri}
+
 import scala.annotation.implicitNotFound
+import scala.util.matching.Regex
 
 /**
   * Typeclass for something that can be converted into a metric name fragment.
@@ -17,7 +20,27 @@ trait Expansion[A] {
     s"$key.${makeName(a)}"
 }
 
-object Expansion {
+trait LowPriorityImplicits {
+  /**
+    * Implicit expansion for Uri.
+    * Statsd doesn't allow slashes in metric names, so we override makeName to override
+    * the default toString based implementation.
+    */
+  implicit object UriExpansion extends Expansion[Uri] {
+    override def makeName(uri: Uri): String = {
+      val path = if (uri.path.startsWithSlash) uri.path.tail.toString else uri.path
+      path.toString.replace('/', '.')
+    }
+  }
+
+  // Implicit expansions for String and Int.
+  // It's preferable to use more specific types when possible, but sometimes expanding
+  // primitive types into metric names is needed.
+  implicit object StringExpansion extends Expansion[String]
+  implicit object IntExpansion extends Expansion[Int]
+}
+
+object Expansion extends LowPriorityImplicits {
 
   // Typeclass instances:
 
@@ -34,14 +57,18 @@ object Expansion {
   }
 
   /**
-    * Implicit expansion for Uri.
-    * Statsd doesn't allow slashes in metric names, so we override makeName to override
-    * the default toString based implementation.
+    * An implicit expansion for Uri which redacts a piece of the Uri matched by the provided regex.
+    * @param regex will be matched against the String resulting from calling UriExpansion.makeName(uri).
+    *              The regex is expected to have 1 capturing group, which will be redacted from the Uri.
+    * @return Uri Expansion instance
     */
-  implicit object UriExpansion extends Expansion[Uri] {
+  implicit def redactedUriExpansion(regex: Regex): Expansion[Uri] = new Expansion[Uri] {
     override def makeName(uri: Uri): String = {
-      val path = if (uri.path.startsWithSlash) uri.path.tail.toString else uri.path
-      path.toString.replace('/', '.')
+      val name = UriExpansion.makeName(uri)
+      name match {
+        case regex(capture) => name.replace(capture, "redacted")
+        case _ => name
+      }
     }
   }
 
@@ -52,9 +79,4 @@ object Expansion {
     override def makeName(statusCode: StatusCode): String = statusCode.intValue.toString
   }
 
-  // Implicit expansions for String and Int.
-  // It's preferable to use more specific types when possible, but sometimes expanding
-  // primitive types into metric names is needed.
-  implicit object StringExpansion extends Expansion[String]
-  implicit object IntExpansion extends Expansion[Int]
 }
