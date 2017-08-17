@@ -49,17 +49,19 @@ object Expansion {
   }
 
   /**
-    * Creates an expansion for Uri which redacts a piece of the Uri matched by the provided regex.
-    * @param regex will be matched against the String resulting from calling UriExpansion.makeName(uri).
-    *              The regex is expected to have 1 capturing group, which will be redacted from the Uri.
+    * Creates an expansion for Uri which redacts a piece of the Uri matched by the provided regexes.
+    * @param regexes will be matched in order against the String resulting from calling UriExpansion.makeName(uri).
+    *                Each regex is expected to have 1 capturing group, which will be redacted from the Uri.
     * @return Uri Expansion instance
     */
-  def redactedUriExpansion(regex: Regex): Expansion[Uri] = new Expansion[Uri] {
+  def redactedUriExpansion(regexes: Regex*): Expansion[Uri] = new Expansion[Uri] {
     override def makeName(uri: Uri): String = {
       val name = UriExpansion.makeName(uri)
-      name match {
-        case regex(capture) => name.replace(capture, "redacted")
-        case _ => name
+      regexes.foldLeft(name) { (name, regex) =>
+        name match {
+          case regex(capture) => name.replace(capture, "redacted")
+          case _ => name
+        }
       }
     }
   }
