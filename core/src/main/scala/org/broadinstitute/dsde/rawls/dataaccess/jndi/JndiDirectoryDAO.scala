@@ -87,6 +87,12 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }
     }
 
+    def loadAllGroups(): ReadWriteAction[Seq[RawlsGroup]] = withContext { ctx =>
+      ctx.search(groupsOu, new BasicAttributes("objectclass", "workbenchGroup", true)).asScala.map { result =>
+        unmarshallGroup(result.getAttributes)
+      }.toSeq
+    }
+
     def save(group: RawlsGroup): ReadWriteAction[RawlsGroup] = withContext { ctx =>
       try {
         val groupContext = new BaseDirContext {
@@ -331,7 +337,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
         user
       } catch {
         case e: NameAlreadyBoundException =>
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"user with id ${user.userSubjectId.value} already exists"))
+          throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"user with id ${user.userSubjectId} already exists"))
       }
     }
 

@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionParser
+import org.broadinstitute.dsde.rawls.model.{RawlsGroupName, RawlsGroupRef}
 import slick.driver.JdbcProfile
 
 trait DataAccess
@@ -63,6 +64,20 @@ trait DataAccess
 
   def sqlDBStatus() = {
     sql"select version()".as[String]
+  }
+
+  def emptyLdap = {
+    // user load all users to read in all users,
+    // delete each user
+    // load all groups, delete each one
+    withContext(directoryConfig.directoryUrl, directoryConfig.user, directoryConfig.password) {ctx =>
+      rawlsUserQuery.loadAllUsers.map{users =>
+        users.map{user => ctx.unbind(user.userSubjectId.toString)}
+      }
+      rawlsGroupQuery.loadAllGroups.map{groups =>
+        groups.map{group => ctx.unbind(group.groupName.toString)}
+      }
+    }
   }
 
 }

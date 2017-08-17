@@ -61,11 +61,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   implicit def wfStatusCounter(wfStatus: WorkflowStatus): Counter = metrics.counter(s"${wfStatus.toString}")
   implicit def subStatusCounter(subStatus: SubmissionStatus): Counter = metrics.counter(s"${subStatus.toString}")
 
-  val databaseConfig = DbResource.dataConfig
+  override val driver: JdbcDriver = DbResource.dataConfig.driver
+  override val batchSize: Int = DbResource.dataConfig.config.getInt("batchSize")
   val slickDataSource = DbResource.dataSource
-
-  override val driver: JdbcDriver = databaseConfig.driver
-  override val batchSize: Int = databaseConfig.config.getInt("batchSize")
 
   val userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))
 
@@ -977,6 +975,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       case t: Throwable => t.printStackTrace; throw t
     } finally {
       runAndWait(DBIO.seq(slickDataSource.dataAccess.truncateAll), 2 minutes)
+      slickDataSource.dataAccess.emptyLdap
+//      runAndWait(DBIO.seq(slickDataSource.dataAccess.emptyLdap), 2 minutes)
     }
   }
 
