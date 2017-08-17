@@ -29,8 +29,8 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
   private implicit lazy val baseMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Cromwell)
 
-  // Strip out workflow IDs from metrics by providing an implicit redactedUriExpansion
-  private val WorkflowIdRegex = """^.*workflows\.v1\.(.*)\..*$""".r
+  // Strip out workflow IDs from metrics by providing a redactedUriExpansion
+  private val WorkflowIdRegex = """^.*workflows\.v1\.([^.]*)\..*$""".r
   override protected val UriExpansion: Expansion[Uri] = Expansion.redactedUriExpansion(WorkflowIdRegex)
 
   private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =

@@ -8,9 +8,9 @@ import spray.routing.directives.BasicDirectives.mapHttpResponse
 import spray.routing.directives.MiscDirectives.requestInstance
 
 trait InstrumentationDirectives extends RawlsInstrumented {
-  // Strip out workflow IDs from metrics by providing an implicit redactedUriExpansion
-  private val WorkflowIdRegex = """^.*workflows\.(.*)\..*$""".r
-  private val EntityIdRegex = """^.*entities\..*\.(.*)\..*$""".r
+  // Strip out workflow IDs and entity names from metrics by providing a redactedUriExpansion
+  private val WorkflowIdRegex = """^.*workflows\.([^.]*).*$""".r
+  private val EntityIdRegex = """^.*entities\.[^.]*\.([^.]*).*$""".r
   override protected val UriExpansion: Expansion[Uri] = Expansion.redactedUriExpansion(WorkflowIdRegex, EntityIdRegex)
 
   def instrumentRequest: Directive0 = requestInstance flatMap { request =>
