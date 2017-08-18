@@ -5,7 +5,6 @@ import java.util.UUID
 import spray.http.{HttpMethod, StatusCode, Uri}
 
 import scala.annotation.implicitNotFound
-import scala.util.matching.Regex
 
 /**
   * Typeclass for something that can be converted into a metric name fragment.
@@ -14,10 +13,10 @@ import scala.util.matching.Regex
   */
 @implicitNotFound(msg = "Cannot expand instances of type ${A}")
 trait Expansion[A] {
-  def makeName(a: A): String = a.toString
-
   final def makeNameWithKey(key: String, a: A) =
     s"$key.${makeName(a)}"
+
+  def makeName(a: A): String = a.toString
 }
 
 object Expansion {
@@ -45,24 +44,6 @@ object Expansion {
     override def makeName(uri: Uri): String = {
       val path = if (uri.path.startsWithSlash) uri.path.tail.toString else uri.path
       path.toString.replace('/', '.')
-    }
-  }
-
-  /**
-    * Creates an expansion for Uri which redacts a piece of the Uri matched by the provided regexes.
-    * @param regexes will be matched in order against the String resulting from calling UriExpansion.makeName(uri).
-    *                Each regex is expected to have 1 capturing group, which will be redacted from the Uri.
-    * @return Uri Expansion instance
-    */
-  def redactedUriExpansion(regexes: Regex*): Expansion[Uri] = new Expansion[Uri] {
-    override def makeName(uri: Uri): String = {
-      val name = UriExpansion.makeName(uri)
-      regexes.foldLeft(name) { (name, regex) =>
-        name match {
-          case regex(capture) => name.replace(capture, "redacted")
-          case _ => name
-        }
-      }
     }
   }
 
