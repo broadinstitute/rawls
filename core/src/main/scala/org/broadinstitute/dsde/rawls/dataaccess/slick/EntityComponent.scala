@@ -4,7 +4,7 @@ import java.sql.Timestamp
 import java.util.{Date, UUID}
 
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
@@ -352,15 +352,83 @@ trait EntityComponent {
         preExistingEntityRecs <- getEntityRecords(workspaceContext.workspaceId, entities.map(_.toReference).toSet).map(populateAllAttributeValues(_, entities))
         savingEntityRecs <- insertNewEntities(workspaceContext, entities, preExistingEntityRecs).map(_ ++ preExistingEntityRecs)
         referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs).map(_ ++ savingEntityRecs)
-        _ <- upsertAttributes(entities, savingEntityRecs.map(_.id), referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap)
+        _ <- rewriteAttributes(entities, savingEntityRecs.map(_.id), referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap)
         _ <- DBIO.seq(preExistingEntityRecs map optimisticLockUpdate: _ *)
       } yield entities
     }
 
-    def saveEntityDeltas(workspaceContext: SlickWorkspaceContext, )
+    //todo: fix this signature
+    private def deltaAttributes(existingAttributes: Map[AttributeName, Long], upserts: AttributeMap, deletes: Traversable[AttributeName], entityIdsByRef: Map[AttributeEntityReference, Long]): ReadWriteAction[Int] = {
+      //todo: replace with marshalling upserts + creates
+      /*
+
+      val existingAttributes = existingAttributeMap.keySet
+
+        //these are all actual attributes. we can match them to their ids in existingAttributeMap. so we have everything we need for the db now.
+        val (updateThese, createThese) = upserts.keys.partition( attrName => existingAttributes.contains(attrName) )
+        val deleteThese = existingAttributes.intersect(deletes.toSet)
+
+
+      val attributesToSave = for {
+        entity <- entitiesToSave
+        (attributeName, attribute) <- entity.attributes
+        attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByRef(entity.toReference), attributeName, attribute, entityIdsByRef)
+      } yield attributeRec
+
+      //this is nicked from rewriteAttributes -- probably pull it out so we can both reference it
+      def insertScratchAttributes(attributeRecs: Seq[EntityAttributeRecord])(transactionId: String): WriteAction[Int] = {
+        entityAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
+      }
+
+      //this definitely needs to change.
+      entityAttributeQuery.findByOwnerQuery(entityIds).result flatMap { existingAttributes =>
+        entityAttributeQuery.rewriteAttrsAction(attributesToSave, existingAttributes, insertScratchAttributes)
+      } */
+
+      DBIO.successful(2)
+    }
+
+    def applyAttributeDeltas(workspaceContext: SlickWorkspaceContext, entityRecord: EntityRecord, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
+      //yank the attribute list for this entity to determine what to do with upserts
+      entityAttributeQuery.findByOwnerQuery(Seq(entityRecord.id)).map(attr => (attr.namespace, attr.name, attr.id)).result flatMap { attrCols =>
+        val existingAttributeMap: Map[AttributeName, Long] = attrCols.map(a => AttributeName(a._1, a._2) -> a._3).toMap
+
+        val attrRefsToAdd = upserts.valuesIterator.collect { case e: AttributeEntityReference => e }.toSet
+
+        //todo: the below is a dbio so gotta flatmap that shit
+        val entityRefRecs = lookupNotYetLoadedReferences(workspaceContext, attrRefsToAdd, Seq(entityRecord))
+
+        deltaAttributes(existingAttributeMap, upserts, deletes, entityRefRecs.map(e => e.toReference -> e.id).toMap)
+
+        DBIO.successful(2)
+      }
+    }
+
+    //save the deltas for some attributes on an existing entity. a little more database efficient than a "full" save, but requires the entity already exist.
+    def saveEntityDeltas(workspaceContext: SlickWorkspaceContext, entityRef: AttributeEntityReference, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
+      getEntityRecords(workspaceContext.workspaceId, Set(entityRef)) flatMap { eRecs =>
+        if( eRecs.length != 1 ) {
+          throw new RawlsException(s"saveEntityDeltas looked up $entityRef expecting 1 record, got ${eRecs.length} instead")
+        }
+
+        val eRec = eRecs.head
+
+        upserts.keys.foreach { attrName =>
+          validateUserDefinedString(attrName.name)
+          validateAttributeName(attrName, eRec.entityType)
+        }
+
+        for {
+          _ <- applyAttributeDeltas(workspaceContext, eRec, upserts, deletes)
+          _ <- optimisticLockUpdate(eRec)
+        } yield {}
+
+        DBIO.successful(2)
+      }
+    }
 
     private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], alreadyLoadedEntityRecs: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
-      val notYetLoadedEntityRecs = (for {
+      val allRefAttributes = (for {
         entity <- entities
         (_, attribute) <- entity.attributes
         ref <- attribute match {
@@ -368,7 +436,13 @@ trait EntityComponent {
           case r: AttributeEntityReference => Seq(r)
           case _ => Seq.empty
         }
-      } yield ref).toSet -- alreadyLoadedEntityRecs.map(_.toReference)
+      } yield ref).toSet
+
+      lookupNotYetLoadedReferences(workspaceContext, allRefAttributes, alreadyLoadedEntityRecs)
+    }
+
+    private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, attrReferences: Set[AttributeEntityReference], alreadyLoadedEntityRecs: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
+      val notYetLoadedEntityRecs = attrReferences -- alreadyLoadedEntityRecs.map(_.toReference)
 
       getEntityRecords(workspaceContext.workspaceId, notYetLoadedEntityRecs) map { foundEntities =>
         if (foundEntities.size != notYetLoadedEntityRecs.size) {
@@ -389,7 +463,7 @@ trait EntityComponent {
       }
     }
 
-    private def upsertAttributes(entitiesToSave: Traversable[Entity], entityIds: Seq[Long], entityIdsByRef: Map[AttributeEntityReference, Long]): ReadWriteAction[Int] = {
+    private def rewriteAttributes(entitiesToSave: Traversable[Entity], entityIds: Seq[Long], entityIdsByRef: Map[AttributeEntityReference, Long]): ReadWriteAction[Int] = {
       val attributesToSave = for {
         entity <- entitiesToSave
         (attributeName, attribute) <- entity.attributes
@@ -401,7 +475,7 @@ trait EntityComponent {
       }
 
       entityAttributeQuery.findByOwnerQuery(entityIds).result flatMap { existingAttributes =>
-        entityAttributeQuery.upsertAction(attributesToSave, existingAttributes, insertScratchAttributes)
+        entityAttributeQuery.rewriteAttrsAction(attributesToSave, existingAttributes, insertScratchAttributes)
       }
     }
 

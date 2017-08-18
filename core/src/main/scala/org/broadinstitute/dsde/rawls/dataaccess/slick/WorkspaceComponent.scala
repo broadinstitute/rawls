@@ -230,7 +230,7 @@ trait WorkspaceComponent {
         val attributesToSave = workspace.attributes flatMap { attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef) }
 
         workspaceAttributeQuery.findByOwnerQuery(Seq(workspaceId)).result flatMap { existingAttributes =>
-          workspaceAttributeQuery.upsertAction(attributesToSave, existingAttributes, insertScratchAttributes)
+          workspaceAttributeQuery.rewriteAttrsAction(attributesToSave, existingAttributes, insertScratchAttributes)
         }
       }
     }

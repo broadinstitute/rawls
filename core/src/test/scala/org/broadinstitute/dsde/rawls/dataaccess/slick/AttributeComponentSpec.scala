@@ -423,7 +423,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
   }
 
-  it should "upsert" in withEmptyTestDatabase {
+  it should "rewrite" in withEmptyTestDatabase {
     // copied from WorkspaceComponent
     def insertScratchAttributes(attributeRecs: Seq[WorkspaceAttributeRecord])(transactionId: String): WriteAction[Int] = {
       workspaceAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
@@ -446,7 +446,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val insert = WorkspaceAttributeRecord(3, workspaceId, AttributeName.defaultNamespace, "test3", None, None, Option(false), None, None, None, None, deleted = false, None)
     val toSave = Seq(update, insert)
 
-    runAndWait(workspaceAttributeQuery.upsertAction(toSave, existing, insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.rewriteAttrsAction(toSave, existing, insertScratchAttributes))
 
     assertExpectedRecords(toSave:_*)
   }
