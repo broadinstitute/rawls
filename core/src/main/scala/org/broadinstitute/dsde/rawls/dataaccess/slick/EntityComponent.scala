@@ -357,6 +357,8 @@ trait EntityComponent {
       } yield entities
     }
 
+    def saveEntityDeltas(workspaceContext: SlickWorkspaceContext, )
+
     private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], alreadyLoadedEntityRecs: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
       val notYetLoadedEntityRecs = (for {
         entity <- entities
