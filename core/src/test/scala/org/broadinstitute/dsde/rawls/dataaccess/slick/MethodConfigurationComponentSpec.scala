@@ -31,68 +31,9 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
   }
 
-  it should "hide old method config and save new method config with incremented version" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
-
-    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.methodConfig.namespace, testData.methodConfig.name))).get
-
-    val changed = testData.methodConfig.copy(rootEntityType = "goober",
-      prerequisites = Map.empty,
-      inputs = Map("input.expression.new" -> AttributeString("input.expr")),
-      outputs = Map("output.expression.new" -> AttributeString("output.expr")),
-      methodRepoMethod = testData.methodConfig.methodRepoMethod.copy(methodVersion = 2)
-    )
-
-    runAndWait(methodConfigurationQuery.update(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, changed))
-
-    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
-    }
-
-    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethod.id))).get.name
-
-    assert(oldConfigName.startsWith(oldMethod.name + "_"))
-
-    val listActive = runAndWait(methodConfigurationQuery.listActive(workspaceContext))
-
-    assertResult(0) {
-      listActive.filter(_.name.contains(testData.methodConfig.name + "_")).size
-    }
-  }
-
   it should "list method configs" in withConstantTestDatabase {
     val workspaceContext = SlickWorkspaceContext(constantData.workspace)
     assertSameElements(constantData.allMCs.map(_.toShort), runAndWait(methodConfigurationQuery.listActive(workspaceContext)))
-  }
-
-  it should "rename method configs" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
-
-    val methodConfigOldName = MethodConfiguration(
-      "ns",
-      "oldName",
-      "sample",
-      Map("input.expression" -> AttributeString("this..wont.parse")),
-      Map("output.expression" -> AttributeString("output.expr")),
-      Map("prereq.expression" -> AttributeString("prereq.expr")),
-      MethodRepoMethod("ns-config", "meth2", 2)
-    )
-
-    runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigOldName))
-
-    val oldMethodId = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, methodConfigOldName.namespace, methodConfigOldName.name))).get.id
-
-    val changed = methodConfigOldName.copy(name = "newName")
-
-    runAndWait(methodConfigurationQuery.update(workspaceContext, methodConfigOldName.namespace, methodConfigOldName.name, changed))
-
-    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
-    }
-
-    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethodId))).get.name
-
-    assert(oldConfigName.startsWith(methodConfigOldName.name + "_"))
   }
 
   it should "delete method configs by hiding them" in withDefaultTestDatabase {
@@ -130,4 +71,142 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       deletedMethod.map(_.deletedDate.isDefined)
     }
   }
+
+  "MethodConfigurationComponent.upsert" should "in-place update a method config with incremented version" in withDefaultTestDatabase {
+    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+
+    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.methodConfig.namespace, testData.methodConfig.name))).get
+
+    val changed = testData.methodConfig.copy(rootEntityType = "goober",
+      prerequisites = Map.empty,
+      inputs = Map("input.expression.new" -> AttributeString("input.expr")),
+      outputs = Map("output.expression.new" -> AttributeString("output.expr")),
+      methodRepoMethod = testData.methodConfig.methodRepoMethod.copy(methodVersion = 2)
+    )
+
+    runAndWait(methodConfigurationQuery.upsert(workspaceContext, changed))
+
+    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
+      runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
+    }
+
+    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethod.id))).get.name
+
+    assert(oldConfigName.startsWith(oldMethod.name + "_"))
+
+    val listActive = runAndWait(methodConfigurationQuery.listActive(workspaceContext))
+
+    assertResult(0) {
+      listActive.filter(_.name.contains(testData.methodConfig.name + "_")).size
+    }
+  }
+
+  "MethodConfigurationComponent.update" should "in-place update a method config with incremented version" in withDefaultTestDatabase {
+    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+
+    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.methodConfig.namespace, testData.methodConfig.name))).get
+
+    val changed = testData.methodConfig.copy(rootEntityType = "goober",
+      prerequisites = Map.empty,
+      inputs = Map("input.expression.new" -> AttributeString("input.expr")),
+      outputs = Map("output.expression.new" -> AttributeString("output.expr")),
+      methodRepoMethod = testData.methodConfig.methodRepoMethod.copy(methodVersion = 2)
+    )
+
+    runAndWait(methodConfigurationQuery.update(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, changed))
+
+    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
+      runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
+    }
+
+    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethod.id))).get.name
+
+    assert(oldConfigName.startsWith(oldMethod.name + "_"))
+
+    val listActive = runAndWait(methodConfigurationQuery.listActive(workspaceContext))
+
+    assertResult(0) {
+      listActive.filter(_.name.contains(testData.methodConfig.name + "_")).size
+    }
+  }
+
+  it should "update method configs to a new, empty location" in withDefaultTestDatabase {
+    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+
+    val methodConfigOldName = MethodConfiguration(
+      "ns",
+      "oldName",
+      "sample",
+      Map("input.expression" -> AttributeString("this..wont.parse")),
+      Map("output.expression" -> AttributeString("output.expr")),
+      Map("prereq.expression" -> AttributeString("prereq.expr")),
+      MethodRepoMethod("ns-config", "meth2", 2)
+    )
+
+    runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigOldName))
+
+    val oldMethodId = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, methodConfigOldName.namespace, methodConfigOldName.name))).get.id
+
+    val changed = methodConfigOldName.copy(name = "newName")
+
+    runAndWait(methodConfigurationQuery.update(workspaceContext, methodConfigOldName.namespace, methodConfigOldName.name, changed))
+
+    //there was no config at that location, so the version should be 1
+    assertResult(Option(changed.copy(methodConfigVersion = 1))) {
+      runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
+    }
+
+    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethodId))).get.name
+
+    assert(oldConfigName.startsWith(methodConfigOldName.name + "_"))
+  }
+
+  it should "update method configs to a new location with something there already" in withDefaultTestDatabase {
+    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+
+    val methodConfigToMove = MethodConfiguration(
+      "ns",
+      "oldName",
+      "sample",
+      Map("input.expression" -> AttributeString("this..wont.parse")),
+      Map("output.expression" -> AttributeString("output.expr")),
+      Map("prereq.expression" -> AttributeString("prereq.expr")),
+      MethodRepoMethod("ns-config", "meth2", 2)
+    )
+
+    val methodConfigAlreadyThere = MethodConfiguration(
+      "ns",
+      "newName",
+      "sample",
+      Map("input.expression" -> AttributeString("this..wont.parse")),
+      Map("output.expression" -> AttributeString("already.there")),
+      Map("prereq.expression" -> AttributeString("already.there")),
+      MethodRepoMethod("ns-config", "meth2", 2),
+      methodConfigVersion = 10
+    )
+
+    runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigToMove))
+
+    //do it a few times to bump the version
+    runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigAlreadyThere))
+    runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigAlreadyThere))
+    runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigAlreadyThere))
+
+    val oldMethodId = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, methodConfigToMove.namespace, methodConfigToMove.name))).get.id
+
+    val changed = methodConfigToMove.copy(name = "newName")
+
+    runAndWait(methodConfigurationQuery.update(workspaceContext, methodConfigToMove.namespace, methodConfigToMove.name, changed))
+
+    //the version number should be incremented relative to the one that was already there
+    assertResult(Option(changed.copy(methodConfigVersion = 4))) {
+      runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
+    }
+
+    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethodId))).get.name
+
+    assert(oldConfigName.startsWith(methodConfigToMove.name + "_"))
+  }
+
+
 }
