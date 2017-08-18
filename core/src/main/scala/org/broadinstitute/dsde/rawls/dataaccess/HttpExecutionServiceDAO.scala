@@ -4,17 +4,18 @@ import akka.actor.ActorSystem
 import akka.util.Timeout
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
-import org.broadinstitute.dsde.rawls.metrics.{InstrumentedRetry, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, RawlsExpansion, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
 import spray.client.pipelining._
-import spray.http.{BodyPart, MultipartFormData}
+import spray.http._
 import spray.httpx.SprayJsonSupport._
 import spray.httpx.unmarshalling.FromResponseUnmarshaller
 import spray.json.DefaultJsonProtocol._
 import spray.json.JsObject
+import spray.routing.directives.PathDirectives._
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
@@ -28,6 +29,11 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
 
   private implicit lazy val baseMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Cromwell)
+
+  // Strip out workflow IDs from metrics by providing a redactedUriExpansion
+  override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
+    (Slash ~ "workflows") / "v1" / Segment / Neutral
+  )
 
   private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =
     addAuthHeader(userInfo) ~> instrumentedGzSendReceive ~> unmarshal[A]

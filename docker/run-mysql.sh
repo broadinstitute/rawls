@@ -36,6 +36,12 @@ stop() {
 
 CONTAINER=mysql
 COMMAND=$1
+
+if [ ${#@} == 0 ]; then
+    echo "Usage: $0 stop|start"
+    exit 1
+fi
+
 if [ $COMMAND = "start" ]; then
     start
 elif [ $COMMAND = "stop" ]; then
