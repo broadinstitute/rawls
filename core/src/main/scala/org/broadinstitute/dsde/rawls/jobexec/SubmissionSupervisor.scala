@@ -6,7 +6,9 @@ import akka.actor.SupervisorStrategy.Restart
 import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
+import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.MonitoredSubmissionException
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts, SubmissionStarted}
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -76,6 +78,9 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
       }
   }
 
+  private def restartCounter(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable): Counter =
+    workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand("cause", cause).asCounter("monitorRestarted")
+
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential): ActorRef = {
     actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, workbenchMetricBaseName), submissionId.toString)
   }
@@ -91,8 +96,13 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
       case _ => Restart
     }
 
-    def thresholdFunc(cause: Throwable, count: Int): Unit = {
-      logger.error(s"error monitoring submission after $count times", cause)
+    def thresholdFunc(throwable: Throwable, count: Int): Unit = throwable match {
+      case MonitoredSubmissionException(workspaceName, submissionId, cause) =>
+        // increment smaRestart counter
+        restartCounter(workspaceName, submissionId, cause) += 1
+        logger.error(s"error monitoring submission $submissionId in workspace $workspaceName after $count times", cause)
+      case _ =>
+        logger.error(s"error monitoring submission after $count times", throwable)
     }
 
     new ThresholdOneForOneStrategy(thresholdLimit = 3)(alwaysRestart)(thresholdFunc)
