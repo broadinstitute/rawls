@@ -51,6 +51,8 @@ object SubmissionMonitorActor {
    */
   case class ExecutionServiceStatusResponse(statusResponse: Seq[Try[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]]]) extends SubmissionMonitorMessage
   case class StatusCheckComplete(terminateActor: Boolean) extends SubmissionMonitorMessage
+
+  case class MonitoredSubmissionException(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable) extends Exception(cause)
 }
 
 /**
@@ -97,7 +99,10 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       logger.debug(s"check current workflow status counts for submission $submissionId")
       checkCurrentWorkflowStatusCounts(true) pipeTo parent
 
-    case Status.Failure(t) => throw t // an error happened in some future, let the supervisor handle it
+    case Status.Failure(t) =>
+      // an error happened in some future, let the supervisor handle it
+      // wrap in MonitoredSubmissionException so the supervisor can log/instrument the submission details
+      throw MonitoredSubmissionException(workspaceName, submissionId, t)
   }
 
   private def scheduleInitialMonitorPass: Cancellable = {
