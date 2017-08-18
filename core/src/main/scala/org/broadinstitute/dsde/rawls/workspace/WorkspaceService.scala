@@ -1235,16 +1235,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def renameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: MethodConfigurationName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-        withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfiguration =>
-          //If a different MC exists at the target location, return 409. But it's okay to want to overwrite your own MC.
-          dataAccess.methodConfigurationQuery.get(workspaceContext, newName.namespace, newName.name) flatMap {
-            case Some(_) if methodConfigurationNamespace != newName.namespace || methodConfigurationName != newName.name =>
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport =
-                ErrorReport(StatusCodes.Conflict, s"There is already a method configuration at ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}.")))
-            case Some(_) => DBIO.successful(()) //renaming self to self: no-op
-            case None =>
-              dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration.copy(name = newName.name, namespace = newName.namespace))
-          } map (_ => RequestComplete(StatusCodes.NoContent))
+        //It's terrible that we pass unnecessary junk that we don't read in the payload, but a big refactor of the API is going to have to wait until Some Other Time.
+        if(newName.workspaceName != workspaceName) {
+          DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Workspace name and namespace in payload must match those in the URI")))
+        } else {
+          withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfiguration =>
+            //If a different MC exists at the target location, return 409. But it's okay to want to overwrite your own MC.
+            dataAccess.methodConfigurationQuery.get(workspaceContext, newName.namespace, newName.name) flatMap {
+              case Some(_) if methodConfigurationNamespace != newName.namespace || methodConfigurationName != newName.name =>
+                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport =
+                  ErrorReport(StatusCodes.Conflict, s"There is already a method configuration at ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}.")))
+              case Some(_) => DBIO.successful(()) //renaming self to self: no-op
+              case None =>
+                dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration.copy(name = newName.name, namespace = newName.namespace))
+            } map (_ => RequestComplete(StatusCodes.NoContent))
+          }
         }
       }
     }

@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import spray.http._
+import spray.http.HttpMethods
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
@@ -248,7 +249,23 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return 409 on method configuration rename when rename already exists" in withTestDataApiServices { services =>
+  it should "return 400 on method configuration rename when workspace in URI doesn't match payload" in withTestDataApiServices { services =>
+    withStatsD {
+      Post(s"${testData.methodConfig2.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName("uh_oh", "bad_times")))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig2.namespace}.${testData.methodConfig2.name}.rename", StatusCodes.BadRequest.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
+  }
+
+  it should "return 409 on method configuration rename when destination already exists" in withTestDataApiServices { services =>
     withStatsD {
       Post(s"${testData.methodConfig2.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
         services.sealedInstrumentedRoutes ~>
@@ -298,7 +315,6 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   /*
    * test disabled until we decide what to do with submissions that reference deleted configs
    */
-  /*
   ignore should "*DISABLED* return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(testData.methodConfig.path(testData.workspace)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -310,7 +326,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name))
         }
       }
-  } */
+  }
 
   it should "return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(testData.methodConfig3.path(testData.workspace)) ~>
@@ -365,9 +381,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 on update method configuration" in withTestDataApiServices { services =>
+  def check200AddMC(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
-    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+    httpMethod(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -382,10 +398,18 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "update the workspace last modified date on update method configuration" in withTestDataApiServices { services =>
+  it should "return 200 on put method configuration" in {
+    check200AddMC(Put)
+  }
+
+  it should "return 200 on post method configuration" in {
+    check200AddMC(Post)
+  }
+
+  def checkLastModified(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
     withStatsD {
-      Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+      httpMethod(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
         services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.OK) {
@@ -399,14 +423,21 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         }
     } { capturedMetrics =>
       val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
-      val expected = expectedHttpRequestMetrics("put", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}", StatusCodes.OK.intValue, 1) ++
+      val expected = expectedHttpRequestMetrics(httpMethod.method.name.toLowerCase, s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}", StatusCodes.OK.intValue, 1) ++
         expectedHttpRequestMetrics("get", s"${wsPathForRequestMetrics}", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
   }
 
+  it should "update the workspace last modified date on put method configuration" in {
+    checkLastModified(Put)
+  }
 
-  it should "validate attribute syntax in update method configuration" in withTestDataApiServices { services =>
+  it should "update the workspace last modified date on post method configuration" in {
+    checkLastModified(Post)
+  }
+
+  def checkValidAttributeSyntax(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
     val newOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = newInputs, outputs = newOutputs)
@@ -416,7 +447,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
-    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+    httpMethod(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -435,7 +466,15 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow library attributes in outputs for update method configuration by curator" in withTestDataApiServices { services =>
+  it should "validate attribute syntax in put method configuration" in {
+    checkValidAttributeSyntax(Put)
+  }
+
+  it should "validate attribute syntax in post method configuration" in {
+    checkValidAttributeSyntax(Post)
+  }
+
+  def checkNoLibraryAttributesInOutputsByCurator(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"))
     val newOutputs = Map("good_out" -> AttributeString("this.library:bar"))
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = newInputs, outputs = newOutputs)
@@ -445,7 +484,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map.empty[String, String]
 
-    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+    httpMethod(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -454,7 +493,15 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow library attributes in outputs for update method configuration by non-curator" in withTestDataApiServices { services =>
+  it should "not allow library attributes in outputs for put method configuration by curator" in {
+    checkNoLibraryAttributesInOutputsByCurator(Put)
+  }
+
+  it should "not allow library attributes in outputs for post method configuration by curator" in {
+    checkNoLibraryAttributesInOutputsByCurator(Post)
+  }
+
+  def checkNoLibraryAttributesInOutputsByNonCurator(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"))
     val newOutputs = Map("good_out" -> AttributeString("this.library:bar"))
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = newInputs, outputs = newOutputs)
@@ -475,12 +522,31 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 400 on update method configuration if the location differs between URI and JSON body" in withTestDataApiServices { services =>
+  it should "not allow library attributes in outputs for put method configuration by non-curator" in {
+    checkNoLibraryAttributesInOutputsByNonCurator(Put)
+  }
+
+  it should "not allow library attributes in outputs for post method configuration by non-curator" in {
+    checkNoLibraryAttributesInOutputsByNonCurator(Post)
+  }
+
+  it should "return 400 on put method configuration if the location differs between URI and JSON body" in withTestDataApiServices { services =>
     val modifiedMethodConfig = testData.methodConfig.copy(name = "different", inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
     Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 409 on update method configuration if the destination already exists" in withTestDataApiServices { services =>
+    val modifiedMethodConfig = testData.methodConfig2.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
+    Post(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Conflict) {
           status
         }
       }

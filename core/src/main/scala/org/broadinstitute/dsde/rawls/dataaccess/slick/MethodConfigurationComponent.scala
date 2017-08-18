@@ -110,16 +110,16 @@ trait MethodConfigurationComponent {
     //In either case, saves the new method configuration.
     def upsert(workspaceContext: SlickWorkspaceContext, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
       uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceId, newMethodConfig.namespace, newMethodConfig.name)) flatMap {
-        //note that we don't do anything with the version in newMethodConfig. version is a function of location, not the config itself
+        //note that we ignore the version in newMethodConfig, as the version is defined by how many MCs have ever lived at the target location
         case None =>
-          saveWithoutArchive(workspaceContext, newMethodConfig, 1)
+          saveWithoutArchive(workspaceContext, newMethodConfig)
         case Some(currentMethodConfigRec) =>
           archive(workspaceContext, currentMethodConfigRec) andThen
             saveWithoutArchive(workspaceContext, newMethodConfig, currentMethodConfigRec.methodConfigVersion + 1)
       }
     } map { _ => newMethodConfig }
 
-    //"Update" the method config at oldMethodConfig[name|namespace] to be the MC - including potential new location - in newMethodConfig.
+    //"Update" the method config at oldMethodConfig[name|namespace] to be newMethodConfig, changing the name and namespace if necessary
     //It's like a rename and upsert all in one.
     //The MC at oldMethodConfig[name|namespace] MUST exist. It will be archived.
     //If there's a method config at the location specified in newMethodConfig that will be archived too.

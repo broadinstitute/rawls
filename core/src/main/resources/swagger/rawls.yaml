@@ -2620,6 +2620,10 @@ paths:
       responses:
         '204':
           description: Successful Request
+        '400':
+          description: Workspace details in payload don't match the URI
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '404':
           description: Workspace or Method Configuration not found
           schema:
@@ -2634,7 +2638,7 @@ paths:
             $ref: '#/definitions/ErrorReport'
       description: |
         Rename method configuration.
-        The workspace name and namespace in the HTTP body are ignored.
+        The workspace name and namespace in the HTTP body must match those in the URI.
         409 may be returned if there's already a method configuration at the target location.
       tags:
         - methodconfigs
