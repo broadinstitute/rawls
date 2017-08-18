@@ -1,9 +1,7 @@
 package org.broadinstitute.dsde.rawls.metrics
 
 import java.util.UUID
-
 import spray.http.{HttpMethod, StatusCode, Uri}
-
 import scala.annotation.implicitNotFound
 
 /**
@@ -13,10 +11,10 @@ import scala.annotation.implicitNotFound
   */
 @implicitNotFound(msg = "Cannot expand instances of type ${A}")
 trait Expansion[A] {
+  def makeName(a: A): String = a.toString
+
   final def makeNameWithKey(key: String, a: A) =
     s"$key.${makeName(a)}"
-
-  def makeName(a: A): String = a.toString
 }
 
 object Expansion {
@@ -59,5 +57,4 @@ object Expansion {
   // primitive types into metric names is needed.
   implicit object StringExpansion extends Expansion[String]
   implicit object IntExpansion extends Expansion[Int]
-
 }
