@@ -12,7 +12,7 @@ import akka.util.Timeout
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.readytalk.metrics.StatsDReporter
+import com.readytalk.metrics.{WorkbenchStatsD, StatsDReporter}
 import com.typesafe.config.{ConfigFactory, ConfigObject, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import slick.backend.DatabaseConfig
@@ -290,7 +290,7 @@ object Boot extends App with LazyLogging {
       .prefixedWith(apiKey.orNull)
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
-      .build(host, port)
+      .build(WorkbenchStatsD(host, port))
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
