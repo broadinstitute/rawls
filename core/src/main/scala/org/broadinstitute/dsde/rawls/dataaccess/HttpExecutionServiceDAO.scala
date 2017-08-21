@@ -32,7 +32,7 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
 
   // Strip out workflow IDs from metrics by providing a redactedUriExpansion
   override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
-    (Slash ~ "workflows") / "v1" / Segment / Neutral
+    (Slash ~ "api").? / "workflows" / "v1" / Segment / Neutral
   )
 
   private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =
