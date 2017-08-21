@@ -229,7 +229,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val attributeRecs = runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result)
     assertResult(3) { attributeRecs.size }
 
-    assertResult(3) { runAndWait(workspaceAttributeQuery.deleteAttributeRecords(attributeRecs)) }
+    assertResult(3) { runAndWait(workspaceAttributeQuery.deleteAttributeRecordsById(attributeRecs.map(_.id))) }
 
     assertResult(0) { runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).size }
   }
@@ -423,12 +423,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
   }
 
-  it should "rewrite" in withEmptyTestDatabase {
-    // copied from WorkspaceComponent
-    def insertScratchAttributes(attributeRecs: Seq[WorkspaceAttributeRecord])(transactionId: String): WriteAction[Int] = {
-      workspaceAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
-    }
-
+  it should "rewrite attributes" in withEmptyTestDatabase {
     def insertAndUpdateID(rec: WorkspaceAttributeRecord): WorkspaceAttributeRecord = {
       rec.copy(id = runAndWait((workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += rec))
     }
@@ -446,9 +441,35 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val insert = WorkspaceAttributeRecord(3, workspaceId, AttributeName.defaultNamespace, "test3", None, None, Option(false), None, None, None, None, deleted = false, None)
     val toSave = Seq(update, insert)
 
-    runAndWait(workspaceAttributeQuery.rewriteAttrsAction(toSave, existing, insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.rewriteAttrsAction(toSave, existing, workspaceAttributeScratchQuery.insertScratchAttributes))
 
     assertExpectedRecords(toSave:_*)
+  }
+
+  it should "apply attribute deltas" in withEmptyTestDatabase {
+    def insertAndUpdateID(rec: WorkspaceAttributeRecord): WorkspaceAttributeRecord = {
+      rec.copy(id = runAndWait((workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += rec))
+    }
+
+    runAndWait(workspaceQuery.save(workspace))
+
+    val existing = Seq(
+      insertAndUpdateID(WorkspaceAttributeRecord(dummyId1, workspaceId, AttributeName.defaultNamespace, "test1", Option("test"), None, None, None, None, None, None, deleted = false, None)),
+      insertAndUpdateID(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test2", None, Option(2), None, None, None, None, None, deleted = false, None))
+    )
+
+    assertExpectedRecords(existing:_*)
+
+    val update = WorkspaceAttributeRecord(2, workspaceId, AttributeName.defaultNamespace, "test2", Option("test2"), None, None, None, None, None, None, deleted = false, None)
+    val insert = WorkspaceAttributeRecord(3, workspaceId, AttributeName.defaultNamespace, "test3", None, None, Option(false), None, None, None, None, deleted = false, None)
+
+    runAndWait(workspaceAttributeQuery.deltaAttrsAction(Seq(insert), Seq(update), Seq(), workspaceAttributeScratchQuery.insertScratchAttributes))
+
+    assertExpectedRecords(Seq(existing.head, update, insert):_*)
+
+    runAndWait(workspaceAttributeQuery.deltaAttrsAction(Seq(), Seq(), existing.map(_.id), workspaceAttributeScratchQuery.insertScratchAttributes))
+
+    assertExpectedRecords(Seq(insert):_*)
   }
 
   it should "findUniqueStringsByNameQuery shouldn't return any duplicates, limit results by namespace" in withEmptyTestDatabase{

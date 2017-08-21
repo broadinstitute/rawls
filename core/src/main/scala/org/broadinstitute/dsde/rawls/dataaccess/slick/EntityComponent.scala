@@ -357,50 +357,37 @@ trait EntityComponent {
       } yield entities
     }
 
-    //todo: fix this signature
-    private def deltaAttributes(existingAttributes: Map[AttributeName, Long], upserts: AttributeMap, deletes: Traversable[AttributeName], entityIdsByRef: Map[AttributeEntityReference, Long]): ReadWriteAction[Int] = {
-      //todo: replace with marshalling upserts + creates
-      /*
+    private def deltaAttributes(ownerEntityRef: AttributeEntityReference, existingAttributesMap: Map[AttributeName, Long], upserts: AttributeMap, deletes: Traversable[AttributeName], entityIdsByRef: Map[AttributeEntityReference, Long]): ReadWriteAction[Int] = {
 
-      val existingAttributes = existingAttributeMap.keySet
+      val existingAttributes = existingAttributesMap.values.toSeq
+      val (updateAttrs, insertAttrs) = upserts.partition( attrName => existingAttributes.contains(attrName) )
 
-        //these are all actual attributes. we can match them to their ids in existingAttributeMap. so we have everything we need for the db now.
-        val (updateThese, createThese) = upserts.keys.partition( attrName => existingAttributes.contains(attrName) )
-        val deleteThese = existingAttributes.intersect(deletes.toSet)
-
-
-      val attributesToSave = for {
-        entity <- entitiesToSave
-        (attributeName, attribute) <- entity.attributes
-        attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByRef(entity.toReference), attributeName, attribute, entityIdsByRef)
-      } yield attributeRec
-
-      //this is nicked from rewriteAttributes -- probably pull it out so we can both reference it
-      def insertScratchAttributes(attributeRecs: Seq[EntityAttributeRecord])(transactionId: String): WriteAction[Int] = {
-        entityAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
+      def attributeMapToRecs(attrMap: AttributeMap) = {
+        for {
+          (attributeName, attribute) <- attrMap
+          attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByRef(ownerEntityRef), attributeName, attribute, entityIdsByRef)
+        } yield attributeRec
       }
 
-      //this definitely needs to change.
-      entityAttributeQuery.findByOwnerQuery(entityIds).result flatMap { existingAttributes =>
-        entityAttributeQuery.rewriteAttrsAction(attributesToSave, existingAttributes, insertScratchAttributes)
-      } */
+      val insertRecs = attributeMapToRecs(insertAttrs)
+      val updateRecs = attributeMapToRecs(updateAttrs)
+      val deleteIds = for {
+        attributeName <- deletes
+      } yield existingAttributesMap(attributeName)
 
-      DBIO.successful(2)
+      entityAttributeQuery.deltaAttrsAction(insertRecs, updateRecs, deleteIds, entityAttributeScratchQuery.insertScratchAttributes)
     }
 
     def applyAttributeDeltas(workspaceContext: SlickWorkspaceContext, entityRecord: EntityRecord, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
       //yank the attribute list for this entity to determine what to do with upserts
       entityAttributeQuery.findByOwnerQuery(Seq(entityRecord.id)).map(attr => (attr.namespace, attr.name, attr.id)).result flatMap { attrCols =>
         val existingAttributeMap: Map[AttributeName, Long] = attrCols.map(a => AttributeName(a._1, a._2) -> a._3).toMap
-
         val attrRefsToAdd = upserts.valuesIterator.collect { case e: AttributeEntityReference => e }.toSet
 
-        //todo: the below is a dbio so gotta flatmap that shit
-        val entityRefRecs = lookupNotYetLoadedReferences(workspaceContext, attrRefsToAdd, Seq(entityRecord))
-
-        deltaAttributes(existingAttributeMap, upserts, deletes, entityRefRecs.map(e => e.toReference -> e.id).toMap)
-
-        DBIO.successful(2)
+        lookupNotYetLoadedReferences(workspaceContext, attrRefsToAdd, Seq(entityRecord)) flatMap { entityRefRecs =>
+          val allTheEntityRefs = entityRefRecs ++ Seq(entityRecord) //re-add the current entity
+          deltaAttributes(entityRecord.toReference, existingAttributeMap, upserts, deletes, allTheEntityRefs.map(e => e.toReference -> e.id).toMap)
+        }
       }
     }
 
@@ -422,8 +409,6 @@ trait EntityComponent {
           _ <- applyAttributeDeltas(workspaceContext, eRec, upserts, deletes)
           _ <- optimisticLockUpdate(eRec)
         } yield {}
-
-        DBIO.successful(2)
       }
     }
 
@@ -470,12 +455,8 @@ trait EntityComponent {
         attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByRef(entity.toReference), attributeName, attribute, entityIdsByRef)
       } yield attributeRec
 
-      def insertScratchAttributes(attributeRecs: Seq[EntityAttributeRecord])(transactionId: String): WriteAction[Int] = {
-        entityAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
-      }
-
       entityAttributeQuery.findByOwnerQuery(entityIds).result flatMap { existingAttributes =>
-        entityAttributeQuery.rewriteAttrsAction(attributesToSave, existingAttributes, insertScratchAttributes)
+        entityAttributeQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeScratchQuery.insertScratchAttributes)
       }
     }
 
