@@ -35,7 +35,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     val groupSynchronizedTimestamp = "groupSynchronizedTimestamp"
   }
 
-  def init(): ReadWriteAction[Unit] = {
+  def initLdap(): ReadWriteAction[Unit] = {
     for {
       _ <- removeWorkbenchGroupSchema()
       _ <- createWorkbenchGroupSchema()

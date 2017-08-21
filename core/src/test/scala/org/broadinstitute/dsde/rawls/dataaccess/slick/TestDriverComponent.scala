@@ -46,6 +46,9 @@ object DbResource {
 
   val dataSource = new SlickDataSource(dataConfig, dirConfig)(TestExecutionContext.testExecutionContext)
   dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
+
+  // create or replace ldap schema
+  Await.result(dataSource.database.run(dataSource.dataAccess.initLdap()), Duration.Inf)
 }
 
 /**
@@ -975,8 +978,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       case t: Throwable => t.printStackTrace; throw t
     } finally {
       runAndWait(DBIO.seq(slickDataSource.dataAccess.truncateAll), 2 minutes)
-      slickDataSource.dataAccess.emptyLdap
-//      runAndWait(DBIO.seq(slickDataSource.dataAccess.emptyLdap), 2 minutes)
+      runAndWait(slickDataSource.dataAccess.emptyLdap, 2 minutes)
     }
   }
 

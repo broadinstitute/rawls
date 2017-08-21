@@ -66,18 +66,16 @@ trait DataAccess
     sql"select version()".as[String]
   }
 
-  def emptyLdap = {
+  def emptyLdap(): ReadWriteAction[Unit] = {
     // user load all users to read in all users,
     // delete each user
     // load all groups, delete each one
-    withContext(directoryConfig.directoryUrl, directoryConfig.user, directoryConfig.password) {ctx =>
-      rawlsUserQuery.loadAllUsers.map{users =>
-        users.map{user => ctx.unbind(user.userSubjectId.toString)}
-      }
-      rawlsGroupQuery.loadAllGroups.map{groups =>
-        groups.map{group => ctx.unbind(group.groupName.toString)}
-      }
-    }
+    for {
+      users <- rawlsUserQuery.loadAllUsers
+      groups <- rawlsGroupQuery.loadAllGroups
+      _ <- DBIO.sequence(users.map(user => rawlsUserQuery.deleteUser(user.userSubjectId)))
+      _ <- DBIO.sequence(groups.map(group => rawlsGroupQuery.delete(group)))
+    } yield { }
   }
 
 }
