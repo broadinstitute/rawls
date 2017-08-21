@@ -359,8 +359,8 @@ trait EntityComponent {
 
     private def deltaAttributes(ownerEntityRef: AttributeEntityReference, existingAttributesMap: Map[AttributeName, Long], upserts: AttributeMap, deletes: Traversable[AttributeName], entityIdsByRef: Map[AttributeEntityReference, Long]): ReadWriteAction[Int] = {
 
-      val existingAttributes = existingAttributesMap.values.toSeq
-      val (updateAttrs, insertAttrs) = upserts.partition( attrName => existingAttributes.contains(attrName) )
+      val existingAttributes = existingAttributesMap.keys.toSeq
+      val (updateAttrs, insertAttrs) = upserts.partition( attr => existingAttributes.contains(attr._1) )
 
       def attributeMapToRecs(attrMap: AttributeMap) = {
         for {
@@ -378,7 +378,7 @@ trait EntityComponent {
       entityAttributeQuery.deltaAttrsAction(insertRecs, updateRecs, deleteIds, entityAttributeScratchQuery.insertScratchAttributes)
     }
 
-    def applyAttributeDeltas(workspaceContext: SlickWorkspaceContext, entityRecord: EntityRecord, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
+    private def applyAttributeDeltas(workspaceContext: SlickWorkspaceContext, entityRecord: EntityRecord, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
       //yank the attribute list for this entity to determine what to do with upserts
       entityAttributeQuery.findByOwnerQuery(Seq(entityRecord.id)).map(attr => (attr.namespace, attr.name, attr.id)).result flatMap { attrCols =>
         val existingAttributeMap: Map[AttributeName, Long] = attrCols.map(a => AttributeName(a._1, a._2) -> a._3).toMap
@@ -393,22 +393,27 @@ trait EntityComponent {
 
     //save the deltas for some attributes on an existing entity. a little more database efficient than a "full" save, but requires the entity already exist.
     def saveEntityDeltas(workspaceContext: SlickWorkspaceContext, entityRef: AttributeEntityReference, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
-      getEntityRecords(workspaceContext.workspaceId, Set(entityRef)) flatMap { eRecs =>
-        if( eRecs.length != 1 ) {
-          throw new RawlsException(s"saveEntityDeltas looked up $entityRef expecting 1 record, got ${eRecs.length} instead")
+      val deleteIntersectUpsert = deletes.toSet intersect upserts.keySet
+      if (deleteIntersectUpsert.nonEmpty) {
+        DBIO.failed(new RawlsException(s"Can't saveEntityDeltas on $entityRef because upserts and deletes share attributes $deleteIntersectUpsert"))
+      } else {
+        getEntityRecords(workspaceContext.workspaceId, Set(entityRef)) flatMap { eRecs =>
+          if (eRecs.length != 1) {
+            throw new RawlsException(s"saveEntityDeltas looked up $entityRef expecting 1 record, got ${eRecs.length} instead")
+          }
+
+          val eRec = eRecs.head
+
+          upserts.keys.foreach { attrName =>
+            validateUserDefinedString(attrName.name)
+            validateAttributeName(attrName, eRec.entityType)
+          }
+
+          for {
+            _ <- applyAttributeDeltas(workspaceContext, eRec, upserts, deletes)
+            _ <- optimisticLockUpdate(eRec)
+          } yield {}
         }
-
-        val eRec = eRecs.head
-
-        upserts.keys.foreach { attrName =>
-          validateUserDefinedString(attrName.name)
-          validateAttributeName(attrName, eRec.entityType)
-        }
-
-        for {
-          _ <- applyAttributeDeltas(workspaceContext, eRec, upserts, deletes)
-          _ <- optimisticLockUpdate(eRec)
-        } yield {}
       }
     }
 
