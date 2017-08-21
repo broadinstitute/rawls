@@ -12,7 +12,7 @@ import akka.util.Timeout
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.readytalk.metrics.StatsDReporter
+import com.readytalk.metrics.{StatsD, StatsDReporter}
 import com.typesafe.config.{ConfigFactory, ConfigObject, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import slick.backend.DatabaseConfig
@@ -21,6 +21,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor}
+import org.broadinstitute.dsde.rawls.metrics.RawlsStatsD
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
@@ -290,7 +291,7 @@ object Boot extends App with LazyLogging {
       .prefixedWith(apiKey.orNull)
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
-      .build(host, port)
+      .build(RawlsStatsD(host, port))
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
