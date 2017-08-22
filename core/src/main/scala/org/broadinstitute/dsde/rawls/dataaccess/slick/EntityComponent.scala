@@ -8,6 +8,8 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
+import slick.dbio.DBIOAction
+import slick.dbio.Effect.{Read, Write}
 import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
 import spray.http.StatusCodes
@@ -381,12 +383,33 @@ trait EntityComponent {
     private def applyAttributeDeltas(workspaceContext: SlickWorkspaceContext, entityRecord: EntityRecord, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
       //yank the attribute list for this entity to determine what to do with upserts
       entityAttributeQuery.findByOwnerQuery(Seq(entityRecord.id)).map(attr => (attr.namespace, attr.name, attr.id)).result flatMap { attrCols =>
-        val existingAttributeMap: Map[AttributeName, Long] = attrCols.map(a => AttributeName(a._1, a._2) -> a._3).toMap
-        val attrRefsToAdd = upserts.valuesIterator.collect { case e: AttributeEntityReference => e }.toSet
 
-        lookupNotYetLoadedReferences(workspaceContext, attrRefsToAdd, Seq(entityRecord)) flatMap { entityRefRecs =>
+        val existingAttrsToRecordIds: Map[AttributeName, Long] = attrCols.map(a => AttributeName(a._1, a._2) -> a._3).toMap
+        val entityRefsToLookup = upserts.valuesIterator.collect { case e: AttributeEntityReference => e }.toSet
+
+        lookupNotYetLoadedReferences(workspaceContext, entityRefsToLookup, Seq(entityRecord)) flatMap { entityRefRecs =>
           val allTheEntityRefs = entityRefRecs ++ Seq(entityRecord) //re-add the current entity
-          deltaAttributes(entityRecord.toReference, existingAttributeMap, upserts, deletes, allTheEntityRefs.map(e => e.toReference -> e.id).toMap)
+          val refsToIds = allTheEntityRefs.map(e => e.toReference -> e.id).toMap
+          val existingAttributes = existingAttrsToRecordIds.keys.toSeq
+
+          val (updateAttrs, insertAttrs) = upserts.partition( attr => existingAttributes.contains(attr._1) )
+
+          //function that marshals attribute maps to list of attribute records for saving
+          def attributeMapToRecs(attrMap: AttributeMap) = {
+            for {
+              (attributeName, attribute) <- attrMap
+              attributeRec <- entityAttributeQuery.marshalAttribute(refsToIds(entityRecord.toReference), attributeName, attribute, refsToIds)
+            } yield attributeRec
+          }
+
+          //actually build the records we're going to send to the db
+          val insertRecs = attributeMapToRecs(insertAttrs)
+          val updateRecs = attributeMapToRecs(updateAttrs)
+          val deleteIds = (for {
+            attributeName <- deletes
+          } yield existingAttrsToRecordIds.get(attributeName)).flatten
+
+          entityAttributeQuery.deltaAttrsAction(insertRecs, updateRecs, deleteIds, entityAttributeScratchQuery.insertScratchAttributes)
         }
       }
     }

@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputE
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
@@ -132,6 +133,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   private implicit val subStatusCounter: SubmissionStatus => Counter =
     submissionStatusCounter(workspaceMetricBuilder)
+
+  case class EntityUpdate(entityRef: AttributeEntityReference, upserts: AttributeMap)
 
   import datasource.dataAccess.driver.api._
 
@@ -310,6 +313,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         workspace <-            getWorkspace(dataAccess).map(_.getOrElse(throw new RawlsException(s"workspace for submission $submissionId not found")))
 
         // update the appropriate entities and workspace (in memory)
+      //TODO too: decide if workspace attributes need a delta sync too
         updatedEntitiesAndWorkspace = attachOutputs(workspace, workflowsWithOutputs, entitiesById, outputExpressionMap)
 
         // save everything to the db
@@ -332,21 +336,26 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     dataAccess.entityQuery.getEntities(workflowsWithOutputs.map { case (workflowRec, outputs) => workflowRec.workflowEntityId }).map(_.toMap)
   }
 
-  def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {
+  def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(EntityUpdate, Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {
     //note there is only 1 workspace (may be None if it is not updated) even though it may be updated multiple times so reduce it into 1 update
     val workspaces = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
     if (workspaces.isEmpty) DBIO.successful(0)
     else dataAccess.workspaceQuery.save(workspaces.reduce((a, b) => a.copy(attributes = a.attributes ++ b.attributes)))
   }
 
-  def saveEntities(dataAccess: DataAccess, workspace: Workspace, updatedEntitiesAndWorkspace: Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {
-    val entities = updatedEntitiesAndWorkspace.collect { case Left((Some(entity), _)) => entity }
-    if (entities.isEmpty) DBIO.successful(0)
-    else dataAccess.entityQuery.save(SlickWorkspaceContext(workspace), entities)
+  def saveEntities(dataAccess: DataAccess, workspace: Workspace, updatedEntitiesAndWorkspace: Seq[Either[(EntityUpdate, Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]])(implicit executionContext: ExecutionContext) = {
+    val entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((entityUpdate, _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
+    if(entityUpdates.isEmpty) {
+       DBIO.successful(())
+    }
+    else {
+      DBIO.sequence(entityUpdates map { entityUpd =>
+        dataAccess.entityQuery.saveEntityDeltas(SlickWorkspaceContext(workspace), entityUpd.entityRef, entityUpd.upserts, Seq())
+      })
+    }
   }
 
-  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressionMap: Map[String, String]): Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
-    workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
+  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressionMap: Map[String, String]): Seq[Either[(EntityUpdate, Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {    workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
       logger.debug(s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs}")
       logger.debug(s"output expressions for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputExpressionMap}")
@@ -362,8 +371,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       if (parsedExpressions.forall(_.isSuccess)) {
         val boundExpressions = parsedExpressions.collect { case Success(boe @ BoundOutputExpression(target, name, attr)) => boe }
         val updates = updateEntityAndWorkspace(entitiesById(workflowRecord.workflowEntityId), workspace, boundExpressions)
-        val (optEnt, optWs) = updates
-        logger.debug(s"updated entityattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optEnt.map(_.attributes)}")
+        val (entityUpdates, optWs) = updates
+        logger.debug(s"updated entityattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${entityUpdates.entityRef} ${entityUpdates.upserts.values}")
         logger.debug(s"updated wsattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optWs.map(_.attributes)}")
         Left(updates)
       } else {
@@ -372,14 +381,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
-  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Iterable[BoundOutputExpression]): (Option[Entity], Option[Workspace]) = {
-    val entityAttributes = workflowOutputs.collect({ case BoundOutputExpression(ThisEntityTarget, attrName, attr) => (attrName, attr) })
+  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Iterable[BoundOutputExpression]): (EntityUpdate, Option[Workspace]) = {
+    val entityUpsert = workflowOutputs.collect({ case BoundOutputExpression(ThisEntityTarget, attrName, attr) => (attrName, attr) })
     val workspaceAttributes = workflowOutputs.collect({ case BoundOutputExpression(WorkspaceTarget, attrName, attr) => (attrName, attr) })
 
-    val updatedEntity = if (entityAttributes.isEmpty) None else Option(entity.copy(attributes = entity.attributes ++ entityAttributes))
+    val entityAndUpsert = EntityUpdate(entity.toReference, entityUpsert.toMap)
     val updatedWorkspace = if (workspaceAttributes.isEmpty) None else Option(workspace.copy(attributes = workspace.attributes ++ workspaceAttributes))
     
-    (updatedEntity, updatedWorkspace)
+    (entityAndUpsert, updatedWorkspace)
   }
 
   def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess) = {

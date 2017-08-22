@@ -127,43 +127,49 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assertResult(0)(activeAttributeCount4)
   }
 
-  it should "fail to saveEntityDeltas for a nonexistent entity" in withDefaultTestDatabase {
+  it should "fail to saveEntityDeltas for a nonexistent entity" in withConstantTestDatabase {
     withWorkspaceContext(constantData.workspace) { context =>
-      intercept[RawlsException] {
+      val caught = intercept[RawlsException] {
         runAndWait(
           entityQuery.saveEntityDeltas(context, AttributeEntityReference("Sample", "nonexistent"),
             Map(AttributeName.withDefaultNS("newAttribute") -> AttributeNumber(2)),
             Seq(AttributeName.withDefaultNS("type"))
           ))
       }
+      caught.getMessage should include("expecting")
     }
   }
 
-  it should "fail to saveEntityDeltas if you try to delete and upsert the same attribute" in withDefaultTestDatabase {
+  it should "fail to saveEntityDeltas if you try to delete and upsert the same attribute" in withConstantTestDatabase {
     withWorkspaceContext(constantData.workspace) { context =>
-      intercept[RawlsException] {
+      val caught = intercept[RawlsException] {
         runAndWait(
           entityQuery.saveEntityDeltas(context, AttributeEntityReference("Sample", "sample1"),
             Map(AttributeName.withDefaultNS("type") -> AttributeNumber(2)),
             Seq(AttributeName.withDefaultNS("type"))
           ))
       }
+      caught.getMessage should include("share")
     }
   }
 
   it should "saveEntityDeltas" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      val insert = Map(AttributeName.withDefaultNS("totallyNew") -> AttributeNumber(2))
+      val inserts = Map(
+        AttributeName.withDefaultNS("totallyNew") -> AttributeNumber(2),
+        AttributeName.withDefaultNS("quot2") -> testData.aliquot2.toReference
+      )
       val updates = Map(
         AttributeName.withDefaultNS("type") -> AttributeString("tumor"),
-        AttributeName.withDefaultNS("thingies") -> AttributeValueList(Seq(AttributeString("c"), AttributeString("d")))
+        AttributeName.withDefaultNS("thingies") -> AttributeValueList(Seq(AttributeString("c"), AttributeString("d"))),
+        AttributeName.withDefaultNS("quot1") -> testData.aliquot2.toReference //jerk move
       )
-      val delete = Seq(AttributeName.withDefaultNS("whatsit"))
+      val deletes = Seq(AttributeName.withDefaultNS("whatsit"), AttributeName.withDefaultNS("nonexistent"))
 
-      val expected = testData.sample1.attributes ++ insert ++ updates -- delete
+      val expected = testData.sample1.attributes ++ inserts ++ updates -- deletes
 
       runAndWait {
-        entityQuery.saveEntityDeltas(context, AttributeEntityReference("Sample", "sample1"), insert ++ updates, delete)
+        entityQuery.saveEntityDeltas(context, AttributeEntityReference("Sample", "sample1"), inserts ++ updates, deletes)
       }
 
       assertSameElements(
