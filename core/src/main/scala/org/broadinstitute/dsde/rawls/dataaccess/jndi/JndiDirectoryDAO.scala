@@ -192,7 +192,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def loadFromEmail(email: String): ReadWriteAction[Option[Either[RawlsUser, RawlsGroup]]] = withContext { ctx =>
-      val subjectResults = ctx.search(directoryConfig.baseDn, s"(${Attr.email}=${email})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, true, false)).asScala.toSeq
+      val subjectResults = ctx.search(directoryConfig.baseDn, s"(${Attr.email}=${email})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)).asScala.toSeq
       val subjects = subjectResults.map { result =>
         dnToSubject(result.getNameInNamespace) match {
           case Left(groupName) => Right(unmarshallGroup(result.getAttributes))
@@ -258,10 +258,10 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
 
     def removeUserFromAllGroups(userRef: RawlsUserRef): ReadWriteAction[Boolean] = withContext { ctx =>
       val userAttributes = new BasicAttributes(Attr.member, userDn(userRef.userSubjectId), true)
-      val groupResults = ctx.search(groupsOu, userAttributes, Array(Attr.dn)).asScala
+      val groupResults = ctx.search(groupsOu, userAttributes, Array[String]()).asScala
 
       groupResults.foreach { result =>
-        ctx.modifyAttributes(result.getAttributes.get(Attr.dn).get().asInstanceOf[String], DirContext.REMOVE_ATTRIBUTE, userAttributes)
+        ctx.modifyAttributes(result.getNameInNamespace, DirContext.REMOVE_ATTRIBUTE, userAttributes)
       }
 
       !groupResults.isEmpty
@@ -279,7 +279,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     def intersectGroupMembership(groups: Set[RawlsGroupRef]): ReadWriteAction[Set[RawlsUserRef]] = withContext { ctx =>
       val groupFilters = groups.map(g => s"(${Attr.memberOf}=${groupDn(g.groupName)})")
       ctx.search(peopleOu, s"(&${groupFilters.mkString})", new SearchControls()).asScala.map { result =>
-        RawlsUserRef(dnToUserSubjectId(result.getAttributes.get(Attr.dn).get().asInstanceOf[String]))
+        RawlsUserRef(dnToUserSubjectId(result.getNameInNamespace))
       }.toSet
     }
 
