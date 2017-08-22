@@ -32,4 +32,12 @@
     <changeSet id="dropForeignKeyConstraint_pendingWsAccessOriginUser" author="ursas">
         <dropForeignKeyConstraint baseTableName="PENDING_WORKSPACE_ACCESS" constraintName="FK_PENDING_WS_ACCESS_ORIGIN_USER"/>
     </changeSet>
+
+    <changeSet id="dropForeignKeyConstraint_BILLING_PROJECT_GROUP" author="dvoet">
+        <dropForeignKeyConstraint baseTableName="BILLING_PROJECT_GROUP" constraintName="FK_PROJECT_GROUP"/>
+    </changeSet>
+
+    <changeSet id="dropForeignKeyConstraint_SUBMISSION" author="dvoet">
+        <dropForeignKeyConstraint baseTableName="SUBMISSION" constraintName="FK_SUB_SUBMITTER"/>
+    </changeSet>
 </databaseChangeLog>

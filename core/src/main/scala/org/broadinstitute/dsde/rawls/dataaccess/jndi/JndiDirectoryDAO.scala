@@ -192,9 +192,9 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def loadFromEmail(email: String): ReadWriteAction[Option[Either[RawlsUser, RawlsGroup]]] = withContext { ctx =>
-      val subjectResults = ctx.search(directoryConfig.baseDn, new BasicAttributes(Attr.email, email, true)).asScala.toSeq
+      val subjectResults = ctx.search(directoryConfig.baseDn, s"(${Attr.email}=${email})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, true, false)).asScala.toSeq
       val subjects = subjectResults.map { result =>
-        dnToSubject(result.getAttributes.get(Attr.dn).get().asInstanceOf[String]) match {
+        dnToSubject(result.getNameInNamespace) match {
           case Left(groupName) => Right(unmarshallGroup(result.getAttributes))
           case Right(userSubjectId) => Left(unmarshalUser(result.getAttributes))
         }
