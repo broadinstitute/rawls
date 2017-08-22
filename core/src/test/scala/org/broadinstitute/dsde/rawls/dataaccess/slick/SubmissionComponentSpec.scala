@@ -308,9 +308,10 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
     // Validate testUser counts
     val result = runAndWait(workflowQuery.countWorkflowsByQueueStatusByUser)
-    result should contain key testUserId
+//    result should equal(Set())
+    result should contain key (testUserId)
     testUserStatusCounts.foreach { case (st, count) =>
-      result(testUserEmail)(st.toString) should be (count)
+      result(testUserId)(st.toString) should be (count)
     }
 
     // Validate all workspace counts by status

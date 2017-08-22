@@ -30,7 +30,6 @@ trait RawlsBillingProjectComponent {
     def groupName = column[String]("GROUP_NAME", O.Length(254))
     def role = column[String]("PROJECT_ROLE", O.Length(254))
 
-    def projectRef = foreignKey("FK_PROJECT_NAME", projectName, rawlsBillingProjectQuery)(_.projectName)
     def pk = primaryKey("PK_BILLING_PROJECT_GROUP", (projectName, groupName, role))
 
     def * = (projectName, groupName, role) <> (RawlsBillingProjectGroupRecord.tupled, RawlsBillingProjectGroupRecord.unapply)
@@ -44,7 +43,6 @@ trait RawlsBillingProjectComponent {
     def errorMessage = column[Option[String]]("ERROR_MESSAGE")
     def api = column[String]("API")
 
-    def projectRef = foreignKey("FK_PROJECT_NAME", projectName, rawlsBillingProjectQuery)(_.projectName)
     def pk = primaryKey("PK_BILLING_PROJECT_OPERATION", (projectName, operationName))
 
     def * = (projectName, operationName, operationId, done, errorMessage, api) <> (RawlsBillingProjectOperationRecord.tupled, RawlsBillingProjectOperationRecord.unapply)
