@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.jndi
 
-import java.sql.Timestamp
+import java.sql.{SQLException, Timestamp}
 import javax.naming._
 import javax.naming.directory._
 
@@ -122,8 +122,10 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       group
     }
 
-    def delete(groupRef: RawlsGroupRef): ReadWriteAction[Unit] = withContext { ctx =>
+    def delete(groupRef: RawlsGroupRef): ReadWriteAction[Boolean] = withContext { ctx =>
+      val bool = ctx.search(groupsOu, s"(${Attr.cn}=${groupRef.groupName.value})", new SearchControls()).asScala.nonEmpty
       ctx.unbind(groupDn(groupRef.groupName))
+      bool
     }
 
     def removeGroupMember(groupName: RawlsGroupName, removeMember: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>
