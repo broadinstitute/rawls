@@ -680,7 +680,8 @@ trait WorkspaceComponent {
         groupRec <- rawlsGroupQuery.load(group).map(_.getOrElse(throw new RawlsException(s"group not found $group")))
         // the group in question may be an access group for a workspace, get the workspace access rec if it is
         workspaceAccessRec <- workspaceAccessQuery.filter(workspaceAccess => workspaceAccess.groupName === group.groupName.value && workspaceAccess.isAuthDomainAcl === false).result.headOption
-        allGroups <- rawlsGroupQuery.listAncestorGroups(groupRec.groupName)
+        ancestorGroups <- rawlsGroupQuery.listAncestorGroups(groupRec.groupName)
+        allGroups = ancestorGroups + groupRec.groupName
         workspaceRecsForGroups <- findWorkspacesForGroups(allGroups).result
         workspaceRecsForAuthDomains <- findWorkspacesForAuthDomains(allGroups).result
         authDomainedWorkspaceRecs = workspaceRecsForGroups ++ workspaceRecsForAuthDomains

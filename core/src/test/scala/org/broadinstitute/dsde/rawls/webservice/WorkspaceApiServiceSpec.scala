@@ -377,7 +377,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "should let a user access a shared workspace once they are added to all auth domain groups" in withTestDataApiServices { services =>
+  it should "let a user access a shared workspace once they are added to all auth domain groups" in withTestDataApiServices { services =>
     val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner, testData.userWriter))
     val realmGroup2 = createAndSaveManagedGroup("realm-for-testing2", Set(testData.userOwner))
     val workspaceWithRealm = WorkspaceRequest(

@@ -1,10 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.jndi
 
-import java.sql.Timestamp
+import java.text.SimpleDateFormat
+import java.util.Date
 import javax.naming._
 import javax.naming.directory._
 
-import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
@@ -19,6 +19,8 @@ import scala.util.Try
  * Created by dvoet on 11/5/15.
  */
 trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
+
+  val dateFormat = new SimpleDateFormat("yyyyMMddHHmmss.SSSZ")
 
   implicit val executionContext: ExecutionContext
   /** a bunch of attributes used in directory entries */
@@ -103,6 +105,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
             Seq("top", "workbenchGroup").foreach(oc.add)
             myAttrs.put(oc)
 
+            myAttrs.put(new BasicAttribute(Attr.groupUpdatedTimestamp, dateFormat.format(new Date())))
             myAttrs.put(new BasicAttribute(Attr.email, group.groupEmail.value))
 
             addMemberAttributes(group.users, group.subGroups, myAttrs)
@@ -117,13 +120,17 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
         case e: NameAlreadyBoundException =>
           val myAttrs = new BasicAttributes(true) // Case ignore
           addMemberAttributes(group.users, group.subGroups, myAttrs)
+          myAttrs.put(new BasicAttribute(Attr.groupUpdatedTimestamp, dateFormat.format(new Date())))
           ctx.modifyAttributes(groupDn(group.groupName), DirContext.REPLACE_ATTRIBUTE, myAttrs)
       }
       group
     }
 
-    def delete(groupRef: RawlsGroupRef): ReadWriteAction[Unit] = withContext { ctx =>
+    def delete(groupRef: RawlsGroupRef): ReadWriteAction[Boolean] = withContext { ctx =>
+      val groupAttributes = new BasicAttributes(Attr.cn, groupDn(groupRef.groupName), true)
+      val bool = ctx.search(groupsOu, groupAttributes, Array[String]()).asScala.nonEmpty
       ctx.unbind(groupDn(groupRef.groupName))
+      bool
     }
 
     def removeGroupMember(groupName: RawlsGroupName, removeMember: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>
@@ -244,10 +251,10 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def updateSynchronizedDate(rawlsGroupRef: RawlsGroupRef): ReadWriteAction[Unit] = withContext { ctx =>
-      ctx.modifyAttributes(groupDn(rawlsGroupRef.groupName), DirContext.REPLACE_ATTRIBUTE, new BasicAttributes(Attr.groupSynchronizedTimestamp, new Timestamp(System.currentTimeMillis()), true))
+      ctx.modifyAttributes(groupDn(rawlsGroupRef.groupName), DirContext.REPLACE_ATTRIBUTE, new BasicAttributes(Attr.groupSynchronizedTimestamp, dateFormat.format(new Date()), true))
     }
 
-    def overwriteGroupUsers(groupsWithUsers: Set[(RawlsGroupRef, Set[RawlsUserRef])]) = withContext { ctx =>
+    def overwriteGroupUsers(groupsWithUsers: Seq[(RawlsGroupRef, Set[RawlsUserRef])]) = withContext { ctx =>
       groupsWithUsers.map { case (groupRef, users) =>
         val myAttrs = new BasicAttributes(true)
         addMemberAttributes(users, Set.empty, myAttrs)
