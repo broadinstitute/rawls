@@ -417,7 +417,9 @@ trait EntityComponent {
     //save the deltas for some attributes on an existing entity. a little more database efficient than a "full" save, but requires the entity already exist.
     def saveEntityDeltas(workspaceContext: SlickWorkspaceContext, entityRef: AttributeEntityReference, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
       val deleteIntersectUpsert = deletes.toSet intersect upserts.keySet
-      if (deleteIntersectUpsert.nonEmpty) {
+      if (upserts.isEmpty && deletes.isEmpty) {
+        DBIO.successful(()) //no-op
+      } else if (deleteIntersectUpsert.nonEmpty) {
         DBIO.failed(new RawlsException(s"Can't saveEntityDeltas on $entityRef because upserts and deletes share attributes $deleteIntersectUpsert"))
       } else {
         getEntityRecords(workspaceContext.workspaceId, Set(entityRef)) flatMap { eRecs =>

@@ -192,8 +192,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Left(
-      (Option(entity.copy(attributes = entity.attributes ++ Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")))),
-        Option(testData.workspace.copy(attributes = testData.workspace.attributes + (AttributeName.withDefaultNS("garble") -> AttributeString("hello workspace.")))))))) {
+      WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world."))),
+      Option(testData.workspace.copy(attributes = testData.workspace.attributes + (AttributeName.withDefaultNS("garble") -> AttributeString("hello workspace."))))))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
     }
   }
@@ -209,9 +209,9 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val expected = Seq(Left(
       (
-        Option(entity.copy(attributes = entity.attributes ++ Map(
+        WorkflowEntityUpdate(entity.toReference, Map(
           AttributeName("library", "bar") -> AttributeString("hello world!"),
-          AttributeName("library", "baz") -> AttributeString("hello world.")))
+          AttributeName("library", "baz") -> AttributeString("hello world."))
         ),
         Option(testData.workspace.copy(attributes = testData.workspace.attributes +
           (AttributeName("library", "garble") -> AttributeString("hello workspace."))
@@ -233,7 +233,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Left(
-      (Option(entity.copy(attributes = entity.attributes ++ Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")))),
+      (WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world."))),
         None)))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
     }
@@ -248,7 +248,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
-    assertResult(Seq(Left((None, None)))) {
+    assertResult(Seq(Left((WorkflowEntityUpdate(entity.toReference, Map()), None)))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
     }
   }
@@ -593,7 +593,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val numSubmissions = submissions.length
     submissions.foreach ( sub => createSubmissionMonitorActor(dataSource, sub, manySubmissionsTestData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)) )
 
-    //they're all being monitored. they should all complete just fine, without deadlocking or otherwise barfing
+    //they're all being monitored. they should all complete just fine, without deadlocking forever or otherwise barfing
     awaitCond({
       val submissionList = runAndWait(DBIO.sequence(submissions map { sub: Submission =>
         submissionQuery.findById(UUID.fromString(sub.submissionId)).result
