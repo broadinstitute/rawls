@@ -133,11 +133,12 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       group
     }
 
-    def delete(groupRef: RawlsGroupRef): ReadWriteAction[Boolean] = withContext { ctx =>
-      val groupAttributes = new BasicAttributes(Attr.cn, groupDn(groupRef.groupName), true)
-      val bool = ctx.search(groupsOu, groupAttributes, Array[String]()).asScala.nonEmpty
+    def delete(groupRef: RawlsGroupRef) = withContext { ctx =>
+      val groupPresent = Try{
+        ctx.getAttributes(groupDn(groupRef.groupName))
+      }
       ctx.unbind(groupDn(groupRef.groupName))
-      bool
+      groupPresent.isSuccess
     }
 
     def removeGroupMember(groupName: RawlsGroupName, removeMember: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>
