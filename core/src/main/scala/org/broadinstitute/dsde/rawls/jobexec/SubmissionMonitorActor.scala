@@ -112,6 +112,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
 
 }
 
+//A map of writebacks to apply to the given entity reference
 case class WorkflowEntityUpdate(entityRef: AttributeEntityReference, upserts: AttributeMap)
 
 trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrumented {
@@ -354,7 +355,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
-  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressionMap: Map[String, String]): Seq[Either[(WorkflowEntityUpdate, Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {    workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
+  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressionMap: Map[String, String]): Seq[Either[(WorkflowEntityUpdate, Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
+    workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
       logger.debug(s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs}")
       logger.debug(s"output expressions for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputExpressionMap}")

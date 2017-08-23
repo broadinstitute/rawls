@@ -401,21 +401,20 @@ trait EntityComponent {
       } else if (deleteIntersectUpsert.nonEmpty) {
         DBIO.failed(new RawlsException(s"Can't saveEntityDeltas on $entityRef because upserts and deletes share attributes $deleteIntersectUpsert"))
       } else {
-        getEntityRecords(workspaceContext.workspaceId, Set(entityRef)) flatMap { eRecs =>
-          if (eRecs.length != 1) {
-            throw new RawlsException(s"saveEntityDeltas looked up $entityRef expecting 1 record, got ${eRecs.length} instead")
+        getEntityRecords(workspaceContext.workspaceId, Set(entityRef)) flatMap { entityRecs =>
+          if (entityRecs.length != 1) {
+            throw new RawlsException(s"saveEntityDeltas looked up $entityRef expecting 1 record, got ${entityRecs.length} instead")
           }
 
-          val eRec = eRecs.head
-
+          val entityRecord = entityRecs.head
           upserts.keys.foreach { attrName =>
             validateUserDefinedString(attrName.name)
-            validateAttributeName(attrName, eRec.entityType)
+            validateAttributeName(attrName, entityRecord.entityType)
           }
 
           for {
-            _ <- applyAttributeDeltas(workspaceContext, eRec, upserts, deletes)
-            _ <- optimisticLockUpdate(eRec)
+            _ <- applyAttributeDeltas(workspaceContext, entityRecord, upserts, deletes)
+            _ <- optimisticLockUpdate(entityRecord)
           } yield {}
         }
       }
