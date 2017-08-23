@@ -40,4 +40,8 @@
     <changeSet id="dropForeignKeyConstraint_SUBMISSION" author="dvoet">
         <dropForeignKeyConstraint baseTableName="SUBMISSION" constraintName="FK_SUB_SUBMITTER"/>
     </changeSet>
+
+    <changeSet id="dropForeignKeyConstraint_groupCatalogPermsUser" author="ursas">
+        <dropForeignKeyConstraint baseTableName="WORKSPACE_GROUP_CATALOG" constraintName="FK_GROUP_CATALOG_PERMS_USER"/>
+    </changeSet>
 </databaseChangeLog>
