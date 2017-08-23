@@ -154,14 +154,14 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }.get
     }
 
-    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[TraversableOnce[RawlsGroup]] = withContext { ctx =>
-      val filters = groupRefs.map { ref => s"(${Attr.dn}=${groupDn(ref.groupName)})"}
+    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = withContext { ctx =>
+      val filters = groupRefs.toSet[RawlsGroupRef].map { ref => s"(${Attr.cn}=${ref.groupName.value})"}
       if (filters.isEmpty) {
-        Iterator.empty
+        Seq.empty
       } else {
-        ctx.search(groupsOu, s"(|${filters.mkString}", new SearchControls()).asScala.map { result =>
+        ctx.search(groupsOu, s"(|${filters.mkString})", new SearchControls()).asScala.map { result =>
           unmarshallGroup(result.getAttributes)
-        }
+        }.toSeq
       }
     }
 
@@ -353,14 +353,14 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }.get
     }
 
-    def load(userRefs: TraversableOnce[RawlsUserRef]): ReadWriteAction[TraversableOnce[RawlsUser]] = withContext { ctx =>
+    def load(userRefs: TraversableOnce[RawlsUserRef]): ReadWriteAction[Seq[RawlsUser]] = withContext { ctx =>
       val filters = userRefs.toSet[RawlsUserRef].map { ref => s"(${Attr.uid}=${ref.userSubjectId.value})"}
       if (filters.isEmpty) {
-        Iterator.empty
+        Seq.empty
       } else {
         ctx.search(peopleOu, s"(|${filters.mkString})", new SearchControls()).asScala.map { result =>
           unmarshalUser(result.getAttributes)
-        }
+        }.toSeq
       }
     }
 
