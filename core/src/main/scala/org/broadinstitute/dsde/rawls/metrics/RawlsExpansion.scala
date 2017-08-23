@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.model.{RawlsEnumeration, WorkspaceName}
 import shapeless._
 import spray.http.Uri
 import spray.routing.PathMatcher.Matched
-import spray.routing.PathMatcher1
+import spray.routing.{PathMatcher, PathMatcher1}
 
 /**
   * Created by rtitle on 7/25/17.
@@ -31,19 +31,33 @@ object RawlsExpansion {
   implicit def RawlsEnumerationExpansion[A <: RawlsEnumeration[_]] = new Expansion[A] {}
 
   /**
-    * Creates an expansion for Uri which redacts a piece of the Uri matched by the provided PathMatcher.
-    * @param pathMatcher a PathMatcher which matches exactly 1 String element. If the PathMatcher matches,
-    *                    that String will be redacted from the Uri. Otherwise, the Uri is unchanged.
+    * Creates an expansion for Uri which redacts pieces of the Uri matched by the provided PathMatcher.
+    * @param pathMatcher a PathMatcher which matches 1 or more String elements. If the PathMatcher matches,
+    *                    any matched Strings will be redacted from the Uri. Otherwise, the Uri is unchanged.
     * @return Uri Expansion instance
     */
-  def redactedUriExpansion(pathMatcher: PathMatcher1[String]): Expansion[Uri] = new Expansion[Uri] {
-    override def makeName(uri: Uri): String = {
-      val newPath = pathMatcher.apply(uri.path) match {
-        case Matched(_, extraction :: HNil) =>
-          Uri.Path(uri.path.toString().replace(extraction, "redacted"))
-        case _ => uri.path
+  def redactedUriExpansion[L <: HList](pathMatcher: PathMatcher[String :: L]): Expansion[Uri] = {
+    new Expansion[Uri] {
+      override def makeName(uri: Uri): String = {
+
+        @annotation.tailrec
+        def hloop(path: Uri.Path, extractions: HList): Uri.Path = {
+          extractions match {
+            case e: (String :: _) =>
+              val newPath = Uri.Path(path.toString().replace(e.head, "redacted"))
+              hloop(newPath, e.tail)
+            case e@_ =>
+              hloop(path, e.tail)
+          }
+        }
+
+        val updatedPath = pathMatcher.apply(uri.path) match {
+          case Matched(_, extractions) => hloop(uri.path, extractions)
+          case _ => uri.path
+        }
+
+        UriExpansion.makeName(uri.copy(path = updatedPath))
       }
-      UriExpansion.makeName(uri.copy(path = newPath))
     }
 
   }
