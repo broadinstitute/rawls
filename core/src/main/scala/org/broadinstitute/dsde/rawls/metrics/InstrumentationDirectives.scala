@@ -21,27 +21,30 @@ trait InstrumentationDirectives extends RawlsInstrumented {
     (Slash ~ "api").? / "billing" / Segment / Segment / Segment
 
   private val redactUserGroup =
-    (Slash ~ "api").? / "user" / Segment
+    (Slash ~ "api").? / "user" / "group" / Segment
+
+  private val redactUserGroupRoleEmail =
+    (Slash ~ "api").? / "user" / "groups" / Segment / Segment / Segment
 
   private val redactWorkflowIds =
     (Slash ~ "api").? / "workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / (Segment ~ SegmentIgnore.repeat(separator = Slash))
 
   private val redactSubmissionIds =
-    (Slash ~ "api").? / "workspaces" / Segment / Segment / "submissions" / (Segment ~ SegmentIgnore.repeat(separator = Slash))
+    (Slash ~ "api").? / "workspaces" / Segment / Segment / "submissions" / (!"validate" ~ Segment ~ SegmentIgnore.repeat(separator = Slash))
 
   private val redactEntityIds =
-    (Slash ~ "api") / "workspaces" / Segment / Segment / "entities" / SegmentIgnore / (Segment ~ SegmentIgnore.repeat(separator = Slash))
+    (Slash ~ "api").? / "workspaces" / Segment / Segment / "entities" / SegmentIgnore / (Segment ~ SegmentIgnore.repeat(separator = Slash))
 
   private val redactMethodConfigs =
-    (Slash ~ "api") / "workspaces" / Segment / Segment / "methodconfigs" / Segment / (Segment ~ SegmentIgnore.repeat(separator = Slash))
+    (Slash ~ "api").? / "workspaces" / Segment / Segment / "methodconfigs" / Segment / (Segment ~ SegmentIgnore.repeat(separator = Slash))
 
   private val redactWorkspaceNames =
-    (Slash ~ "api") / "workspaces" / Segment / (Segment ~ SegmentIgnore.repeat(separator = Slash))
+    (Slash ~ "api").? / "workspaces" / (!"entities" ~ Segment) / (Segment ~ SegmentIgnore.repeat(separator = Slash))
 
   // Strip out unique IDs from metrics by providing a redactedUriExpansion
   override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
-    redactBillingProject | redactBillingProjectRoleEmail | redactUserGroup | redactWorkflowIds | redactSubmissionIds
-      | redactEntityIds | redactMethodConfigs | redactWorkspaceNames
+    redactBillingProject | redactBillingProjectRoleEmail | redactUserGroup | redactUserGroupRoleEmail | redactWorkflowIds
+      | redactSubmissionIds | redactEntityIds | redactMethodConfigs | redactWorkspaceNames
   )
 
   def instrumentRequest: Directive0 = requestInstance flatMap { request =>

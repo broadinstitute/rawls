@@ -644,7 +644,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
     } { capturedMetrics =>
-      val expected = Set(group1, group2, group3) flatMap { g => expectedHttpRequestMetrics("get", s"user.group.${g.groupName.value}", StatusCodes.OK.intValue, 1) }
+      val expected = Set(group1, group2, group3) flatMap { g => expectedHttpRequestMetrics("get", s"user.group.redacted", StatusCodes.OK.intValue, 3) }
       assertSubsetOf(expected, capturedMetrics)
     }
   }

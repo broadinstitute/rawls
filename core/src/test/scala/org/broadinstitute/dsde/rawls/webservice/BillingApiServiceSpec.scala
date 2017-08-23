@@ -109,8 +109,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
           }
         }
     } { capturedMetrics =>
-      val expected = expectedHttpRequestMetrics("put", s"billing.${project.projectName.value}.user.${testData.userReader.userEmail.value}", StatusCodes.Forbidden.intValue, 1) ++
-        expectedHttpRequestMetrics("put", s"billing.${project.projectName.value}.owner.${testData.userReader.userEmail.value}", StatusCodes.Forbidden.intValue, 1)
+      val expected = expectedHttpRequestMetrics("put", s"billing.redacted.redacted.redacted", StatusCodes.Forbidden.intValue, 2)
       assertSubsetOf(expected, capturedMetrics)
     }
   }
@@ -164,8 +163,8 @@ class BillingApiServiceSpec extends ApiServiceSpec {
           }
         }
     } { capturedMetrics =>
-      val expected = expectedHttpRequestMetrics("put", s"billing.${project.projectName.value}.user.${testData.userWriter.userEmail.value}", StatusCodes.OK.intValue, 1) ++
-        expectedHttpRequestMetrics("delete", s"billing.${project.projectName.value}.user.${testData.userWriter.userEmail.value}", StatusCodes.OK.intValue, 1)
+      val expected = expectedHttpRequestMetrics("put", s"billing.redacted.redacted.redacted", StatusCodes.OK.intValue, 1) ++
+        expectedHttpRequestMetrics("delete", s"billing.redacted.redacted.redacted", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
   }

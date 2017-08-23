@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.metrics
 
+import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.metrics.Expansion.UriExpansion
 import org.broadinstitute.dsde.rawls.model.{RawlsEnumeration, WorkspaceName}
 import shapeless._
@@ -43,11 +44,12 @@ object RawlsExpansion {
         @annotation.tailrec
         def hloop(path: Uri.Path, extractions: HList): Uri.Path = {
           extractions match {
-            case e: (String :: _) =>
-              val newPath = Uri.Path(path.toString().replace(e.head, "redacted"))
-              hloop(newPath, e.tail)
-            case e@_ =>
-              hloop(path, e.tail)
+            case (e: String) :: tail =>
+              val newPath = Uri.Path(StringUtils.replaceOnce(path.toString(), e, "redacted"))
+              hloop(newPath, tail)
+            case _ :: tail =>
+              hloop(path, tail)
+            case _: HNil => path
           }
         }
 
