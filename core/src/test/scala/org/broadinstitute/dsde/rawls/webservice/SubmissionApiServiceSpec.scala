@@ -278,7 +278,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.wsName.path}/submissions") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         responseAs[Seq[SubmissionListResponse]] should contain allOf (

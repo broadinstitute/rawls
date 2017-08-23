@@ -354,11 +354,11 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def load(userRefs: TraversableOnce[RawlsUserRef]): ReadWriteAction[TraversableOnce[RawlsUser]] = withContext { ctx =>
-      val filters = userRefs.map { ref => s"(${Attr.dn}=${userDn(ref.userSubjectId)})"}
+      val filters = userRefs.toSet[RawlsUserRef].map { ref => s"(${Attr.uid}=${ref.userSubjectId.value})"}
       if (filters.isEmpty) {
         Iterator.empty
       } else {
-        ctx.search(peopleOu, s"(|${filters.mkString}", new SearchControls()).asScala.map { result =>
+        ctx.search(peopleOu, s"(|${filters.mkString})", new SearchControls()).asScala.map { result =>
           unmarshalUser(result.getAttributes)
         }
       }
