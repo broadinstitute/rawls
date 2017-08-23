@@ -136,6 +136,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
             Seq(AttributeName.withDefaultNS("type"))
           ))
       }
+      //make sure we get the _right_ RawlsException:
+      //"saveEntityDeltas looked up $entityRef expecting 1 record, got 0 instead"
       caught.getMessage should include("expecting")
     }
   }
@@ -149,6 +151,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
             Seq(AttributeName.withDefaultNS("type"))
           ))
       }
+      //make sure we get the _right_ RawlsException:
+      //"Can't saveEntityDeltas on $entityRef because upserts and deletes share attributes <blah>"
       caught.getMessage should include("share")
     }
   }
