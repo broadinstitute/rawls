@@ -119,7 +119,14 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       } catch {
         case e: NameAlreadyBoundException =>
           val myAttrs = new BasicAttributes(true) // Case ignore
-          addMemberAttributes(group.users, group.subGroups, myAttrs)
+
+          (group.users.size, group.subGroups.size) match {
+            case (0, 0) =>
+              // there are no users or subgroups so add an empty member attribute
+              myAttrs.put(new BasicAttribute(Attr.member))
+            case _ => addMemberAttributes(group.users, group.subGroups, myAttrs)
+          }
+
           myAttrs.put(new BasicAttribute(Attr.groupUpdatedTimestamp, dateFormat.format(new Date())))
           ctx.modifyAttributes(groupDn(group.groupName), DirContext.REPLACE_ATTRIBUTE, myAttrs)
       }
@@ -190,12 +197,17 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def listGroupsForUser(userRef: RawlsUserRef): ReadWriteAction[Set[RawlsGroupRef]] = withContext { ctx =>
-      val groups = for (
-        attr <- ctx.getAttributes(userDn(userRef.userSubjectId), Array(Attr.memberOf)).getAll.asScala;
-        attrE <- attr.getAll.asScala
-      ) yield RawlsGroupRef(dnToGroupName(attrE.asInstanceOf[String]))
+      val groups = Try {
+        for (
+          attr <- ctx.getAttributes(userDn(userRef.userSubjectId), Array(Attr.memberOf)).getAll.asScala;
+          attrE <- attr.getAll.asScala
+        ) yield RawlsGroupRef(dnToGroupName(attrE.asInstanceOf[String]))
+      } recover {
+        // user does not exist so they can't have any groups
+        case t: NameNotFoundException => Iterator.empty
+      }
 
-      groups.toSet
+      groups.get.toSet
     }
 
     def loadFromEmail(email: String): ReadWriteAction[Option[Either[RawlsUser, RawlsGroup]]] = withContext { ctx =>

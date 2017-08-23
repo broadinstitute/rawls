@@ -1826,7 +1826,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound) { status }
+        assertResult(StatusCodes.NotFound, response.entity.asString) { status }
       }
   }
 
