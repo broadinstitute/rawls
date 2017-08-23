@@ -22,10 +22,11 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(rawlsUserQuery.save(user1))
     }
 
+    //update not needed
     // second save is update, not duplicate
-    assertResult(user1) {
-      runAndWait(rawlsUserQuery.save(user1))
-    }
+//    assertResult(user1) {
+//      runAndWait(rawlsUserQuery.save(user1))
+//    }
 
     assertResult(user2) {
       runAndWait(rawlsUserQuery.save(user2))
@@ -112,6 +113,7 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     runAndWait(rawlsUserQuery.save(user1))
     runAndWait(rawlsUserQuery.save(user2))
+    runAndWait(rawlsUserQuery.save(user3))
     runAndWait(rawlsGroupQuery.save(group1))
     runAndWait(rawlsGroupQuery.save(group2))
     runAndWait(rawlsGroupQuery.save(group3))
