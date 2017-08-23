@@ -74,7 +74,6 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              override val workbenchMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
   import context._
 
-
   override def preStart(): Unit = {
     super.preStart()
     scheduleInitialMonitorPass
@@ -98,6 +97,10 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
     case CheckCurrentWorkflowStatusCounts =>
       logger.debug(s"check current workflow status counts for submission $submissionId")
       checkCurrentWorkflowStatusCounts(true) pipeTo parent
+
+    case Status.Failure(_: SubmissionDeletedException) =>
+      logger.debug(s"submission $submissionId has been deleted, terminating disgracefully")
+      stop(self)
 
     case Status.Failure(t) =>
       // an error happened in some future, let the supervisor handle it
@@ -123,6 +126,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
   val submissionPollInterval: Duration
+
+  class SubmissionDeletedException extends Exception
 
   // Cache these metric builders since they won't change for this SubmissionMonitor
   protected lazy val workspaceMetricBuilder: ExpandedMetricBuilder =
@@ -184,7 +189,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     submissionFuture flatMap {
       case Some(submission) =>
-        val abortFuture = if(submission.status == SubmissionStatuses.Aborting) {
+        val abortFuture = if (submission.status == SubmissionStatuses.Aborting) {
+          //abort workflows if necessary
           for {
             _ <- abortQueuedWorkflows(submissionId)
             _ <- abortActiveWorkflows(submissionId)
@@ -193,7 +199,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           Future.successful(())
         }
         abortFuture flatMap( _ => queryForWorkflowStatuses() )
-      case None => throw new RawlsException(s"Submission ${submissionId} could not be found")
+      case None =>
+        //submission has been deleted, most likely because the owning workspace has been deleted
+        // treat this as a failure and let it get caught when we pipe it to ourselves
+        throw new SubmissionDeletedException()
     }
   }
 
