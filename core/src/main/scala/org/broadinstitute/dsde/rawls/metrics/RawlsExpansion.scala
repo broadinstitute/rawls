@@ -45,7 +45,7 @@ object RawlsExpansion {
         def hloop(path: Uri.Path, extractions: HList): Uri.Path = {
           extractions match {
             case (e: String) :: tail =>
-              val newPath = Uri.Path(StringUtils.replaceOnce(path.toString(), e, "redacted"))
+              val newPath = Uri.Path(StringUtils.replaceOnce(path.toString(), s".$e.", ".redacted."))
               hloop(newPath, tail)
             case _ :: tail =>
               hloop(path, tail)
