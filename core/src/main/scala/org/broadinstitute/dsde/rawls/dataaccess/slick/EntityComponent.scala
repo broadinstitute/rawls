@@ -359,27 +359,6 @@ trait EntityComponent {
       } yield entities
     }
 
-    private def deltaAttributes(ownerEntityRef: AttributeEntityReference, existingAttributesMap: Map[AttributeName, Long], upserts: AttributeMap, deletes: Traversable[AttributeName], entityIdsByRef: Map[AttributeEntityReference, Long]): ReadWriteAction[Int] = {
-
-      val existingAttributes = existingAttributesMap.keys.toSeq
-      val (updateAttrs, insertAttrs) = upserts.partition( attr => existingAttributes.contains(attr._1) )
-
-      def attributeMapToRecs(attrMap: AttributeMap) = {
-        for {
-          (attributeName, attribute) <- attrMap
-          attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByRef(ownerEntityRef), attributeName, attribute, entityIdsByRef)
-        } yield attributeRec
-      }
-
-      val insertRecs = attributeMapToRecs(insertAttrs)
-      val updateRecs = attributeMapToRecs(updateAttrs)
-      val deleteIds = for {
-        attributeName <- deletes
-      } yield existingAttributesMap(attributeName)
-
-      entityAttributeQuery.deltaAttrsAction(insertRecs, updateRecs, deleteIds, entityAttributeScratchQuery.insertScratchAttributes)
-    }
-
     private def applyAttributeDeltas(workspaceContext: SlickWorkspaceContext, entityRecord: EntityRecord, upserts: AttributeMap, deletes: Traversable[AttributeName]) = {
       //yank the attribute list for this entity to determine what to do with upserts
       entityAttributeQuery.findByOwnerQuery(Seq(entityRecord.id)).map(attr => (attr.namespace, attr.name, attr.id)).result flatMap { attrCols =>
