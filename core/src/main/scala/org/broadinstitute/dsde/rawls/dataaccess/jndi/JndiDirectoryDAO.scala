@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.jndi
 
+import java.sql.SQLException
 import java.text.SimpleDateFormat
 import java.util.Date
 import javax.naming._
@@ -101,6 +102,23 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def save(group: RawlsGroup): ReadWriteAction[RawlsGroup] = withContext { ctx =>
+      val userChecks = group.users.map { userRef => Try { ctx.getAttributes(userDn(userRef.userSubjectId)) }}
+      val subGroupChecks = group.subGroups.map { groupRef => Try { ctx.getAttributes(groupDn(groupRef.groupName)) }}
+
+      if ((userChecks ++ subGroupChecks).find(_.isFailure).isDefined) {
+        Thread.sleep(500)
+
+        val userChecks2 = group.users.map { userRef => Try { ctx.getAttributes(userDn(userRef.userSubjectId)) }}
+        val subGroupChecks2 = group.subGroups.map { groupRef => Try { ctx.getAttributes(groupDn(groupRef.groupName)) }}
+        if ((userChecks2 ++ subGroupChecks2).find(_.isFailure).isDefined) {
+          Thread.sleep(500)
+          val userChecks3 = group.users.map { userRef => Try { ctx.getAttributes(userDn(userRef.userSubjectId)) }}
+          val subGroupChecks3 = group.subGroups.map { groupRef => Try { ctx.getAttributes(groupDn(groupRef.groupName)) }}
+          if ((userChecks3 ++ subGroupChecks3).find(_.isFailure).isDefined) {
+            throw new SQLException
+          }
+        }
+      }
       try {
         val groupContext = new BaseDirContext {
           override def getAttributes(name: String): Attributes = {
