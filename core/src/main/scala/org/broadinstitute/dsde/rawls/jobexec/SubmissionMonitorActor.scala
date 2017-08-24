@@ -52,6 +52,7 @@ object SubmissionMonitorActor {
   case class ExecutionServiceStatusResponse(statusResponse: Seq[Try[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]]]) extends SubmissionMonitorMessage
   case class StatusCheckComplete(terminateActor: Boolean) extends SubmissionMonitorMessage
 
+  case object SubmissionDeletedException extends Exception
   case class MonitoredSubmissionException(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable) extends Exception(cause)
 }
 
@@ -73,7 +74,6 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val submissionPollInterval: FiniteDuration,
                              override val workbenchMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
   import context._
-
 
   override def preStart(): Unit = {
     super.preStart()
@@ -98,6 +98,10 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
     case CheckCurrentWorkflowStatusCounts =>
       logger.debug(s"check current workflow status counts for submission $submissionId")
       checkCurrentWorkflowStatusCounts(true) pipeTo parent
+
+    case Status.Failure(SubmissionDeletedException) =>
+      logger.debug(s"submission $submissionId has been deleted, terminating disgracefully")
+      stop(self)
 
     case Status.Failure(t) =>
       // an error happened in some future, let the supervisor handle it
@@ -184,7 +188,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     submissionFuture flatMap {
       case Some(submission) =>
-        val abortFuture = if(submission.status == SubmissionStatuses.Aborting) {
+        val abortFuture = if (submission.status == SubmissionStatuses.Aborting) {
+          //abort workflows if necessary
           for {
             _ <- abortQueuedWorkflows(submissionId)
             _ <- abortActiveWorkflows(submissionId)
@@ -193,7 +198,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           Future.successful(())
         }
         abortFuture flatMap( _ => queryForWorkflowStatuses() )
-      case None => throw new RawlsException(s"Submission ${submissionId} could not be found")
+      case None =>
+        //submission has been deleted, most likely because the owning workspace has been deleted
+        // treat this as a failure and let it get caught when we pipe it to ourselves
+        throw SubmissionDeletedException
     }
   }
 

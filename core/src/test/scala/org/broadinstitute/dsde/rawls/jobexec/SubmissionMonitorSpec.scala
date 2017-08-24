@@ -587,6 +587,15 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
+  it should "stop trying to monitor a submission that's been deleted" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val monitorRef = createSubmissionMonitorActor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString))
+    watch(monitorRef)
+
+    runAndWait(submissionQuery.delete(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId))
+
+    expectMsgClass(5 seconds, classOf[Terminated])
+  }
+
   val manySubmissionsTestData = new ManySubmissionsTestData
   it should "attach outputs and not deadlock with multiple submissions all updating the same entity at once" in withCustomTestDatabase(manySubmissionsTestData) { dataSource: SlickDataSource =>
     val submissions = manySubmissionsTestData.submissions
