@@ -36,7 +36,7 @@ object RawlsExpansion {
     *                    any matched Strings will be redacted from the Uri. Otherwise, the Uri is unchanged.
     * @return Uri Expansion instance
     */
-  def redactedUriExpansion[L <: HList](pathMatcher: PathMatcher[String :: L]): Expansion[Uri] = {
+  def redactedUriExpansion[L <: HList](pathMatcher: PathMatcher[L]): Expansion[Uri] = {
     new Expansion[Uri] {
       override def makeName(uri: Uri): String = {
 
@@ -45,12 +45,13 @@ object RawlsExpansion {
           extractions match {
             case (e: String) :: tail =>
               val newPath = Uri.Path(path.toString()
-                .replaceFirst(s"""/$e$$""", "/redacted")   // end of path
-                .replaceFirst(s"""/$e/""", "/redacted/"))  // middle of path
+                .replaceFirst(s"""/$e/""", "/redacted/")   // middle of path
+                .replaceFirst(s"""/$e$$""", "/redacted"))  // end of path
               hloop(newPath, tail)
             case _ :: tail =>
               hloop(path, tail)
-            case _: HNil => path
+            case _: HNil =>
+              path
           }
         }
 

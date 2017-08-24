@@ -30,7 +30,7 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
   private lazy implicit val baseMetricBuilder: ExpandedMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Agora)
 
-  // Strip out workflow IDs from metrics by providing a redactedUriExpansion
+  // Strip out unique IDs from metrics by providing a redactedUriExpansion
   override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
     (Slash ~ "api" ~ Slash ~ "v1").? / "configurations" / Segment / Segment / Segment
   )
