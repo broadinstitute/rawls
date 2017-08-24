@@ -437,7 +437,7 @@ trait WorkspaceComponent {
         catalogGroupQuery <- workspaceGroupCatalogQuery.filter(_.workspaceId === workspaceContext.workspaceId).result
         groups <- DBIO.sequence(catalogGroupQuery.map(result => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(result.groupName)))))
       }yield {
-        users.map(_.get.userEmail.toString) ++ groups.map(_.get.groupEmail.toString)
+        users.map(_.get.userEmail.value) ++ groups.map(_.get.groupEmail.value)
       }
       emails.map{_.map{ case (email: String) => WorkspaceCatalog(email, true)}}
     }
