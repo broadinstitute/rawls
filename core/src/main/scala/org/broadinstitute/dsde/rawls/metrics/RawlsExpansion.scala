@@ -1,12 +1,11 @@
 package org.broadinstitute.dsde.rawls.metrics
 
-import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.metrics.Expansion.UriExpansion
 import org.broadinstitute.dsde.rawls.model.{RawlsEnumeration, WorkspaceName}
 import shapeless._
 import spray.http.Uri
 import spray.routing.PathMatcher.Matched
-import spray.routing.{PathMatcher, PathMatcher1}
+import spray.routing.PathMatcher
 
 /**
   * Created by rtitle on 7/25/17.
@@ -45,7 +44,9 @@ object RawlsExpansion {
         def hloop(path: Uri.Path, extractions: HList): Uri.Path = {
           extractions match {
             case (e: String) :: tail =>
-              val newPath = Uri.Path(StringUtils.replaceOnce(path.toString(), s".$e.", ".redacted."))
+              val newPath = Uri.Path(path.toString()
+                .replaceFirst(s"""/$e$$""", "/redacted")   // end of path
+                .replaceFirst(s"""/$e/""", "/redacted/"))  // middle of path
               hloop(newPath, tail)
             case _ :: tail =>
               hloop(path, tail)
