@@ -80,12 +80,17 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
   }
 
   object rawlsGroupQuery {
-    private def addMemberAttributes(users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef], myAttrs: BasicAttributes): Any = {
+    /**
+      * @param emptyValueFn a function called when no members are present
+      */
+    private def addMemberAttributes(users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef], myAttrs: BasicAttributes)(emptyValueFn: BasicAttributes => Unit): Any = {
       val memberDns = users.map(user => userDn(user.userSubjectId)) ++ subGroups.map(subGroup => groupDn(subGroup.groupName))
       if (!memberDns.isEmpty) {
         val members = new BasicAttribute(Attr.member)
         memberDns.foreach(subject => members.add(subject))
         myAttrs.put(members)
+      } else {
+        emptyValueFn(myAttrs)
       }
     }
 
@@ -108,7 +113,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
             myAttrs.put(new BasicAttribute(Attr.groupUpdatedTimestamp, dateFormat.format(new Date())))
             myAttrs.put(new BasicAttribute(Attr.email, group.groupEmail.value))
 
-            addMemberAttributes(group.users, group.subGroups, myAttrs)
+            addMemberAttributes(group.users, group.subGroups, myAttrs) { _ => () } // do nothing when no members present
 
             myAttrs
           }
@@ -120,13 +125,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
         case e: NameAlreadyBoundException =>
           val myAttrs = new BasicAttributes(true) // Case ignore
 
-          (group.users.size, group.subGroups.size) match {
-            case (0, 0) =>
-              // there are no users or subgroups so add an empty member attribute
-              myAttrs.put(new BasicAttribute(Attr.member))
-            case _ => addMemberAttributes(group.users, group.subGroups, myAttrs)
-          }
-
+          addMemberAttributes(group.users, group.subGroups, myAttrs) { _.put(new BasicAttribute(Attr.member)) } // add attribute with no value when no member present
           myAttrs.put(new BasicAttribute(Attr.groupUpdatedTimestamp, dateFormat.format(new Date())))
           ctx.modifyAttributes(groupDn(group.groupName), DirContext.REPLACE_ATTRIBUTE, myAttrs)
       }
@@ -270,7 +269,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     def overwriteGroupUsers(groupsWithUsers: Seq[(RawlsGroupRef, Set[RawlsUserRef])]) = withContext { ctx =>
       groupsWithUsers.map { case (groupRef, users) =>
         val myAttrs = new BasicAttributes(true)
-        addMemberAttributes(users, Set.empty, myAttrs)
+        addMemberAttributes(users, Set.empty, myAttrs) { _.put(new BasicAttribute(Attr.member)) }  // add attribute with no value when no member present
         ctx.modifyAttributes(groupDn(groupRef.groupName), DirContext.REPLACE_ATTRIBUTE, myAttrs)
         groupRef
       }
