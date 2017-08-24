@@ -52,6 +52,7 @@ object SubmissionMonitorActor {
   case class ExecutionServiceStatusResponse(statusResponse: Seq[Try[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]]]) extends SubmissionMonitorMessage
   case class StatusCheckComplete(terminateActor: Boolean) extends SubmissionMonitorMessage
 
+  case object SubmissionDeletedException extends Exception
   case class MonitoredSubmissionException(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable) extends Exception(cause)
 }
 
@@ -98,7 +99,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       logger.debug(s"check current workflow status counts for submission $submissionId")
       checkCurrentWorkflowStatusCounts(true) pipeTo parent
 
-    case Status.Failure(_: SubmissionDeletedException) =>
+    case Status.Failure(SubmissionDeletedException) =>
       logger.debug(s"submission $submissionId has been deleted, terminating disgracefully")
       stop(self)
 
@@ -126,8 +127,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
   val submissionPollInterval: Duration
-
-  class SubmissionDeletedException extends Exception
 
   // Cache these metric builders since they won't change for this SubmissionMonitor
   protected lazy val workspaceMetricBuilder: ExpandedMetricBuilder =
@@ -202,7 +201,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       case None =>
         //submission has been deleted, most likely because the owning workspace has been deleted
         // treat this as a failure and let it get caught when we pipe it to ourselves
-        throw new SubmissionDeletedException()
+        throw SubmissionDeletedException
     }
   }
 
