@@ -777,16 +777,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   val userNoBilling = RawlsUser(RawlsUserSubjectId("4637649"), RawlsUserEmail("no-billing-projects@example.com"))
   val testDataUsers = Seq(testData.userProjectOwner, testData.userOwner, testData.userWriter, testData.userReader, testData.userReaderViaGroup, userNoBilling)
 
-  it should "return 200 when listing users" in withTestDataApiServices { services =>
-    runAndWait(rawlsUserQuery.createUser(userNoBilling))
-
-    Get("/admin/users") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertSameElements(testDataUsers, responseAs[RawlsUserInfoList].userInfoList.map(_.user))
-      }
-  }
-
   it should "return 404 when adding a member that doesn't exist" in withTestDataApiServices { services =>
     val group = RawlsGroupRef(RawlsGroupName("test_group"))
 
@@ -1164,9 +1154,10 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
     // Create a new test user and some new submissions
     val testUserEmail = "testUser"
+    val testSubjectId = "0001"
     val testUserStatusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
     withWorkspaceContext(constantData.workspace) { ctx =>
-      val testUser = RawlsUser(UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("0001")))
+      val testUser = RawlsUser(UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(testSubjectId)))
       runAndWait(rawlsUserQuery.createUser(testUser))
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
@@ -1192,10 +1183,10 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           .filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
           .mapValues(_.size)
 
-        val testUserWorkflows = (testUserEmail -> testUserStatusCounts.map { case (k, v) => k.toString -> v })
+        val testUserWorkflows = (testSubjectId -> testUserStatusCounts.map { case (k, v) => k.toString -> v })
 
         // userOwner workflow counts should be equal to all workflows in the system except for testUser's workflows.
-        val userOwnerWorkflows = (constantData.userOwner.userEmail.value ->
+        val userOwnerWorkflows = (constantData.userOwner.userSubjectId.value ->
           groupedWorkflowRecs.map { case (k, v) =>
             k -> (v - testUserStatusCounts.getOrElse(WorkflowStatuses.withName(k), 0))
           }.filter(_._2 > 0))
