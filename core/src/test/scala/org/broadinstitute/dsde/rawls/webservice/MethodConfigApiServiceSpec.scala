@@ -56,7 +56,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           }
         }
     } {capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
       val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs", StatusCodes.Created.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
@@ -79,7 +79,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
         }
     } { capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
       val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
@@ -243,8 +243,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           }
         }
     } {capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
-      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}.rename", StatusCodes.NoContent.intValue, 1)
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.redacted.redacted.rename", StatusCodes.NoContent.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
   }
@@ -259,8 +259,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           }
         }
     } {capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
-      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig2.namespace}.${testData.methodConfig2.name}.rename", StatusCodes.BadRequest.intValue, 1)
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.redacted.redacted.rename", StatusCodes.BadRequest.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
   }
@@ -275,8 +275,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           }
         }
     } {capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
-      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig2.namespace}.${testData.methodConfig2.name}.rename", StatusCodes.Conflict.intValue, 1)
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs.redacted.redacted.rename", StatusCodes.Conflict.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
   }
@@ -351,8 +351,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           }
         }
     } { capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
-      val expected = expectedHttpRequestMetrics("delete", s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig3.namespace}.${testData.methodConfig3.name}",
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
+      val expected = expectedHttpRequestMetrics("delete", s"$wsPathForRequestMetrics.methodconfigs.redacted.redacted",
         StatusCodes.NoContent.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
@@ -422,8 +422,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
         }
     } { capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
-      val expected = expectedHttpRequestMetrics(httpMethod.method.name.toLowerCase, s"$wsPathForRequestMetrics.methodconfigs.${testData.methodConfig.namespace}.${testData.methodConfig.name}", StatusCodes.OK.intValue, 1) ++
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
+      val expected = expectedHttpRequestMetrics(httpMethod.method.name.toLowerCase, s"$wsPathForRequestMetrics.methodconfigs.redacted.redacted", StatusCodes.OK.intValue, 1) ++
         expectedHttpRequestMetrics("get", s"${wsPathForRequestMetrics}", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
@@ -686,7 +686,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   val copyFromMethodRepo = "/methodconfigs/copyFromMethodRepo"
 
-  it should "return 201 on copy method configuration from method repo" in withTestDataApiServices { services =>
+  it should "foo return 201 on copy method configuration from method repo" in withTestDataApiServices { services =>
     withStatsD {
       Post(copyFromMethodRepo, httpJson(testData.methodRepoGood)) ~>
         sealRoute(services.methodConfigRoutes) ~>
@@ -699,7 +699,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           }
         }
     } { capturedMetrics =>
-      val expected = expectedHttpRequestMetrics("get", s"configurations.${testData.methodRepoGood.methodRepoNamespace}.${testData.methodRepoGood.methodRepoName}.${testData.methodRepoGood.methodRepoSnapshotId}", StatusCodes.OK.intValue, 1, Some(Subsystems.Agora))
+      val expected = expectedHttpRequestMetrics("get", s"configurations.redacted.redacted.redacted", StatusCodes.OK.intValue, 1, Some(Subsystems.Agora))
       assertSubsetOf(expected, capturedMetrics)
     }
   }

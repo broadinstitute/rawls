@@ -1518,7 +1518,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           }
         }
     } { capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.workspace.namespace}.${testData.workspace.name}.clone"
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted.clone"
       val expected = expectedHttpRequestMetrics("post", wsPathForRequestMetrics, StatusCodes.Created.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
@@ -2422,7 +2422,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           }
         }
     } { capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testWorkspaces.workspace.namespace}.${testWorkspaces.workspace.name}.genomics.operations.dummy-job-id"
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted.genomics.operations.dummy-job-id"
       val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }

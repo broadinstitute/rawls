@@ -3,17 +3,18 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
-import org.broadinstitute.dsde.rawls.metrics.{InstrumentedRetry, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, RawlsExpansion, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus, MethodConfiguration, Subsystems, UserInfo}
 import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
 import spray.client.pipelining._
-import spray.http.StatusCodes
+import spray.http._
 import spray.httpx.SprayJsonSupport._
 import spray.httpx.UnsuccessfulResponseException
 import spray.httpx.unmarshalling.FromResponseUnmarshaller
 import spray.json._
+import spray.routing.directives.PathDirectives._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
@@ -28,6 +29,11 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
 
   private lazy implicit val baseMetricBuilder: ExpandedMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Agora)
+
+  // Strip out unique IDs from metrics by providing a redactedUriExpansion
+  override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
+    (Slash ~ "api" ~ Slash ~ "v1").? / "configurations" / Segment / Segment / Segment
+  )
 
   private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =
     addAuthHeader(userInfo) ~> instrumentedSendReceive ~> unmarshal[A]
