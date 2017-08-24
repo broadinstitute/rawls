@@ -14,8 +14,6 @@ import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
 import spray.http.StatusCodes
 
-import scala.collection.immutable.Iterable
-
 /**
  * Created by dvoet on 2/4/16.
  */
