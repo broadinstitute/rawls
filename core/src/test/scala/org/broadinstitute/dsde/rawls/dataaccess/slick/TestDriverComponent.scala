@@ -176,9 +176,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.save(userOwner),
-        rawlsUserQuery.save(userWriter),
-        rawlsUserQuery.save(userReader),
+        rawlsUserQuery.createUser(userOwner),
+        rawlsUserQuery.createUser(userWriter),
+        rawlsUserQuery.createUser(userReader),
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),
@@ -202,9 +202,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq (
-        rawlsUserQuery.save(userOwner),
-        rawlsUserQuery.save(userWriter),
-        rawlsUserQuery.save(userReader),
+        rawlsUserQuery.createUser(userOwner),
+        rawlsUserQuery.createUser(userWriter),
+        rawlsUserQuery.createUser(userReader),
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),
@@ -570,11 +570,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.save(userProjectOwner),
-        rawlsUserQuery.save(userOwner),
-        rawlsUserQuery.save(userWriter),
-        rawlsUserQuery.save(userReader),
-        rawlsUserQuery.save(userReaderViaGroup),
+        rawlsUserQuery.createUser(userProjectOwner),
+        rawlsUserQuery.createUser(userOwner),
+        rawlsUserQuery.createUser(userWriter),
+        rawlsUserQuery.createUser(userReader),
+        rawlsUserQuery.createUser(userReaderViaGroup),
         rawlsGroupQuery.save(nestedProjectGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.membersGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.adminsGroup),
@@ -761,7 +761,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         rawlsGroupQuery.save(readerGroup2),
         workspaceQuery.save(workspace),
         workspaceQuery.save(workspace2),
-        rawlsUserQuery.save(userReader)
+        rawlsUserQuery.createUser(userReader)
       )
     }
   }
@@ -907,10 +907,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.save(userOwner),
+        rawlsUserQuery.createUser(userOwner),
         DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
-        rawlsUserQuery.save(userWriter),
-        rawlsUserQuery.save(userReader),
+        rawlsUserQuery.createUser(userWriter),
+        rawlsUserQuery.createUser(userReader),
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),

@@ -211,7 +211,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       val billingUser = testData.userOwner
       val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
-      runAndWait(rawlsUserQuery.save(billingUser))
+      runAndWait(rawlsUserQuery.createUser(billingUser))
 
       val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
@@ -297,7 +297,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       val billingUser = testData.userOwner
       val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
-      runAndWait(rawlsUserQuery.save(billingUser))
+      runAndWait(rawlsUserQuery.createUser(billingUser))
 
       val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
@@ -368,7 +368,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       val billingUser = testData.userOwner
       val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
-      runAndWait(rawlsUserQuery.save(billingUser))
+      runAndWait(rawlsUserQuery.createUser(billingUser))
 
       val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
@@ -1071,9 +1071,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.save(userOwner),
-        rawlsUserQuery.save(userUser),
-        rawlsUserQuery.save(userNoAccess)
+        rawlsUserQuery.createUser(userOwner),
+        rawlsUserQuery.createUser(userUser),
+        rawlsUserQuery.createUser(userNoAccess)
       )
     }
   }

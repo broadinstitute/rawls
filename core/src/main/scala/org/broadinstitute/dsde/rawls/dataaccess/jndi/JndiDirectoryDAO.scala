@@ -333,7 +333,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }
     }
 
-    def save(user: RawlsUser): ReadWriteAction[RawlsUser] = withContext { ctx =>
+    def createUser(user: RawlsUser): ReadWriteAction[RawlsUser] = withContext { ctx =>
       try {
         val userContext = new BaseDirContext {
           override def getAttributes(name: String): Attributes = {
@@ -355,8 +355,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
         ctx.bind(userDn(user.userSubjectId), userContext)
         user
       } catch {
-        case e: NameAlreadyBoundException =>
-          throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"user with id ${user.userSubjectId} already exists"))
+        case e: NameAlreadyBoundException => user // user already exists, do nothing
       }
     }
 

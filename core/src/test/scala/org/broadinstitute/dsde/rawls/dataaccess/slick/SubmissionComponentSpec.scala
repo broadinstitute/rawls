@@ -294,7 +294,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val testUserStatusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
     withWorkspaceContext(testData.workspace) { ctx =>
       val testUser = RawlsUser(UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(testUserId)))
-      runAndWait(rawlsUserQuery.save(testUser))
+      runAndWait(rawlsUserQuery.createUser(testUser))
       testUserStatusCounts.flatMap { case (st, count) =>
         for (_ <- 0 until count) yield {
           createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testUser,

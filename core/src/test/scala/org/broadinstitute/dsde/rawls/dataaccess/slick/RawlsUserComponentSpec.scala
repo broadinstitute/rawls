@@ -19,7 +19,7 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
 
     assertResult(user1) {
-      runAndWait(rawlsUserQuery.save(user1))
+      runAndWait(rawlsUserQuery.createUser(user1))
     }
 
     //update not needed
@@ -29,7 +29,7 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 //    }
 
     assertResult(user2) {
-      runAndWait(rawlsUserQuery.save(user2))
+      runAndWait(rawlsUserQuery.createUser(user2))
     }
 
     assertResult(Seq(user1, user2)) {
@@ -47,7 +47,7 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
 
     assertResult(user) {
-      runAndWait(rawlsUserQuery.save(user))
+      runAndWait(rawlsUserQuery.createUser(user))
     }
 
     assertResult(Some(user)) {
@@ -74,7 +74,7 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val user = RawlsUser(subjId, email)
 
     assertResult(user) {
-      runAndWait(rawlsUserQuery.save(user))
+      runAndWait(rawlsUserQuery.createUser(user))
     }
 
     assertResult(SingleStatistic(1)) {
@@ -111,9 +111,9 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
 
 
-    runAndWait(rawlsUserQuery.save(user1))
-    runAndWait(rawlsUserQuery.save(user2))
-    runAndWait(rawlsUserQuery.save(user3))
+    runAndWait(rawlsUserQuery.createUser(user1))
+    runAndWait(rawlsUserQuery.createUser(user2))
+    runAndWait(rawlsUserQuery.createUser(user3))
     runAndWait(rawlsGroupQuery.save(group1))
     runAndWait(rawlsGroupQuery.save(group2))
     runAndWait(rawlsGroupQuery.save(group3))

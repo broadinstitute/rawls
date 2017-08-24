@@ -74,9 +74,12 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     assert {
       loadUser(user).nonEmpty
     }
+    val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
     assert {
-      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
-      group.isDefined && group.get.users.contains(user)
+      group.isDefined
+    }
+    assert {
+      group.get.users.contains(user)
     }
 
     assert {
@@ -325,7 +328,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val testUser = RawlsUser(RawlsUserSubjectId("test_subject_id"), RawlsUserEmail("test_user_email"))
     val project1 = billingProjectFromName("project1")
 
-    runAndWait(rawlsUserQuery.save(testUser))
+    runAndWait(rawlsUserQuery.createUser(testUser))
 
     withStatsD {
       Get(s"/admin/billing/list/${testUser.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
@@ -530,7 +533,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
       // scenario: re-trying a deletion after something failed.  The DB user remains but not necessarily anything else
 
-      runAndWait(rawlsUserQuery.save(user))
+      runAndWait(rawlsUserQuery.createUser(user))
 
       Delete(s"/admin/user/${user.userSubjectId.value}") ~>
         sealRoute(services.adminRoutes) ~>
@@ -571,7 +574,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       assertUserExists(services, testUser)
 
       val user2 = RawlsUser(RawlsUserSubjectId("some_other_subject"), RawlsUserEmail("some_other_email"))
-      runAndWait(rawlsUserQuery.save(user2))
+      runAndWait(rawlsUserQuery.createUser(user2))
 
       val group = RawlsGroup(RawlsGroupName("groupName"), RawlsGroupEmail("groupEmail"), Set(testUser, user2), Set.empty)
       saveGroupToDbAndGoogle(services, group)
@@ -775,7 +778,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   val testDataUsers = Seq(testData.userProjectOwner, testData.userOwner, testData.userWriter, testData.userReader, testData.userReaderViaGroup, userNoBilling)
 
   it should "return 200 when listing users" in withTestDataApiServices { services =>
-    runAndWait(rawlsUserQuery.save(userNoBilling))
+    runAndWait(rawlsUserQuery.createUser(userNoBilling))
 
     Get("/admin/users") ~>
       sealRoute(services.adminRoutes) ~>
@@ -856,9 +859,9 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
     val testGroup = RawlsGroup(RawlsGroupName(UUID.randomUUID().toString), RawlsGroupEmail(s"${UUID.randomUUID().toString}@foo.com"), Set[RawlsUserRef](user1, user2), Set[RawlsGroupRef](subGroup1, subGroup2))
 
-    runAndWait(rawlsUserQuery.save(user1))
-    runAndWait(rawlsUserQuery.save(user2))
-    runAndWait(rawlsUserQuery.save(user3))
+    runAndWait(rawlsUserQuery.createUser(user1))
+    runAndWait(rawlsUserQuery.createUser(user2))
+    runAndWait(rawlsUserQuery.createUser(user3))
 
     runAndWait(rawlsGroupQuery.save(subGroup1))
     runAndWait(rawlsGroupQuery.save(subGroup2))
@@ -973,9 +976,9 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(inBothUser)), Duration.Inf)
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(unknownUserInGoogle)), Duration.Inf)
 
-    runAndWait(rawlsUserQuery.save(inGoogleUser))
-    runAndWait(rawlsUserQuery.save(inBothUser))
-    runAndWait(rawlsUserQuery.save(inDbUser))
+    runAndWait(rawlsUserQuery.createUser(inGoogleUser))
+    runAndWait(rawlsUserQuery.createUser(inBothUser))
+    runAndWait(rawlsUserQuery.createUser(inDbUser))
 
     runAndWait(rawlsGroupQuery.save(inGoogleGroup))
     runAndWait(rawlsGroupQuery.save(inBothGroup))
@@ -1002,7 +1005,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "get the status of a workspace" in withTestDataApiServices { services =>
     val testUser = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
-    runAndWait(rawlsUserQuery.save(testUser))
+    runAndWait(rawlsUserQuery.createUser(testUser))
 
     Get(s"/admin/validate/${testData.workspace.namespace}/${testData.workspace.name}?userSubjectId=${testUser.userSubjectId.value}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -1164,7 +1167,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val testUserStatusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
     withWorkspaceContext(constantData.workspace) { ctx =>
       val testUser = RawlsUser(UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("0001")))
-      runAndWait(rawlsUserQuery.save(testUser))
+      runAndWait(rawlsUserQuery.createUser(testUser))
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
       testUserStatusCounts.flatMap { case (st, count) =>

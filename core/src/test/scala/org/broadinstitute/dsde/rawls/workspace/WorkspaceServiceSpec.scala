@@ -353,7 +353,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
     val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
 
-    runAndWait(rawlsUserQuery.save(user))
+    runAndWait(rawlsUserQuery.createUser(user))
     runAndWait(rawlsGroupQuery.save(group))
 
     val ownerGroupRef = testData.workspace.accessLevels(WorkspaceAccessLevels.Owner)
@@ -383,7 +383,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   it should "patch ACLs and return updated acls" in withTestDataServices { services =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
     val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    runAndWait(rawlsUserQuery.save(user))
+    runAndWait(rawlsUserQuery.createUser(user))
     runAndWait(rawlsGroupQuery.save(group))
 
     services.gcsDAO.createGoogleGroup(group)
@@ -462,7 +462,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "patch realm ACLs when the owner is also a project owner" in withTestDataServices { services =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    runAndWait(rawlsUserQuery.save(user))
+    runAndWait(rawlsUserQuery.createUser(user))
 
     //add the owner as an owner on the billing project
     Await.result(services.userService.addUserToBillingProject(RawlsBillingProjectName(testData.controlledWorkspace.namespace), ProjectAccessUpdate("owner-access", ProjectRoles.Owner)), Duration.Inf)
@@ -639,7 +639,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   it should "patch Catalog and return updated permissions" in withTestDataServices { services =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
     val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    runAndWait(rawlsUserQuery.save(user))
+    runAndWait(rawlsUserQuery.createUser(user))
     runAndWait(rawlsGroupQuery.save(group))
 
     services.gcsDAO.createGoogleGroup(group)

@@ -200,7 +200,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         toFutureTry(gcsDAO.createProxyGroup(user) flatMap( _ => gcsDAO.addUserToProxyGroup(user))),
         toFutureTry(for {
         // these things need to be done in order
-          _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user) }
+          _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.createUser(user) }
           _ <- dataSource.inTransaction { dataAccess => getOrCreateAllUsersGroup(dataAccess) }
           _ <- updateGroupMembership(allUsersGroupRef, addUsers = Set(user))
         } yield ()),

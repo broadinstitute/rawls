@@ -159,10 +159,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.save(userProjectOwner),
-        rawlsUserQuery.save(userOwner),
-        rawlsUserQuery.save(userWriter),
-        rawlsUserQuery.save(userReader),
+        rawlsUserQuery.createUser(userProjectOwner),
+        rawlsUserQuery.createUser(userOwner),
+        rawlsUserQuery.createUser(userWriter),
+        rawlsUserQuery.createUser(userReader),
         DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
