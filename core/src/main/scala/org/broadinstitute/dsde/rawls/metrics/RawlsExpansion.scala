@@ -4,8 +4,11 @@ import org.broadinstitute.dsde.rawls.metrics.Expansion.UriExpansion
 import org.broadinstitute.dsde.rawls.model.{RawlsEnumeration, WorkspaceName}
 import shapeless._
 import spray.http.Uri
+import spray.http.Uri.Path._
 import spray.routing.PathMatcher.Matched
 import spray.routing.PathMatcher
+
+import scala.annotation.tailrec
 
 /**
   * Created by rtitle on 7/25/17.
@@ -37,32 +40,51 @@ object RawlsExpansion {
     * @return Uri Expansion instance
     */
   def redactedUriExpansion[L <: HList](pathMatcher: PathMatcher[L]): Expansion[Uri] = {
+
     new Expansion[Uri] {
       override def makeName(uri: Uri): String = {
-
-        @annotation.tailrec
-        def hloop(path: Uri.Path, extractions: HList): Uri.Path = {
-          extractions match {
-            case (e: String) :: tail =>
-              val newPath = Uri.Path(path.toString()
-                .replaceFirst(s"""/$e/""", "/redacted/")   // middle of path
-                .replaceFirst(s"""/$e$$""", "/redacted"))  // end of path
-              hloop(newPath, tail)
-            case _ :: tail =>
-              hloop(path, tail)
-            case _: HNil =>
-              path
-          }
-        }
-
+        // Apply the provided PathMatcher. This will give us a HList of extractions, if it matches the Path.
         val updatedPath = pathMatcher.apply(uri.path) match {
-          case Matched(_, extractions) => hloop(uri.path, extractions)
-          case _ => uri.path
+          case Matched(_, extractions) =>
+            // Fold through the URI path elements, building up a new Path that has each extraction replaced
+            // with the string "redacted".
+            // Note the extractions are returned in the same order as they occur in the path, so we only need
+            // to traverse the path once.
+            uri.path.foldLeft[(Uri.Path, HList)]((Uri.Path.Empty, extractions)) { case ((resultPath, remainingExtractions), currentSegment) =>
+              remainingExtractions match {
+                case (h: String) :: tail if h == currentSegment =>
+                  (resultPath / "redacted", tail)
+                case _  =>
+                  (resultPath / currentSegment, remainingExtractions)
+              }
+            }._1
+          case _ =>
+            // For non-matches, return the path unchanged.
+            uri.path
         }
-
+        // Finally invoke UriExpansion with our updated path
         UriExpansion.makeName(uri.copy(path = updatedPath))
       }
     }
+  }
 
+  /**
+    * Adds foldLeft to spray's Uri.Path which operates on its segments.
+    * Path is a recursive data structure (like List), but there are no map, fold, etc operations defined on it.
+    */
+  private implicit class PathOps(path: Uri.Path) {
+    @tailrec
+    final def foldLeft[B](z: B)(op: (B, String) => B): B = {
+      path match {
+        case Segment(head, tail) =>
+          val current = op(z, head)
+          tail.foldLeft(current)(op)
+        case Slash(tail) =>
+          // Ignore slashes; the fold only operates on segments
+          tail.foldLeft(z)(op)
+        case Empty =>
+          z
+      }
+    }
   }
 }
