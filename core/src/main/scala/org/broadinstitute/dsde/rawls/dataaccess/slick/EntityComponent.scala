@@ -14,6 +14,8 @@ import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
 import spray.http.StatusCodes
 
+import scala.collection.immutable.Iterable
+
 /**
  * Created by dvoet on 2/4/16.
  */
@@ -374,7 +376,7 @@ trait EntityComponent {
           val (updateAttrs, insertAttrs) = upserts.partition( attr => existingAttributes.contains(attr._1) )
 
           //function that marshals attribute maps to list of attribute records for saving
-          def attributeMapToRecs(attrMap: AttributeMap) = {
+          def attributeMapToRecs(attrMap: AttributeMap): Iterable[EntityAttributeRecord] = {
             for {
               (attributeName, attribute) <- attrMap
               attributeRec <- entityAttributeQuery.marshalAttribute(refsToIds(entityRecord.toReference), attributeName, attribute, refsToIds)
