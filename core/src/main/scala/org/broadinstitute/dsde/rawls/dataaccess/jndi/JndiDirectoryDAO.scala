@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.model._
 import slick.dbio.DBIO
 import spray.http.StatusCodes
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.util.Try
@@ -102,23 +103,23 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def save(group: RawlsGroup): ReadWriteAction[RawlsGroup] = withContext { ctx =>
-      val userChecks = group.users.map { userRef => Try { ctx.getAttributes(userDn(userRef.userSubjectId)) }}
-      val subGroupChecks = group.subGroups.map { groupRef => Try { ctx.getAttributes(groupDn(groupRef.groupName)) }}
+      @tailrec
+      def verifyUsersAndSubGroupsExist(deadline: Long): Unit = {
+        val userChecks = group.users.map { userRef => Try { ctx.getAttributes(userDn(userRef.userSubjectId)) }}
+        val subGroupChecks = group.subGroups.map { groupRef => Try { ctx.getAttributes(groupDn(groupRef.groupName)) }}
 
-      if ((userChecks ++ subGroupChecks).find(_.isFailure).isDefined) {
-        Thread.sleep(500)
-
-        val userChecks2 = group.users.map { userRef => Try { ctx.getAttributes(userDn(userRef.userSubjectId)) }}
-        val subGroupChecks2 = group.subGroups.map { groupRef => Try { ctx.getAttributes(groupDn(groupRef.groupName)) }}
-        if ((userChecks2 ++ subGroupChecks2).find(_.isFailure).isDefined) {
-          Thread.sleep(500)
-          val userChecks3 = group.users.map { userRef => Try { ctx.getAttributes(userDn(userRef.userSubjectId)) }}
-          val subGroupChecks3 = group.subGroups.map { groupRef => Try { ctx.getAttributes(groupDn(groupRef.groupName)) }}
-          if ((userChecks3 ++ subGroupChecks3).find(_.isFailure).isDefined) {
+        if ((userChecks ++ subGroupChecks).find(_.isFailure).isDefined) {
+          if (System.currentTimeMillis() > deadline) {
             throw new SQLException
+          } else {
+            Thread.sleep(100)
+            verifyUsersAndSubGroupsExist(deadline)
           }
         }
       }
+
+      verifyUsersAndSubGroupsExist(System.currentTimeMillis() + 1000)
+
       try {
         val groupContext = new BaseDirContext {
           override def getAttributes(name: String): Attributes = {
