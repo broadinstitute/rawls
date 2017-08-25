@@ -726,22 +726,42 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def deleteManagedGroup(groupRef: ManagedGroupRef) = {
-
     for {
-      groupToDelete <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsGroupQuery.listAncestorGroups(groupRef.membersGroupName).map { groups =>
-          if (groups.nonEmpty) {
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "Cannot delete group because it is in use."))
-          } else {
-            dataAccess.managedGroupQuery.deleteManagedGroup(groupRef)
-            deleteGroup(RawlsGroupRef(groupRef.membersGroupName))
+      group <- dataSource.inTransaction { dataAccess =>
+        dataAccess.managedGroupQuery.load(groupRef).flatMap { g =>
+          val groupToCheck = g.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Group does not exist,")))
+          dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.adminsGroup.groupName).map { admins =>
+            if (admins.nonEmpty) {
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "Cannot delete group because it is in use."))
+            }
+          }
+          dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.membersGroup.groupName).map { groups =>
+            if (groups.nonEmpty) {
+              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "Cannot delete group because it is in use."))
+            }
           }
         }
       }
-    }yield{
+      groupEmailsToDelete <- dataSource.inTransaction { dataAccess =>
+        withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
+          DBIO.seq(
+            dataAccess.managedGroupQuery.deleteManagedGroup(groupRef),
+            dataAccess.rawlsGroupQuery.delete(managedGroup.membersGroup),
+            dataAccess.rawlsGroupQuery.delete(managedGroup.adminsGroup)
+          ).map(_ => Seq(managedGroup.membersGroup, managedGroup.adminsGroup))
+        }
+      }
+      _ <- Future.traverse(groupEmailsToDelete) { group =>
+        gcsDAO.deleteGoogleGroup(group).recover {
+          // log any exception but ignore
+          case t: Throwable => logger.error(s"error deleting google group $group", t)
+        }
+      }
+    } yield {
       RequestComplete(StatusCodes.NoContent)
     }
   }
+
 
   /**
    * Internal function to update a group
