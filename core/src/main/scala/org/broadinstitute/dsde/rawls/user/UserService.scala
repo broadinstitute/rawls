@@ -733,6 +733,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           if (groups.nonEmpty) {
             throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "Cannot delete group because it is in use."))
           } else {
+            dataAccess.managedGroupQuery.deleteManagedGroup(groupRef)
             deleteGroup(RawlsGroupRef(groupRef.membersGroupName))
           }
         }
