@@ -726,19 +726,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def deleteManagedGroup(groupRef: ManagedGroupRef) = {
-    for {
-      group <- dataSource.inTransaction { dataAccess =>
-        dataAccess.managedGroupQuery.load(groupRef).flatMap { g =>
-          val groupToCheck = g.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Group does not exist,")))
-          dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.adminsGroup.groupName).map { admins =>
-            if (admins.nonEmpty) {
-              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "Cannot delete group because it is in use."))
-            }
-          }
-          dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.membersGroup.groupName).map { groups =>
-            if (groups.nonEmpty) {
-              throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "Cannot delete group because it is in use."))
-            }
+    for{
+      _ <- dataSource.inTransaction { dataAccess =>
+        for {
+          groupToCheck <- dataAccess.managedGroupQuery.load(groupRef).map(_.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Group does not exist,"))))
+          admins <- dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.adminsGroup.groupName)
+          members <- dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.membersGroup.groupName)
+        } yield {
+          if ((admins - groupToCheck.membersGroup.groupName).nonEmpty || members.nonEmpty) {
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"Cannot delete group because it is in use. Admins: ${admins} Members: ${members}"))
           }
         }
       }
