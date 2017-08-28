@@ -34,7 +34,7 @@ stop() {
     docker rm -v $CONTAINER || echo "mysql rm -v failed.  container already destroyed."
 }
 
-CONTAINER=mysql
+CONTAINER=mysql-$(date +%s)
 COMMAND=$1
 
 if [ ${#@} == 0 ]; then
