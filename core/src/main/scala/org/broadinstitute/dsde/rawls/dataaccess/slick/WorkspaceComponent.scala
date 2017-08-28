@@ -527,12 +527,17 @@ trait WorkspaceComponent {
       * @param groupRef The GroupSubgroup to check
       * @return Seq of UUIDs that match
       */
-    def listWorkspacesWithGroupAccess(workspaceIds: Seq[UUID], groupRef: RawlsGroupRef): ReadAction[Seq[UUID]] = {
-      val accessQuery = workspaceAccessQuery.filter(access => access.workspaceId.inSetBind(workspaceIds))
-      val subGroupQuery = accessQuery join groupSubgroupsQuery on { case (wsAccess, subGroup) =>
-        wsAccess.groupName === subGroup.parentGroupName && subGroup.childGroupName === groupRef.groupName.value
+    def listWorkspacesWithGroupAccess(workspaceIds: Seq[UUID], groupRef: RawlsGroupRef): ReadWriteAction[Seq[UUID]] = {
+      for {
+        accessRecs <- workspaceAccessQuery.filter(access => access.workspaceId.inSetBind(workspaceIds)).result
+        accessGroups <- rawlsGroupQuery.load(accessRecs.map(rec => RawlsGroupRef(RawlsGroupName(rec.groupName))))
+      } yield {
+        val uuidsByGroupRef = accessRecs.map(rec => RawlsGroupName(rec.groupName) -> rec.workspaceId).toMap
+        accessGroups.collect {
+          case accessGroup: RawlsGroup if accessGroup.subGroups.contains(groupRef) =>
+            uuidsByGroupRef(accessGroup.groupName)
+        }
       }
-      subGroupQuery.result.map { wsAndGroups => wsAndGroups.map(_._1.workspaceId) }
     }
 
     def loadAccessGroup(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) = {
