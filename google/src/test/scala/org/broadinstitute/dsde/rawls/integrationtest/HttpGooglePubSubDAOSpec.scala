@@ -11,14 +11,16 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.google.{HttpGooglePubSubDAO, GooglePubSubDAO}
-import org.broadinstitute.dsde.rawls.util.Retry
+import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, HttpGooglePubSubDAO}
+import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
+import org.broadinstitute.dsde.rawls.util.{MockitoTestUtils, Retry}
+import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
-class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfterAll with Retry with LazyLogging {
+class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfterAll with Retry with LazyLogging with Eventually with MockitoTestUtils with StatsDTestUtils {
   implicit val system = ActorSystem("HttpGooglePubSubDAOSpec")
 
   val etcConf = ConfigFactory.load()
@@ -31,7 +33,8 @@ class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfter
       JacksonFactory.getDefaultInstance, new StringReader(gcsConfig.getString("secrets"))).getDetails.get("client_email").toString,
     gcsConfig.getString("pathToPem"),
     gcsConfig.getString("appName"),
-    gcsConfig.getString("serviceProject")
+    gcsConfig.getString("serviceProject"),
+    workbenchMetricBaseName
   )
 
   val defaultTopicName = "integration-tests"

@@ -26,15 +26,16 @@ See the wiki for detailed documentation.
 Ensure that docker is up to date and initialized.
 Spin up mysql locally and validate that it is working:
 ```
-./docker/run-mysql.sh
+./docker/run-mysql.sh start
 ```
 Run tests.
 ```
-sbt clean compile test -Dmysql.host=localhost -Dmysql.port=3310
+export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310"
+sbt clean compile test
 ```
 And when you're done, spin down mysql:
 ```
-docker stop mysql && docker rm mysql
+./docker/run-mysql.sh stop
 ```
 
 ## Integration Testing with MySQL in Docker
@@ -49,7 +50,8 @@ sudo ln -s <path_to_rawls_src>/config/billing-account.pem
 ```
 Run tests using mysql similarly to unit tests.
 ```
-sbt clean compile it:test -Dmysql.host=localhost -Dmysql.port=3310
+export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310"
+sbt clean compile it:test
 ```
 
 ## Build Rawls docker image

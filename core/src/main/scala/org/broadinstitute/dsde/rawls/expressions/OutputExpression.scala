@@ -1,31 +1,39 @@
 package org.broadinstitute.dsde.rawls.expressions
 
 import org.broadinstitute.dsde.rawls.{RawlsException, StringValidationUtils}
-import org.broadinstitute.dsde.rawls.model.{AttributeName, ErrorReportSource}
+import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeName, ErrorReportSource}
 
-sealed trait OutputExpressionTarget {
-  val prefix: String
-  def remainder(s: String): String = s.stripPrefix(prefix)
-}
-case object ThisEntityTarget extends OutputExpressionTarget { override val prefix = "this." }
-case object WorkspaceTarget extends OutputExpressionTarget { override val prefix = "workspace." }
+import scala.util.{Failure, Success, Try}
 
-case class OutputExpression(target: OutputExpressionTarget, attributeName: AttributeName)
+sealed trait OutputExpressionTarget { val root: String }
+case object ThisEntityTarget extends OutputExpressionTarget { override val root = "this." }
+case object WorkspaceTarget extends OutputExpressionTarget { override val root = "workspace." }
 
-object OutputExpression extends StringValidationUtils {
+sealed trait OutputExpression
+case object UnboundOutputExpression extends OutputExpression
+case class BoundOutputExpression(target: OutputExpressionTarget, attributeName: AttributeName, attribute: Attribute) extends OutputExpression
+
+object BoundOutputExpression extends StringValidationUtils {
   override implicit val errorReportSource = ErrorReportSource("rawls")
 
-  def apply(s: String): OutputExpression = {
-    val target = if(s.startsWith(ThisEntityTarget.prefix))
-      ThisEntityTarget
-    else if(s.startsWith(WorkspaceTarget.prefix))
-      WorkspaceTarget
-    else
-      throw new RawlsException(s"Invalid output expression: $s")
+  def tryParse(target: OutputExpressionTarget, expr: String, attribute: Attribute): Try[BoundOutputExpression] = {
+    if (expr.startsWith(target.root)) Try {
+      val attributeName = AttributeName.fromDelimitedName(expr.stripPrefix(target.root))
+      validateUserDefinedString(attributeName.name)
 
-    val attributeName = AttributeName.fromDelimitedName(target.remainder(s))
-    validateUserDefinedString(attributeName.name)
+      BoundOutputExpression(target, attributeName, attribute)
+    }
+    else Failure(new RawlsException(s"Invalid output expression: $expr"))
+  }
 
-    OutputExpression(target, attributeName)
+  def build(expr: String, attribute: Attribute): Try[BoundOutputExpression] = {
+    tryParse(ThisEntityTarget, expr, attribute) recoverWith { case _ => tryParse(WorkspaceTarget, expr, attribute) }
+  }
+}
+
+object OutputExpression {
+  def build(expr: String, attribute: Attribute): Try[OutputExpression] = {
+    if (expr.isEmpty) Success(UnboundOutputExpression)
+    else BoundOutputExpression.build(expr, attribute)
   }
 }

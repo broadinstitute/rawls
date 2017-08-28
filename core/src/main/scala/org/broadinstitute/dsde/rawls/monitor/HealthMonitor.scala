@@ -124,6 +124,18 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
   }
 
   /**
+    * A monoid used for combining SubsystemStatuses.
+    * Zero is an ok status with no messages.
+    * Append uses && on the ok flag, and ++ on the messages.
+    */
+  private implicit val SubsystemStatusMonoid = new Monoid[SubsystemStatus] {
+    def combine(a: SubsystemStatus, b: SubsystemStatus): SubsystemStatus = {
+      SubsystemStatus(a.ok && b.ok, a.messages |+| b.messages)
+    }
+    def empty: SubsystemStatus = OkStatus
+  }
+
+  /**
     * Checks Agora status by calling the /status endpoint.
     */
   private def checkAgora: Future[SubsystemStatus] = {
@@ -166,7 +178,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     */
   private def checkGooglePubsub: Future[SubsystemStatus] = {
     logger.debug("Checking Google PubSub...")
-    // Note: call to `foldMap` depends on SubsystemStatusMonoid, defined implicitly below
+    // Note: call to `foldMap` depends on SubsystemStatusMonoid
     topicsToCheck.toList.foldMap { topic =>
       googlePubSubDAO.getTopic(topic).map {
         case Some(_) => OkStatus
@@ -181,7 +193,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     */
   private def checkGoogleGroups: Future[SubsystemStatus] = {
     logger.debug("Checking Google Groups...")
-    // Note: call to `foldMap` depends on SubsystemStatusMonoid, defined implicitly below
+    // Note: call to `foldMap` depends on SubsystemStatusMonoid
     groupsToCheck.toList.foldMap { group =>
       googleServicesDAO.getGoogleGroup(group).map {
         case Some(_) => OkStatus
@@ -195,7 +207,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     */
   private def checkGoogleBuckets: Future[SubsystemStatus] = {
     logger.debug("Checking Google Buckets...")
-    // Note: call to `foldMap` depends on SubsystemStatusMonoid, defined implicitly below
+    // Note: call to `foldMap` depends on SubsystemStatusMonoid
     bucketsToCheck.toList.foldMap { bucket =>
       googleServicesDAO.getBucket(bucket).map {
         case Some(_) => OkStatus
@@ -264,8 +276,6 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     val overall = processed.forall(_._2.ok)
     StatusCheckResponse(overall, processed)
   }
-
-
 
   /**
     * Adds non-blocking timeout support to futures.

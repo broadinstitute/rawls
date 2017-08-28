@@ -1,31 +1,36 @@
 package org.broadinstitute.dsde.rawls.expressions
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.AttributeName
+import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString}
 import org.scalatest.{FlatSpec, Matchers}
 
+import scala.util.{Failure, Success}
+
 class OutputExpressionSpec extends FlatSpec with Matchers {
+  val testAttr = AttributeString("this is a test")
 
   "OutputExpressions" should "parse" in {
-    OutputExpression("this.gvcf") shouldEqual OutputExpression(ThisEntityTarget, AttributeName("default", "gvcf"))
-    OutputExpression("workspace.gvcf") shouldEqual OutputExpression(WorkspaceTarget, AttributeName("default", "gvcf"))
-    OutputExpression("workspace.library:cohort") shouldEqual OutputExpression(WorkspaceTarget, AttributeName("library", "cohort"))
-    OutputExpression("this.library:cohort") shouldEqual OutputExpression(ThisEntityTarget, AttributeName("library", "cohort"))
+    OutputExpression.build("this.gvcf", testAttr) shouldEqual Success(BoundOutputExpression(ThisEntityTarget, AttributeName("default", "gvcf"), testAttr))
+    OutputExpression.build("workspace.gvcf", testAttr) shouldEqual Success(BoundOutputExpression(WorkspaceTarget, AttributeName("default", "gvcf"), testAttr))
+    OutputExpression.build("workspace.library:cohort", testAttr) shouldEqual Success(BoundOutputExpression(WorkspaceTarget, AttributeName("library", "cohort"), testAttr))
+    OutputExpression.build("this.library:cohort", testAttr) shouldEqual Success(BoundOutputExpression(ThisEntityTarget, AttributeName("library", "cohort"), testAttr))
 
     // does not enforce Attribute Namespace constraints
-    OutputExpression("this.arbitrary:whatever") shouldEqual OutputExpression(ThisEntityTarget, AttributeName("arbitrary", "whatever"))
-    OutputExpression("workspace.arbitrary:whatever") shouldEqual OutputExpression(WorkspaceTarget, AttributeName("arbitrary", "whatever"))
+    OutputExpression.build("this.arbitrary:whatever", testAttr) shouldEqual Success(BoundOutputExpression(ThisEntityTarget, AttributeName("arbitrary", "whatever"), testAttr))
+    OutputExpression.build("workspace.arbitrary:whatever", testAttr) shouldEqual Success(BoundOutputExpression(WorkspaceTarget, AttributeName("arbitrary", "whatever"), testAttr))
+
+    // empty output expressions are allowed: don't bind the outputs back to the data model
+    OutputExpression.build("", testAttr) shouldEqual Success(UnboundOutputExpression)
   }
 
   it should "reject invalid output expressions" in {
-    intercept[RawlsException] { OutputExpression("this.") }
-    intercept[RawlsException] { OutputExpression("this.bad|character") }
-    intercept[RawlsException] { OutputExpression("this.case_sample.attribute") }
-    intercept[RawlsException] { OutputExpression("workspace.") }
-    intercept[RawlsException] { OutputExpression("workspace........") }
-    intercept[RawlsException] { OutputExpression("workspace.nope.nope.nope") }
-    intercept[RawlsException] { OutputExpression("where_does_this_even_go") }
-    intercept[RawlsException] { OutputExpression("") }
-    intercept[RawlsException] { OutputExpression("*") }
+    OutputExpression.build("this.", testAttr) shouldBe a [Failure[_]]
+    OutputExpression.build("this.bad|character", testAttr) shouldBe a [Failure[_]]
+    OutputExpression.build("this.case_sample.attribute", testAttr) shouldBe a [Failure[_]]
+    OutputExpression.build("workspace.", testAttr) shouldBe a [Failure[_]]
+    OutputExpression.build("workspace........", testAttr) shouldBe a [Failure[_]]
+    OutputExpression.build("workspace.nope.nope.nope", testAttr) shouldBe a [Failure[_]]
+    OutputExpression.build("where_does_this_even_go", testAttr) shouldBe a [Failure[_]]
+    OutputExpression.build("*", testAttr) shouldBe a [Failure[_]]
   }
 }

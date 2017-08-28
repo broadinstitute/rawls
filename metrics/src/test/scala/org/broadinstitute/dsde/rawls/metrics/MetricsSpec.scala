@@ -5,7 +5,6 @@ import java.util.concurrent.TimeUnit
 import com.codahale.metrics._
 import com.codahale.metrics.health.SharedHealthCheckRegistries
 import com.readytalk.metrics.{StatsD, StatsDReporter}
-
 import org.broadinstitute.dsde.rawls.metrics.MetricsSpec.TestInstrumented
 import org.mockito.ArgumentMatchers.{eq => argEq, _}
 import org.mockito.Mockito.{inOrder => mockitoInOrder, _}
@@ -90,6 +89,31 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
     // Eventually gauge value should be 43
     verifyStatsD { order =>
       order.verify(statsD).send(argEq("test.a.gauge.current"), argEq("43"))
+    }
+  }
+
+  it should "throw an exception if a gauge already exists" in {
+    test.set(42)
+
+    assertThrows[IllegalArgumentException] {
+      test.ExpandedMetricBuilder.expand("a", "gauge").asGauge("current")(-1)
+    }
+
+    // Gauge value should be 42
+    verifyStatsD { order =>
+      order.verify(statsD).send(argEq("test.a.gauge.current"), argEq("42"))
+    }
+  }
+
+  it should "not throw an exception if a gauge already exists and calling asGaugeIfAbsent" in {
+    test.set(42)
+
+    // Should not throw exception, and should not affect the gauge
+    test.ExpandedMetricBuilder.expand("a", "gauge").asGaugeIfAbsent("current")(-1)
+
+    // Gauge value should be 42
+    verifyStatsD { order =>
+      order.verify(statsD).send(argEq("test.a.gauge.current"), argEq("42"))
     }
   }
 

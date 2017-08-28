@@ -52,6 +52,13 @@ object Expansion {
     override def makeName(statusCode: StatusCode): String = statusCode.intValue.toString
   }
 
+  /**
+    * Expand exceptions into their simple class name.
+    */
+  implicit def ThrowableExpansion[T <: Throwable] = new Expansion[T] {
+    override def makeName(a: T): String = a.getClass.getSimpleName
+  }
+
   // Implicit expansions for String and Int.
   // It's preferable to use more specific types when possible, but sometimes expanding
   // primitive types into metric names is needed.

@@ -543,7 +543,7 @@ trait WorkflowComponent {
       val submissionValues = resolutionsByInput map { case (inputName, recTuples: Seq[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])]) =>
         val attr = if (recTuples.forall { case (submissionRec, attrRecOpt) => attrRecOpt.isDefined }) {
           //all attributes are real
-          val attrRecsWithRefs = recTuples map { case (rec, Some(attrOpt)) => ((workflowId, attrOpt), None) }
+          val attrRecsWithRefs = recTuples collect { case (rec, Some(attrOpt)) => ((workflowId, attrOpt), None) }
 
           // note: the concept of namespace does not apply to Submission "attributes" because they are really input names
           val inputAttrName = AttributeName.withDefaultNS(inputName)
@@ -624,7 +624,7 @@ trait WorkflowComponent {
   private object UpdateWorkflowStatusRawSql extends RawSqlQuery {
     val driver: JdbcDriver = WorkflowComponent.this.driver
 
-    private def update(newStatus: WorkflowStatus) = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 "
+    private def update(newStatus: WorkflowStatus) = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
 
     def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus) = {
       val where = sql"where (id, record_version) in ("
@@ -644,7 +644,7 @@ trait WorkflowComponent {
   private object UpdateWorkflowStatusAndExecutionIdRawSql extends RawSqlQuery {
     val driver: JdbcDriver = WorkflowComponent.this.driver
 
-    private def update(newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = sql"update WORKFLOW set status = ${newStatus.toString}, exec_service_key = ${executionServiceId.id}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 "
+    private def update(newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = sql"update WORKFLOW set status = ${newStatus.toString}, exec_service_key = ${executionServiceId.id}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
 
     def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = {
       val where = sql"where (id, record_version) in ("

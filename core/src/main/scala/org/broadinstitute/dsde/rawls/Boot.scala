@@ -12,7 +12,7 @@ import akka.util.Timeout
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.readytalk.metrics.StatsDReporter
+import com.readytalk.metrics.{WorkbenchStatsD, StatsDReporter}
 import com.typesafe.config.{ConfigFactory, ConfigObject, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import slick.backend.DatabaseConfig
@@ -121,14 +121,16 @@ object Boot extends App with LazyLogging {
       gcsConfig.getString("billingPemEmail"),
       gcsConfig.getString("pathToBillingPem"),
       gcsConfig.getString("billingEmail"),
-      gcsConfig.getInt("bucketLogsMaxAge")
+      gcsConfig.getInt("bucketLogsMaxAge"),
+      workbenchMetricBaseName = metricsPrefix
     )
 
     val pubSubDAO = new HttpGooglePubSubDAO(
       clientSecrets.getDetails.get("client_email").toString,
       gcsConfig.getString("pathToPem"),
       gcsConfig.getString("appName"),
-      gcsConfig.getString("serviceProject")
+      gcsConfig.getString("serviceProject"),
+      workbenchMetricBaseName = metricsPrefix
     )
 
     val ldapConfig = conf.getConfig("userLdap")
@@ -300,7 +302,7 @@ object Boot extends App with LazyLogging {
       .prefixedWith(apiKey.orNull)
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
-      .build(host, port)
+      .build(WorkbenchStatsD(host, port))
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 

@@ -157,7 +157,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
           }
         }
     } { capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${ws.namespace}.${ws.name}.library"
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted.library"
       val expected = expectedHttpRequestMetrics("patch", wsPathForRequestMetrics, expectedStatusCode.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }

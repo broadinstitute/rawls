@@ -10,7 +10,7 @@ import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
-import org.broadinstitute.dsde.rawls.expressions.{OutputExpression, ThisEntityTarget, WorkspaceTarget}
+import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression, ThisEntityTarget, WorkspaceTarget}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -51,6 +51,9 @@ object SubmissionMonitorActor {
    */
   case class ExecutionServiceStatusResponse(statusResponse: Seq[Try[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]]]) extends SubmissionMonitorMessage
   case class StatusCheckComplete(terminateActor: Boolean) extends SubmissionMonitorMessage
+
+  case object SubmissionDeletedException extends Exception
+  case class MonitoredSubmissionException(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable) extends Exception(cause)
 }
 
 /**
@@ -72,10 +75,9 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              override val workbenchMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
   import context._
 
-
   override def preStart(): Unit = {
     super.preStart()
-    scheduleNextMonitorPass
+    scheduleInitialMonitorPass
   }
 
   override def receive = {
@@ -97,7 +99,19 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       logger.debug(s"check current workflow status counts for submission $submissionId")
       checkCurrentWorkflowStatusCounts(true) pipeTo parent
 
-    case Status.Failure(t) => throw t // an error happened in some future, let the supervisor handle it
+    case Status.Failure(SubmissionDeletedException) =>
+      logger.debug(s"submission $submissionId has been deleted, terminating disgracefully")
+      stop(self)
+
+    case Status.Failure(t) =>
+      // an error happened in some future, let the supervisor handle it
+      // wrap in MonitoredSubmissionException so the supervisor can log/instrument the submission details
+      throw MonitoredSubmissionException(workspaceName, submissionId, t)
+  }
+
+  private def scheduleInitialMonitorPass: Cancellable = {
+    //Wait anything _up to_ the poll interval for a much wider distribution of submission monitor start times when Rawls starts up
+    system.scheduler.scheduleOnce(addJitter(0 seconds, submissionPollInterval), self, StartMonitorPass)
   }
 
   private def scheduleNextMonitorPass: Cancellable = {
@@ -174,7 +188,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     submissionFuture flatMap {
       case Some(submission) =>
-        val abortFuture = if(submission.status == SubmissionStatuses.Aborting) {
+        val abortFuture = if (submission.status == SubmissionStatuses.Aborting) {
+          //abort workflows if necessary
           for {
             _ <- abortQueuedWorkflows(submissionId)
             _ <- abortActiveWorkflows(submissionId)
@@ -183,7 +198,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           Future.successful(())
         }
         abortFuture flatMap( _ => queryForWorkflowStatuses() )
-      case None => throw new RawlsException(s"Submission ${submissionId} could not be found")
+      case None =>
+        //submission has been deleted, most likely because the owning workspace has been deleted
+        // treat this as a failure and let it get caught when we pipe it to ourselves
+        throw SubmissionDeletedException
     }
   }
 
@@ -346,33 +364,30 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       logger.debug(s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs}")
       logger.debug(s"output expressions for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputExpressionMap}")
 
-      val attributes = outputExpressionMap.map { case (outputName, outputExprStr) =>
-        Try {
-          // parse and validate the output expression strings
-          val outputExpr = OutputExpression(outputExprStr)
-          outputs.get(outputName) match {
-            case None => throw new RawlsException(s"output named ${outputName} does not exist")
-            case Some(Right(uot: UnsupportedOutputType)) => throw new RawlsException(s"output named ${outputName} is not a supported type, received json u${uot.json.compactPrint}")
-            case Some(Left(output)) => outputExpr -> output
-          }
+      val parsedExpressions = outputExpressionMap.map { case (outputName, outputExprStr) =>
+        outputs.get(outputName) match {
+          case None => Failure(new RawlsException(s"output named ${outputName} does not exist"))
+          case Some(Right(uot: UnsupportedOutputType)) => Failure(new RawlsException(s"output named ${outputName} is not a supported type, received json u${uot.json.compactPrint}"))
+          case Some(Left(output)) => OutputExpression.build(outputExprStr, output)
         }
       }
 
-      if (attributes.forall(_.isSuccess)) {
-        val updates = updateEntityAndWorkspace(entitiesById(workflowRecord.workflowEntityId), workspace, attributes.map(_.get).toMap)
+      if (parsedExpressions.forall(_.isSuccess)) {
+        val boundExpressions = parsedExpressions.collect { case Success(boe @ BoundOutputExpression(target, name, attr)) => boe }
+        val updates = updateEntityAndWorkspace(entitiesById(workflowRecord.workflowEntityId), workspace, boundExpressions)
         val (optEnt, optWs) = updates
         logger.debug(s"updated entityattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optEnt.map(_.attributes)}")
         logger.debug(s"updated wsattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optWs.map(_.attributes)}")
         Left(updates)
       } else {
-        Right((workflowRecord, attributes.collect { case Failure(t) => AttributeString(t.getMessage) }.toSeq))
+        Right((workflowRecord, parsedExpressions.collect { case Failure(t) => AttributeString(t.getMessage) }.toSeq))
       }
     }
   }
 
-  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Map[OutputExpression, Attribute]): (Option[Entity], Option[Workspace]) = {
-    val entityAttributes = workflowOutputs.collect({ case (OutputExpression(ThisEntityTarget, attrName), attr) => (attrName, attr) })
-    val workspaceAttributes = workflowOutputs.collect({ case (OutputExpression(WorkspaceTarget, attrName), attr) => (attrName, attr) })
+  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Iterable[BoundOutputExpression]): (Option[Entity], Option[Workspace]) = {
+    val entityAttributes = workflowOutputs.collect({ case BoundOutputExpression(ThisEntityTarget, attrName, attr) => (attrName, attr) })
+    val workspaceAttributes = workflowOutputs.collect({ case BoundOutputExpression(WorkspaceTarget, attrName, attr) => (attrName, attr) })
 
     val updatedEntity = if (entityAttributes.isEmpty) None else Option(entity.copy(attributes = entity.attributes ++ entityAttributes))
     val updatedWorkspace = if (workspaceAttributes.isEmpty) None else Option(workspace.copy(attributes = workspace.attributes ++ workspaceAttributes))

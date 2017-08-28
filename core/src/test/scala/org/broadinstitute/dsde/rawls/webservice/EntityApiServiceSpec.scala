@@ -73,10 +73,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
     } {capturedMetrics =>
-      val WorkspaceName(wsNamespace, wsName) = testData.workspace.toWorkspaceName
-      val AttributeEntityReference(eType, eName) = testData.sample2.toReference
-      val postPath = s"workspaces.$wsNamespace.$wsName.entities.$eType.$eName.rename"
-      val getPath = s"workspaces.$wsNamespace.$wsName"
+      val AttributeEntityReference(eType, _) = testData.sample2.toReference
+      val postPath = s"workspaces.redacted.redacted.entities.$eType.redacted.rename"
+      val getPath = s"workspaces.redacted.redacted"
 
       val expected = expectedHttpRequestMetrics("post", postPath, StatusCodes.NoContent.intValue, 1) ++
         expectedHttpRequestMetrics("get", getPath, StatusCodes.OK.intValue, 1)
@@ -971,7 +970,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
         }
     } {capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}.entities.${testData.sample2.entityType}.${testData.sample2.name}"
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted.entities.${testData.sample2.entityType}.redacted"
       val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
@@ -1211,7 +1210,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
         }
     } {capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}.entities.${testData.sample2.entityType}.${testData.sample2.name}"
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted.entities.${testData.sample2.entityType}.redacted"
       val expected = expectedHttpRequestMetrics("patch", s"$wsPathForRequestMetrics", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
@@ -1351,7 +1350,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
         }
     } {capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}.entities.${testData.sample2.entityType}.${testData.sample2.name}"
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted.entities.${testData.sample2.entityType}.redacted"
       val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.rename", StatusCodes.NoContent.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
@@ -1988,7 +1987,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
         }
     } {capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
       val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics.entityQuery.bar", StatusCodes.OK.intValue, 1) ++
                      expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.entities.delete", StatusCodes.NoContent.intValue, 1) ++
                      expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.entities", StatusCodes.Created.intValue, 1)
@@ -2068,7 +2067,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
     } {capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
       val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics.entityQuery.${paginationTestData.entityType}", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }

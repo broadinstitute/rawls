@@ -519,6 +519,22 @@ trait WorkspaceComponent {
 
     }
 
+    /**
+      * List all workspaces that have a sub-group child name. Useful for determining if workspaces
+      * are in the "All_Users" group.
+      *
+      * @param workspaceIds Seq of UUIDs to check
+      * @param groupRef The GroupSubgroup to check
+      * @return Seq of UUIDs that match
+      */
+    def listWorkspacesWithGroupAccess(workspaceIds: Seq[UUID], groupRef: RawlsGroupRef): ReadAction[Seq[UUID]] = {
+      val accessQuery = workspaceAccessQuery.filter(access => access.workspaceId.inSetBind(workspaceIds))
+      val subGroupQuery = accessQuery join groupSubgroupsQuery on { case (wsAccess, subGroup) =>
+        wsAccess.groupName === subGroup.parentGroupName && subGroup.childGroupName === groupRef.groupName.value
+      }
+      subGroupQuery.result.map { wsAndGroups => wsAndGroups.map(_._1.workspaceId) }
+    }
+
     def loadAccessGroup(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) = {
       val query = for {
         workspace <- workspaceQuery if workspace.namespace === workspaceName.namespace && workspace.name === workspaceName.name

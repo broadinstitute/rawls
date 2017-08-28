@@ -178,8 +178,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     } { capturedMetrics =>
       capturedMetrics should contain (expectedSubmissionStatusMetric(wsName, SubmissionStatuses.Aborting, 1))
 
-      val wsPathForRequestMetrics = s"workspaces.${wsName.namespace}.${wsName.name}"
-      val expected = expectedHttpRequestMetrics("delete", s"$wsPathForRequestMetrics.submissions.$submissionId", StatusCodes.NoContent.intValue, 1)
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
+      val expected = expectedHttpRequestMetrics("delete", s"$wsPathForRequestMetrics.submissions.redacted", StatusCodes.NoContent.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
 
@@ -430,7 +430,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
           }
         }
     } { capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.${testData.wsName.namespace}.${testData.wsName.name}"
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
       val expected = expectedHttpRequestMetrics("get", s"$wsPathForRequestMetrics.submissionsCount", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
@@ -591,15 +591,24 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))
 
-    Get(s"${testData.wsName.path}/submissions/${testSubmission.submissionId}/workflows/${testSubmission.workflows.head.workflowId.get}/outputs") ~>
-      sealRoute(services.submissionRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK, response.entity.asString) {status}
-        val expectedOutputs = WorkflowOutputs(workflowId, Map("aggregate_data_workflow.aggregate_data" -> TaskOutput(None, Option(Map("aggregate_data_workflow.aggregate_data.output_array" -> Left(AttributeValueRawJson(JsArray(Vector(
-          JsArray(Vector(JsString("foo"), JsString("bar"))),
-          JsArray(Vector(JsString("baz"), JsString("qux"))))))))))))
-        assertResult(expectedOutputs) { responseAs[WorkflowOutputs] }
-      }
+    withStatsD {
+      Get(s"${testData.wsName.path}/submissions/${testSubmission.submissionId}/workflows/${testSubmission.workflows.head.workflowId.get}/outputs") ~>
+        services.sealedInstrumentedRoutes
+        check {
+          assertResult(StatusCodes.OK, response.entity.asString) {
+            status
+          }
+          val expectedOutputs = WorkflowOutputs(workflowId, Map("aggregate_data_workflow.aggregate_data" -> TaskOutput(None, Option(Map("aggregate_data_workflow.aggregate_data.output_array" -> Left(AttributeValueRawJson(JsArray(Vector(
+            JsArray(Vector(JsString("foo"), JsString("bar"))),
+            JsArray(Vector(JsString("baz"), JsString("qux"))))))))))))
+          assertResult(expectedOutputs) {
+            responseAs[WorkflowOutputs]
+          }
+        }
+    } { capturedMetrics =>
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get",
+          s"workspaces.redacted.redacted.submissions.redacted.workflows.redacted.outputs", 200, 1))
+    }
   }
 
   it should "return the cromwell version" in withTestDataApiServices { services =>

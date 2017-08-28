@@ -2,13 +2,14 @@ package org.broadinstitute.dsde.rawls.google
 
 import akka.actor.ActorSystem
 import com.google.api.client.auth.oauth2.Credential
-import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
+import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.pubsub.model._
 import com.google.api.services.pubsub.{Pubsub, PubsubScopes}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
+import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import spray.http.StatusCodes
 
@@ -22,7 +23,8 @@ import scala.concurrent._
 class HttpGooglePubSubDAO(clientEmail: String,
                           pemFile: String,
                           appName: String,
-                          serviceProject: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends FutureSupport with GoogleUtilities with GooglePubSubDAO {
+                          serviceProject: String,
+                          override val workbenchMetricBaseName: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends FutureSupport with GoogleUtilities with GooglePubSubDAO {
 
   val pubSubScopes = Seq(PubsubScopes.PUBSUB)
 
@@ -30,6 +32,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
   val jsonFactory = JacksonFactory.getDefaultInstance
 
   private val characterEncoding = "UTF-8"
+  implicit val service = GoogleInstrumentedService.PubSub
 
   override def createTopic(topicName: String) = {
     retryWithRecoverWhen500orGoogleError(() => {

@@ -1,8 +1,11 @@
 package org.broadinstitute.dsde.rawls.metrics
 
+import com.codahale.metrics.{Gauge => DropwizardGauge}
 import nl.grons.metrics.scala._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
-import spray.http.{HttpRequest, HttpResponse}
+
+import scala.collection.JavaConverters._
+import spray.http.{HttpRequest, HttpResponse, Uri}
 
 /**
   * Mixin trait for instrumentation.
@@ -45,10 +48,28 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
     def asGauge[T](name: String)(fn: => T): Gauge[T] =
       metrics.gauge(makeName(name))(fn)
 
+    def asGaugeIfAbsent[T](name: String)(fn: => T): Gauge[T] = {
+      // Get the fully qualified metric name for inspecting the registry.
+      val gaugeName = metricBaseName.append(makeName(name)).name
+      metricRegistry.getGauges().asScala.get(gaugeName) match {
+        case None =>
+          // If the gauge does not exist in the registry, create it
+          asGauge[T](name)(fn)
+        case Some(gauge) =>
+          // If the gauge exists in the registry, return it.
+          // Need to wrap the returned Java DropwizardGauge in a Scala Gauge.
+          new Gauge[T](gauge.asInstanceOf[DropwizardGauge[T]])
+      }
+    }
+
     def asTimer(name: String): Timer =
       metrics.timer(makeName(name))
 
-    private def makeName(name: String): String = s"$m.$name"
+    def asHistogram(name: String): Histogram =
+      metrics.histogram(makeName(name))
+
+    private def makeName(name: String): String =
+      if (m.nonEmpty) s"$m.$name" else name
 
     override def toString: String = m
   }
@@ -73,7 +94,7 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
   protected def httpRequestMetricBuilder(builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => ExpandedMetricBuilder = {
     (httpRequest, httpResponse) => builder
       .expand(HttpRequestMethodMetricKey, httpRequest.method)
-      .expand(HttpRequestUriMetricKey, httpRequest.uri)
+      .expand(HttpRequestUriMetricKey, httpRequest.uri)(UriExpansion)
       .expand(HttpResponseStatusCodeMetricKey, httpResponse.status)
   }
 
@@ -82,4 +103,11 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
 
   protected implicit def httpRequestTimer(implicit builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => Timer =
     httpRequestMetricBuilder(builder)(_, _).asTimer("latency")
+
+  protected implicit def httpRetryHistogram(implicit builder: ExpandedMetricBuilder): Histogram =
+    builder.asHistogram("retry")
+
+  // Let subclasses override the UriExpansion if desired
+
+  protected val UriExpansion: Expansion[Uri] = implicitly
 }
