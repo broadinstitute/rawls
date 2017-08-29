@@ -127,37 +127,37 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assertResult(0)(activeAttributeCount4)
   }
 
-  it should "fail to saveEntityDeltas for a nonexistent entity" in withConstantTestDatabase {
+  it should "fail to saveEntityPatch for a nonexistent entity" in withConstantTestDatabase {
     withWorkspaceContext(constantData.workspace) { context =>
       val caught = intercept[RawlsException] {
         runAndWait(
-          entityQuery.saveEntityDeltas(context, AttributeEntityReference("Sample", "nonexistent"),
+          entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "nonexistent"),
             Map(AttributeName.withDefaultNS("newAttribute") -> AttributeNumber(2)),
             Seq(AttributeName.withDefaultNS("type"))
           ))
       }
       //make sure we get the _right_ RawlsException:
-      //"saveEntityDeltas looked up $entityRef expecting 1 record, got 0 instead"
+      //"saveEntityPatch looked up $entityRef expecting 1 record, got 0 instead"
       caught.getMessage should include("expecting")
     }
   }
 
-  it should "fail to saveEntityDeltas if you try to delete and upsert the same attribute" in withConstantTestDatabase {
+  it should "fail to saveEntityPatch if you try to delete and upsert the same attribute" in withConstantTestDatabase {
     withWorkspaceContext(constantData.workspace) { context =>
       val caught = intercept[RawlsException] {
         runAndWait(
-          entityQuery.saveEntityDeltas(context, AttributeEntityReference("Sample", "sample1"),
+          entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "sample1"),
             Map(AttributeName.withDefaultNS("type") -> AttributeNumber(2)),
             Seq(AttributeName.withDefaultNS("type"))
           ))
       }
       //make sure we get the _right_ RawlsException:
-      //"Can't saveEntityDeltas on $entityRef because upserts and deletes share attributes <blah>"
+      //"Can't saveEntityPatch on $entityRef because upserts and deletes share attributes <blah>"
       caught.getMessage should include("share")
     }
   }
 
-  it should "saveEntityDeltas" in withDefaultTestDatabase {
+  it should "saveEntityPatch" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       val inserts = Map(
         AttributeName.withDefaultNS("totallyNew") -> AttributeNumber(2),
@@ -173,7 +173,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val expected = testData.sample1.attributes ++ inserts ++ updates -- deletes
 
       runAndWait {
-        entityQuery.saveEntityDeltas(context, AttributeEntityReference("Sample", "sample1"), inserts ++ updates, deletes)
+        entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "sample1"), inserts ++ updates, deletes)
       }
 
       assertSameElements(

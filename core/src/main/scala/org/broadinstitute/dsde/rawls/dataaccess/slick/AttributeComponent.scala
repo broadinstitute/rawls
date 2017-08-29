@@ -326,7 +326,7 @@ trait AttributeComponent {
     def toPrimaryKeyMap(recs: Traversable[RECORD]) =
       recs.map { rec => (AttributeRecordPrimaryKey(rec.ownerId, rec.namespace, rec.name, rec.listIndex), rec) }.toMap
 
-    def deltaAttrsAction(inserts: Traversable[RECORD], updates: Traversable[RECORD], deleteIds: Traversable[Long], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
+    def patchAttributesAction(inserts: Traversable[RECORD], updates: Traversable[RECORD], deleteIds: Traversable[Long], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
       deleteAttributeRecordsById(deleteIds.toSeq) andThen
         batchInsertAttributes(inserts.toSeq) andThen
         AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))

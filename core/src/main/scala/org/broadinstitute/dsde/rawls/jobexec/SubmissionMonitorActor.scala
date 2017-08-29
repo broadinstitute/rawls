@@ -350,7 +350,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
     else {
       DBIO.sequence(entityUpdates map { entityUpd =>
-        dataAccess.entityQuery.saveEntityDeltas(SlickWorkspaceContext(workspace), entityUpd.entityRef, entityUpd.upserts, Seq())
+        dataAccess.entityQuery.saveEntityPatch(SlickWorkspaceContext(workspace), entityUpd.entityRef, entityUpd.upserts, Seq())
       })
     }
   }

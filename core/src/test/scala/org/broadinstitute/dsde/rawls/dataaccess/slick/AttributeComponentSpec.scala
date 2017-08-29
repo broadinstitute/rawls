@@ -446,7 +446,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertExpectedRecords(toSave:_*)
   }
 
-  it should "apply attribute deltas" in withEmptyTestDatabase {
+  it should "apply attribute patch" in withEmptyTestDatabase {
     def insertAndUpdateID(rec: WorkspaceAttributeRecord): WorkspaceAttributeRecord = {
       rec.copy(id = runAndWait((workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += rec))
     }
@@ -464,11 +464,11 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val insert = WorkspaceAttributeRecord(3, workspaceId, AttributeName.defaultNamespace, "test3", None, None, Option(false), None, None, None, None, deleted = false, None)
 
     //test insert and update
-    runAndWait(workspaceAttributeQuery.deltaAttrsAction(Seq(insert), Seq(update), Seq(), workspaceAttributeScratchQuery.insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(insert), Seq(update), Seq(), workspaceAttributeScratchQuery.insertScratchAttributes))
     assertExpectedRecords(Seq(existing.head, update, insert):_*)
 
     //test delete
-    runAndWait(workspaceAttributeQuery.deltaAttrsAction(Seq(), Seq(), existing.map(_.id), workspaceAttributeScratchQuery.insertScratchAttributes))
+    runAndWait(workspaceAttributeQuery.patchAttributesAction(Seq(), Seq(), existing.map(_.id), workspaceAttributeScratchQuery.insertScratchAttributes))
     assertExpectedRecords(Seq(insert):_*)
   }
 
