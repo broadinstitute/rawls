@@ -24,7 +24,7 @@ trait DirectorySubjectNameSupport {
   protected def userDn(RawlsUserSubjectId: RawlsUserSubjectId) = s"uid=${RawlsUserSubjectId.value},$peopleOu"
 
   protected def dnToSubject(dn: String): Either[RawlsGroupName,RawlsUserSubjectId] = {
-    dn.split(",").toList match {
+    dn.split(",").map(_.toLowerCase).toList match {
       case name :: "ou=groups" :: tail => Left(RawlsGroupName(name.stripPrefix("cn=")))
       case name :: "ou=people" :: tail => Right(RawlsUserSubjectId(name.stripPrefix("uid=")))
       case _ => throw new RawlsException(s"unexpected dn [$dn]")
