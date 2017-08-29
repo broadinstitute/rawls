@@ -197,11 +197,11 @@ trait WorkspaceComponent {
           (workspaceQuery += marshalNewWorkspace(workspace)) andThen
             insertAuthDomainRecords(workspace) andThen
             insertOrUpdateAccessRecords(workspace) andThen
-            upsertAttributes(workspace) andThen
+            rewriteAttributes(workspace) andThen
             updateLastModified(UUID.fromString(workspace.workspaceId))
         case Some(workspaceRecord) =>
           insertOrUpdateAccessRecords(workspace) andThen
-            upsertAttributes(workspace) andThen
+            rewriteAttributes(workspace) andThen
             optimisticLockUpdate(workspaceRecord) andThen
             updateLastModified(UUID.fromString(workspace.workspaceId))
       } map { _ => workspace }
@@ -214,23 +214,19 @@ trait WorkspaceComponent {
       DBIO.sequence((accessRecords ++ authDomainAclRecords).map { workspaceAccessQuery insertOrUpdate }).map(_.sum)
     }
 
-    private def upsertAttributes(workspace: Workspace) = {
+    private def rewriteAttributes(workspace: Workspace) = {
       val workspaceId = UUID.fromString(workspace.workspaceId)
 
       val entityRefs = workspace.attributes.collect { case (_, ref: AttributeEntityReference) => ref }
       val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list }.flatten
       val entitiesToLookup = (entityRefs ++ entityRefListMembers).toSet
 
-      def insertScratchAttributes(attributeRecs: Seq[WorkspaceAttributeRecord])(transactionId: String): WriteAction[Int] = {
-        workspaceAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
-      }
-
       entityQuery.getEntityRecords(workspaceId, entitiesToLookup) flatMap { entityRecords =>
         val entityIdsByRef = entityRecords.map(e => e.toReference -> e.id).toMap
         val attributesToSave = workspace.attributes flatMap { attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef) }
 
         workspaceAttributeQuery.findByOwnerQuery(Seq(workspaceId)).result flatMap { existingAttributes =>
-          workspaceAttributeQuery.upsertAction(attributesToSave, existingAttributes, insertScratchAttributes)
+          workspaceAttributeQuery.rewriteAttrsAction(attributesToSave, existingAttributes, workspaceAttributeScratchQuery.insertScratchAttributes)
         }
       }
     }
@@ -626,7 +622,7 @@ trait WorkspaceComponent {
     }
 
     private def deleteWorkspaceAttributes(attributeRecords: Seq[WorkspaceAttributeRecord]) = {
-      workspaceAttributeQuery.deleteAttributeRecords(attributeRecords)
+      workspaceAttributeQuery.deleteAttributeRecordsById(attributeRecords.map(_.id))
     }
 
     private def findByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType = {

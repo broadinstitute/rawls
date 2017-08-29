@@ -183,6 +183,10 @@ trait AttributeComponent {
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
   protected abstract class AttributeScratchQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], TEMP_RECORD <: AttributeScratchRecord[OWNER_ID], T <: AttributeScratchTable[OWNER_ID, TEMP_RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[String], Option[Long], Option[Int], Option[Int], Boolean, Option[Timestamp], String) => TEMP_RECORD) extends TableQuery[T](cons) {
+    def insertScratchAttributes(attributeRecs: Seq[RECORD])(transactionId: String): WriteAction[Int] = {
+      batchInsertAttributes(attributeRecs, transactionId)
+    }
+
     def batchInsertAttributes(attributes: Seq[RECORD], transactionId: String) = {
       insertInBatches(this, attributes.map { case rec =>
         createRecord(rec.id, rec.ownerId, rec.namespace, rec.name, rec.valueString, rec.valueNumber, rec.valueBoolean, rec.valueJson, rec.valueEntityRef, rec.listIndex, rec.listLength, rec.deleted, rec.deletedDate, transactionId)
@@ -300,8 +304,8 @@ trait AttributeComponent {
       res.sortBy(r => (r._2.desc, r._1)).map(x => (x._1.get, x._2))
     }
 
-    def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {
-      filter(_.id inSetBind attributeRecords.map(_.id)).delete
+    def deleteAttributeRecordsById(attributeRecordIds: Seq[Long]): DBIOAction[Int, NoStream, Write] = {
+      filter(_.id inSetBind attributeRecordIds).delete
     }
 
     // for DB performance reasons, it's necessary to split "save attributes" into 3 steps:
@@ -322,7 +326,13 @@ trait AttributeComponent {
     def toPrimaryKeyMap(recs: Traversable[RECORD]) =
       recs.map { rec => (AttributeRecordPrimaryKey(rec.ownerId, rec.namespace, rec.name, rec.listIndex), rec) }.toMap
 
-    def upsertAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
+    def patchAttributesAction(inserts: Traversable[RECORD], updates: Traversable[RECORD], deleteIds: Traversable[Long], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
+      deleteAttributeRecordsById(deleteIds.toSeq) andThen
+        batchInsertAttributes(inserts.toSeq) andThen
+        AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(updates.toSeq))
+    }
+
+    def rewriteAttrsAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
       val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
       val existingAttrMap = toPrimaryKeyMap(existingAttributes)
 
@@ -331,7 +341,7 @@ trait AttributeComponent {
       // delete attributes which currently exist but are not in the attributes to save
       val attributesToDelete = existingAttrMap.filterKeys(! attrsToUpdateMap.keySet.contains(_)).values
 
-      deleteAttributeRecords(attributesToDelete.toSeq) andThen
+      deleteAttributeRecordsById(attributesToDelete.map(_.id).toSeq) andThen
         batchInsertAttributes(attrsToInsertMap.values.toSeq) andThen
         AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(attrsToUpdateMap.values.toSeq))
     }

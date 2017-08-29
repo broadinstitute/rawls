@@ -127,6 +127,62 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assertResult(0)(activeAttributeCount4)
   }
 
+  it should "fail to saveEntityPatch for a nonexistent entity" in withConstantTestDatabase {
+    withWorkspaceContext(constantData.workspace) { context =>
+      val caught = intercept[RawlsException] {
+        runAndWait(
+          entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "nonexistent"),
+            Map(AttributeName.withDefaultNS("newAttribute") -> AttributeNumber(2)),
+            Seq(AttributeName.withDefaultNS("type"))
+          ))
+      }
+      //make sure we get the _right_ RawlsException:
+      //"saveEntityPatch looked up $entityRef expecting 1 record, got 0 instead"
+      caught.getMessage should include("expecting")
+    }
+  }
+
+  it should "fail to saveEntityPatch if you try to delete and upsert the same attribute" in withConstantTestDatabase {
+    withWorkspaceContext(constantData.workspace) { context =>
+      val caught = intercept[RawlsException] {
+        runAndWait(
+          entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "sample1"),
+            Map(AttributeName.withDefaultNS("type") -> AttributeNumber(2)),
+            Seq(AttributeName.withDefaultNS("type"))
+          ))
+      }
+      //make sure we get the _right_ RawlsException:
+      //"Can't saveEntityPatch on $entityRef because upserts and deletes share attributes <blah>"
+      caught.getMessage should include("share")
+    }
+  }
+
+  it should "saveEntityPatch" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val inserts = Map(
+        AttributeName.withDefaultNS("totallyNew") -> AttributeNumber(2),
+        AttributeName.withDefaultNS("quot2") -> testData.aliquot2.toReference
+      )
+      val updates = Map(
+        AttributeName.withDefaultNS("type") -> AttributeString("tumor"),
+        AttributeName.withDefaultNS("thingies") -> AttributeValueList(Seq(AttributeString("c"), AttributeString("d"))),
+        AttributeName.withDefaultNS("quot1") -> testData.aliquot2.toReference //jerk move
+      )
+      val deletes = Seq(AttributeName.withDefaultNS("whatsit"), AttributeName.withDefaultNS("nonexistent"))
+
+      val expected = testData.sample1.attributes ++ inserts ++ updates -- deletes
+
+      runAndWait {
+        entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "sample1"), inserts ++ updates, deletes)
+      }
+
+      assertSameElements(
+        expected,
+        runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
+      )
+    }
+  }
+
   it should "list all entities of all entity types" in withConstantTestDatabase {
     withWorkspaceContext(constantData.workspace) { context =>
       assertSameElements(constantData.allEntities, runAndWait(entityQuery.listActiveEntities(context)))
