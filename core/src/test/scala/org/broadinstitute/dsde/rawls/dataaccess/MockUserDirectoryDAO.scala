@@ -16,11 +16,7 @@ class MockUserDirectoryDAO extends UserDirectoryDAO{
   val users = mutable.Map[RawlsUserSubjectId, Boolean]()
 
   override def createUser(user: RawlsUserSubjectId, email: RawlsUserEmail): Future[Unit] = {
-    if( users.contains(user) ) {
-      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "user already exists")))
-    } else {
-      Future.successful(users += (user -> false))
-    }
+    Future.successful(users += (user -> false))
   }
 
   override def removeUser(user: RawlsUserSubjectId): Future[Unit] = Future.successful(users -= user)

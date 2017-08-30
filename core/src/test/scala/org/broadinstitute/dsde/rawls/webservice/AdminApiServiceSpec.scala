@@ -741,7 +741,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "add and remove users from ldap" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
-      Put(s"/admin/user/ldap/12345") ~>
+      Put(s"/admin/user/ldap/12345/foo@bar.com") ~>
         sealRoute(services.adminRoutes) ~>
         check {
           assertResult(StatusCodes.Created) {
@@ -753,15 +753,15 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         services.directoryDAO.exists(RawlsUserSubjectId("12345"))
       }
 
-      Put(s"/admin/user/ldap/12345") ~>
-      //should conflict a second time
+      Put(s"/admin/user/ldap/12345/foo@bar.com") ~>
+      //should not conflict a second time
         sealRoute(services.adminRoutes) ~>
         check {
-          assertResult(StatusCodes.Conflict) {
+          assertResult(StatusCodes.Created) {
             status
           }
         }
-      Delete(s"/admin/user/ldap/12345") ~>
+      Delete(s"/admin/user/ldap/12345/foo@bar.com") ~>
         sealRoute(services.adminRoutes) ~>
         check {
           assertResult(StatusCodes.NoContent) {
