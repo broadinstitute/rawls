@@ -29,8 +29,8 @@ trait DirectorySubjectNameSupport {
     splitDn.lift(1) match {
       case Some(ou) => {
         if(ou.equalsIgnoreCase("ou=groups")) Left(RawlsGroupName(splitDn(0).stripPrefix("cn=")))
-        if(ou.equalsIgnoreCase("ou=people")) Right(RawlsUserSubjectId(splitDn(0).stripPrefix("uid=")))
-        else throw new RawlsException(s"unexpected dn [$dn]")
+        else if(ou.equalsIgnoreCase("ou=people")) Right(RawlsUserSubjectId(splitDn(0).stripPrefix("uid=")))
+        else throw new RawlsException(s"unexpected dn2 [$dn]")
       }
       case None => throw new RawlsException(s"unexpected dn [$dn]")
     }
