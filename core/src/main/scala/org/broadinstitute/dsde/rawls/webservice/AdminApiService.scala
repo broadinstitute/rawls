@@ -176,11 +176,11 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           UserService.AdminDeleteUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
       }
     } ~
-    path("admin" / "user" / "ldap" / Segment) { userSubjectId =>
+    path("admin" / "user" / "ldap" / Segment / Segment) { (userSubjectId, email) =>
       put {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminAddToLDAP(RawlsUserSubjectId(userSubjectId)))
+          UserService.AdminAddToLDAP(RawlsUserSubjectId(userSubjectId), RawlsUserEmail(email)))
       } ~
       delete {
         requestContext => perRequest(requestContext,
