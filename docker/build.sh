@@ -23,11 +23,17 @@ function make_jar()
     GIT_MODEL_HASH=$(git log -n 1 --pretty=format:%h model)
 
     # make jar.  cache sbt dependencies.
-    docker run --rm --link mysql:mysql --link opendj:opendj -e GIT_MODEL_HASH=$GIT_MODEL_HASH -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working
+    JAR_CMD=`docker run --rm --link mysql:mysql --link opendj:opendj -e GIT_MODEL_HASH=$GIT_MODEL_HASH -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working`
+    EXIT_CODE=$?
 
     # stop mysql and opendj
     bash ./docker/run-mysql.sh stop
     bash ./docker/run-opendj.sh stop
+
+    # if tests were a fail, fail script
+    if [ $EXIT_CODE != 0 ]; then
+        exit $EXIT_CODE
+    fi
 }
 
 function artifactory_push()
