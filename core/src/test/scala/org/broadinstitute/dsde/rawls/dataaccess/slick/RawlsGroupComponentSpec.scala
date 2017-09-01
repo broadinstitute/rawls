@@ -207,6 +207,18 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     assertResult(Some(group3)) {
       runAndWait(rawlsGroupQuery.loadGroupIfMember(groupRef3, userRef2))
     }
+
+    runAndWait(rawlsGroupQuery.removeGroupMember(groupName1, userRef1.userSubjectId))
+
+    assertResult(None) {
+      runAndWait(rawlsGroupQuery.loadGroupIfMember(groupRef1, userRef1))
+    }
+    assertResult(None) {
+      runAndWait(rawlsGroupQuery.loadGroupIfMember(groupRef2, userRef1))
+    }
+    assertResult(None) {
+      runAndWait(rawlsGroupQuery.loadGroupIfMember(groupRef3, userRef1))
+    }
   }
 
   it should "check recursive group membership with cycles" in withEmptyTestDatabase {
