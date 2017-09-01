@@ -278,7 +278,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.wsName.path}/submissions") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         responseAs[Seq[SubmissionListResponse]] should contain allOf (
@@ -542,8 +542,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val otherUser1 = RawlsUser(RawlsUserSubjectId("subj-id-1"), RawlsUserEmail("new.email1@example.net"))
     val otherUser2 = RawlsUser(RawlsUserSubjectId("subj-id-2"), RawlsUserEmail("new.email2@example.net"))
 
-    runAndWait(rawlsUserQuery.save(otherUser1))
-    runAndWait(rawlsUserQuery.save(otherUser2))
+    runAndWait(rawlsUserQuery.createUser(otherUser1))
+    runAndWait(rawlsUserQuery.createUser(otherUser2))
 
     addWorkflowsToQueue(otherUser1, 5)
     addWorkflowsToQueue(otherUser2, 10)
@@ -561,8 +561,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val otherUser1 = RawlsUser(RawlsUserSubjectId("subj-id-1"), RawlsUserEmail("new.email1@example.net"))
     val otherUser2 = RawlsUser(RawlsUserSubjectId("subj-id-2"), RawlsUserEmail("new.email2@example.net"))
 
-    runAndWait(rawlsUserQuery.save(otherUser1))
-    runAndWait(rawlsUserQuery.save(otherUser2))
+    runAndWait(rawlsUserQuery.createUser(otherUser1))
+    runAndWait(rawlsUserQuery.createUser(otherUser2))
 
     addWorkflowsToQueue(otherUser1, 5)
     addWorkflowsToQueue(RawlsUser(userInfo), 20)
@@ -642,8 +642,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       import driver.api._
 
       DBIO.seq(
-        rawlsUserQuery.save(userProjectOwner),
-        rawlsUserQuery.save(userOwner),
+        rawlsUserQuery.createUser(userProjectOwner),
+        rawlsUserQuery.createUser(userOwner),
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),

@@ -233,7 +233,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def getMaximumAccessLevel(user: RawlsUser, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[WorkspaceAccessLevel] = {
+  def getMaximumAccessLevel(user: RawlsUser, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadWriteAction[WorkspaceAccessLevel] = {
     val accessLevels = workspaceContext.workspace.authDomainACLs.map { case (accessLevel, groupRef) =>
       dataAccess.rawlsGroupQuery.loadGroupIfMember(groupRef, user).map {
         case Some(_) => accessLevel
@@ -244,7 +244,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     DBIO.sequence(accessLevels).map { _.fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max) }
   }
   
-  def getWorkspaceOwners(workspace: Workspace, dataAccess: DataAccess): ReadAction[Seq[String]] = {
+  def getWorkspaceOwners(workspace: Workspace, dataAccess: DataAccess): ReadWriteAction[Seq[String]] = {
     dataAccess.rawlsGroupQuery.load(workspace.accessLevels(WorkspaceAccessLevels.Owner)).flatMap {
       case None => DBIO.failed(new RawlsException(s"Unable to load owners for workspace ${workspace.toWorkspaceName}"))
       case Some(ownerGroup) =>
@@ -429,7 +429,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       results.map { responses => RequestComplete(StatusCodes.OK, responses) }
     }, TransactionIsolation.ReadCommitted)
 
-  def listWorkspaces(user: RawlsUser, dataAccess: DataAccess): ReadAction[Seq[WorkspacePermissionsPair]] = {
+  def listWorkspaces(user: RawlsUser, dataAccess: DataAccess): ReadWriteAction[Seq[WorkspacePermissionsPair]] = {
     val rawPairs = for {
       groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
       pairs <- dataAccess.workspaceQuery.listPermissionPairsForGroups(groups)
@@ -722,7 +722,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @param workspaceContext
    * @return tuple: messages to send to UserService to overwrite acl groups, email that were not found in the process
    */
-  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]])] = {
+  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]])] = {
     for {
       refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(aclUpdates.map(_.email))
       existingRefsAndLevels <- dataAccess.workspaceQuery.findWorkspaceUsersAndAccessLevel(workspaceContext.workspaceId)
@@ -2047,12 +2047,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def getUserSharePermissions(workspaceContext: SlickWorkspaceContext, userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess): ReadAction[Boolean] = {
+  def getUserSharePermissions(workspaceContext: SlickWorkspaceContext, userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess): ReadWriteAction[Boolean] = {
     if (userAccessLevel >= WorkspaceAccessLevels.Owner) DBIO.successful(true)
     else dataAccess.workspaceQuery.getUserSharePermissions(userInfo.userSubjectId, workspaceContext)
   }
 
-  def getUserCatalogPermissions(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[Boolean] = {
+  def getUserCatalogPermissions(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadWriteAction[Boolean] = {
     dataAccess.workspaceQuery.getUserCatalogPermissions(userInfo.userSubjectId, workspaceContext)
   }
 

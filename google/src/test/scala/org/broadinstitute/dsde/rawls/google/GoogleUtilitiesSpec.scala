@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.metrics.{StatsDTestUtils, WorkbenchInstrume
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.time.{Millis, Span}
 import spray.json._
 
 import scala.collection.JavaConverters._
@@ -20,6 +21,7 @@ import scala.concurrent.duration._
 class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtilities with FlatSpecLike with BeforeAndAfterAll with Matchers with ScalaFutures with Eventually with MockitoTestUtils with StatsDTestUtils {
   implicit val executionContext = ExecutionContext.global
   implicit def histo = ExpandedMetricBuilder.empty.asHistogram("histo")
+  override implicit val patienceConfig = PatienceConfig(scaled(Span(1000, Millis)), scaled(Span(15, Millis)))
 
   override def afterAll {
     TestKit.shutdownActorSystem(system)

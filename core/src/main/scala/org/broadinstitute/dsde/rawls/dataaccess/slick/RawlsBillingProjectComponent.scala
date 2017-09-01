@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
 
@@ -10,8 +11,7 @@ case class RawlsBillingProjectOperationRecord(projectName: String, operationName
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent
-    with RawlsUserComponent
-    with RawlsGroupComponent =>
+    with JndiDirectoryDAO =>
 
   import driver.api._
 
@@ -30,8 +30,6 @@ trait RawlsBillingProjectComponent {
     def groupName = column[String]("GROUP_NAME", O.Length(254))
     def role = column[String]("PROJECT_ROLE", O.Length(254))
 
-    def groupRef = foreignKey("FK_PROJECT_GROUP", groupName, rawlsGroupQuery)(_.groupName)
-    def projectRef = foreignKey("FK_PROJECT_NAME", projectName, rawlsBillingProjectQuery)(_.projectName)
     def pk = primaryKey("PK_BILLING_PROJECT_GROUP", (projectName, groupName, role))
 
     def * = (projectName, groupName, role) <> (RawlsBillingProjectGroupRecord.tupled, RawlsBillingProjectGroupRecord.unapply)
@@ -45,7 +43,6 @@ trait RawlsBillingProjectComponent {
     def errorMessage = column[Option[String]]("ERROR_MESSAGE")
     def api = column[String]("API")
 
-    def projectRef = foreignKey("FK_PROJECT_NAME", projectName, rawlsBillingProjectQuery)(_.projectName)
     def pk = primaryKey("PK_BILLING_PROJECT_OPERATION", (projectName, operationName))
 
     def * = (projectName, operationName, operationId, done, errorMessage, api) <> (RawlsBillingProjectOperationRecord.tupled, RawlsBillingProjectOperationRecord.unapply)
@@ -74,20 +71,20 @@ trait RawlsBillingProjectComponent {
       DBIO.sequence(projects.map(project => rawlsBillingProjectQuery.filter(_.projectName === project.projectName.value).update(marshalBillingProject(project))).toSeq)
     }
 
-    def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadAction[Seq[RawlsBillingProject]] = {
+    def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadWriteAction[Seq[RawlsBillingProject]] = {
       filter(_.creationStatus === status.toString).result.flatMap { projectRecords =>
         DBIO.sequence(projectRecords.map { projectRec => load(projectRec) })
       }
     }
 
-    def load(projectName: RawlsBillingProjectName): ReadAction[Option[RawlsBillingProject]] = {
+    def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
       uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).flatMap {
         case None => DBIO.successful(None)
         case Some(projectRec) => load(projectRec).map(Option(_))
       }
     }
 
-    def load(projectRec: RawlsBillingProjectRecord): ReadAction[RawlsBillingProject] = {
+    def load(projectRec: RawlsBillingProjectRecord): ReadWriteAction[RawlsBillingProject] = {
       findBillingProjectGroups(RawlsBillingProjectName(projectRec.projectName)).result.flatMap { groups =>
         DBIO.sequence(groups.map { group =>
           for {
@@ -104,13 +101,24 @@ trait RawlsBillingProjectComponent {
      * @param rawlsProjectName
      * @return
      */
-    def loadDirectProjectMembersWithEmail(rawlsProjectName: RawlsBillingProjectName): ReadAction[Seq[RawlsBillingProjectMember]] = {
-      val usersQuery = findDirectProjectUsers(rawlsProjectName)
-      val subgroupsQuery = findDirectProjectSubgroups(rawlsProjectName)
+    def loadDirectProjectMembersWithEmail(rawlsProjectName: RawlsBillingProjectName): ReadWriteAction[Seq[RawlsBillingProjectMember]] = {
+      for {
+        roleGroupRecs <- rawlsBillingProjectGroupQuery.filter(_.projectName === rawlsProjectName.value).result
+        roleGroups <- rawlsGroupQuery.load(roleGroupRecs.map(roleRec => RawlsGroupRef(RawlsGroupName(roleRec.groupName))))
+        users <- rawlsUserQuery.load(roleGroups.flatMap(_.users))
+        subGroups <- rawlsGroupQuery.load(roleGroups.flatMap(_.subGroups))
+      } yield {
+        val userEmailsById = users.map(u => u.userSubjectId -> u.userEmail).toMap
+        val groupEmailsById = subGroups.map(sg => sg.groupName -> sg.groupEmail).toMap
+        val groupAndRole = roleGroupRecs.map { rec => rec.groupName -> rec.role }.toMap
 
-      val membersQuery = usersQuery union subgroupsQuery
+        roleGroups.flatMap { group =>
+          val subGroupMembers = group.subGroups.map(sg => RawlsBillingProjectMember(RawlsUserEmail(groupEmailsById(sg.groupName).value), ProjectRoles.withName(groupAndRole(group.groupName.value))))
+          val userMembers = group.users.map(u => RawlsBillingProjectMember(userEmailsById(u.userSubjectId), ProjectRoles.withName(groupAndRole(group.groupName.value))))
 
-      membersQuery.result.map(_.map{ case(email, role) => RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(role))})
+          subGroupMembers ++ userMembers
+        }
+      }
     }
 
     def delete(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] = {
@@ -143,22 +151,6 @@ trait RawlsBillingProjectComponent {
       })
     }
 
-    // includes users who are not in any billing projects
-    def loadAllUsersAndTheirProjects: ReadAction[Map[RawlsUser, Iterable[RawlsBillingProjectName]]] = {
-      val usersAndProjects = for {
-        (project, user) <- rawlsBillingProjectQuery join rawlsBillingProjectGroupQuery on (_.projectName === _.projectName) join
-          groupUsersQuery on (_._2.groupName === _.groupName) joinRight rawlsUserQuery on (_._2.userSubjectId === _.userSubjectId)
-      } yield (user, project map (_._1._1))
-
-      usersAndProjects.result.map { results =>
-        results.groupBy { case (userRec, optProjectRec) => userRec } map {
-          case (userRec, userAndProjectOps) =>
-            val projects = userAndProjectOps.collect { case (_, Some(projectRec)) => RawlsBillingProjectName(projectRec.projectName) }
-            rawlsUserQuery.unmarshalRawlsUser(userRec) -> projects
-        }
-      }
-    }
-
     /**
      * Checks that user has at least one of roles for the project specified by projectName. Will recurse through sub groups.
      * @param projectName
@@ -166,7 +158,7 @@ trait RawlsBillingProjectComponent {
      * @param roles
      * @return
      */
-    def hasOneOfProjectRole(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]): ReadAction[Boolean] = {
+    def hasOneOfProjectRole(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]): ReadWriteAction[Boolean] = {
       val projectUsersAction = findBillingProjectGroupsForRoles(projectName, roles).result.flatMap { groups =>
         DBIO.sequence(groups.map { group =>
           rawlsGroupQuery.flattenGroupMembership(RawlsGroupRef(RawlsGroupName(group.groupName)))
@@ -188,24 +180,6 @@ trait RawlsBillingProjectComponent {
 
     def loadOperationsForProjects(projectNames: Seq[RawlsBillingProjectName]): ReadAction[Seq[RawlsBillingProjectOperationRecord]] = {
       rawlsBillingProjectOperationQuery.filter(_.projectName.inSetBind(projectNames.map(_.value))).result
-    }
-
-    // does not recurse
-    private def findDirectProjectUsers(projectName: RawlsBillingProjectName) = {
-      for {
-        projectGroup <- rawlsBillingProjectGroupQuery if projectGroup.projectName === projectName.value
-        groupUser <- groupUsersQuery if groupUser.groupName === projectGroup.groupName
-        user <- rawlsUserQuery if user.userSubjectId === groupUser.userSubjectId
-      } yield (user.userEmail, projectGroup.role)
-    }
-
-    // does not recurse
-    private def findDirectProjectSubgroups(projectName: RawlsBillingProjectName) = {
-      for {
-        projectGroup <- rawlsBillingProjectGroupQuery if projectGroup.projectName === projectName.value
-        groupSubgroup <- groupSubgroupsQuery if groupSubgroup.parentGroupName === projectGroup.groupName
-        subgroup <- rawlsGroupQuery if subgroup.groupName === groupSubgroup.childGroupName
-      } yield (subgroup.groupEmail, projectGroup.role)
     }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {

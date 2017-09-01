@@ -78,7 +78,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
       import driver.api._
 
       DBIO.seq(
-        DBIO.sequence(users.map(u => rawlsUserQuery.save(u.rawlsUser)).toSeq),
+        DBIO.sequence(users.map(u => rawlsUserQuery.createUser(u.rawlsUser)).toSeq),
         rawlsGroupQuery.save(unpublishedOwnerGroup),
         rawlsGroupQuery.save(unpublishedWriterGroup),
         rawlsGroupQuery.save(unpublishedReaderGroup),

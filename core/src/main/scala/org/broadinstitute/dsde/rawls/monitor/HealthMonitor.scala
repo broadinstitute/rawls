@@ -124,18 +124,6 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
   }
 
   /**
-    * A monoid used for combining SubsystemStatuses.
-    * Zero is an ok status with no messages.
-    * Append uses && on the ok flag, and ++ on the messages.
-    */
-  private implicit val SubsystemStatusMonoid = new Monoid[SubsystemStatus] {
-    def combine(a: SubsystemStatus, b: SubsystemStatus): SubsystemStatus = {
-      SubsystemStatus(a.ok && b.ok, a.messages |+| b.messages)
-    }
-    def empty: SubsystemStatus = OkStatus
-  }
-
-  /**
     * Checks Agora status by calling the /status endpoint.
     */
   private def checkAgora: Future[SubsystemStatus] = {
@@ -161,7 +149,17 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     logger.debug("Checking Database...")
     slickDataSource.inTransaction(_.sqlDBStatus).map(_ => OkStatus)
   }
-
+ /**
+    * A monoid used for combining SubsystemStatuses.
+    * Zero is an ok status with no messages.
+    * Append uses && on the ok flag, and ++ on the messages.
+    */
+  private implicit val SubsystemStatusMonoid = new Monoid[SubsystemStatus] {
+    def combine(a: SubsystemStatus, b: SubsystemStatus): SubsystemStatus = {
+      SubsystemStatus(a.ok && b.ok, a.messages |+| b.messages)
+    }
+    def empty: SubsystemStatus = OkStatus
+  }
   /**
     * Checks Google PubSub status by doing a Get call on the notification and group monitor topics
     * using the pubsub service account.

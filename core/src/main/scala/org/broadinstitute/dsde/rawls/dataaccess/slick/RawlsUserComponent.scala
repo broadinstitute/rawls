@@ -21,7 +21,6 @@ trait RawlsUserComponent {
   private type RawlsUserQuery = Query[RawlsUserTable, RawlsUserRecord, Seq]
 
   object rawlsUserQuery extends TableQuery(new RawlsUserTable(_)) {
-
     def save(rawlsUser: RawlsUser): WriteAction[RawlsUser] = {
       rawlsUserQuery insertOrUpdate marshalRawlsUser(rawlsUser) map { _ => rawlsUser }
     }

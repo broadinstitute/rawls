@@ -145,13 +145,6 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           UserService.AdminSynchronizeGroupMembers(RawlsGroupRef(RawlsGroupName(groupName))))
       }
     } ~
-    path("admin" / "users") {
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminListUsers)
-      }
-    } ~
     path("admin" / "user" / "role" / "curator" / Segment) { (userEmail) =>
       put {
         requestContext => perRequest(requestContext,

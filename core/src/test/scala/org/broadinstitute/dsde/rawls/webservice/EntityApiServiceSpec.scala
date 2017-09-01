@@ -1804,7 +1804,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       import driver.api._
 
       DBIO.seq(
-        rawlsUserQuery.save(userOwner),
+        rawlsUserQuery.createUser(userOwner),
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),

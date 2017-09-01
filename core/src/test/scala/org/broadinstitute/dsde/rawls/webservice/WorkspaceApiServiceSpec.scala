@@ -159,10 +159,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.save(userProjectOwner),
-        rawlsUserQuery.save(userOwner),
-        rawlsUserQuery.save(userWriter),
-        rawlsUserQuery.save(userReader),
+        rawlsUserQuery.createUser(userProjectOwner),
+        rawlsUserQuery.createUser(userOwner),
+        rawlsUserQuery.createUser(userWriter),
+        rawlsUserQuery.createUser(userReader),
         DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
@@ -377,7 +377,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "should let a user access a shared workspace once they are added to all auth domain groups" in withTestDataApiServices { services =>
+  it should "let a user access a shared workspace once they are added to all auth domain groups" in withTestDataApiServices { services =>
     val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner, testData.userWriter))
     val realmGroup2 = createAndSaveManagedGroup("realm-for-testing2", Set(testData.userOwner))
     val workspaceWithRealm = WorkspaceRequest(
@@ -1826,7 +1826,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound) { status }
+        assertResult(StatusCodes.NotFound, response.entity.asString) { status }
       }
   }
 

@@ -55,7 +55,6 @@ object UserService {
   case class AdminDeleteUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class AdminAddToLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case class AdminRemoveFromLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
-  case object AdminListUsers extends UserServiceMessage
   case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
 
@@ -105,6 +104,7 @@ object UserService {
 class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths with LazyLogging {
 
   import dataSource.dataAccess.driver.api._
+  import spray.json.DefaultJsonProtocol._
 
   override def receive = {
     case SetRefreshToken(token) => setRefreshToken(token) pipeTo sender
@@ -118,7 +118,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminDeleteUser(userRef) => asFCAdmin { deleteUser(userRef) } pipeTo sender
     case AdminAddToLDAP(userSubjectId) => asFCAdmin { addToLDAP(userSubjectId) } pipeTo sender
     case AdminRemoveFromLDAP(userSubjectId) => asFCAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
-    case AdminListUsers => asFCAdmin { listUsers() } pipeTo sender
     case ListGroupsForUser(userEmail) => listGroupsForUser(userEmail) pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
@@ -201,7 +200,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         toFutureTry(gcsDAO.createProxyGroup(user) flatMap( _ => gcsDAO.addUserToProxyGroup(user))),
         toFutureTry(for {
         // these things need to be done in order
-          _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user) }
+          _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.createUser(user) }
           _ <- dataSource.inTransaction { dataAccess => getOrCreateAllUsersGroup(dataAccess) }
           _ <- updateGroupMembership(allUsersGroupRef, addUsers = Set(user))
         } yield ()),
@@ -229,20 +228,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } flatMap { _ =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.workspaceQuery.deleteWorkspaceInvitesForUser(user.userEmail)
-      }
-    }
-  }
-
-  import spray.json.DefaultJsonProtocol._
-  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsUserInfoListFormat
-
-  def listUsers(): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.loadAllUsersAndTheirProjects map { projectsByUser =>
-        val userInfoList = projectsByUser map {
-          case (user, projectNames) => RawlsUserInfo(user, projectNames.toSeq)
-        }
-        RequestComplete(RawlsUserInfoList(userInfoList.toSeq))
       }
     }
   }
@@ -332,14 +317,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def deleteUserFromDB(userRef: RawlsUserRef): Future[Int] = {
+  private def deleteUserFromDB(userRef: RawlsUserRef): Future[Unit] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsUserQuery.findUserBySubjectId(userRef.userSubjectId.value).delete
-    } flatMap {
-      case 1 => Future.successful(1)
-      case rowsDeleted =>
-        val error = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Expected to delete 1 row from user table, but deleted $rowsDeleted"))
-        Future.failed(error)
+      dataAccess.rawlsUserQuery.deleteUser(userRef.userSubjectId)
     }
   }
 
@@ -581,6 +561,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def createManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
+    val userDefinedRegex = "[A-z0-9_-]+".r
+    if(! userDefinedRegex.pattern.matcher(groupRef.membersGroupName.value).matches) {
+      val msg = s"Invalid input: ${groupRef.membersGroupName}. Input may only contain alphanumeric characters, underscores, and dashes."
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
+    }
+    if(groupRef.membersGroupName.value.length > 50) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: ${groupRef.membersGroupName}. Input may be a max of 50 characters.", statusCode = StatusCodes.BadRequest))
     val usersGroupRef = groupRef.toMembersGroupRef
     val ownersGroupRef = RawlsGroupRef(RawlsGroupName(groupRef.membersGroupName.value + "-owners"))
     for {
@@ -740,10 +726,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def deleteManagedGroup(groupRef: ManagedGroupRef) = {
-    // note that this function does not call deleteGroup (in this class) which does the desired work of deleting
-    // a rawls group and associated google group because we need to catch any FK constraint violations caused by
-    // deleting the rawls groups and if there are any rollback the db delete and not remove google groups
-    for {
+    for{
+      _ <- dataSource.inTransaction { dataAccess =>
+        for {
+          groupToCheck <- dataAccess.managedGroupQuery.load(groupRef).map(_.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Group does not exist,"))))
+          admins <- dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.adminsGroup.groupName)
+          members <- dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.membersGroup.groupName)
+        } yield {
+          if ((admins - groupToCheck.membersGroup.groupName).nonEmpty || members.nonEmpty) {
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"Cannot delete group because it is in use. Admins: ${admins} Members: ${members}"))
+          }
+        }
+      }
       groupEmailsToDelete <- dataSource.inTransaction { dataAccess =>
         withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
           DBIO.seq(
@@ -752,12 +746,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             dataAccess.rawlsGroupQuery.delete(managedGroup.adminsGroup)
           ).map(_ => Seq(managedGroup.membersGroup, managedGroup.adminsGroup))
         }
-      }.recover {
-        // assume any sql exception is a FK violation, to be more specific catch MySQLIntegrityConstraintViolationException
-        // but it is good to keep the code free of mysql specific code
-        case sqle: SQLException => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "Cannot delete group because it is in use", sqle))
       }
-
       _ <- Future.traverse(groupEmailsToDelete) { group =>
         gcsDAO.deleteGoogleGroup(group).recover {
           // log any exception but ignore
@@ -768,6 +757,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       RequestComplete(StatusCodes.NoContent)
     }
   }
+
 
   /**
    * Internal function to update a group
@@ -797,7 +787,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield savedGroup
   }
 
-  private def loadMemberUsersAndGroups(memberList: RawlsGroupMemberList, dataAccess: DataAccess): ReadAction[(Set[RawlsUser], Set[RawlsGroup])] = {
+  private def loadMemberUsersAndGroups(memberList: RawlsGroupMemberList, dataAccess: DataAccess): ReadWriteAction[(Set[RawlsUser], Set[RawlsGroup])] = {
     val userQueriesByEmail = for {
       email <- memberList.userEmails.getOrElse(Seq.empty)
     } yield dataAccess.rawlsUserQuery.loadUserByEmail(RawlsUserEmail(email)).map((email, _))
@@ -927,15 +917,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def updateIntersectionGroupMembers(groupsToIntersect: Set[GroupsToIntersect], dataAccess:DataAccess): ReadWriteAction[Iterable[RawlsGroupRef]] = {
-    val groups = groupsToIntersect.flatMap { _.groups }
-    val flattenedGroupsAction = DBIO.sequence(groups.map(group => dataAccess.rawlsGroupQuery.flattenGroupMembership(group).map(group -> _)).toSeq).map(_.toMap)
-
-    val intersectionMemberships = flattenedGroupsAction.map { flattenedGroups =>
-      groupsToIntersect.map { case GroupsToIntersect(target, sourceGroups) =>
-        val flattenedGroupsToIntersect = flattenedGroups.filterKeys(sourceGroups)
-        target -> flattenedGroupsToIntersect.values.reduce(_ intersect _)
-      }
-    }
+    val intersectionMemberships = DBIO.sequence(groupsToIntersect.toSeq.map { gti =>
+      dataAccess.rawlsGroupQuery.intersectGroupMembership(gti.groups).map(members => gti.target -> members)
+    })
 
     intersectionMemberships.flatMap(dataAccess.rawlsGroupQuery.overwriteGroupUsers).map(_ => groupsToIntersect.map(_.target))
   }

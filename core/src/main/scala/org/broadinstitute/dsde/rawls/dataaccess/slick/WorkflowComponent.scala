@@ -9,6 +9,7 @@ import cats.instances.map._
 import cats.syntax.foldable._
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceId, SlickWorkspaceContext}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
@@ -43,7 +44,7 @@ trait WorkflowComponent {
     with EntityComponent
     with SubmissionComponent
     with AttributeComponent
-    with RawlsUserComponent =>
+    with JndiDirectoryDAO =>
 
   import driver.api._
 
@@ -312,16 +313,15 @@ trait WorkflowComponent {
     }
 
     def countWorkflowsByQueueStatusByUser: ReadAction[Map[String, Map[String, Int]]] = {
-      // Run query for workflow counts, grouping by user email and workflow status.
+      // Run query for workflow counts, grouping by submitter and workflow status.
       // The query returns a Seq[(userEmail, workflowStatus, count)].
       val userWorkflowQuery = for {
         workflow <- findQueuedAndRunningWorkflows
         submission <- submissionQuery if workflow.submissionId === submission.id
-        user <- rawlsUserQuery if submission.submitterId === user.userSubjectId
-      } yield (user, workflow)
+      } yield (submission, workflow)
 
-      val groupedSeq = userWorkflowQuery.groupBy { case (user, workflow) =>
-        (user.userEmail, workflow.status)
+      val groupedSeq = userWorkflowQuery.groupBy { case (submission, workflow) =>
+        (submission.submitterId, workflow.status)
       }.map { case ((email, status), recs) =>
         (email, status, recs.length)
       }.result

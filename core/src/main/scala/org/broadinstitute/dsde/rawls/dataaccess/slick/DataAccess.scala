@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionParser
+import org.broadinstitute.dsde.rawls.model.{RawlsGroupName, RawlsGroupRef}
 import slick.driver.JdbcProfile
 
 trait DataAccess
   extends PendingBucketDeletionComponent
-  with RawlsUserComponent
-  with RawlsGroupComponent
   with RawlsBillingProjectComponent
   with WorkspaceComponent
   with EntityComponent
@@ -16,7 +16,9 @@ trait DataAccess
   with WorkflowComponent
   with ManagedGroupComponent
   with ExprEvalComponent
-  with SlickExpressionParser {
+  with SlickExpressionParser
+  with JndiDirectoryDAO {
+
 
   this: DriverComponent =>
 
@@ -29,9 +31,7 @@ trait DataAccess
     // important to keep the right order for referential integrity !
     // if table X has a Foreign Key to table Y, delete table X first
 
-    TableQuery[GroupSubgroupsTable].delete andThen                // FK to group
-      TableQuery[GroupUsersTable].delete andThen                  // FK to group, users
-      TableQuery[WorkspaceAccessTable].delete andThen             // FK to group, workspace
+    TableQuery[WorkspaceAccessTable].delete andThen             // FK to group, workspace
       TableQuery[RawlsBillingProjectGroupTable].delete andThen    // FK to group, billingproject
       TableQuery[EntityAttributeTable].delete andThen             // FK to entity
       TableQuery[WorkspaceAttributeTable].delete andThen          // FK to entity, workspace
@@ -54,8 +54,6 @@ trait DataAccess
       TableQuery[WorkspaceTable].delete andThen
       TableQuery[ManagedGroupTable].delete andThen                // FK to group
       TableQuery[RawlsBillingProjectTable].delete andThen
-      TableQuery[RawlsGroupTable].delete andThen
-      TableQuery[RawlsUserTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen
       TableQuery[SubmissionAuditStatusTable].delete andThen
       TableQuery[PendingBucketDeletionTable].delete andThen
@@ -66,6 +64,18 @@ trait DataAccess
 
   def sqlDBStatus() = {
     sql"select version()".as[String]
+  }
+
+  def emptyLdap(): ReadWriteAction[Unit] = {
+    // user load all users to read in all users,
+    // delete each user
+    // load all groups, delete each one
+    for {
+      users <- rawlsUserQuery.loadAllUsers
+      groups <- rawlsGroupQuery.loadAllGroups
+      _ <- DBIO.sequence(users.map(user => rawlsUserQuery.deleteUser(user.userSubjectId)))
+      _ <- DBIO.sequence(groups.map(group => rawlsGroupQuery.delete(group)))
+    } yield { }
   }
 
 }

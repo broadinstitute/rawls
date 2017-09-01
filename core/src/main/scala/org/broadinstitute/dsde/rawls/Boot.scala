@@ -18,6 +18,7 @@ import com.typesafe.scalalogging.LazyLogging
 import slick.backend.DatabaseConfig
 import slick.driver.JdbcDriver
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor}
@@ -35,6 +36,7 @@ import spray.http.StatusCodes
 import spray.json._
 
 import scala.collection.JavaConversions._
+import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
@@ -48,7 +50,14 @@ object Boot extends App with LazyLogging {
     // we need an ActorSystem to host our application in
     implicit val system = ActorSystem("rawls")
 
-    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcDriver]("slick", conf))
+    val directoryConfig = DirectoryConfig(
+      conf.getString("directory.url"),
+      conf.getString("directory.user"),
+      conf.getString("directory.password"),
+      conf.getString("directory.baseDn")
+    )
+
+    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcDriver]("slick", conf), directoryConfig)
 
     val liquibaseConf = conf.getConfig("liquibase")
     val liquibaseChangeLog = liquibaseConf.getString("changelog")
@@ -59,6 +68,9 @@ object Boot extends App with LazyLogging {
     if(initWithLiquibase) {
       slickDataSource.initWithLiquibase(liquibaseChangeLog, changelogParams)
     }
+
+    // create or replace ldap schema
+    Await.result(slickDataSource.database.run(slickDataSource.dataAccess.initLdap()), Duration.Inf)
 
     val metricsConf = conf.getConfig("metrics")
     val metricsPrefix = {

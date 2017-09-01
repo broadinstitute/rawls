@@ -139,7 +139,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.save(user),
+        rawlsUserQuery.createUser(user),
         rawlsGroupQuery.save(ownerGroup),
         workspaceQuery.save(workspace),
         withWorkspaceContext(workspace) { context =>

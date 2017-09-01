@@ -86,9 +86,9 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val user2 = RawlsUser(subjId2, email2)
     val user3 = RawlsUser(subjId3, email3)
 
-    runAndWait(rawlsUserQuery.save(user1))
-    runAndWait(rawlsUserQuery.save(user2))
-    runAndWait(rawlsUserQuery.save(user3))
+    runAndWait(rawlsUserQuery.createUser(user1))
+    runAndWait(rawlsUserQuery.createUser(user2))
+    runAndWait(rawlsUserQuery.createUser(user3))
 
     val groupName1 = RawlsGroupName("The-Justice-League")
     val groupEmail1 = RawlsGroupEmail("justice@dc.org")
@@ -162,8 +162,8 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val user1 = RawlsUser(subjId1, email1)
     val user2 = RawlsUser(subjId2, email2)
 
-    runAndWait(rawlsUserQuery.save(user1))
-    runAndWait(rawlsUserQuery.save(user2))
+    runAndWait(rawlsUserQuery.createUser(user1))
+    runAndWait(rawlsUserQuery.createUser(user2))
 
     val groupName1 = RawlsGroupName("Group-1")
     val groupEmail1 = RawlsGroupEmail("g1@broad.mit.edu")
@@ -207,6 +207,18 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     assertResult(Some(group3)) {
       runAndWait(rawlsGroupQuery.loadGroupIfMember(groupRef3, userRef2))
     }
+
+    runAndWait(rawlsGroupQuery.removeGroupMember(groupName1, userRef1.userSubjectId))
+
+    assertResult(None) {
+      runAndWait(rawlsGroupQuery.loadGroupIfMember(groupRef1, userRef1))
+    }
+    assertResult(None) {
+      runAndWait(rawlsGroupQuery.loadGroupIfMember(groupRef2, userRef1))
+    }
+    assertResult(None) {
+      runAndWait(rawlsGroupQuery.loadGroupIfMember(groupRef3, userRef1))
+    }
   }
 
   it should "check recursive group membership with cycles" in withEmptyTestDatabase {
@@ -219,8 +231,8 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val user1 = RawlsUser(subjId1, email1)
     val user2 = RawlsUser(subjId2, email2)
 
-    runAndWait(rawlsUserQuery.save(user1))
-    runAndWait(rawlsUserQuery.save(user2))
+    runAndWait(rawlsUserQuery.createUser(user1))
+    runAndWait(rawlsUserQuery.createUser(user2))
 
     val groupName1 = RawlsGroupName("Group-1")
     val groupEmail1 = RawlsGroupEmail("g1@broad.mit.edu")
@@ -269,7 +281,7 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val group1 = makeRawlsGroup("Group-1-For-User", Set(testUser))
     val group2 = makeRawlsGroup("Group-2-For-User", Set(testUser))
 
-    runAndWait(rawlsUserQuery.save(testUser))
+    runAndWait(rawlsUserQuery.createUser(testUser))
     runAndWait(rawlsGroupQuery.save(group1))
     runAndWait(rawlsGroupQuery.save(group2))
 
@@ -323,8 +335,8 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val group4 = makeRawlsGroup("Group-Four", Set.empty).copy(subGroups = Set(group3))
     val group5 = makeRawlsGroup("Group-Five", Set.empty).copy(subGroups = Set(group3))
 
-    runAndWait(rawlsUserQuery.save(testUser))
-    runAndWait(rawlsUserQuery.save(testUser2))
+    runAndWait(rawlsUserQuery.createUser(testUser))
+    runAndWait(rawlsUserQuery.createUser(testUser2))
     runAndWait(rawlsGroupQuery.save(group1))
     runAndWait(rawlsGroupQuery.save(group2))
     runAndWait(rawlsGroupQuery.save(group3))
@@ -349,11 +361,11 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val group4 = makeRawlsGroup("Good-And-Evil", Set.empty).copy(subGroups =  Set(group, group2, group3))
     val realm = makeRawlsGroup("Politicos", Set(obama, trump, bernie)).copy(subGroups = Set(group3))
 
-    runAndWait(rawlsUserQuery.save(obama))
-    runAndWait(rawlsUserQuery.save(trump))
-    runAndWait(rawlsUserQuery.save(arod))
-    runAndWait(rawlsUserQuery.save(clinton))
-    runAndWait(rawlsUserQuery.save(bernie))
+    runAndWait(rawlsUserQuery.createUser(obama))
+    runAndWait(rawlsUserQuery.createUser(trump))
+    runAndWait(rawlsUserQuery.createUser(arod))
+    runAndWait(rawlsUserQuery.createUser(clinton))
+    runAndWait(rawlsUserQuery.createUser(bernie))
     runAndWait(rawlsGroupQuery.save(group))
     runAndWait(rawlsGroupQuery.save(group2))
     runAndWait(rawlsGroupQuery.save(group3))
