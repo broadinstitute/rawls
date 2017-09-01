@@ -22,7 +22,7 @@ import scala.util.Try
  */
 trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
 
-  val dateFormat = new SimpleDateFormat("yyyyMMddHHmmss.SSSZ")
+  def dateFormat = new SimpleDateFormat("yyyyMMddHHmmss.SSSZ")
 
   implicit val executionContext: ExecutionContext
   /** a bunch of attributes used in directory entries */
