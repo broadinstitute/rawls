@@ -104,16 +104,17 @@ trait RawlsBillingProjectComponent {
     def loadDirectProjectMembersWithEmail(rawlsProjectName: RawlsBillingProjectName): ReadWriteAction[Seq[RawlsBillingProjectMember]] = {
       for {
         roleGroupRecs <- rawlsBillingProjectGroupQuery.filter(_.projectName === rawlsProjectName.value).result
-        roleGroups <- DBIO.sequence(roleGroupRecs.map { roleRec => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(roleRec.groupName))).map(roleRec -> _)})
-        users <- rawlsUserQuery.load(roleGroups.flatMap(_._2.get.users))
-        subGroups <- rawlsGroupQuery.load(roleGroups.flatMap(_._2.get.subGroups))
+        roleGroups <- rawlsGroupQuery.load(roleGroupRecs.map(roleRec => RawlsGroupRef(RawlsGroupName(roleRec.groupName))))
+        users <- rawlsUserQuery.load(roleGroups.flatMap(_.users))
+        subGroups <- rawlsGroupQuery.load(roleGroups.flatMap(_.subGroups))
       } yield {
         val userEmailsById = users.map(u => u.userSubjectId -> u.userEmail).toMap
         val groupEmailsById = subGroups.map(sg => sg.groupName -> sg.groupEmail).toMap
+        val groupAndRole = roleGroupRecs.map { rec => rec.groupName -> rec.role }.toMap
 
-        roleGroups.flatMap { case (roleRec, group) =>
-          val subGroupMembers = group.get.subGroups.map(sg => RawlsBillingProjectMember(RawlsUserEmail(groupEmailsById(sg.groupName).value), ProjectRoles.withName(roleRec.role)))
-          val userMembers = group.get.users.map(u => RawlsBillingProjectMember(userEmailsById(u.userSubjectId), ProjectRoles.withName(roleRec.role)))
+        roleGroups.flatMap { group =>
+          val subGroupMembers = group.subGroups.map(sg => RawlsBillingProjectMember(RawlsUserEmail(groupEmailsById(sg.groupName).value), ProjectRoles.withName(groupAndRole(group.groupName.value))))
+          val userMembers = group.users.map(u => RawlsBillingProjectMember(userEmailsById(u.userSubjectId), ProjectRoles.withName(groupAndRole(group.groupName.value))))
 
           subGroupMembers ++ userMembers
         }

@@ -21,7 +21,6 @@ trait RawlsUserComponent {
   private type RawlsUserQuery = Query[RawlsUserTable, RawlsUserRecord, Seq]
 
   object rawlsUserQuery extends TableQuery(new RawlsUserTable(_)) {
-//replicate
     def save(rawlsUser: RawlsUser): WriteAction[RawlsUser] = {
       rawlsUserQuery insertOrUpdate marshalRawlsUser(rawlsUser) map { _ => rawlsUser }
     }
@@ -29,15 +28,15 @@ trait RawlsUserComponent {
     def load(ref: RawlsUserRef): ReadAction[Option[RawlsUser]] = {
       loadCommon(findUserBySubjectId(ref.userSubjectId.value))
     }
-//replicate
+
     def loadAllUsers(): ReadAction[Seq[RawlsUser]] = {
       rawlsUserQuery.result map { _ map unmarshalRawlsUser }
     }
-//replicate
+
     def countUsers(): ReadAction[SingleStatistic] = {
       rawlsUserQuery.countDistinct.result.map(count => SingleStatistic(count))
     }
-//replicate
+
     def loadUserByEmail(userEmail: RawlsUserEmail): ReadAction[Option[RawlsUser]] = {
       loadCommon(findUserByEmail(userEmail.value))
     }

@@ -83,8 +83,6 @@ trait WorkspaceComponent {
     def accessLevel = column[String]("access_level", O.Length(254))
     def isAuthDomainAcl = column[Boolean]("is_auth_domain_acl")
 
-//    def workspace = foreignKey("FK_WS_ACCESS_WORKSPACE", workspaceId, workspaceQuery)(_.id)
-
     def accessPrimaryKey = primaryKey("PK_WORKSPACE_ACCESS", (workspaceId, accessLevel, isAuthDomainAcl))
 
     def * = (workspaceId, groupName, accessLevel, isAuthDomainAcl) <> (WorkspaceAccessRecord.tupled, WorkspaceAccessRecord.unapply)
