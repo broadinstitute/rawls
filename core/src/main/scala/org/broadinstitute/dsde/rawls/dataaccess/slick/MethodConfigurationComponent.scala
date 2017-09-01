@@ -156,8 +156,6 @@ trait MethodConfigurationComponent {
 
 
     private def saveMaps(methodConfig: MethodConfiguration, configId: Long) = {
-      val in = findInputsByConfigId(configId)
-
       val prerequisites = methodConfig.prerequisites.map { case (key, value) => marshalConfigPrereq(configId, key, value) }
       val inputs = methodConfig.inputs.map { case (key, value) => marshalConfigInput(configId, key, value) }
       val outputs = methodConfig.outputs.map{ case (key, value) => marshalConfigOutput(configId, key, value) }
@@ -234,18 +232,6 @@ trait MethodConfigurationComponent {
 
     private def findActiveByWorkspace(workspaceId: UUID): MethodConfigurationQueryType = {
       findByWorkspace(workspaceId).filterNot(_.deleted)
-    }
-
-    private def findInputsByConfigId(configId: Long): MethodConfigurationInputQueryType = {
-      methodConfigurationInputQuery.filter(rec => rec.methodConfigId === configId)
-    }
-
-    private def findOutputsByConfigId(configId: Long): MethodConfigurationOutputQueryType = {
-      methodConfigurationOutputQuery.filter(rec => rec.methodConfigId === configId)
-    }
-
-    private def findPrereqsByConfigId(configId: Long): MethodConfigurationPrereqQueryType = {
-      methodConfigurationPrereqQuery.filter(rec => rec.methodConfigId === configId)
     }
 
     def findActiveByName(workspaceId: UUID, methodNamespace: String, methodName: String): MethodConfigurationQueryType = {

@@ -145,15 +145,15 @@ trait SlickExpressionParser extends JavaTokenParsers {
         else entityAttributeFinalFunc(attrName)
     }
 
-  def parseAttributeExpr(expression: String) = {
+  def parseAttributeExpr(expression: String): Try[PipelineQuery] = {
     parse(expression, attributeExpression)
   }
 
-  def parseOutputExpr(expression: String) = {
+  def parseOutputExpr(expression: String): Try[PipelineQuery] = {
     parse(expression, outputExpression)
   }
 
-  def parseEntityExpr(expression: String) = {
+  def parseEntityExpr(expression: String): Try[PipelineQuery] = {
     parse(expression, entityExpression)
   }
 
