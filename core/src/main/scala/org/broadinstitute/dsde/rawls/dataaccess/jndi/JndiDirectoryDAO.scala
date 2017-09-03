@@ -23,7 +23,6 @@ import scala.util.Try
 trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
 
   def dateFormat = new SimpleDateFormat("yyyyMMddHHmmss.SSSZ")
-  private val batchSize = 1000
 
   implicit val executionContext: ExecutionContext
   /** a bunch of attributes used in directory entries */
@@ -188,18 +187,12 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }.get
     }
 
-    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = {
-      val filters = groupRefs.toSet[RawlsGroupRef].map { ref => s"(${Attr.cn}=${ref.groupName.value})"}
-      if (filters.isEmpty) {
-        DBIO.successful(Seq.empty)
-      } else {
-        DBIO.sequence(filters.grouped(batchSize).map { batch => withContext { ctx =>
-          ctx.search(groupsOu, s"(|${batch.mkString})", new SearchControls()).asScala.map { result =>
-            unmarshallGroup(result.getAttributes)
-          }
-        } }).map(_.flatten.toSeq)
-      }
-    }
+    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = batchedLoad(groupRefs.toSeq) { batch => { ctx =>
+      val filters = batch.toSet[RawlsGroupRef].map { ref => s"(${Attr.cn}=${ref.groupName.value})" }
+      ctx.search(groupsOu, s"(|${filters.mkString})", new SearchControls()).asScala.map { result =>
+        unmarshallGroup(result.getAttributes)
+      }.toSeq
+    } }
 
     def flattenGroupMembership(groupRef: RawlsGroupRef): ReadWriteAction[Set[RawlsUserRef]] = withContext { ctx =>
       ctx.search(peopleOu, new BasicAttributes(Attr.memberOf, groupDn(groupRef.groupName), true)).asScala.map { result =>
@@ -393,18 +386,12 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }.get
     }
 
-    def load(userRefs: TraversableOnce[RawlsUserRef]): ReadWriteAction[Seq[RawlsUser]] = withContext { ctx =>
-      val filters = userRefs.toSet[RawlsUserRef].map { ref => s"(${Attr.uid}=${ref.userSubjectId.value})"}
-      if (filters.isEmpty) {
-        Seq.empty
-      } else {
-        filters.grouped(batchSize).flatMap { batch =>
-          ctx.search(peopleOu, s"(|${batch.mkString})", new SearchControls()).asScala.map { result =>
-            unmarshalUser(result.getAttributes)
-          }
-        }.toSeq
-      }
-    }
+    def load(userRefs: TraversableOnce[RawlsUserRef]): ReadWriteAction[Seq[RawlsUser]] = batchedLoad(userRefs.toSeq) { batch => { ctx =>
+      val filters = batch.toSet[RawlsUserRef].map { ref => s"(${Attr.uid}=${ref.userSubjectId.value})" }
+      ctx.search(peopleOu, s"(|${filters.mkString})", new SearchControls()).asScala.map { result =>
+        unmarshalUser(result.getAttributes)
+      }.toSeq
+    } }
 
     def deleteUser(userId: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>
       ctx.unbind(userDn(userId))
@@ -432,6 +419,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
   }
 
   private def withContext[T](op: InitialDirContext => T): ReadWriteAction[T] = DBIO.from(withContext(directoryConfig.directoryUrl, directoryConfig.user, directoryConfig.password)(op))
+  private def batchedLoad[T, R](input: Seq[T])(op: Seq[T] => InitialDirContext => Seq[R]): ReadWriteAction[Seq[R]] = DBIO.from(batchedLoad(directoryConfig.directoryUrl, directoryConfig.user, directoryConfig.password)(input)(op))
 }
 
 

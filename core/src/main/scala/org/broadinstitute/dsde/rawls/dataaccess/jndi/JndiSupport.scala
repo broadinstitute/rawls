@@ -5,11 +5,15 @@ import javax.naming._
 import javax.naming.directory._
 
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
+import slick.dbio.DBIO
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 trait JndiSupport extends LazyLogging {
+  private val batchSize = 1000
+
   protected def getContext(url: String, user: String, password: String): InitialDirContext = {
     val env = new util.Hashtable[String, String]()
     env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory")
@@ -35,6 +39,16 @@ trait JndiSupport extends LazyLogging {
     logger.info(s"jndi op: get connection ${gotCtx-start}, op ${opDone-gotCtx}, closed ${closed-opDone}, overall ${closed-start}")
 
     t.get
+  }
+
+  def batchedLoad[T, R](url: String, user: String, password: String)(input: Seq[T])(op: (Seq[T]) => (InitialDirContext) => Seq[R])(implicit executionContext: ExecutionContext): Future[Seq[R]] = {
+    if (input.isEmpty) {
+      Future.successful(Seq.empty)
+    } else {
+      Future.sequence(input.grouped(batchSize).map { batch =>
+        withContext(url, user, password)(op(batch))
+      }).map(_.flatten.toSeq)
+    }
   }
 
   protected def createAttributeDefinition(schema: DirContext, numericOID: String, name: String, description: String, singleValue: Boolean, equality: Option[String] = None, ordering: Option[String] = None, syntax: Option[String] = None) = {
