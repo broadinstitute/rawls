@@ -23,6 +23,7 @@ import scala.util.Try
 trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
 
   def dateFormat = new SimpleDateFormat("yyyyMMddHHmmss.SSSZ")
+  private val batchSize = 1000
 
   implicit val executionContext: ExecutionContext
   /** a bunch of attributes used in directory entries */
@@ -187,14 +188,16 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }.get
     }
 
-    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = withContext { ctx =>
+    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = {
       val filters = groupRefs.toSet[RawlsGroupRef].map { ref => s"(${Attr.cn}=${ref.groupName.value})"}
       if (filters.isEmpty) {
-        Seq.empty
+        DBIO.successful(Seq.empty)
       } else {
-        ctx.search(groupsOu, s"(|${filters.mkString})", new SearchControls()).asScala.map { result =>
-          unmarshallGroup(result.getAttributes)
-        }.toSeq
+        DBIO.sequence(filters.grouped(batchSize).map { batch => withContext { ctx =>
+          ctx.search(groupsOu, s"(|${batch.mkString})", new SearchControls()).asScala.map { result =>
+            unmarshallGroup(result.getAttributes)
+          }
+        } }).map(_.flatten.toSeq)
       }
     }
 
@@ -395,8 +398,10 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       if (filters.isEmpty) {
         Seq.empty
       } else {
-        ctx.search(peopleOu, s"(|${filters.mkString})", new SearchControls()).asScala.map { result =>
-          unmarshalUser(result.getAttributes)
+        filters.grouped(batchSize).flatMap { batch =>
+          ctx.search(peopleOu, s"(|${batch.mkString})", new SearchControls()).asScala.map { result =>
+            unmarshalUser(result.getAttributes)
+          }
         }.toSeq
       }
     }

@@ -4,10 +4,12 @@ import java.util
 import javax.naming._
 import javax.naming.directory._
 
+import com.typesafe.scalalogging.LazyLogging
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
-trait JndiSupport {
+trait JndiSupport extends LazyLogging {
   protected def getContext(url: String, user: String, password: String): InitialDirContext = {
     val env = new util.Hashtable[String, String]()
     env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory")
@@ -22,9 +24,16 @@ trait JndiSupport {
   }
 
   protected def withContext[T](url: String, user: String, password: String)(op: InitialDirContext => T)(implicit executionContext: ExecutionContext): Future[T] = Future {
+    val start = System.currentTimeMillis()
     val ctx = getContext(url, user, password)
+    val gotCtx = System.currentTimeMillis()
     val t = Try(op(ctx))
+    val opDone = System.currentTimeMillis()
     ctx.close()
+    val closed = System.currentTimeMillis()
+
+    logger.info(s"jndi op: get connection ${gotCtx-start}, op ${opDone-gotCtx}, closed ${closed-opDone}, overall ${closed-start}")
+
     t.get
   }
 
