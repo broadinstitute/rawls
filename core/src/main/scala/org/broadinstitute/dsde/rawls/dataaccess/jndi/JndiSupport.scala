@@ -27,17 +27,10 @@ trait JndiSupport extends LazyLogging {
     new InitialDirContext(env)
   }
 
-  protected def withContext[T](url: String, user: String, password: String)(op: InitialDirContext => T)(implicit executionContext: ExecutionContext): Future[T] = Future {
-    val start = System.currentTimeMillis()
+  protected def withContext[T](url: String, user: String, password: String)(op: InitialDirContext => T)(implicit executionContext: ExecutionContext): Future[T] = 
     val ctx = getContext(url, user, password)
-    val gotCtx = System.currentTimeMillis()
     val t = Try(op(ctx))
-    val opDone = System.currentTimeMillis()
     ctx.close()
-    val closed = System.currentTimeMillis()
-
-    logger.info(s"jndi op: get connection ${gotCtx-start}, op ${opDone-gotCtx}, closed ${closed-opDone}, overall ${closed-start}")
-
     t.get
   }
 
