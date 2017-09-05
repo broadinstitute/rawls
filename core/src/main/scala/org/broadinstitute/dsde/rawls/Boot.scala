@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls
 
 import java.io.StringReader
 import java.net.InetAddress
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Executors, TimeUnit}
 import javax.naming.directory.AttributeInUseException
 
 import akka.actor.ActorSystem
@@ -12,7 +12,7 @@ import akka.util.Timeout
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.readytalk.metrics.{WorkbenchStatsD, StatsDReporter}
+import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{ConfigFactory, ConfigObject, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import slick.backend.DatabaseConfig
@@ -36,7 +36,7 @@ import spray.http.StatusCodes
 import spray.json._
 
 import scala.collection.JavaConversions._
-import scala.concurrent.Await
+import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
@@ -133,6 +133,9 @@ object Boot extends App with LazyLogging {
       workbenchMetricBaseName = metricsPrefix
     )
 
+    //TODO: read this value from system properites after https://github.com/broadinstitute/firecloud-develop/pull/607/files goes in
+    val jndiExecutionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(100))
+
     val ldapConfig = conf.getConfig("userLdap")
     val userDirDAO = new JndiUserDirectoryDAO(
       ldapConfig.getString("providerUrl"),
@@ -143,7 +146,7 @@ object Boot extends App with LazyLogging {
       ldapConfig.getStringList("userObjectClasses").toList,
       ldapConfig.getStringList("userAttributes").toList,
       ldapConfig.getString("userDnFormat")
-    )
+    )(jndiExecutionContext)
 
     enableServiceAccount(gcsDAO, userDirDAO)
 

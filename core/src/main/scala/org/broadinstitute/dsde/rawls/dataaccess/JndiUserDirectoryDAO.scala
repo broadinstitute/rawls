@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util
-import java.util.concurrent.Executors
 import javax.naming._
 import javax.naming.directory._
 
@@ -16,9 +15,7 @@ import scala.util.Try
 /**
  * Created by dvoet on 11/5/15.
  */
-class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, groupDn: String, memberAttribute: String, userObjectClasses: List[String], userAttributes: List[String], userDnFormat: String) extends UserDirectoryDAO {
-
-  implicit private val executionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(200))
+class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, groupDn: String, memberAttribute: String, userObjectClasses: List[String], userAttributes: List[String], userDnFormat: String)(implicit executionContext: ExecutionContext) extends UserDirectoryDAO {
 
   override def createUser(user: RawlsUserSubjectId): Future[Unit] = withContext { ctx =>
     try {
