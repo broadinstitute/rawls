@@ -76,8 +76,8 @@ object AttributeName {
 case class WorkspaceRequest (
                               namespace: String,
                               name: String,
-                              authorizationDomain: Set[ManagedGroupRef],
-                              attributes: AttributeMap
+                              attributes: AttributeMap,
+                              authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty)
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString

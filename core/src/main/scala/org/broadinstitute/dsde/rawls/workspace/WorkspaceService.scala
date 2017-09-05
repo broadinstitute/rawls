@@ -460,7 +460,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               // add to or replace current attributes, on an individual basis
               val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
 
-              withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = newAuthDomain, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
+              withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), dataAccess) { destWorkspaceContext =>
                 dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
                   dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                     val inserts = methodConfigShorts.map { methodConfigShort =>
@@ -484,7 +484,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // if the source has an auth domain, the dest must also have that auth domain as a subset
     // otherwise, the caller may choose to add to the auth domain
     val sourceWorkspaceADs = sourceWorkspaceContext.workspace.authorizationDomain
-    val destWorkspaceADs = destWorkspaceRequest.authorizationDomain
+    val destWorkspaceADs = destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)
 
     if(sourceWorkspaceADs.subsetOf(destWorkspaceADs)) op(sourceWorkspaceADs ++ destWorkspaceADs)
     else {
@@ -1933,7 +1933,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val workspace = Workspace(
         namespace = workspaceRequest.namespace,
         name = workspaceRequest.name,
-        authorizationDomain = workspaceRequest.authorizationDomain,
+        authorizationDomain = workspaceRequest.authorizationDomain.getOrElse(Set.empty),
         workspaceId = workspaceId,
         bucketName = googleWorkspaceInfo.bucketName,
         createdDate = currentDate,
@@ -1966,10 +1966,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             // so if there is an auth domain we have to do the intersection. There should not be any readers or writers
             // at this point (brand new workspace) so we don't need to do intersections for those
             authDomainProjectOwnerIntersection <- DBIOUtils.maybeDbAction(if(workspaceRequest.authorizationDomain.isEmpty)None else Option(workspaceRequest.authorizationDomain)) { authDomain =>
-              dataAccess.rawlsGroupQuery.intersectGroupMembership(authDomain.map(_.toMembersGroupRef) ++ Set(RawlsGroupRef(project.get.groups(ProjectRoles.Owner).groupName)))
+              dataAccess.rawlsGroupQuery.intersectGroupMembership(authDomain.getOrElse(Set.empty).map(_.toMembersGroupRef) ++ Set(RawlsGroupRef(project.get.groups(ProjectRoles.Owner).groupName)))
             }
 
-            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain, authDomainProjectOwnerIntersection))
+            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain.getOrElse(Set.empty), authDomainProjectOwnerIntersection))
 
             savedWorkspace <- saveNewWorkspace(workspaceId, googleWorkspaceInfo, workspaceRequest, dataAccess)
             response <- op(SlickWorkspaceContext(savedWorkspace))
@@ -1988,7 +1988,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         dataAccess.rawlsBillingProjectQuery.load(projectName).flatMap {
           case Some(RawlsBillingProject(_, _, _, CreationStatuses.Ready, _, _)) =>
             dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUser(userInfo)) flatMap { authDomainAccesses =>
-              if(workspaceRequest.authorizationDomain.subsetOf(authDomainAccesses.filter(_.role == ManagedRoles.Member).map(_.managedGroupRef))) op
+              if(workspaceRequest.authorizationDomain.getOrElse(Set.empty).subsetOf(authDomainAccesses.filter(_.role == ManagedRoles.Member).map(_.managedGroupRef))) op
               else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"In order to use a group in an Authorization Domain, you must be a member of that group.")))
             }
 
