@@ -38,7 +38,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   "MethodConfigApi" should "return 201 on create method configuration" in withTestDataApiServices { services =>
-    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("this.foo")), Map("out" -> AttributeString("this.bar")),
       MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
     withStatsD {
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
@@ -63,7 +63,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the workspace last modified date on create method configuration" in withTestDataApiServices { services =>
-    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("this.foo")), Map("out" -> AttributeString("this.bar")),
       MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -382,7 +382,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   def check200AddMC(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
-    val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
+    val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("this.foo2")))
     httpMethod(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -392,7 +392,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(modifiedMethodConfig) {
           responseAs[ValidatedMethodConfiguration].methodConfiguration
         }
-        assertResult(Option(AttributeString("foo2"))) {
+        assertResult(Option(AttributeString("this.foo2"))) {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.inputs.get("param2")
         }
       }
@@ -407,7 +407,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   def checkLastModified(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
-    val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
+    val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("this.foo2")))
     withStatsD {
       httpMethod(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
         services.sealedInstrumentedRoutes ~>

@@ -387,13 +387,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       "testConfig1",
       "Sample",
       Map("p1" -> AttributeString("prereq")),
-      Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("output")),
+      Map("i1" -> AttributeString("this.input")),
+      Map("o1" -> AttributeString("this.output")),
       MethodRepoMethod("ns-config", "meth1", 1)
     )
 
-    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoMethod(wsName.namespace, "method-a", 1))
-    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), MethodRepoMethod("ns-config", "meth1", 1))
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("this.foo")), Map("out1" -> AttributeString("this.bar"), "out2" -> AttributeString("this.splat")), MethodRepoMethod(wsName.namespace, "method-a", 1))
+    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("this.foo"), "param2"-> AttributeString("this.foo2")), Map("out" -> AttributeString("this.bar")), MethodRepoMethod("ns-config", "meth1", 1))
 
     val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(), Map("o1" -> AttributeString("this.foo")), MethodRepoMethod("ns-config", "meth1", 1))
     val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), MethodRepoMethod("ns-config", "meth1", 1))
@@ -401,7 +401,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val methodConfigMissingOutputs = MethodConfiguration("ns", "testConfigMissingOutputs", "Sample", Map(), Map(), Map("some.workflow.output" -> AttributeString("this.might_not_be_here")), MethodRepoMethod("ns-config", "meth1", 1))
 
     val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
     val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
     val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
 
@@ -624,7 +623,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                 methodConfigurationQuery.create(context, methodConfig2),
                 methodConfigurationQuery.create(context, methodConfig3),
                 methodConfigurationQuery.create(context, methodConfigValid),
-                methodConfigurationQuery.create(context, methodConfigUnparseable),
                 methodConfigurationQuery.create(context, methodConfigNotAllSamples),
                 methodConfigurationQuery.create(context, methodConfigAttrTypeMixup),
                 methodConfigurationQuery.create(context, methodConfigArrayType),
@@ -859,19 +857,18 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       "testConfig1",
       "Sample",
       Map("p1" -> AttributeString("prereq")),
-      Map("i1" -> AttributeString("input")),
-      Map("o1" -> AttributeString("output")),
+      Map("i1" -> AttributeString("this.input")),
+      Map("o1" -> AttributeString("this.output")),
       MethodRepoMethod("ns-config", "meth1", 1)
     )
 
-    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoMethod(wsName.namespace, "method-a", 1))
-    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), MethodRepoMethod("ns-config", "meth1", 1))
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("this.foo")), Map("out1" -> AttributeString("this.bar"), "out2" -> AttributeString("this.splat")), MethodRepoMethod(wsName.namespace, "method-a", 1))
+    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("this.foo"), "param2"-> AttributeString("this.foo2")), Map("out" -> AttributeString("this.bar")), MethodRepoMethod("ns-config", "meth1", 1))
 
     val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(), Map("o1" -> AttributeString("this.foo")), MethodRepoMethod("ns-config", "meth1", 1))
     val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), MethodRepoMethod("ns-config", "meth1", 1))
 
     val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
     val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
     val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
 
@@ -908,7 +905,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
 
     val allEntities = Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)
-    val allMCs = Seq(methodConfig, methodConfig2, methodConfig3, methodConfigValid, methodConfigUnparseable, methodConfigNotAllSamples, methodConfigAttrTypeMixup, methodConfigEntityUpdate)
+    val allMCs = Seq(methodConfig, methodConfig2, methodConfig3, methodConfigValid, methodConfigNotAllSamples, methodConfigAttrTypeMixup, methodConfigEntityUpdate)
     def saveAllMCs(context: SlickWorkspaceContext) = DBIO.sequence(allMCs map { mc => methodConfigurationQuery.create(context, mc) })
 
     override def save() = {
