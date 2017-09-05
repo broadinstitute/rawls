@@ -34,6 +34,19 @@ trait JndiSupport extends LazyLogging {
     t.get
   }
 
+  /**
+    * Given a possibly large collection of inputs, splits input into batches and calls op on each batch.
+    * @param url
+    * @param user
+    * @param password
+    * @param input
+    * @param op function of type (Seq[T])(InitialDirContext) => Seq[R], a function that takes a batch which produces a
+    *           function that takes an InitialDirContext that produces the results
+    * @param executionContext
+    * @tparam T type of inputs
+    * @tparam R type of results
+    * @return aggregated results of calling op for each batch
+    */
   def batchedLoad[T, R](url: String, user: String, password: String)(input: Seq[T])(op: (Seq[T]) => (InitialDirContext) => Seq[R])(implicit executionContext: ExecutionContext): Future[Seq[R]] = {
     if (input.isEmpty) {
       Future.successful(Seq.empty)
