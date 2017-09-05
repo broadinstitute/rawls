@@ -451,7 +451,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        assertResult(workspaceWithRealm.authorizationDomain) {
+        assertResult(workspaceWithRealm.authorizationDomain.get) {
           val ws = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
           ws.authorizationDomain
         }
@@ -485,7 +485,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        assertResult(workspaceCopy.authorizationDomain) {
+        assertResult(workspaceCopy.authorizationDomain.get) {
           val ws = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
           ws.authorizationDomain
         }
@@ -1036,7 +1036,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(workspaceWithRealm.authorizationDomain) {
+        assertResult(workspaceWithRealm.authorizationDomain.get) {
           responseAs[Workspace].authorizationDomain
         }
       }
