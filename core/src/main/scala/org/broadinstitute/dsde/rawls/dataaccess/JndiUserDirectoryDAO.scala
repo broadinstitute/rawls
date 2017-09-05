@@ -18,7 +18,7 @@ import scala.util.Try
  */
 class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, groupDn: String, memberAttribute: String, userObjectClasses: List[String], userAttributes: List[String], userDnFormat: String) extends UserDirectoryDAO {
 
-  implicit private val executionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(4))
+  implicit private val executionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(200))
 
   override def createUser(user: RawlsUserSubjectId): Future[Unit] = withContext { ctx =>
     try {
