@@ -27,7 +27,7 @@ trait JndiSupport extends LazyLogging {
     new InitialDirContext(env)
   }
 
-  protected def withContext[T](url: String, user: String, password: String)(op: InitialDirContext => T)(implicit executionContext: ExecutionContext): Future[T] = 
+  protected def withContext[T](url: String, user: String, password: String)(op: InitialDirContext => T)(implicit executionContext: ExecutionContext): Future[T] = Future {
     val ctx = getContext(url, user, password)
     val t = Try(op(ctx))
     ctx.close()
