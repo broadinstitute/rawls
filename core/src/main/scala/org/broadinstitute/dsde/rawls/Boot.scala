@@ -133,8 +133,7 @@ object Boot extends App with LazyLogging {
       workbenchMetricBaseName = metricsPrefix
     )
 
-    //TODO: read this value from system properites after https://github.com/broadinstitute/firecloud-develop/pull/607/files goes in
-    val jndiExecutionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(100))
+    val jndiExecutionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(sys.props.getOrElse("com.sun.jndi.ldap.connect.pool.maxsize", "100").toInt))
 
     val ldapConfig = conf.getConfig("userLdap")
     val userDirDAO = new JndiUserDirectoryDAO(
