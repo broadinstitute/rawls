@@ -161,13 +161,11 @@ trait RawlsBillingProjectComponent {
     def hasOneOfProjectRole(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]): ReadWriteAction[Boolean] = {
       val projectUsersAction = findBillingProjectGroupsForRoles(projectName, roles).result.flatMap { groups =>
         DBIO.sequence(groups.map { group =>
-          rawlsGroupQuery.flattenGroupMembership(RawlsGroupRef(RawlsGroupName(group.groupName)))
+          rawlsGroupQuery.isGroupMember(RawlsGroupRef(RawlsGroupName(group.groupName)), user)
         })
       }
 
-      projectUsersAction.map { projectUsers =>
-        projectUsers.flatten.contains(user)
-      }
+      projectUsersAction.map { isMembers => isMembers.contains(true) }
     }
 
     def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] = {
