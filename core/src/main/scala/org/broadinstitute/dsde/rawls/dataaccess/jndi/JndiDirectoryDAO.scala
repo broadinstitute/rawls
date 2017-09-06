@@ -200,8 +200,9 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }.toSet
     }
 
-    def isGroupMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef): ReadWriteAction[Boolean] = {
-      flattenGroupMembership(groupRef).map(_.contains(userRef))
+    def isGroupMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef): ReadWriteAction[Boolean] = withContext { ctx =>
+      val results = ctx.search(peopleOu, s"(&(${Attr.uid}=${userRef.userSubjectId.value})(${Attr.memberOf}=${groupDn(groupRef.groupName)}))", new SearchControls())
+      results.hasMore
     }
 
     def loadGroupIfMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef): ReadWriteAction[Option[RawlsGroup]] = {
