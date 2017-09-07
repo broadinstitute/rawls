@@ -22,10 +22,16 @@ object TargetedOutputExpression extends StringValidationUtils {
 
   def tryParse(target: ExpressionTarget, expr: String): Try[TargetedOutputExpression] = {
     if (expr.startsWith(target.root)) Try {
-      val attributeName = AttributeName.fromDelimitedName(expr.stripPrefix(target.root))
-      validateUserDefinedString(attributeName.name)
+      val attributeNames = expr.stripPrefix(target.root).split("\\.") filterNot(_.isEmpty) map { name =>
+        val attributeName = AttributeName.fromDelimitedName(name)
+        validateUserDefinedString(attributeName.name)
+        attributeName
+      }
 
-      TargetedOutputExpression(target, attributeName)
+      attributeNames.toList match {
+        case attributeName :: Nil => TargetedOutputExpression(target, attributeName)
+        case _ => throw new RawlsException(s"Invalid output expression: $expr")
+      }
     }
     else Failure(new RawlsException(s"Invalid output expression: $expr"))
   }

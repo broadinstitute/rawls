@@ -22,7 +22,7 @@ object TargetedInputExpression extends StringValidationUtils {
 
   def tryParse(target: ExpressionTarget, expr: String): Try[TargetedInputExpression] = {
     if (expr.startsWith(target.root)) Try {
-      val attributeNames = expr.stripPrefix(target.root).split("\\.") map { name =>
+      val attributeNames = expr.stripPrefix(target.root).split("\\.") filterNot(_.isEmpty) map { name =>
         val attributeName = AttributeName.fromDelimitedName(name)
         validateUserDefinedString(attributeName.name)
         attributeName

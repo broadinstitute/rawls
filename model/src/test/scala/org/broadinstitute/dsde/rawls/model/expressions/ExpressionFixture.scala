@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.model.expressions
 
-
 trait ExpressionFixture {
   val validInputExpressions = Seq(
     "this.gvcf",
@@ -20,6 +19,7 @@ trait ExpressionFixture {
     "-3.77",
     "true",
     """["foo","bar","horsefish"]""",
+    "[1,2,3]",
     """{"key":"value"}""",
     """["a",{"more":{"elaborate":"example"}}]"""
   )
@@ -46,6 +46,8 @@ trait ExpressionFixture {
     "workspace.arbitrary:whatever",
     "this.hyphen-is-allowed",
     "this.underscores_are_ok",
+
+    // empty output expressions are OK
     ""
   )
 
@@ -58,7 +60,16 @@ trait ExpressionFixture {
     "workspace.nope.nope.nope",
     "where_does_this_even_go",
     "gs://buckets-arent-expressions/nope",
-    "*"
-  )
+    "*",
 
+    // JSON output expressions are not allowed
+    """"a string literal"""",
+    "9000",
+    "-3.77",
+    "true",
+    """["foo","bar","horsefish"]""",
+    "[1,2,3]",
+    """{"key":"value"}""",
+    """["a",{"more":{"elaborate":"example"}}]"""
+  )
 }
