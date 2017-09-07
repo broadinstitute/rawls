@@ -375,7 +375,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   val workspace2Request = WorkspaceRequest(
     workspace2Name.namespace,
     workspace2Name.name,
-    Set.empty,
     Map.empty
   )
 

@@ -216,7 +216,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      Set.empty,
       Map.empty
     )
 
@@ -228,11 +227,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(newWorkspace) {
           val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
         }
         assertResult(newWorkspace) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
@@ -245,7 +244,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val newWorkspace = WorkspaceRequest(
       namespace = testData.billingProject.projectName.value,
       name = "newWorkspace",
-      Set.empty,
       Map.empty
     )
 
@@ -267,8 +265,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      authorizationDomain = Set(realmGroup),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup)),
+      attributes = Map.empty
     )
 
     withStatsD {
@@ -279,11 +277,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           }
           assertResult(workspaceWithRealm) {
             val ws = runAndWait(workspaceQuery.findByName(workspaceWithRealm.toWorkspaceName)).get
-            WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
+            WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
           }
           assertResult(workspaceWithRealm) {
             val ws = responseAs[Workspace]
-            WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
+            WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
           }
           // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
           assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceWithRealm.path))))) {
@@ -303,8 +301,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace2",
-      authorizationDomain = Set(realmGroup, realmGroup2, realmGroup3),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup, realmGroup2, realmGroup3)),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -315,11 +313,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(workspaceWithRealm) {
           val ws = runAndWait(workspaceQuery.findByName(workspaceWithRealm.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
         }
         assertResult(workspaceWithRealm) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, ws.authorizationDomain, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
         }
       }
   }
@@ -331,8 +329,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace2",
-      authorizationDomain = Set(realmGroup, realmGroup2, realmGroup3),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup, realmGroup2, realmGroup3)),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -350,8 +348,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace2",
-      authorizationDomain = Set(realmGroup, realmGroup2),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup, realmGroup2)),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -383,8 +381,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace2",
-      authorizationDomain = Set(realmGroup, realmGroup2),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup, realmGroup2)),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -433,8 +431,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace2",
-      authorizationDomain = Set(realmGroup, realmGroup2),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup, realmGroup2)),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -445,7 +443,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", workspaceWithRealm.authorizationDomain, Map.empty)
+    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", Map.empty, workspaceWithRealm.authorizationDomain)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -453,7 +451,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        assertResult(workspaceWithRealm.authorizationDomain) {
+        assertResult(workspaceWithRealm.authorizationDomain.get) {
           val ws = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
           ws.authorizationDomain
         }
@@ -467,8 +465,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace2",
-      authorizationDomain = Set(realmGroup, realmGroup2),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup, realmGroup2)),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -479,7 +477,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", Set(realmGroup, realmGroup2, realmGroup3), Map.empty)
+    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", Map.empty, Option(Set(realmGroup, realmGroup2, realmGroup3)))
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -487,7 +485,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        assertResult(workspaceCopy.authorizationDomain) {
+        assertResult(workspaceCopy.authorizationDomain.get) {
           val ws = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
           ws.authorizationDomain
         }
@@ -499,8 +497,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      authorizationDomain = Set(realmGroup),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup)),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -521,7 +519,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      Set.empty,
       Map(AttributeName(invalidAttrNamespace, "attribute") -> AttributeString("foo"))
     )
 
@@ -541,7 +538,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      Set.empty,
       Map(AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo"))
     )
 
@@ -559,7 +555,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       val newWorkspace = WorkspaceRequest(
         namespace = testData.wsName.namespace,
         name = s"newWorkspace$i",
-        Set.empty,
         Map.empty
       )
 
@@ -732,7 +727,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 Not Found on clone if the source workspace cannot be found" in withTestDataApiServices { services =>
     val cloneSrc = testData.workspace.copy(name = "test_nonexistent_1")
-    val cloneDest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_nonexistent_2", Set.empty, Map.empty)
+    val cloneDest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_nonexistent_2", Map.empty)
     Post(s"${cloneSrc.path}/clone", httpJson(cloneDest)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -835,7 +830,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "clone a workspace if the source exists" in withTestDataApiServices { services =>
-    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Set.empty, Map.empty)
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -866,7 +861,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "clone a workspace and not try to copy over deleted method configs or hidden entities from the source" in withTestDataApiServices { services =>
-    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Set.empty, Map.empty)
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty)
 
     // contains no references in/out, safe to hide
     val entToDelete = testData.sample8
@@ -929,7 +924,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceCopy = WorkspaceRequest(
       namespace = testData.workspace.namespace,
       name = "test_copy",
-      Set.empty, Map(AttributeName(invalidAttrNamespace, "attribute") -> AttributeString("foo"))
+      Map(AttributeName(invalidAttrNamespace, "attribute") -> AttributeString("foo"))
     )
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -950,7 +945,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceCopy = WorkspaceRequest(
       namespace = testData.workspace.namespace,
       name = "test_copy",
-      Set.empty, Map(newAttr)
+      Map(newAttr)
     )
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -986,7 +981,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val updatedWorkspace = testData.workspace.copy(attributes = testData.workspace.attributes + (AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo")))
     runAndWait(workspaceQuery.save(updatedWorkspace))
 
-    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Set.empty, Map.empty)
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1022,8 +1017,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      authorizationDomain = Set(realmGroup),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup)),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -1034,14 +1029,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", workspaceWithRealm.authorizationDomain, Map.empty)
+    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", Map.empty, workspaceWithRealm.authorizationDomain)
     Post(s"${workspaceWithRealm.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(workspaceWithRealm.authorizationDomain) {
+        assertResult(workspaceWithRealm.authorizationDomain.get) {
           responseAs[Workspace].authorizationDomain
         }
       }
@@ -1061,8 +1056,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      authorizationDomain = Set(realmGroup1),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup1)),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -1073,7 +1068,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", Set(realmGroup2), Map.empty)
+    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", Map.empty, Option(Set(realmGroup2)))
     Post(s"${workspaceWithRealm.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1088,7 +1083,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "set the Realm when cloning a workspace with no Realm" in withTestDataApiServices { services =>
-    val workspaceCopyNoRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Set.empty, Map.empty)
+    val workspaceCopyNoRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopyNoRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1102,7 +1097,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner))
 
-    val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", Set(realmGroup), Map.empty)
+    val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", Map.empty, Option(Set(realmGroup)))
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopyRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1121,8 +1116,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      authorizationDomain = Set(realmGroup),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup)),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -1159,8 +1154,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      authorizationDomain = Set(ManagedGroupRef(realmGroup.groupName)),
-      Map.empty
+      authorizationDomain = Option(Set(ManagedGroupRef(realmGroup.groupName))),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -1190,8 +1185,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      authorizationDomain = Set(realmGroup),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup)),
+      attributes = Map.empty
     )
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
@@ -1278,8 +1273,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      authorizationDomain = Set(realmGroup),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup)),
+      attributes = Map.empty
     )
 
     //create the workspace with the realm
@@ -1395,8 +1390,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      authorizationDomain = Set(realmGroup),
-      Map.empty
+      authorizationDomain = Option(Set(realmGroup)),
+      attributes = Map.empty
     )
 
     //create the workspace with the realm
@@ -1489,7 +1484,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "add attributes when cloning a workspace" in withTestDataApiServices { services =>
-    val workspaceNoAttrs = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Set.empty, Map.empty)
+    val workspaceNoAttrs = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceNoAttrs)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1506,7 +1501,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       AttributeName.withDefaultNS("another") -> AttributeNumber(12)    // adds a new attribute
     )
 
-    val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", Set.empty, newAtts)
+    val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", newAtts)
     withStatsD {
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopyRealm)) ~> services.sealedInstrumentedRoutes ~>
         check {
@@ -1525,7 +1520,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 409 Conflict on clone if the destination already exists" in withTestDataApiServices { services =>
-    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = testData.workspaceNoGroups.name, Set.empty, Map.empty)
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = testData.workspaceNoGroups.name, Map.empty)
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -2158,7 +2153,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val newWorkspace = WorkspaceRequest(
       namespace = "foobar",
       name = "newWorkspace",
-      Set.empty,
       Map.empty
     )
 
@@ -2175,7 +2169,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val newWorkspace = WorkspaceRequest(
       namespace = "project",
       name = "newWorkspace",
-      Set.empty,
       Map.empty
     )
 
@@ -2192,7 +2185,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val request = WorkspaceRequest(
       namespace = testData.billingProject.projectName.value,
       name = "newWorkspace",
-      Set.empty,
       Map.empty
     )
 
@@ -2230,8 +2222,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val request = WorkspaceRequest(
       namespace = testData.billingProject.projectName.value,
       name = "newWorkspace",
-      Set(realm),
-      Map.empty
+      Map.empty,
+      Option(Set(realm))
     )
 
     def expectedAccessGroups(workspaceId: String) = Map(
@@ -2275,8 +2267,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val request = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      Set(ManagedGroupRef(RawlsGroupName(realmName))),
-      Map.empty
+      Map.empty,
+      Option(Set(ManagedGroupRef(RawlsGroupName(realmName))))
     )
     val newSample = Entity("sampleNew", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
 
