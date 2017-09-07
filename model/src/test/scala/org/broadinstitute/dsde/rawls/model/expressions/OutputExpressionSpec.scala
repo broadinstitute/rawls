@@ -5,7 +5,7 @@ import org.scalatest.{FlatSpec, Matchers}
 
 import scala.util.{Failure, Success}
 
-class OutputExpressionSpec extends FlatSpec with Matchers {
+class OutputExpressionSpec extends FlatSpec with Matchers with ExpressionFixture {
   "OutputExpressions" should "parse" in {
     OutputExpression.build("this.gvcf") shouldEqual Success(TargetedOutputExpression(EntityTarget, AttributeName("default", "gvcf")))
     OutputExpression.build("workspace.gvcf") shouldEqual Success(TargetedOutputExpression(WorkspaceTarget, AttributeName("default", "gvcf")))
@@ -37,29 +37,14 @@ class OutputExpressionSpec extends FlatSpec with Matchers {
   }
 
   it should "round-trip correctly" in {
-    val strings = Seq(
-      "this.gvcf",
-      "workspace.gvcf",
-      "workspace.library:cohort",
-      "this.library:cohort",
-      "this.arbitrary:whatever",
-      "workspace.arbitrary:whatever",
-      ""
-    )
-
-    strings foreach { s =>
-      OutputExpression.build(s).map(_.toString) shouldEqual Success(s)
+    validOutputExpressions foreach { expr =>
+      OutputExpression.build(expr).map(_.toString) shouldEqual Success(expr)
     }
   }
 
   it should "reject invalid output expressions" in {
-    OutputExpression.build("this.") shouldBe a [Failure[_]]
-    OutputExpression.build("this.bad|character") shouldBe a [Failure[_]]
-    OutputExpression.build("this.case_sample.attribute") shouldBe a [Failure[_]]
-    OutputExpression.build("workspace.") shouldBe a [Failure[_]]
-    OutputExpression.build("workspace........") shouldBe a [Failure[_]]
-    OutputExpression.build("workspace.nope.nope.nope") shouldBe a [Failure[_]]
-    OutputExpression.build("where_does_this_even_go") shouldBe a [Failure[_]]
-    OutputExpression.build("*") shouldBe a [Failure[_]]
+    invalidOutputExpressions foreach { expr =>
+      OutputExpression.build(expr) shouldBe a [Failure[_]]
+    }
   }
 }

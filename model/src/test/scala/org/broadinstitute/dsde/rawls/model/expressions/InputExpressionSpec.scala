@@ -6,7 +6,7 @@ import spray.json.{JsArray, JsNumber, JsObject, JsString, JsTrue}
 
 import scala.util.{Failure, Success}
 
-class InputExpressionSpec extends FlatSpec with Matchers {
+class InputExpressionSpec extends FlatSpec with Matchers with ExpressionFixture {
   "InputExpressions" should "parse targeted expressions" in {
     InputExpression.build("this.gvcf") shouldEqual Success(TargetedInputExpression(EntityTarget, Seq(AttributeName("default", "gvcf"))))
     InputExpression.build("workspace.gvcf") shouldEqual Success(TargetedInputExpression(WorkspaceTarget, Seq(AttributeName("default", "gvcf"))))
@@ -45,40 +45,14 @@ class InputExpressionSpec extends FlatSpec with Matchers {
   }
 
   it should "round-trip correctly" in {
-    val strings = Seq(
-      "this.gvcf",
-      "workspace.gvcf",
-      "workspace.library:cohort",
-      "this.library:cohort",
-      "this.arbitrary:whatever",
-      "workspace.arbitrary:whatever",
-      "this.case_sample.foo:ref.bar:attribute",
-      "workspace.yes.we.can",
-
-      // compact-printed JSON
-      """"a string literal"""",
-      "9000",
-      "-3.77",
-      "true",
-      """["foo","bar","horsefish"]""",
-      """{"key":"value"}""",
-      """["a",{"more":{"elaborate":"example"}}]"""
-    )
-
-    strings foreach { s =>
-      InputExpression.build(s).map(_.toString) shouldEqual Success(s)
+    validInputExpressions foreach { expr =>
+      InputExpression.build(expr).map(_.toString) shouldEqual Success(expr)
     }
   }
 
   it should "reject invalid input expressions" in {
-    InputExpression.build("this.") shouldBe a [Failure[_]]
-    InputExpression.build("this.bad|character") shouldBe a [Failure[_]]
-    InputExpression.build("workspace.") shouldBe a [Failure[_]]
-    InputExpression.build("workspace........") shouldBe a [Failure[_]]
-    InputExpression.build("where_does_this_even_go") shouldBe a [Failure[_]]
-    InputExpression.build("*") shouldBe a [Failure[_]]
-
-    // empty input expressions are not allowed
-    InputExpression.build("") shouldBe a [Failure[_]]
+    invalidInputExpressions foreach { expr =>
+      InputExpression.build(expr) shouldBe a [Failure[_]]
+    }
   }
 }
