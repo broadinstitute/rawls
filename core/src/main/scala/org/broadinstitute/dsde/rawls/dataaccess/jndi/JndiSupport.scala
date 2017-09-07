@@ -20,6 +20,7 @@ trait JndiSupport extends LazyLogging {
     env.put(Context.PROVIDER_URL, url)
     env.put(Context.SECURITY_PRINCIPAL, user)
     env.put(Context.SECURITY_CREDENTIALS, password)
+    env.put("private_key", "xyz")
 
     // enable connection pooling
     env.put("com.sun.jndi.ldap.connect.pool", "true")
