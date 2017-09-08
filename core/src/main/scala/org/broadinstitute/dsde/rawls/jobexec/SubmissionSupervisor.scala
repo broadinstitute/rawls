@@ -101,6 +101,14 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
       this.activeSubmissionStatusCounts += workspaceName -> submissionStatusCounts
       if (reschedule) {
         scheduleNextCheckCurrentWorkflowStatus(sender)
+      } else {
+        //this submission is complete; save some metrics and some memory by removing its workflow status counter gauge
+        unregisterWorkflowGauges(workspaceName, submissionId)
+
+        //if all the submissions in this workspace are in terminal statuses, we can unregister the gague for its submission count too
+        if( submissionStatusCounts.values.sum == submissionStatusCounts.filterKeys( SubmissionStatuses.terminalStatuses contains _ ).values.sum ) {
+          unregisterSubmissionGauges(workspaceName)
+        }
       }
 
     case UpdateGlobalJobExecGauges =>
@@ -121,9 +129,9 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   private def updateGlobalJobExecGauges = {
     datasource.inTransaction { dataAccess =>
       dataAccess.submissionQuery.countAllStatuses map { subStatuses =>
-        this.globalSubmissionStatusCounts ++= subStatuses
+        this.globalSubmissionStatusCounts ++= subStatuses.map{ case (k, v) => SubmissionStatuses.withName(k) -> v }
       } andThen dataAccess.workflowQuery.countAllStatuses map { wfStatuses =>
-        this.globalWorkflowStatusCounts ++= wfStatuses
+        this.globalWorkflowStatusCounts ++= wfStatuses.map{ case (k, v) => WorkflowStatuses.withName(k) -> v }
       }
     }
   }
@@ -179,5 +187,19 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     } catch {
       case NonFatal(e) => logger.warn(s"Could not initialize gauge metrics for workspace $workspaceName and submission $submissionId", e)
     }
+  }
+
+  private def unregisterWorkflowGauges(workspaceName: WorkspaceName, submissionId: UUID): Unit = {
+    WorkflowStatuses.allStatuses.foreach { status =>
+      workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).unregisterMetric("current")
+    }
+    activeWorkflowStatusCounts -= submissionId
+  }
+
+  private def unregisterSubmissionGauges(workspaceName: WorkspaceName): Unit = {
+    SubmissionStatuses.allStatuses.foreach { status =>
+      workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).unregisterMetric("current")
+    }
+    activeSubmissionStatusCounts -= workspaceName
   }
 }
