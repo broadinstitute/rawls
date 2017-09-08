@@ -53,7 +53,7 @@ object UserService {
   case class AdminEnableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class AdminDisableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class AdminDeleteUser(userRef: RawlsUserRef) extends UserServiceMessage
-  case class AdminAddToLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
+  case class AdminAddToLDAP(userSubjectId: RawlsUserSubjectId, email: RawlsUserEmail) extends UserServiceMessage
   case class AdminRemoveFromLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
@@ -116,7 +116,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminEnableUser(userRef) => asFCAdmin { enableUser(userRef) } pipeTo sender
     case AdminDisableUser(userRef) => asFCAdmin { disableUser(userRef) } pipeTo sender
     case AdminDeleteUser(userRef) => asFCAdmin { deleteUser(userRef) } pipeTo sender
-    case AdminAddToLDAP(userSubjectId) => asFCAdmin { addToLDAP(userSubjectId) } pipeTo sender
+    case AdminAddToLDAP(userSubjectId, email) => asFCAdmin { addToLDAP(userSubjectId, email) } pipeTo sender
     case AdminRemoveFromLDAP(userSubjectId) => asFCAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
     case ListGroupsForUser(userEmail) => listGroupsForUser(userEmail) pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
@@ -204,7 +204,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           _ <- dataSource.inTransaction { dataAccess => getOrCreateAllUsersGroup(dataAccess) }
           _ <- updateGroupMembership(allUsersGroupRef, addUsers = Set(user))
         } yield ()),
-        toFutureTry(userDirectoryDAO.createUser(user.userSubjectId) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
+        toFutureTry(userDirectoryDAO.createUser(user.userSubjectId, user.userEmail) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
 
       )).flatMap{ _ => Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user))))})(_ => {
       notificationDAO.fireAndForgetNotification(ActivationNotification(user.userSubjectId))
@@ -351,8 +351,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield RequestComplete(StatusCodes.NoContent)
   }
 
-  def addToLDAP(userSubjectId: RawlsUserSubjectId): Future[PerRequestMessage] = {
-    userDirectoryDAO.createUser(userSubjectId) flatMap { _ =>
+  def addToLDAP(userSubjectId: RawlsUserSubjectId, email: RawlsUserEmail): Future[PerRequestMessage] = {
+    userDirectoryDAO.createUser(userSubjectId, email) flatMap { _ =>
       userDirectoryDAO.enableUser(userSubjectId) } map { _ =>
         RequestComplete(StatusCodes.Created)
     }

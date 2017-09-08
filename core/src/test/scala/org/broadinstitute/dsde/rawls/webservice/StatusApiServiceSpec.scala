@@ -43,7 +43,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
 
   def initializeSubsystems(apiService: TestApiService, subsystemsOk: Boolean) = {
     if (subsystemsOk) {
-      apiService.directoryDAO.createUser(testData.userOwner.userSubjectId)
+      apiService.directoryDAO.createUser(testData.userOwner.userSubjectId, testData.userOwner.userEmail)
     }
     apiService.healthMonitor ! CheckAll
   }

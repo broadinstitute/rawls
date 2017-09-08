@@ -21,7 +21,7 @@ class JndiUserDirectoryDAOSpec extends FlatSpec with Matchers with IntegrationTe
     val user = RawlsUser(RawlsUserSubjectId(UUID.randomUUID().toString), RawlsUserEmail("foo@bar.com"))
 
     assert(!Await.result(dao.isEnabled(user.userSubjectId), Duration.Inf))
-    Await.result(dao.createUser(user.userSubjectId), Duration.Inf)
+    Await.result(dao.createUser(user.userSubjectId, user.userEmail), Duration.Inf)
     assert(!Await.result(dao.isEnabled(user.userSubjectId), Duration.Inf))
     Await.result(dao.enableUser(user.userSubjectId), Duration.Inf)
     assert(Await.result(dao.isEnabled(user.userSubjectId), Duration.Inf))

@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import javax.naming.NameAlreadyBoundException
 
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUser, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUser, RawlsUserEmail, RawlsUserSubjectId}
 import spray.http.StatusCodes
 
 import scala.collection.mutable
@@ -15,12 +15,8 @@ import scala.concurrent.{ExecutionContext, Future}
 class MockUserDirectoryDAO extends UserDirectoryDAO{
   val users = mutable.Map[RawlsUserSubjectId, Boolean]()
 
-  override def createUser(user: RawlsUserSubjectId): Future[Unit] = {
-    if( users.contains(user) ) {
-      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "user already exists")))
-    } else {
-      Future.successful(users += (user -> false))
-    }
+  override def createUser(user: RawlsUserSubjectId, email: RawlsUserEmail): Future[Unit] = {
+    Future.successful(users += (user -> false))
   }
 
   override def removeUser(user: RawlsUserSubjectId): Future[Unit] = Future.successful(users -= user)
