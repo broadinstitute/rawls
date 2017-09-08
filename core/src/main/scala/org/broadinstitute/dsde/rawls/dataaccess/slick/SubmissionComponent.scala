@@ -139,6 +139,12 @@ trait SubmissionComponent {
       }
     }
 
+    def countAllStatuses: ReadAction[Map[String, Int]] = {
+      groupBy(s => s.status).map { case (status, submissions) => (status, submissions.length) }.result map { r =>
+        r.toMap
+      }
+    }
+
     def countByStatus(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Int]] = {
       filter(_.workspaceId === workspaceContext.workspaceId).groupBy(s => s.status).map { case (status, submissions) =>
         (status, submissions.length)

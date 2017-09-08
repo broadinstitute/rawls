@@ -307,6 +307,10 @@ trait WorkflowComponent {
       groupedSeq.map(_.toMap)
     }
 
+    def countAllStatuses: ReadAction[Map[String, Int]] = {
+      groupBy(_.status).map { case (status, workflows) => status -> workflows.length}.result map { _.toMap }
+    }
+
     def countWorkflowsByQueueStatus: ReadAction[Map[String, Int]] = {
       val groupedSeq = findQueuedAndRunningWorkflows.groupBy(_.status).map { case (status, recs) => (status, recs.length) }.result
       groupedSeq.map(_.toMap)
