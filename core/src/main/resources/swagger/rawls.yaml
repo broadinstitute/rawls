@@ -4410,7 +4410,7 @@ definitions:
         enum: ["NoNewCalls", "ContinueWhilePossible"]
 
   SubmissionValidationInput:
-    description: 'method configuration input parameter, it''s name and the associated expression from the method config'
+    description: 'method configuration input parameter, its name and the associated expression from the method config'
     required:
       - wdlName
       - expression
