@@ -56,6 +56,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val intArgName = "w1.t1.int_arg"
   val intOptName = "w1.t1.int_opt"
   val intArrayName = "w1.int_array"
+  val extraArgName = "w1.t1.extra_arg"
 
   val workspace = Workspace("workspaces", "test_workspace", Set.empty, UUID.randomUUID().toString(), "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
@@ -89,6 +90,12 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val configMissingExpr = MethodConfiguration("config_namespace", "configMissingExpr", "Sample",
     Map.empty, Map.empty, Map.empty, dummyMethod)
 
+  val configExtraExpr = MethodConfiguration("config_namespace", "configExtraExpr", "Sample",
+    Map.empty, Map(intArgName -> AttributeString("this.blah"), extraArgName -> AttributeString("this.blah")), Map.empty, dummyMethod)
+
+  val configInvalidExpr = MethodConfiguration("config_namespace", "configInvalidExpr", "Sample",
+    Map.empty, Map(intArgName -> AttributeString("invalid")), Map.empty, dummyMethod)
+
   val configSampleSet = MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
     Map.empty, Map(intArrayName -> AttributeString("this.samples.blah")), Map.empty, dummyMethod)
 
@@ -108,6 +115,8 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
             entityQuery.save(context, sampleSet2),
             methodConfigurationQuery.create(context, configGood),
             methodConfigurationQuery.create(context, configMissingExpr),
+            methodConfigurationQuery.create(context, configExtraExpr),
+            methodConfigurationQuery.create(context, configInvalidExpr),
             methodConfigurationQuery.create(context, configSampleSet)
           )
         }
@@ -151,15 +160,32 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, intArrayName)))
 
       // failure cases
+
       assertResult(true, "Missing values should return an error") {
-        runAndWait(testResolveInputs(context, configGood, sampleMissingValue, littleWdl, this)).get("sampleMissingValue").get match {
+        runAndWait(testResolveInputs(context, configGood, sampleMissingValue, littleWdl, this))(sampleMissingValue.name) match {
           case List(SubmissionValidationValue(None, Some(_), intArg)) if intArg == intArgName => true
         }
       }
 
-      //MethodConfiguration config_namespace/configMissingExpr is missing definitions for these inputs: w1.t1.int_arg
-      intercept[RawlsException] {
+      val missing = intercept[RawlsException] {
         runAndWait(testResolveInputs(context, configMissingExpr, sampleGood, littleWdl, this))
+      }
+      assertResult(s"MethodConfiguration config_namespace/configMissingExpr is missing definitions for these inputs: $intArgName") {
+        missing.getMessage
+      }
+
+      val extra = intercept[RawlsException] {
+        runAndWait(testResolveInputs(context, configExtraExpr, sampleGood, littleWdl, this))
+      }
+      assertResult(s"MethodConfiguration config_namespace/configExtraExpr has extraneous definitions for these inputs: $extraArgName") {
+        extra.getMessage
+      }
+
+      val invalid = intercept[RawlsException] {
+        runAndWait(testResolveInputs(context, configInvalidExpr, sampleGood, littleWdl, this))
+      }
+      assertResult(s"MethodConfiguration config_namespace/configInvalidExpr has invalid input expressions: $intArgName -> invalid") {
+        invalid.getMessage
       }
     }
 
