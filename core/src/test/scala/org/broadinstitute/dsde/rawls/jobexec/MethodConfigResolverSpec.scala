@@ -96,6 +96,9 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val configInvalidExpr = MethodConfiguration("config_namespace", "configInvalidExpr", "Sample",
     Map.empty, Map(intArgName -> AttributeString("invalid")), Map.empty, dummyMethod)
 
+  val configMultipleErrorsExpr = MethodConfiguration("config_namespace", "configMultipleErrorsExpr", "Sample",
+    Map.empty, Map(extraArgName -> AttributeString("invalid")), Map.empty, dummyMethod)
+
   val configSampleSet = MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
     Map.empty, Map(intArrayName -> AttributeString("this.samples.blah")), Map.empty, dummyMethod)
 
@@ -117,6 +120,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
             methodConfigurationQuery.create(context, configMissingExpr),
             methodConfigurationQuery.create(context, configExtraExpr),
             methodConfigurationQuery.create(context, configInvalidExpr),
+            methodConfigurationQuery.create(context, configMultipleErrorsExpr),
             methodConfigurationQuery.create(context, configSampleSet)
           )
         }
@@ -186,6 +190,18 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       }
       assertResult(s"MethodConfiguration config_namespace/configInvalidExpr has invalid input expressions: $intArgName -> invalid") {
         invalid.getMessage
+      }
+
+      val multiple = intercept[RawlsException] {
+        runAndWait(testResolveInputs(context, configMultipleErrorsExpr, sampleGood, littleWdl, this))
+      }
+      val multErrorsExpected = "MethodConfiguration config_namespace/configMultipleErrorsExpr " +
+        s"is missing definitions for these inputs: $intArgName and " +
+        s"it has extraneous definitions for these inputs: $extraArgName and " +
+        s"it has invalid input expressions: $extraArgName -> invalid"
+
+      assertResult(multErrorsExpected) {
+        multiple.getMessage
       }
     }
 
