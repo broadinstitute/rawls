@@ -22,14 +22,15 @@ object TargetedInputExpression extends StringValidationUtils {
 
   def tryParse(target: ExpressionTarget, expr: String): Try[TargetedInputExpression] = {
     if (expr.startsWith(target.root)) Try {
-      val attributeNames = expr.stripPrefix(target.root).split("\\.") filterNot(_.isEmpty) map { name =>
+      val rawNames = expr.stripPrefix(target.root).split("\\.")
+      if (rawNames.isEmpty || rawNames.exists(_.isEmpty)) throw new RawlsException(s"Invalid input expression: $expr")
+
+      val attributeNames = rawNames map { name =>
         val attributeName = AttributeName.fromDelimitedName(name)
         validateUserDefinedString(attributeName.name)
         attributeName
       }
-
-      if (attributeNames.isEmpty) throw new RawlsException(s"Invalid input expression: $expr")
-      else TargetedInputExpression(target, attributeNames)
+      TargetedInputExpression(target, attributeNames)
     }
     else Failure(new RawlsException(s"Invalid input expression: $expr"))
   }

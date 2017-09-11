@@ -27,6 +27,7 @@ trait ExpressionFixture {
   val invalidInputExpressions = Seq(
     "this.",
     "this.bad|character",
+    "this..wont.parse",
     "workspace.",
     "workspace........",
     "where_does_this_even_go",
@@ -54,6 +55,7 @@ trait ExpressionFixture {
   val invalidOutputExpressions = Seq(
     "this.",
     "this.bad|character",
+    "this..wont.parse",
     "this.case_sample.attribute",
     "workspace.",
     "workspace........",
