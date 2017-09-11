@@ -11,6 +11,8 @@ trait ExpressionFixture {
     "workspace.arbitrary:whatever",
     "this.case_sample.foo:ref.bar:attribute",
     "workspace.yes.we.can",
+    "this.hyphen-is-allowed",
+    "this.underscores_are_ok",
 
     // compact-printed JSON
     """"a string literal"""",
@@ -28,6 +30,7 @@ trait ExpressionFixture {
     "workspace.",
     "workspace........",
     "where_does_this_even_go",
+    "gs://buckets-arent-expressions/nope",
     "*",
 
     // empty input expressions are not allowed
@@ -41,6 +44,8 @@ trait ExpressionFixture {
     "this.library:cohort",
     "this.arbitrary:whatever",
     "workspace.arbitrary:whatever",
+    "this.hyphen-is-allowed",
+    "this.underscores_are_ok",
     ""
   )
 
@@ -52,6 +57,7 @@ trait ExpressionFixture {
     "workspace........",
     "workspace.nope.nope.nope",
     "where_does_this_even_go",
+    "gs://buckets-arent-expressions/nope",
     "*"
   )
 
