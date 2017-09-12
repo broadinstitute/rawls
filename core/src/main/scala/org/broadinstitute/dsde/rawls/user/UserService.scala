@@ -921,17 +921,19 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     val allGroupRefs = groupsToIntersect.flatMap(_.groups)
 
     dataAccess.rawlsGroupQuery.load(allGroupRefs).flatMap { allGroups =>
-      // load all the groups first because this is fast and most are likely to be empty
-      // we will just skip over the empty ones later
-      val groupSizesByName = allGroups.map(g => g.groupName -> (g.subGroups.size + g.users.size)).toMap
+      // load all the groups first because this is fast and most are likely to be empty or with no subgroups
+      // only with subgroups do we need to go back to rawlsGroupQuery to do the intersection (which is expensive)
+      val groupsByName = allGroups.map(g => g.groupName -> g).toMap
 
-      // first query the data store for intersections being sure to query once per set of groups
+      // this set makes sure to query once per set of groups
       val intersectionsToMake = Set() ++ groupsToIntersect.map(_.groups)
       val intersections = DBIO.sequence(intersectionsToMake.toSeq.map { groups =>
-        if (groups.forall(g => groupSizesByName(g.groupName) > 0)) {
+        if (groups.exists(g => groupsByName(g.groupName).subGroups.size > 0)) {
+          // subgroups exist, need to go back to the data store to unroll them
           dataAccess.rawlsGroupQuery.intersectGroupMembership(groups).map(members => groups -> members)
         } else {
-          DBIO.successful(groups -> Set.empty[RawlsUserRef])
+          // no subgroups exist, have all the users already so just do it
+          DBIO.successful(groups -> groups.map(ref => groupsByName(ref.groupName).users).reduce(_ intersect _))
         }
       })
 
