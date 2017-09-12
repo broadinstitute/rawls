@@ -917,22 +917,33 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def updateIntersectionGroupMembers(groupsToIntersect: Set[GroupsToIntersect], dataAccess:DataAccess): ReadWriteAction[Iterable[RawlsGroupRef]] = {
-    // first query the data store for intersections being sure to query once per set of groups
-    logger.info(s"groupsToIntersect size: ${groupsToIntersect.size}")
-    val intersectionsToMake = Set() ++ groupsToIntersect.map(_.groups)
-    logger.info(s"intersectionsToMake size: ${intersectionsToMake.size}")
-    val intersections = DBIO.sequence(intersectionsToMake.toSeq.map { groups =>
-      dataAccess.rawlsGroupQuery.intersectGroupMembership(groups).map(members => groups -> members)
-    })
 
-    val intersectionMemberships = intersections.map { sourceGroupsWithMembers =>
-      val membersBySourceGroups = sourceGroupsWithMembers.toMap
-      groupsToIntersect.map { gti =>
-        gti.target -> membersBySourceGroups(gti.groups)
-      }.toSeq
+    val allGroupRefs = groupsToIntersect.flatMap(_.groups)
+
+    dataAccess.rawlsGroupQuery.load(allGroupRefs).flatMap { allGroups =>
+      // load all the groups first because this is fast and most are likely to be empty
+      // we will just skip over the empty ones later
+      val groupSizesByName = allGroups.map(g => g.groupName -> (g.subGroups.size + g.users.size)).toMap
+
+      // first query the data store for intersections being sure to query once per set of groups
+      val intersectionsToMake = Set() ++ groupsToIntersect.map(_.groups)
+      val intersections = DBIO.sequence(intersectionsToMake.toSeq.map { groups =>
+        if (groups.forall(g => groupSizesByName(g.groupName) > 0)) {
+          dataAccess.rawlsGroupQuery.intersectGroupMembership(groups).map(members => groups -> members)
+        } else {
+          DBIO.successful(groups -> Set.empty[RawlsUserRef])
+        }
+      })
+
+      val intersectionMemberships = intersections.map { sourceGroupsWithMembers =>
+        val membersBySourceGroups = sourceGroupsWithMembers.toMap
+        groupsToIntersect.map { gti =>
+          gti.target -> membersBySourceGroups(gti.groups)
+        }.toSeq
+      }
+
+      intersectionMemberships.flatMap(dataAccess.rawlsGroupQuery.overwriteGroupUsers).map(_ => groupsToIntersect.map(_.target))
     }
-
-    intersectionMemberships.flatMap(dataAccess.rawlsGroupQuery.overwriteGroupUsers).map(_ => groupsToIntersect.map(_.target))
   }
 
   def deleteRefreshToken(rawlsUserRef: RawlsUserRef): Future[PerRequestMessage] = {
