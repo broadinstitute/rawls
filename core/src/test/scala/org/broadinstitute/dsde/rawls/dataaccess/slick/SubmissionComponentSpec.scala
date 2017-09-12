@@ -267,7 +267,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   it should "count workflow statuses in aggregate" in withConstantTestDatabase {
     val statusMap = runAndWait(workflowQuery.countAllStatuses)
-    println(statusMap)
+    statusMap shouldBe Map(WorkflowStatuses.Submitted.toString -> 6)
   }
 
   it should "count workflows by queue status" in withDefaultTestDatabase {
