@@ -918,7 +918,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def updateIntersectionGroupMembers(groupsToIntersect: Set[GroupsToIntersect], dataAccess:DataAccess): ReadWriteAction[Iterable[RawlsGroupRef]] = {
     // first query the data store for intersections being sure to query once per set of groups
-    val intersectionsToMake = groupsToIntersect.map(_.groups)
+    logger.info(s"groupsToIntersect size: ${groupsToIntersect.size}")
+    val intersectionsToMake = Set() ++ groupsToIntersect.map(_.groups)
+    logger.info(s"intersectionsToMake size: ${intersectionsToMake.size}")
     val intersections = DBIO.sequence(intersectionsToMake.toSeq.map { groups =>
       dataAccess.rawlsGroupQuery.intersectGroupMembership(groups).map(members => groups -> members)
     })
