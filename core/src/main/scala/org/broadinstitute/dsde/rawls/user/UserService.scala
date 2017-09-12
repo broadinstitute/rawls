@@ -917,11 +917,35 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def updateIntersectionGroupMembers(groupsToIntersect: Set[GroupsToIntersect], dataAccess:DataAccess): ReadWriteAction[Iterable[RawlsGroupRef]] = {
-    val intersectionMemberships = DBIO.sequence(groupsToIntersect.toSeq.map { gti =>
-      dataAccess.rawlsGroupQuery.intersectGroupMembership(gti.groups).map(members => gti.target -> members)
-    })
 
-    intersectionMemberships.flatMap(dataAccess.rawlsGroupQuery.overwriteGroupUsers).map(_ => groupsToIntersect.map(_.target))
+    val allGroupRefs = groupsToIntersect.flatMap(_.groups)
+
+    dataAccess.rawlsGroupQuery.load(allGroupRefs).flatMap { allGroups =>
+      // load all the groups first because this is fast and most are likely to be empty or with no subgroups
+      // only with subgroups do we need to go back to rawlsGroupQuery to do the intersection (which is expensive)
+      val groupsByName = allGroups.map(g => g.groupName -> g).toMap
+
+      // this set makes sure to query once per set of groups
+      val intersectionsToMake = Set() ++ groupsToIntersect.map(_.groups)
+      val intersections = DBIO.sequence(intersectionsToMake.toSeq.map { groups =>
+        if (groups.exists(g => groupsByName(g.groupName).subGroups.size > 0)) {
+          // subgroups exist, need to go back to the data store to unroll them
+          dataAccess.rawlsGroupQuery.intersectGroupMembership(groups).map(members => groups -> members)
+        } else {
+          // no subgroups exist, have all the users already so just do it
+          DBIO.successful(groups -> groups.map(ref => groupsByName(ref.groupName).users).reduce(_ intersect _))
+        }
+      })
+
+      val intersectionMemberships = intersections.map { sourceGroupsWithMembers =>
+        val membersBySourceGroups = sourceGroupsWithMembers.toMap
+        groupsToIntersect.map { gti =>
+          gti.target -> membersBySourceGroups(gti.groups)
+        }.toSeq
+      }
+
+      intersectionMemberships.flatMap(dataAccess.rawlsGroupQuery.overwriteGroupUsers).map(_ => groupsToIntersect.map(_.target))
+    }
   }
 
   def deleteRefreshToken(rawlsUserRef: RawlsUserRef): Future[PerRequestMessage] = {
