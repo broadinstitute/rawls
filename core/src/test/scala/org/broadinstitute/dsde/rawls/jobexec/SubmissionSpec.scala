@@ -187,7 +187,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
-        directoryDAO,
         gpsDAO,
         "test-topic-name",
         notificationDAO
@@ -195,8 +194,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
       val genomicsServiceConstructor = GenomicsService.constructor(
         slickDataSource,
-        gcsDAO,
-        directoryDAO
+        gcsDAO
       )_
 
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))

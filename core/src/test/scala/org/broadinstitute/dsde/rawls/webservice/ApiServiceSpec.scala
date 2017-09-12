@@ -110,8 +110,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       gcsDAO
     ))
 
-    val directoryDAO = new MockUserDirectoryDAO
-
     val googleGroupSyncTopic = "test-topic-name"
 
     val notificationTopic = "test-notification-topic"
@@ -120,7 +118,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      directoryDAO,
       gpsDAO,
       googleGroupSyncTopic,
       notificationDAO
@@ -130,20 +127,18 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
-      gcsDAO,
-      directoryDAO
+      gcsDAO
     )_
 
     val statisticsServiceConstructor = StatisticsService.constructor(
       slickDataSource,
-      gcsDAO,
-      directoryDAO
+      gcsDAO
     )_
 
     val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName)
 
     val healthMonitor = system.actorOf(HealthMonitor.props(
-      dataSource, gcsDAO, gpsDAO, directoryDAO, methodRepoDAO,
+      dataSource, gcsDAO, gpsDAO, methodRepoDAO,
       Seq.empty, Seq.empty, Seq.empty))
     val statusServiceConstructor = StatusService.constructor(healthMonitor)_
 
@@ -179,7 +174,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val sealedInstrumentedRoutes: Route = sealRoute {
       instrumentRequest {
         adminRoutes ~ billingRoutes ~ entityRoutes ~  methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
-          submissionRoutes ~ userRoutes ~ createUserRoute ~ getUserStatusRoute ~ versionRoute ~ workspaceRoutes
+          submissionRoutes ~ userRoutes ~ createUserRoute ~ versionRoute ~ workspaceRoutes
       }
     }
   }

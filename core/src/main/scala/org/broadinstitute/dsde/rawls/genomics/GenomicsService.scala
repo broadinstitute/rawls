@@ -22,15 +22,15 @@ object GenomicsService {
     Props(userServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new GenomicsService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new GenomicsService(userInfo, dataSource, googleServicesDAO)
 
   sealed trait GenomicsServiceMessage
   case class GetOperation(jobId: String) extends GenomicsServiceMessage
 
 }
 
-class GenomicsService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
+class GenomicsService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
 
   override def receive = {
     case GetOperation(jobId) => getOperation(jobId) pipeTo sender

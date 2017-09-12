@@ -25,6 +25,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
   def dateFormat = new SimpleDateFormat("yyyyMMddHHmmss.SSSZ")
 
   implicit val executionContext: ExecutionContext
+
   /** a bunch of attributes used in directory entries */
   private object Attr {
     val member = "uniqueMember"

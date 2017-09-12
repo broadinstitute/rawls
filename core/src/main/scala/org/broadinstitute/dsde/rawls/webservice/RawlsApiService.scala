@@ -33,7 +33,7 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
 
   def actorRefFactory = context
   def apiRoutes = options{ complete(OK) } ~ baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ notificationsRoutes
-  def registerRoutes = options{ complete(OK) } ~ createUserRoute ~ getUserStatusRoute
+  def registerRoutes = options{ complete(OK) } ~ createUserRoute
 
   def receive = runRoute(
     instrumentRequest {
