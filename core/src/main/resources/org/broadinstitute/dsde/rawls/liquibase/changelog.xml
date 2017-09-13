@@ -53,4 +53,5 @@
     <include file="changesets/20170811_index_scratch_tables.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170821_removing_foreign_key_constraints.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170816_save_rawls_instance_for_workflow.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20170911_add_user_run_permissions.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

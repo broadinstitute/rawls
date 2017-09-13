@@ -37,6 +37,8 @@ case class GroupsToIntersect(target: RawlsGroupRef, groups: Set[RawlsGroupRef])
 
 case class WorkspaceUserShareRecord(workspaceId: UUID, subjectId: String)
 case class WorkspaceGroupShareRecord(workspaceId: UUID, groupName: String)
+case class WorkspaceUserRunRecord(workspaceId: UUID, subjectId: String)
+case class WorkspaceGroupRunRecord(workspaceId: UUID, groupName: String)
 case class WorkspaceUserCatalogRecord(workspaceId: UUID, subjectId: String)
 case class WorkspaceGroupCatalogRecord(workspaceId: UUID, groupName: String)
 case class WorkspaceAuthDomainRecord(workspaceId: UUID, groupName: String)
@@ -118,6 +120,24 @@ trait WorkspaceComponent {
     def workspace = foreignKey("FK_GROUP_SHARE_PERMS_WS", workspaceId, workspaceQuery)(_.id)
 
     def * = (workspaceId, groupName) <> (WorkspaceGroupShareRecord.tupled, WorkspaceGroupShareRecord.unapply)
+  }
+
+  class WorkspaceUserRunTable(tag: Tag) extends Table[WorkspaceUserRunRecord](tag, "WORKSPACE_USER_RUN") {
+    def workspaceId = column[UUID]("workspace_id")
+    def userSubjectId = column[String]("user_subject_id")
+
+    def workspace = foreignKey("FK_USER_RUN_PERMS_WS", workspaceId, workspaceQuery)(_.id)
+
+    def * = (workspaceId, userSubjectId) <> (WorkspaceUserRunRecord.tupled, WorkspaceUserRunRecord.unapply)
+  }
+
+  class WorkspaceGroupRunTable(tag: Tag) extends Table[WorkspaceGroupRunRecord](tag, "WORKSPACE_GROUP_RUN") {
+    def workspaceId = column[UUID]("workspace_id")
+    def groupName = column[String]("group_name")
+
+    def workspace = foreignKey("FK_GROUP_RUN_PERMS_WS", workspaceId, workspaceQuery)(_.id)
+
+    def * = (workspaceId, groupName) <> (WorkspaceGroupRunRecord.tupled, WorkspaceGroupRunRecord.unapply)
   }
 
   class WorkspaceUserCatalogTable(tag: Tag) extends Table[WorkspaceUserCatalogRecord](tag, "WORKSPACE_USER_CATALOG") {
