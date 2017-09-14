@@ -10,7 +10,7 @@ import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
-import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression, ThisEntityTarget, WorkspaceTarget}
+import org.broadinstitute.dsde.rawls.model.expressions._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -378,7 +378,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         outputs.get(outputName) match {
           case None => Failure(new RawlsException(s"output named ${outputName} does not exist"))
           case Some(Right(uot: UnsupportedOutputType)) => Failure(new RawlsException(s"output named ${outputName} is not a supported type, received json u${uot.json.compactPrint}"))
-          case Some(Left(output)) => OutputExpression.build(outputExprStr, output)
+          case Some(Left(output)) => OutputExpression.bind(outputExprStr, output)
         }
       }
 
@@ -396,7 +396,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   }
 
   def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Iterable[BoundOutputExpression]): (WorkflowEntityUpdate, Option[Workspace]) = {
-    val entityUpsert = workflowOutputs.collect({ case BoundOutputExpression(ThisEntityTarget, attrName, attr) => (attrName, attr) })
+    val entityUpsert = workflowOutputs.collect({ case BoundOutputExpression(EntityTarget, attrName, attr) => (attrName, attr) })
     val workspaceAttributes = workflowOutputs.collect({ case BoundOutputExpression(WorkspaceTarget, attrName, attr) => (attrName, attr) })
 
     val entityAndUpsert = WorkflowEntityUpdate(entity.toReference, entityUpsert.toMap)

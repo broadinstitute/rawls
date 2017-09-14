@@ -3,6 +3,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.expressions.InputExpression
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
@@ -57,19 +58,22 @@ object MethodConfigResolver {
         case _ => throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} input ${fqn} value is unavailable")
       }
     }
+
     val agoraInputs = workflow.inputs
+
     val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => (!methodConfig.inputs.contains(fqn) || isAttributeEmpty(fqn)) && !workflowInput.optional }.keys
-    val extraInputs = methodConfig.inputs.filter { case (name, expression) => !agoraInputs.contains(name) }.keys
-    if (missingInputs.nonEmpty || extraInputs.nonEmpty) {
-      val message =
-        if (missingInputs.nonEmpty)
-          if (extraInputs.nonEmpty)
-            "is missing definitions for these inputs: " + missingInputs.mkString(", ") + " and it has extraneous definitions for these inputs: " + extraInputs.mkString(", ")
-          else
-            "is missing definitions for these inputs: " + missingInputs.mkString(", ")
-        else
-          "has extraneous definitions for these inputs: " + extraInputs.mkString(", ")
-      throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} ${message}")
+    val extraInputs = methodConfig.inputs.keys.filterNot { agoraInputs.contains }
+    val invalidInputs = methodConfig.inputs.collect {
+      case (name, AttributeString(expr)) if InputExpression.build(expr).isFailure => s"$name -> $expr"
+    }
+
+    if (missingInputs.nonEmpty || extraInputs.nonEmpty || invalidInputs.nonEmpty) {
+      val missingMessage = if (missingInputs.isEmpty) Seq() else Seq("is missing definitions for these inputs: " + missingInputs.mkString(", "))
+      val extraMessage = if (extraInputs.isEmpty) Seq() else Seq("has extraneous definitions for these inputs: " + extraInputs.mkString(", "))
+      val invalidMessage = if (invalidInputs.isEmpty) Seq() else Seq("has invalid input expressions: " + invalidInputs.mkString(", "))
+
+      val message = (missingMessage ++ extraMessage ++ invalidMessage).mkString(" and it ")
+      throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} $message")
     }
     for ((name, expression) <- methodConfig.inputs.toSeq) yield MethodInput(agoraInputs(name), expression.value)
   }

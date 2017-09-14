@@ -381,17 +381,19 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  it should "return a successful Submission but no started workflows when given a method configuration with unparseable inputs" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "UnparseableMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
-    val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-    val (status, newSubmissionReport) = rqComplete.response
-    assertResult(StatusCodes.Created) {
-      status
+  it should "400 when given a method configuration with unparseable inputs" in withWorkspaceService { workspaceService =>
+    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
+    withWorkspaceContext(testData.workspace) { context =>
+      runAndWait(methodConfigurationQuery.create(context, methodConfigUnparseable))
     }
 
-    assert( newSubmissionReport.workflows.size == 0 )
-
-    checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
+    val submissionRq = SubmissionRequest("dsde", "UnparseableMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val rqComplete = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+    }
+    assertResult(StatusCodes.BadRequest) {
+      rqComplete.errorReport.statusCode.get
+    }
   }
 
   it should "return a successful Submission with unstarted workflows where method configuration inputs are missing on some entities" in withWorkspaceService { workspaceService =>
@@ -492,16 +494,19 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  it should "report validated inputs and unrunnable workflows when given a method configuration with unparseable inputs" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "UnparseableMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
-    val vComplete = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
-    val (vStatus, vData) = vComplete.response
-    assertResult(StatusCodes.OK) {
-      vStatus
+  it should "400 when given a method configuration with unparseable inputs" in withWorkspaceService { workspaceService =>
+    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
+    withWorkspaceContext(testData.workspace) { context =>
+      runAndWait(methodConfigurationQuery.create(context, methodConfigUnparseable))
     }
 
-    assert(vData.validEntities.isEmpty)
-    assertResult(testData.sset1.attributes(AttributeName.withDefaultNS("samples")).asInstanceOf[AttributeEntityReferenceList].list.size) { vData.invalidEntities.length }
+    val submissionRq = SubmissionRequest("dsde", "UnparseableMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val rqComplete = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+    }
+    assertResult(StatusCodes.BadRequest) {
+      rqComplete.errorReport.statusCode.get
+    }
   }
 
   it should "report validated inputs and a mixture of started and unstarted workflows where method configuration inputs are missing on some entities" in withWorkspaceService { workspaceService =>

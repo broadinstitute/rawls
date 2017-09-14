@@ -10,17 +10,16 @@ import org.broadinstitute.dsde.rawls.model._
 class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
   import driver.api._
 
-  "MethodConfigurationComponenent" should "save and get a method config" in withDefaultTestDatabase {
+  "MethodConfigurationComponent" should "save and get a method config" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     val methodConfig2 = MethodConfiguration(
       "ns",
       "config2",
       "sample",
-
-      Map("input.expression" -> AttributeString("this..wont.parse")),
-      Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
+      Map("input.expression" -> AttributeString("this.input_expr")),
+      Map("output.expression" -> AttributeString("this.output_expr")),
       MethodRepoMethod("ns-config", "meth2", 2)
     )
 
@@ -79,8 +78,8 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     val changed = testData.methodConfig.copy(rootEntityType = "goober",
       prerequisites = Map.empty,
-      inputs = Map("input.expression.new" -> AttributeString("input.expr")),
-      outputs = Map("output.expression.new" -> AttributeString("output.expr")),
+      inputs = Map("input.expression.new" -> AttributeString("this.input_expr")),
+      outputs = Map("output.expression.new" -> AttributeString("this.output_expr")),
       methodRepoMethod = testData.methodConfig.methodRepoMethod.copy(methodVersion = 2)
     )
 
@@ -108,8 +107,8 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     val changed = testData.methodConfig.copy(rootEntityType = "goober",
       prerequisites = Map.empty,
-      inputs = Map("input.expression.new" -> AttributeString("input.expr")),
-      outputs = Map("output.expression.new" -> AttributeString("output.expr")),
+      inputs = Map("input.expression.new" -> AttributeString("this.input_expr")),
+      outputs = Map("output.expression.new" -> AttributeString("this.output_expr")),
       methodRepoMethod = testData.methodConfig.methodRepoMethod.copy(methodVersion = 2)
     )
 
@@ -137,9 +136,9 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "oldName",
       "sample",
-      Map("input.expression" -> AttributeString("this..wont.parse")),
-      Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
+      Map("input.expression" -> AttributeString("this.input_expr")),
+      Map("output.expression" -> AttributeString("this.output_expr")),
       MethodRepoMethod("ns-config", "meth2", 2)
     )
 
@@ -168,9 +167,9 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "oldName",
       "sample",
-      Map("input.expression" -> AttributeString("this..wont.parse")),
-      Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
+      Map("input.expression" -> AttributeString("this.input_expr")),
+      Map("output.expression" -> AttributeString("this.output_expr")),
       MethodRepoMethod("ns-config", "meth2", 2)
     )
 
@@ -178,9 +177,9 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "newName",
       "sample",
-      Map("input.expression" -> AttributeString("this..wont.parse")),
-      Map("output.expression" -> AttributeString("already.there")),
-      Map("prereq.expression" -> AttributeString("already.there")),
+      Map("prereq.expression" -> AttributeString("prereq.expr")),
+      Map("input.expression" -> AttributeString("this.input_expr")),
+      Map("output.expression" -> AttributeString("this.output_expr")),
       MethodRepoMethod("ns-config", "meth2", 2),
       methodConfigVersion = 10
     )
