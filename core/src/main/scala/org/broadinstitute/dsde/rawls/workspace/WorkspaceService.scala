@@ -804,6 +804,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       if(membersWithComputePermission.nonEmpty && userAccessLevel < WorkspaceAccessLevels.Owner) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the compute permissions of users unless you are a workspace owner. Please correct these entries: $membersWithHigherAccessLevelThanGranter"))
       }
+      if(refsToUpdate.exists {
+        case (_, (WorkspaceAccessLevels.Read, _, Some(true))) => true
+        case _ => false
+      }) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Readers may not be granted compute permissions"))
+      }
 
       val actualChangesToMakeByMember = actualAccessChangesToMake.toMap
       val actualShareChangesToMakeByMember = actualShareChangesToMake.toMap
