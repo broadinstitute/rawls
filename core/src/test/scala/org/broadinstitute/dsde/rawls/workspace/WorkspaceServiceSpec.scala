@@ -333,20 +333,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  it should "validate method config expressions" in withTestDataServices { services =>
-    val shouldBeValid = services.workspaceService.validateMCExpressions(testData.methodConfigValidExprs, this)
-    assertResult(6) { shouldBeValid.validInputs.size }
-    assertResult(4) { shouldBeValid.validOutputs.size }
-    assertResult(0) { shouldBeValid.invalidInputs.size }
-    assertResult(0) { shouldBeValid.invalidOutputs.size }
-
-    val shouldBeInvalid = services.workspaceService.validateMCExpressions(testData.methodConfigInvalidExprs, this)
-    assertResult(1) { shouldBeInvalid.validInputs.size }
-    assertResult(0) { shouldBeInvalid.validOutputs.size }
-    assertResult(1) { shouldBeInvalid.invalidInputs.size }
-    assertResult(4) { shouldBeInvalid.invalidOutputs.size }
-  }
-
   it should "retrieve ACLs" in withTestDataServices { services =>
     //Really annoying setup. I'm trying to avoid using the patch function to test get, so I have to poke
     //ACLs into the workspace manually.

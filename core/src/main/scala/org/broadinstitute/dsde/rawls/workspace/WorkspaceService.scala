@@ -1175,34 +1175,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration) map { _ =>
-      validateMCExpressions(methodConfiguration, dataAccess)
+      ExpressionParser.parseMCExpressions(methodConfiguration, dataAccess)
     }
   }
 
   def updateMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration) map { _ =>
-      validateMCExpressions(methodConfiguration, dataAccess)
+      ExpressionParser.parseMCExpressions(methodConfiguration, dataAccess)
     }
-  }
-
-  def validateMCExpressions(methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ValidatedMethodConfiguration = {
-    val parser = dataAccess  // this makes it compile for some reason (as opposed to inlining parser)
-    def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[Boolean] ) = {
-      val parsed = m map { case (key, attr) => (key, parseFunc(attr.value)) }
-      ( parsed collect { case (key, Success(_)) => key } toSeq,
-        parsed collect { case (key, Failure(regret)) => (key, regret.getMessage) } )
-    }
-    val (successInputs, failedInputs)   = parseAndPartition(methodConfiguration.inputs, ExpressionEvaluator.validateAttributeExpr(parser) )
-    val (successOutputs, failedOutputs) = parseAndPartition(methodConfiguration.outputs, ExpressionEvaluator.validateOutputExpr(parser) )
-
-    ValidatedMethodConfiguration(methodConfiguration, successInputs, failedInputs, successOutputs, failedOutputs)
   }
 
   def getAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
-          DBIO.successful(PerRequest.RequestComplete(StatusCodes.OK, validateMCExpressions(methodConfig, dataAccess)))
+          DBIO.successful(PerRequest.RequestComplete(StatusCodes.OK, ExpressionParser.parseMCExpressions(methodConfig, dataAccess)))
         }
       }
     }
@@ -2172,7 +2159,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 //Remove inputs that are both empty and optional
                 val inputsToEvaluate = methodInputs.filter(input => !(input.workflowInput.optional && input.expression.isEmpty))
                 //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-                MethodConfigResolver.resolveInputsForEntities(workspaceContext, inputsToEvaluate, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
+                MethodConfigResolver.evaluateInputExpressions(workspaceContext, inputsToEvaluate, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
                   valuesByEntity
                     .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values) })
                     .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
