@@ -5,11 +5,11 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 
-case class AccessEntry(accessLevel: WorkspaceAccessLevel, pending: Boolean, canShare: Boolean)
+case class AccessEntry(accessLevel: WorkspaceAccessLevel, pending: Boolean, canShare: Boolean, canCompute: Boolean)
 
 case class WorkspaceACL(acl: Map[String, AccessEntry])
 
-case class WorkspaceACLUpdate(email: String, accessLevel: WorkspaceAccessLevel, canShare: Option[Boolean] = None)
+case class WorkspaceACLUpdate(email: String, accessLevel: WorkspaceAccessLevel, canShare: Option[Boolean] = None, canCompute: Option[Boolean] = None)
 
 case class WorkspaceACLUpdateResponse(subjectId: String, accessLevel: WorkspaceAccessLevel)
 
@@ -84,11 +84,11 @@ class WorkspaceACLJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val AccessEntryFormat = jsonFormat3(AccessEntry)
+  implicit val AccessEntryFormat = jsonFormat4(AccessEntry)
 
   implicit val WorkspaceACLFormat = jsonFormat1(WorkspaceACL)
 
-  implicit val WorkspaceACLUpdateFormat = jsonFormat3(WorkspaceACLUpdate)
+  implicit val WorkspaceACLUpdateFormat = jsonFormat4(WorkspaceACLUpdate)
 
   implicit val WorkspaceACLUpdateResponseFormat = jsonFormat2(WorkspaceACLUpdateResponse)
 
