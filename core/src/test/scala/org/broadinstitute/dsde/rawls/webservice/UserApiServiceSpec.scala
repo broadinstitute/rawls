@@ -86,40 +86,44 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "fully create a user and grant them pending access to a workspace" in withTestDataApiServices { services =>
-    val user = testData.userReader
+  it should "fully create a user and grant them pending access to a workspace" in withMinimalTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
+      runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace.workspaceId), testData.userReader.userSubjectId.value, WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Read, None)))
+      runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace2.workspaceId), testData.userReader.userSubjectId.value, WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Write, None)))
 
-    runAndWait(services.dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(testData.workspace.workspaceId), testData.userReader.userSubjectId.value, WorkspaceACLUpdate("owner-access", WorkspaceAccessLevels.Read, None)))
-    runAndWait(services.dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(testData.workspaceNoAttrs.workspaceId), testData.userReader.userSubjectId.value, WorkspaceACLUpdate("owner-access", WorkspaceAccessLevels.Write, None)))
+      val startingInvites = runAndWait(services.dataSource.dataAccess.workspaceQuery.findWorkspaceInvitesForUser(testData.userOwner.userEmail))
 
-    withStatsD {
-    Post("/user") ~> services.sealedInstrumentedRoutes ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
+      runAndWait(dataSource.dataAccess.rawlsUserQuery.createUser(testData.userOwner))
+
+      withStatsD {
+        Post("/user") ~> services.sealedInstrumentedRoutes ~>
+          check {
+            assertResult(StatusCodes.Created) {
+              status
+            }
+          }
+
+        import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
+
+        Get(s"/workspaces") ~> services.sealedInstrumentedRoutes ~>
+          check {
+            assertResult(Some(WorkspaceAccessLevels.Read)) {
+              responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == minimalTestData.workspace.toWorkspaceName).map(_.accessLevel)
+            }
+            assertResult(Some(WorkspaceAccessLevels.Write)) {
+              responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == minimalTestData.workspace2.toWorkspaceName).map(_.accessLevel)
+            }
+          }
+      } { capturedMetrics =>
+        val expected = expectedHttpRequestMetrics("post", "user", StatusCodes.Created.intValue, 1) ++
+          expectedHttpRequestMetrics("get", "workspaces", StatusCodes.OK.intValue, 1)
+        assertSubsetOf(expected, capturedMetrics)
       }
 
-      import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
+      val leftoverInvites = runAndWait(services.dataSource.dataAccess.workspaceQuery.findWorkspaceInvitesForUser(testData.userOwner.userEmail))
+      assert(leftoverInvites.size == 0)
 
-      Get(s"/workspaces") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(Some(WorkspaceAccessLevels.Read)) {
-            responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == testData.workspace.toWorkspaceName).map(_.accessLevel)
-          }
-          assertResult(Some(WorkspaceAccessLevels.Write)) {
-            responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == testData.workspaceNoAttrs.toWorkspaceName).map(_.accessLevel)
-          }
-        }
-    } { capturedMetrics =>
-      val expected = expectedHttpRequestMetrics("post", "user", StatusCodes.Created.intValue, 1) ++
-        expectedHttpRequestMetrics("get", "workspaces", StatusCodes.OK.intValue, 1)
-      assertSubsetOf(expected, capturedMetrics)
     }
-
-    val leftoverInvites = runAndWait(services.dataSource.dataAccess.workspaceQuery.findWorkspaceInvitesForUser(user.userEmail))
-    assert(leftoverInvites.size == 0)
-
   }
 
   it should "list a user's billing projects" in withTestDataApiServices { services =>
