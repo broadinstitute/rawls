@@ -2502,5 +2502,71 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "prevent user without compute permission from creating submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    testCreateSubmission(dataSource, Option(false), StatusCodes.Forbidden)
+  }
+
+  it should "allow user with explicit compute permission to create submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    testCreateSubmission(dataSource, Option(true), StatusCodes.Created)
+  }
+
+  it should "allow user with default compute permission to create submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    testCreateSubmission(dataSource, None, StatusCodes.Created)
+  }
+
+  private def testCreateSubmission(dataSource: SlickDataSource, canCompute: Option[Boolean], exectedStatus: StatusCode) = {
+    withApiServices(dataSource, testData.userOwner.userEmail.value) { services =>
+      // canCompute explicitly set to false
+      Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, None, canCompute)))) ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+        }
+    }
+    withApiServices(dataSource, testData.userReader.userEmail.value) { services =>
+      val wsName = testData.wsName
+      val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+      val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+
+      createSubmission(wsName, methodConf, testData.sample1, None, services, exectedStatus)
+    }
+  }
+
+  private def createSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
+                                         submissionEntity: Entity, submissionExpression: Option[String],
+                                         services: TestApiService, exectedStatus: StatusCode): Unit = {
+
+    Get(s"${wsName.path}/methodconfigs/${methodConf.namespace}/${methodConf.name}") ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        if (status == StatusCodes.NotFound) {
+          Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
+            sealRoute(services.methodConfigRoutes) ~>
+            check {
+              assertResult(StatusCodes.Created) {
+                status
+              }
+            }
+        } else {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+        }
+      }
+
+    import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionRequestFormat
+
+    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression, false, None)
+    Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(exectedStatus, responseAs[String]) {
+          status
+        }
+      }
+  }
+
 }
 
