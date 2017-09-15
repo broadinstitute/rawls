@@ -139,7 +139,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val healthMonitor = system.actorOf(HealthMonitor.props(
       dataSource, gcsDAO, gpsDAO, methodRepoDAO,
-      Seq.empty, Seq.empty, Seq.empty))
+      Seq.empty, Seq.empty, Seq("my-favorite-bucket")))
     val statusServiceConstructor = StatusService.constructor(healthMonitor)_
 
     val execServiceBatchSize = 3

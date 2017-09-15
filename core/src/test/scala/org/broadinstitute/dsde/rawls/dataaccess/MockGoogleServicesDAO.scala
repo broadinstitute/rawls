@@ -141,10 +141,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def deleteBucket(bucketName: String, monitorRef: ActorRef) = Future.successful(())
 
-  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
-    println("xyz returning a real bucket from the wrong mock dao....")
-    Future.successful(Some(new Bucket))
-  }
+  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(Some(new Bucket))
 
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = Future.successful(Some(List.fill(5)(new BucketAccessControl)))
 

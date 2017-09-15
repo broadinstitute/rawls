@@ -22,10 +22,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 
 class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
-  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
-    println("xyz returning no bucket")
-    Future.successful(None)
-  }
+  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(None)
 }
 
 class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
@@ -93,7 +90,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
               status
             }
             assertResult(StatusCheckResponse(false, AllSubsystems.map {
-              case GoogleBuckets => GoogleBuckets -> SubsystemStatus(false, Some(List("Could not contact Google storage")))
+              case GoogleBuckets => GoogleBuckets -> SubsystemStatus(false, Some(List("Could not find bucket: my-favorite-bucket")))
               case other => other -> SubsystemStatus(true, None)
             }.toMap)) {
               responseAs[StatusCheckResponse]
