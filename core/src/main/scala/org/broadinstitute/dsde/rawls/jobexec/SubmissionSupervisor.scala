@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 object SubmissionSupervisor {
   sealed trait SubmissionSupervisorMessage
 
-  case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential)
+  case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: UUID)
 
   /**
     * A periodic collection of all current workflow and submission status counts.
@@ -38,9 +38,10 @@ object SubmissionSupervisor {
 
   def props(executionServiceCluster: ExecutionServiceCluster,
             datasource: SlickDataSource,
+            bucketCredential: Credential,
             submissionPollInterval: FiniteDuration = 1 minutes,
             workbenchMetricBaseName: String): Props = {
-    Props(new SubmissionSupervisor(executionServiceCluster, datasource, submissionPollInterval, workbenchMetricBaseName))
+    Props(new SubmissionSupervisor(executionServiceCluster, datasource, bucketCredential, submissionPollInterval, workbenchMetricBaseName))
   }
 }
 
@@ -54,6 +55,7 @@ object SubmissionSupervisor {
  */
 class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            datasource: SlickDataSource,
+                           bucketCredential: Credential,
                            submissionPollInterval: FiniteDuration,
                            override val workbenchMetricBaseName: String) extends Actor with LazyLogging with RawlsInstrumented {
   import context._
@@ -91,10 +93,10 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   override def receive = {
-    case SubmissionStarted(workspaceContext, submissionId, credential) =>
-      val child = startSubmissionMonitor(workspaceContext, submissionId, credential)
+    case SubmissionStarted(workspaceName, submissionId) =>
+      val child = startSubmissionMonitor(workspaceName, submissionId, bucketCredential)
       scheduleNextCheckCurrentWorkflowStatus(child)
-      initGauge(workspaceContext, submissionId)
+      initGauge(workspaceName, submissionId)
 
     case SaveCurrentWorkflowStatusCounts(workspaceName, submissionId, workflowStatusCounts, submissionStatusCounts, reschedule) =>
       this.activeWorkflowStatusCounts += submissionId -> workflowStatusCounts
@@ -176,12 +178,12 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     try {
       WorkflowStatuses.allStatuses.foreach { status =>
         workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).asGaugeIfAbsent("current") {
-          activeWorkflowStatusCounts.get(submissionId).getOrElse(status, 0)
+          activeWorkflowStatusCounts.get(submissionId).map(_.getOrElse(status, 0)).getOrElse(0)
         }
       }
       SubmissionStatuses.allStatuses.foreach { status =>
         workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).asGaugeIfAbsent("current") {
-          activeSubmissionStatusCounts.get(workspaceName).getOrElse(status, 0)
+          activeSubmissionStatusCounts.get(workspaceName).map(_.getOrElse(status, 0)).getOrElse(0)
         }
       }
     } catch {
