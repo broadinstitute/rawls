@@ -21,8 +21,11 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 
 
-class MockGoogleServicesExceptionDAO extends MockGoogleServicesDAO("test") {
-  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = throw new RawlsException("foo")
+class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
+  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = {
+    println("xyz returning no bucket")
+    Future.successful(None)
+  }
 }
 
 class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
@@ -49,9 +52,9 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
     }
   }
 
-  def withConstantExceptionTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
+  def withConstantErrorTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
     withConstantTestDatabase { dataSource: SlickDataSource =>
-      val apiService = new TestApiService(dataSource, new MockGoogleServicesExceptionDAO, new MockGooglePubSubDAO)
+      val apiService = new TestApiService(dataSource, new MockGoogleServicesErrorDAO, new MockGooglePubSubDAO)
       withApiServices(dataSource, subsystemsOk, apiService)(testCode)
     }
   }
@@ -80,7 +83,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
     }
   }
 
-  it should "return 500 for non-ok status for any subsystem" in withConstantExceptionTestDataApiServices(false) { services =>
+  it should "return 500 for non-ok status for any subsystem" in withConstantErrorTestDataApiServices(false) { services =>
     eventually {
       withStatsD {
         Get("/status") ~>
