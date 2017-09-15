@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import com.google.api.services.storage.model.Bucket
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
@@ -12,11 +14,17 @@ import org.scalatest.time.{Seconds, Span}
 import spray.http.HttpMethods._
 import spray.http.StatusCodes
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Created by rtitle on 5/21/17.
   */
+
+
+class MockGoogleServicesExceptionDAO extends MockGoogleServicesDAO("test") {
+  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = throw new RawlsException("foo")
+}
+
 class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
   // This configures how long the calls to `whenReady(Future)` and `eventually` will wait
   // before giving up and failing the test.
@@ -25,8 +33,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource, subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+  def withApiServices[T](dataSource: SlickDataSource, subsystemsOk: Boolean, apiService: TestApiService)(testCode: TestApiService => T): T = {
     try {
       initializeSubsystems(apiService, subsystemsOk)
       testCode(apiService)
@@ -37,7 +44,15 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
 
   def withConstantTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
     withConstantTestDatabase { dataSource: SlickDataSource =>
-      withApiServices(dataSource, subsystemsOk)(testCode)
+      val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+      withApiServices(dataSource, subsystemsOk, apiService)(testCode)
+    }
+  }
+
+  def withConstantExceptionTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
+    withConstantTestDatabase { dataSource: SlickDataSource =>
+      val apiService = new TestApiService(dataSource, new MockGoogleServicesExceptionDAO, new MockGooglePubSubDAO)
+      withApiServices(dataSource, subsystemsOk, apiService)(testCode)
     }
   }
 
@@ -65,29 +80,28 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
     }
   }
 
-//TODO: How to simulate a non-ok status now that OpenLDAP is dead?
-//  it should "return 500 for non-ok status for any subsystem" in withConstantTestDataApiServices(false) { services =>
-//    eventually {
-//      withStatsD {
-//        Get("/status") ~>
-//          services.sealedInstrumentedRoutes ~>
-//          check {
-//            assertResult(StatusCodes.InternalServerError) {
-//              status
-//            }
-//            assertResult(StatusCheckResponse(false, AllSubsystems.map {
-//              case Agora => Agora -> SubsystemStatus(false, Some(List("Could not contact methods repo")))
-//              case other => other -> SubsystemStatus(true, None)
-//            }.toMap)) {
-//              responseAs[StatusCheckResponse]
-//            }
-//          }
-//      } { capturedMetrics =>
-//        val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.InternalServerError.intValue, 1)
-//        assertSubsetOf(expected, capturedMetrics)
-//      }
-//    }
-//  }
+  it should "return 500 for non-ok status for any subsystem" in withConstantExceptionTestDataApiServices(false) { services =>
+    eventually {
+      withStatsD {
+        Get("/status") ~>
+          services.sealedInstrumentedRoutes ~>
+          check {
+            assertResult(StatusCodes.InternalServerError) {
+              status
+            }
+            assertResult(StatusCheckResponse(false, AllSubsystems.map {
+              case GoogleBuckets => GoogleBuckets -> SubsystemStatus(false, Some(List("Could not contact Google storage")))
+              case other => other -> SubsystemStatus(true, None)
+            }.toMap)) {
+              responseAs[StatusCheckResponse]
+            }
+          }
+      } { capturedMetrics =>
+        val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.InternalServerError.intValue, 1)
+        assertSubsetOf(expected, capturedMetrics)
+      }
+    }
+  }
 
   List(CONNECT, DELETE, HEAD, OPTIONS, PATCH, POST, PUT, TRACE) foreach { method =>
     it should s"return 405 for $method requests" in withConstantTestDataApiServices(true) { services =>
