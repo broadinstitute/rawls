@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.metrics
 
+import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -21,8 +23,11 @@ trait RawlsStatsDTestUtils extends StatsDTestUtils { this: Eventually with Mocki
     )
   }
 
+  protected def expectedWorkflowStatusMetric(workspaceName: WorkspaceName, submissionId: String, workflowStatus: WorkflowStatus, expectedTimes: Int): (String, String) =
+    (s"${workbenchMetricBaseName}.workspace.${workspaceName.toString.replace('/', '.')}.submission.$submissionId.workflowStatus.${workflowStatus.toString}.count", expectedTimes.toString)
+
   protected def expectedWorkflowStatusMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus, expectedTimes: Int): (String, String) =
-    (s"${workbenchMetricBaseName}.workspace.${workspace.toWorkspaceName.toString.replace('/', '.')}.submission.${submission.submissionId}.workflowStatus.${workflowStatus.toString}.count", expectedTimes.toString)
+    expectedWorkflowStatusMetric(workspace.toWorkspaceName, submission.submissionId, workflowStatus, expectedTimes)
 
   protected def expectedWorkflowStatusMetric(workspace: Workspace, submission: Submission, workflowStatus: WorkflowStatus): (String, String) =
     expectedWorkflowStatusMetric(workspace, submission, workflowStatus, submission.workflows.size)
