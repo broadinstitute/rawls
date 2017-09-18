@@ -7,7 +7,7 @@ import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.{MockExecutionServiceDAO, MockGoogleServicesDAO, MockShardedExecutionServiceCluster}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{SaveCurrentWorkflowStatusCounts, SubmissionStarted, UpdateGlobalJobExecGauges}
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{SaveCurrentWorkflowStatusCounts, SubmissionStarted, RefreshGlobalJobExecGauges}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -137,7 +137,7 @@ class SubmissionSupervisorSpec(_system: ActorSystem) extends TestKit(_system) wi
     withStatsD {
       withSupervisor() { supervisor =>
         //this just looks at the database so we don't need to tell the supervisor about any submissions
-        supervisor ! UpdateGlobalJobExecGauges
+        supervisor ! RefreshGlobalJobExecGauges
         Thread.sleep(1500) //give it a sec for the gauge to roll around again and retry
       }
     } { capturedMetrics =>

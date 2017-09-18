@@ -4,6 +4,7 @@ import java.util.UUID
 
 import akka.actor.SupervisorStrategy.Restart
 import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
+import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
@@ -17,6 +18,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.ThresholdOneForOneStrategy
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
@@ -34,7 +36,8 @@ object SubmissionSupervisor {
     */
   case object CheckCurrentWorkflowStatusCounts
   case class SaveCurrentWorkflowStatusCounts(workspaceName: WorkspaceName, submissionId: UUID, workflowStatusCounts: Map[WorkflowStatus, Int], submissionStatusCounts: Map[SubmissionStatus, Int], reschedule: Boolean)
-  case object UpdateGlobalJobExecGauges
+  case object RefreshGlobalJobExecGauges
+  case class SaveGlobalJobExecCounts(submissionStatuses: Map[SubmissionStatus, Int], workflowStatuses: Map[WorkflowStatus, Int])
 
   def props(executionServiceCluster: ExecutionServiceCluster,
             datasource: SlickDataSource,
@@ -91,7 +94,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     super.preStart()
 
     registerGlobalJobExecGauges()
-    system.scheduler.schedule(0 seconds, submissionPollInterval, self, UpdateGlobalJobExecGauges)
+    system.scheduler.schedule(0 seconds, submissionPollInterval, self, RefreshGlobalJobExecGauges)
   }
 
   override def receive = {
@@ -110,13 +113,16 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
         unregisterWorkflowGauges(workspaceName, submissionId)
 
         //if all the submissions in this workspace are in terminal statuses, we can unregister the gauge for its submission count too
-        if( submissionStatusCounts.values.sum == submissionStatusCounts.filterKeys( SubmissionStatuses.terminalStatuses contains _ ).values.sum ) {
+        if (submissionStatusCounts.keySet == SubmissionStatuses.terminalStatuses.toSet) {
           unregisterSubmissionGauges(workspaceName)
         }
       }
 
-    case UpdateGlobalJobExecGauges =>
-      updateGlobalJobExecGauges
+    case RefreshGlobalJobExecGauges =>
+      refreshGlobalJobExecGauges pipeTo self
+
+    case SaveGlobalJobExecCounts(submissionStatuses, workflowStatuses) =>
+      saveGlobalJobExecCounts(submissionStatuses, workflowStatuses)
   }
 
   private def restartCounter(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable): Counter =
@@ -130,14 +136,21 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     system.scheduler.scheduleOnce(submissionPollInterval, actor, CheckCurrentWorkflowStatusCounts)
   }
 
-  private def updateGlobalJobExecGauges = {
+  private def refreshGlobalJobExecGauges: Future[SaveGlobalJobExecCounts] = {
     datasource.inTransaction { dataAccess =>
-      dataAccess.submissionQuery.countAllStatuses map { subStatuses =>
-        this.globalSubmissionStatusCounts ++= subStatuses.map{ case (k, v) => SubmissionStatuses.withName(k) -> v }
-      } andThen dataAccess.workflowQuery.countAllStatuses map { wfStatuses =>
-        this.globalWorkflowStatusCounts ++= wfStatuses.map{ case (k, v) => WorkflowStatuses.withName(k) -> v }
+      for {
+        subStatuses <- dataAccess.submissionQuery.countAllStatuses
+        wfStatuses <- dataAccess.workflowQuery.countAllStatuses
+      } yield {
+        SaveGlobalJobExecCounts( subStatuses.map { case (k, v) => SubmissionStatuses.withName(k) -> v },
+                                 wfStatuses.map  { case (k, v) => WorkflowStatuses.withName(k) -> v } )
       }
     }
+  }
+
+  private def saveGlobalJobExecCounts(submissionStatuses: Map[SubmissionStatus, Int], workflowStatus: Map[WorkflowStatus, Int]) = {
+    this.globalSubmissionStatusCounts ++= submissionStatuses
+    this.globalWorkflowStatusCounts ++= workflowStatus
   }
 
   // restart the actor on failure (e.g. a DB deadlock or failed transaction)
