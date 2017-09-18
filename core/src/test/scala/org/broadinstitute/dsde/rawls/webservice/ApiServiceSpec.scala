@@ -103,6 +103,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       slickDataSource,
       gcsDAO.getBucketServiceAccountCredential,
       5 seconds,
+      trackDetailedSubmissionMetrics = true,
       workbenchMetricBaseName
     ).withDispatcher("submission-monitor-dispatcher"))
 

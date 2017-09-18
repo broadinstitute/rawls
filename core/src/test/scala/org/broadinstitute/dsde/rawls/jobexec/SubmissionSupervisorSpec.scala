@@ -30,7 +30,7 @@ class SubmissionSupervisorSpec(_system: ActorSystem) extends TestKit(_system) wi
     super.afterAll()
   }
 
-  def withSupervisor[T](op: ActorRef => T): T = {
+  def withSupervisor[T](trackDetailedMetrics: Boolean = true)(op: ActorRef => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO()
     val gcsDAO = new MockGoogleServicesDAO("test")
     val execCluster = MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, slickDataSource)
@@ -39,6 +39,7 @@ class SubmissionSupervisorSpec(_system: ActorSystem) extends TestKit(_system) wi
       slickDataSource,
       gcsDAO.getBucketServiceAccountCredential,
       20 minutes,
+      trackDetailedSubmissionMetrics = trackDetailedMetrics,
       workbenchMetricBaseName
     ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
     try {
@@ -50,7 +51,7 @@ class SubmissionSupervisorSpec(_system: ActorSystem) extends TestKit(_system) wi
 
   "SubmissionSupervisor" should "maintain correct submission metrics for multiple active submissions" in withDefaultTestDatabase {
     withStatsD {
-      withSupervisor { supervisor =>
+      withSupervisor() { supervisor =>
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName, UUID.fromString(testData.submission1.submissionId))
         supervisor ! SaveCurrentWorkflowStatusCounts(testData.workspace.toWorkspaceName, UUID.fromString(testData.submission1.submissionId),
           Map(WorkflowStatuses.Submitted -> 2),
@@ -73,7 +74,7 @@ class SubmissionSupervisorSpec(_system: ActorSystem) extends TestKit(_system) wi
 
   it should "unregister a submission's workflow gauge when the submission completes" in withDefaultTestDatabase {
     withStatsD {
-      withSupervisor { supervisor =>
+      withSupervisor() { supervisor =>
         //start the submission
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName, UUID.fromString(testData.submission1.submissionId))
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName, UUID.fromString(testData.submission2.submissionId))
@@ -107,7 +108,7 @@ class SubmissionSupervisorSpec(_system: ActorSystem) extends TestKit(_system) wi
 
   it should "unregister a workspace's submission gauge when the last submission in a workspace completes" in withDefaultTestDatabase {
     withStatsD {
-      withSupervisor { supervisor =>
+      withSupervisor() { supervisor =>
         //start the submission
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName, UUID.fromString(testData.submission1.submissionId))
         supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName, UUID.fromString(testData.submission2.submissionId))
@@ -134,7 +135,7 @@ class SubmissionSupervisorSpec(_system: ActorSystem) extends TestKit(_system) wi
 
   it should "keep track of global workflow and submission gauges" in withConstantTestDatabase {
     withStatsD {
-      withSupervisor { supervisor =>
+      withSupervisor() { supervisor =>
         //this just looks at the database so we don't need to tell the supervisor about any submissions
         supervisor ! UpdateGlobalJobExecGauges
         Thread.sleep(1500) //give it a sec for the gauge to roll around again and retry
@@ -142,6 +143,29 @@ class SubmissionSupervisorSpec(_system: ActorSystem) extends TestKit(_system) wi
     } { capturedMetrics =>
       capturedMetrics should contain(expectedGlobalSubmissionStatusGauge(SubmissionStatuses.Submitted, 3))
       capturedMetrics should contain(expectedGlobalWorkflowStatusGauge(WorkflowStatuses.Submitted, 6))
+    }
+  }
+
+  it should "not track detailed metrics when told not to" in withDefaultTestDatabase {
+    withStatsD {
+      withSupervisor(trackDetailedMetrics = false) { supervisor =>
+        supervisor ! SubmissionStarted(testData.workspace.toWorkspaceName, UUID.fromString(testData.submission1.submissionId))
+        supervisor ! SaveCurrentWorkflowStatusCounts(testData.workspace.toWorkspaceName, UUID.fromString(testData.submission1.submissionId),
+          Map(WorkflowStatuses.Submitted -> 2),
+          Map(SubmissionStatuses.Submitted -> 1), true)
+
+        supervisor ! SubmissionStarted(testData.workspaceSuccessfulSubmission.toWorkspaceName, UUID.fromString(testData.submissionSuccessful1.submissionId))
+        supervisor ! SaveCurrentWorkflowStatusCounts(testData.workspaceSuccessfulSubmission.toWorkspaceName, UUID.fromString(testData.submissionSuccessful1.submissionId),
+          Map(WorkflowStatuses.Launching -> 1, WorkflowStatuses.Failed -> 1),
+          Map(SubmissionStatuses.Submitted -> 1), true)
+      }
+    } { capturedMetrics =>
+      capturedMetrics shouldNot contain (expectedWorkflowStatusGauge(testData.workspace.toWorkspaceName, testData.submission1.submissionId, WorkflowStatuses.Submitted, 2))
+      capturedMetrics shouldNot contain (expectedWorkflowStatusGauge(testData.workspaceSuccessfulSubmission.toWorkspaceName, testData.submissionSuccessful1.submissionId, WorkflowStatuses.Launching, 1))
+      capturedMetrics shouldNot contain (expectedWorkflowStatusGauge(testData.workspaceSuccessfulSubmission.toWorkspaceName, testData.submissionSuccessful1.submissionId, WorkflowStatuses.Failed, 1))
+
+      capturedMetrics shouldNot contain(expectedSubmissionStatusGauge(testData.workspace.toWorkspaceName, SubmissionStatuses.Submitted, 1))
+      capturedMetrics shouldNot contain(expectedSubmissionStatusGauge(testData.workspaceSuccessfulSubmission.toWorkspaceName, SubmissionStatuses.Submitted, 1))
     }
   }
 }

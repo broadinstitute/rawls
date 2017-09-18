@@ -170,6 +170,7 @@ object Boot extends App with LazyLogging {
       slickDataSource,
       gcsDAO.getBucketServiceAccountCredential,
       util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
+      submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),
       workbenchMetricBaseName = metricsPrefix
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 

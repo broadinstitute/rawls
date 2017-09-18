@@ -40,8 +40,9 @@ object SubmissionSupervisor {
             datasource: SlickDataSource,
             bucketCredential: Credential,
             submissionPollInterval: FiniteDuration = 1 minutes,
+            trackDetailedSubmissionMetrics: Boolean = true,
             workbenchMetricBaseName: String): Props = {
-    Props(new SubmissionSupervisor(executionServiceCluster, datasource, bucketCredential, submissionPollInterval, workbenchMetricBaseName))
+    Props(new SubmissionSupervisor(executionServiceCluster, datasource, bucketCredential, submissionPollInterval, trackDetailedSubmissionMetrics, workbenchMetricBaseName))
   }
 }
 
@@ -57,6 +58,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            datasource: SlickDataSource,
                            bucketCredential: Credential,
                            submissionPollInterval: FiniteDuration,
+                           trackDetailedSubmissionMetrics: Boolean,
                            override val workbenchMetricBaseName: String) extends Actor with LazyLogging with RawlsInstrumented {
   import context._
 
@@ -88,7 +90,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   override def preStart(): Unit = {
     super.preStart()
 
-    initGlobalJobExecGauges()
+    registerGlobalJobExecGauges()
     system.scheduler.schedule(0 seconds, submissionPollInterval, self, UpdateGlobalJobExecGauges)
   }
 
@@ -96,7 +98,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     case SubmissionStarted(workspaceName, submissionId) =>
       val child = startSubmissionMonitor(workspaceName, submissionId, bucketCredential)
       scheduleNextCheckCurrentWorkflowStatus(child)
-      initGauge(workspaceName, submissionId)
+      registerDetailedJobExecGauges(workspaceName, submissionId)
 
     case SaveCurrentWorkflowStatusCounts(workspaceName, submissionId, workflowStatusCounts, submissionStatusCounts, reschedule) =>
       this.activeWorkflowStatusCounts += submissionId -> workflowStatusCounts
@@ -157,7 +159,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     new ThresholdOneForOneStrategy(thresholdLimit = 3)(alwaysRestart)(thresholdFunc)
   }
 
-  private def initGlobalJobExecGauges(): Unit = {
+  private def registerGlobalJobExecGauges(): Unit = {
     try {
       SubmissionStatuses.allStatuses.foreach { status =>
         ExpandedMetricBuilder.expand(SubmissionStatusMetricKey, status).asGaugeIfAbsent("current") {
@@ -174,34 +176,40 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     }
   }
 
-  private def initGauge(workspaceName: WorkspaceName, submissionId: UUID): Unit = {
-    try {
-      WorkflowStatuses.allStatuses.foreach { status =>
-        workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).asGaugeIfAbsent("current") {
-          activeWorkflowStatusCounts.get(submissionId).map(_.getOrElse(status, 0)).getOrElse(0)
+  private def registerDetailedJobExecGauges(workspaceName: WorkspaceName, submissionId: UUID): Unit = {
+    if( trackDetailedSubmissionMetrics ) {
+      try {
+        WorkflowStatuses.allStatuses.foreach { status =>
+          workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).asGaugeIfAbsent("current") {
+            activeWorkflowStatusCounts.get(submissionId).map(_.getOrElse(status, 0)).getOrElse(0)
+          }
         }
-      }
-      SubmissionStatuses.allStatuses.foreach { status =>
-        workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).asGaugeIfAbsent("current") {
-          activeSubmissionStatusCounts.get(workspaceName).map(_.getOrElse(status, 0)).getOrElse(0)
+        SubmissionStatuses.allStatuses.foreach { status =>
+          workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).asGaugeIfAbsent("current") {
+            activeSubmissionStatusCounts.get(workspaceName).map(_.getOrElse(status, 0)).getOrElse(0)
+          }
         }
+      } catch {
+        case NonFatal(e) => logger.warn(s"Could not initialize gauge metrics for workspace $workspaceName and submission $submissionId", e)
       }
-    } catch {
-      case NonFatal(e) => logger.warn(s"Could not initialize gauge metrics for workspace $workspaceName and submission $submissionId", e)
     }
   }
 
   private def unregisterWorkflowGauges(workspaceName: WorkspaceName, submissionId: UUID): Unit = {
-    WorkflowStatuses.allStatuses.foreach { status =>
-      workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).unregisterMetric("current")
+    if( trackDetailedSubmissionMetrics ) {
+      WorkflowStatuses.allStatuses.foreach { status =>
+        workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).unregisterMetric("current")
+      }
+      activeWorkflowStatusCounts -= submissionId
     }
-    activeWorkflowStatusCounts -= submissionId
   }
 
   private def unregisterSubmissionGauges(workspaceName: WorkspaceName): Unit = {
-    SubmissionStatuses.allStatuses.foreach { status =>
-      workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).unregisterMetric("current")
+    if( trackDetailedSubmissionMetrics ) {
+      SubmissionStatuses.allStatuses.foreach { status =>
+        workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).unregisterMetric("current")
+      }
+      activeSubmissionStatusCounts -= workspaceName
     }
-    activeSubmissionStatusCounts -= workspaceName
   }
 }
