@@ -67,11 +67,17 @@ trait InstrumentationDirectives extends RawlsInstrumented {
       | redactAdminBilling | redactAdminAllUserReadAccess | redactNotifications
   )
 
+  private lazy val globalRequestCounter = ExpandedMetricBuilder.empty.asCounter("request")
+  private lazy val globalRequestTimer = ExpandedMetricBuilder.empty.asTimer("latency")
+
   def instrumentRequest: Directive0 = requestInstance flatMap { request =>
     val timeStamp = System.currentTimeMillis
     mapHttpResponse { response =>
+      val elapsed = System.currentTimeMillis - timeStamp
+      globalRequestCounter.inc()
+      globalRequestTimer.update(elapsed, TimeUnit.MILLISECONDS)
       httpRequestCounter(ExpandedMetricBuilder.empty)(request, response).inc()
-      httpRequestTimer(ExpandedMetricBuilder.empty)(request, response).update(System.currentTimeMillis - timeStamp, TimeUnit.MILLISECONDS)
+      httpRequestTimer(ExpandedMetricBuilder.empty)(request, response).update(elapsed, TimeUnit.MILLISECONDS)
       response
     }
   }

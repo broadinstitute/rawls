@@ -193,12 +193,12 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     if( trackDetailedSubmissionMetrics ) {
       try {
         WorkflowStatuses.allStatuses.foreach { status =>
-          workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).asGaugeIfAbsent("current") {
+          workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).transient().asGaugeIfAbsent("current") {
             activeWorkflowStatusCounts.get(submissionId).map(_.getOrElse(status, 0)).getOrElse(0)
           }
         }
         SubmissionStatuses.allStatuses.foreach { status =>
-          workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).asGaugeIfAbsent("current") {
+          workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).transient().asGaugeIfAbsent("current") {
             activeSubmissionStatusCounts.get(workspaceName).map(_.getOrElse(status, 0)).getOrElse(0)
           }
         }
@@ -211,7 +211,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   private def unregisterWorkflowGauges(workspaceName: WorkspaceName, submissionId: UUID): Unit = {
     if( trackDetailedSubmissionMetrics ) {
       WorkflowStatuses.allStatuses.foreach { status =>
-        workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).unregisterMetric("current")
+        workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).transient().unregisterMetric("current")
       }
       activeWorkflowStatusCounts -= submissionId
     }
@@ -220,7 +220,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   private def unregisterSubmissionGauges(workspaceName: WorkspaceName): Unit = {
     if( trackDetailedSubmissionMetrics ) {
       SubmissionStatuses.allStatuses.foreach { status =>
-        workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).unregisterMetric("current")
+        workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).transient().unregisterMetric("current")
       }
       activeSubmissionStatusCounts -= workspaceName
     }
