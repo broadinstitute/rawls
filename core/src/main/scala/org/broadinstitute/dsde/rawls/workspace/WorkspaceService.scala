@@ -1210,13 +1210,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration) map { _ =>
-      ExpressionParser.parseMCExpressions(methodConfiguration, dataAccess)
+      ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, dataAccess)
     }
   }
 
   def updateMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration) map { _ =>
-      ExpressionParser.parseMCExpressions(methodConfiguration, dataAccess)
+      ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, dataAccess)
     }
   }
 
@@ -1224,7 +1224,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
-          DBIO.successful(PerRequest.RequestComplete(StatusCodes.OK, ExpressionParser.parseMCExpressions(methodConfig, dataAccess)))
+          DBIO.successful(PerRequest.RequestComplete(StatusCodes.OK, ExpressionValidator.validateAndParseMCExpressions(methodConfig, dataAccess)))
         }
       }
     }
@@ -2200,25 +2200,26 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+
   private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
-   ( op: (DataAccess, SlickWorkspaceContext, String, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs], Option[WorkflowFailureMode]) => ReadWriteAction[PerRequestMessage]): Future[PerRequestMessage] = {
+    (op: (DataAccess, SlickWorkspaceContext, String, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs], Option[WorkflowFailureMode]) => ReadWriteAction[PerRequestMessage]): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, dataAccess) { methodConfig =>
-          withMethodInputs(methodConfig, userInfo) { (wdl, methodInputs) =>
-            withSubmissionEntityRecs(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntityRecs =>
-              withWorkflowFailureMode(submissionRequest) { workflowFailureMode =>
-                //Remove inputs that are both empty and optional
-                val inputsToEvaluate = methodInputs.filter(input => !(input.workflowInput.optional && input.expression.isEmpty))
-                //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-                MethodConfigResolver.evaluateInputExpressions(workspaceContext, inputsToEvaluate, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
-                  valuesByEntity
-                    .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values) })
-                    .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
-                    case (succeeded, failed) =>
-                      val methodConfigInputs = inputsToEvaluate.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
-                      val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
-                      op(dataAccess, workspaceContext, wdl, header, succeeded.toSeq, failed.toSeq, workflowFailureMode)
+          withMethodInputs(methodConfig, userInfo) { (wdl, inputsToProcess, emptyOptionalInputs) =>
+            withValidatedMCExpressions(methodConfig, inputsToProcess, emptyOptionalInputs, dataAccess) { _ =>
+              withSubmissionEntityRecs(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntityRecs =>
+                withWorkflowFailureMode(submissionRequest) { workflowFailureMode =>
+                  //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
+                  MethodConfigResolver.evaluateInputExpressions(workspaceContext, inputsToProcess, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
+                    valuesByEntity
+                      .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values) })
+                      .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
+                      case (succeeded, failed) =>
+                        val methodConfigInputs = inputsToProcess.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
+                        val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
+                        op(dataAccess, workspaceContext, wdl, header, succeeded.toSeq, failed.toSeq, workflowFailureMode)
+                    }
                   }
                 }
               }
@@ -2229,7 +2230,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 }
-
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
 class AttributeNotFoundException(message: String) extends AttributeUpdateOperationException(message)

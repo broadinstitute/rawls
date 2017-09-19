@@ -3,14 +3,15 @@ package org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.expressions.{ExpressionValidator, SlickExpressionParser}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 import spray.http.StatusCodes
 
-import scala.concurrent.{Future, ExecutionContext}
-import scala.util.{Try, Failure, Success}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 //Well, this is a joke.
 trait MethodWiths {
@@ -27,11 +28,11 @@ trait MethodWiths {
   }
 
   def withMethod[T](methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
-    DBIO.from(methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo)).asTry.flatMap { agoraEntityOption => agoraEntityOption match {
+    DBIO.from(methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo)).asTry.flatMap {
       case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")))
       case Success(Some(agoraEntity)) => op(agoraEntity)
-      case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable))))
-    }}
+      case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.", methodRepoDAO.toErrorReport(throwable))))
+    }
   }
 
   def withWdl[T](method: AgoraEntity)(op: (String) => ReadWriteAction[T]): ReadWriteAction[T] = {
@@ -41,15 +42,27 @@ trait MethodWiths {
     }
   }
 
-  def withMethodInputs[T](methodConfig: MethodConfiguration, userInfo: UserInfo)(op: (String, Seq[MethodInput]) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+  def withMethodInputs[T](methodConfig: MethodConfiguration, userInfo: UserInfo)(op: (String, Seq[MethodInput], Seq[MethodInput]) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
     // TODO add Method to model instead of exposing AgoraEntity?
     val methodRepoMethod = methodConfig.methodRepoMethod
     withMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo) { method =>
-      withWdl(method) { wdl => MethodConfigResolver.gatherInputs(methodConfig,wdl) match {
-        case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
-        case Success(methodInputs) => op(wdl,methodInputs)
-      }}
+      withWdl(method) { wdl =>
+        MethodConfigResolver.gatherInputs(methodConfig, wdl) match {
+          case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
+          case Success(methodInputs) =>
+            //Remove inputs that are both empty and optional
+            val (emptyOptionalInputs, inputsToProcess) = methodInputs.partition(input => input.workflowInput.optional && input.expression.isEmpty)
+            op(wdl, inputsToProcess, emptyOptionalInputs)
+        }
+      }
     }
+  }
+
+  def withValidatedMCExpressions[T](methodConfiguration: MethodConfiguration, methodInputsToProcess: Seq[MethodConfigResolver.MethodInput], emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput], parser: SlickExpressionParser)
+                                   (op: ValidatedMethodConfiguration => ReadWriteAction[T])
+                                   (implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+    val validated = ExpressionValidator.validateExpressionsForSubmission(methodConfiguration, methodInputsToProcess, emptyOptionalMethodInputs, parser)
+    DBIO.from(Future.fromTry(validated)) flatMap op
   }
 }
 

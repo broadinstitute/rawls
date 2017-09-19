@@ -87,13 +87,13 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
     val inputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
-    val outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
+    val outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
       MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
 
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
-    val expectedSuccessOutputs = Seq("good_out")
+    val expectedSuccessOutputs = Seq("good_out", "empty_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
@@ -102,9 +102,13 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(ValidatedMethodConfiguration(newMethodConfig, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {
-          responseAs[ValidatedMethodConfiguration]
-        }
+        val validated = responseAs[ValidatedMethodConfiguration]
+        assertResult(newMethodConfig) { validated.methodConfiguration }
+        assertSameElements(expectedSuccessInputs, validated.validInputs)
+        assertSameElements(expectedFailureInputs, validated.invalidInputs)
+        assertSameElements(expectedSuccessOutputs, validated.validOutputs)
+        assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
+
         // all inputs and outputs are saved, regardless of parsing errors
         for ((key, value) <- inputs) assertResult(Option(value)) {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
@@ -439,12 +443,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   def checkValidAttributeSyntax(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
-    val newOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
+    val newOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = newInputs, outputs = newOutputs)
 
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
-    val expectedSuccessOutputs = Seq("good_out")
+    val expectedSuccessOutputs = Seq("good_out", "empty_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
     httpMethod(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
@@ -453,9 +457,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(ValidatedMethodConfiguration(modifiedMethodConfig, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {
-          responseAs[ValidatedMethodConfiguration]
-        }
+        val validated = responseAs[ValidatedMethodConfiguration]
+        assertResult(modifiedMethodConfig) { validated.methodConfiguration }
+        assertSameElements(expectedSuccessInputs, validated.validInputs)
+        assertSameElements(expectedFailureInputs, validated.invalidInputs)
+        assertSameElements(expectedSuccessOutputs, validated.validOutputs)
+        assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
         // all inputs and outputs are saved, regardless of parsing errors
         for ((key, value) <- newInputs) assertResult(Option(value)) {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.inputs.get(key)
@@ -554,26 +561,29 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "get syntax validation information for a method configuration" in withTestDataApiServices { services =>
     val theInputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
-    val theOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
+    val theOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
 
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
-    val expectedSuccessOutputs = Seq("good_out")
+    val expectedSuccessOutputs = Seq("good_out", "empty_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
-    val foo = testData.methodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
+    val mc = testData.methodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
 
-    runAndWait(methodConfigurationQuery.create(SlickWorkspaceContext(testData.workspace), foo))
+    runAndWait(methodConfigurationQuery.create(SlickWorkspaceContext(testData.workspace), mc))
 
-    Get(s"${foo.path(testData.workspace)}/validate") ~>
+    Get(s"${mc.path(testData.workspace)}/validate") ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
-        assertResult(ValidatedMethodConfiguration(foo, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {
-          responseAs[ValidatedMethodConfiguration]
-        }
+        val validated = responseAs[ValidatedMethodConfiguration]
+        assertResult(mc) { validated.methodConfiguration }
+        assertSameElements(expectedSuccessInputs, validated.validInputs)
+        assertSameElements(expectedFailureInputs, validated.invalidInputs)
+        assertSameElements(expectedSuccessOutputs, validated.validOutputs)
+        assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
       }
   }
 
