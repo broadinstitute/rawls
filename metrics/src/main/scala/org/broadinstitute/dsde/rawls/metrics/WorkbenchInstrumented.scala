@@ -44,6 +44,11 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
         (if (m == "") m else m + ".") + implicitly[Expansion[A]].makeNameWithKey(key, a), _transient)
     }
 
+    /**
+      * Marks a metric as "transient". Transient metrics will automatically be deleted in Hosted
+      * Graphite if they haven't received an update in X amount of time. It's usually good to set
+      * metrics with high granularity (e.g. workspace or submission-level) as transient.
+      */
     def transient(): ExpandedMetricBuilder = {
       new ExpandedMetricBuilder(m, true)
     }

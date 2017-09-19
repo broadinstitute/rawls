@@ -125,8 +125,11 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
       saveGlobalJobExecCounts(submissionStatuses, workflowStatuses)
   }
 
-  private def restartCounter(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable): Counter =
+  private def restartCounter(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable): Counter = {
+    // Note the restart counter is _not_ marked transient() because restarts are relatively rare and
+    // we want to track them over a longer time frame.
     workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand("cause", cause).asCounter("monitorRestarted")
+  }
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential): ActorRef = {
     actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, workbenchMetricBaseName), submissionId.toString)
