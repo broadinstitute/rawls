@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.jndi
 import java.sql.SQLException
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.concurrent.Executors
 import javax.naming._
 import javax.naming.directory._
 
@@ -25,6 +26,10 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
   def dateFormat = new SimpleDateFormat("yyyyMMddHHmmss.SSSZ")
 
   implicit val executionContext: ExecutionContext
+
+  // special exec context to use when searching isMemberOf but not also specifying a single user to search
+  private val isMemberOfExecCtx: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(4))
+
   /** a bunch of attributes used in directory entries */
   private object Attr {
     val member = "uniqueMember"
@@ -194,7 +199,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }.toSeq
     } }
 
-    def flattenGroupMembership(groupRef: RawlsGroupRef): ReadWriteAction[Set[RawlsUserRef]] = withContext { ctx =>
+    def flattenGroupMembership(groupRef: RawlsGroupRef): ReadWriteAction[Set[RawlsUserRef]] = withContextUsingIsMemberOf { ctx =>
       ctx.search(peopleOu, new BasicAttributes(Attr.memberOf, groupDn(groupRef.groupName), true)).asScala.map { result =>
         RawlsUserRef(unmarshalUser(result.getAttributes).userSubjectId)
       }.toSet
@@ -311,7 +316,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       groups.toSet
     }
 
-    def intersectGroupMembership(groups: Set[RawlsGroupRef]): ReadWriteAction[Set[RawlsUserRef]] = withContext { ctx =>
+    def intersectGroupMembership(groups: Set[RawlsGroupRef]): ReadWriteAction[Set[RawlsUserRef]] = withContextUsingIsMemberOf { ctx =>
       val groupFilters = groups.map(g => s"(${Attr.memberOf}=${groupDn(g.groupName)})")
       ctx.search(peopleOu, s"(&${groupFilters.mkString})", new SearchControls()).asScala.map { result =>
         RawlsUserRef(dnToUserSubjectId(result.getNameInNamespace))
@@ -420,6 +425,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
   }
 
   private def withContext[T](op: InitialDirContext => T): ReadWriteAction[T] = DBIO.from(withContext(directoryConfig.directoryUrl, directoryConfig.user, directoryConfig.password)(op))
+  private def withContextUsingIsMemberOf[T](op: InitialDirContext => T): ReadWriteAction[T] = DBIO.from(withContext(directoryConfig.directoryUrl, directoryConfig.user, directoryConfig.password)(op)(isMemberOfExecCtx))
   private def batchedLoad[T, R](input: Seq[T])(op: Seq[T] => InitialDirContext => Seq[R]): ReadWriteAction[Seq[R]] = DBIO.from(batchedLoad(directoryConfig.directoryUrl, directoryConfig.user, directoryConfig.password)(input)(op))
 }
 
