@@ -113,7 +113,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
         unregisterWorkflowGauges(workspaceName, submissionId)
 
         //if all the submissions in this workspace are in terminal statuses, we can unregister the gauge for its submission count too
-        if (submissionStatusCounts.keySet == SubmissionStatuses.terminalStatuses.toSet) {
+        if ( (submissionStatusCounts.keySet -- SubmissionStatuses.terminalStatuses.toSet).isEmpty ) {
           unregisterSubmissionGauges(workspaceName)
         }
       }
