@@ -26,6 +26,12 @@ trait InstrumentationDirectives extends RawlsInstrumented {
   private val redactUserGroupRoleEmail =
     (Slash ~ "api").? / "user" / "groups" / Segment / Segment / Segment
 
+  private val redactGroupAndUser =
+    (Slash ~ "api").? / "groups" / Segment / SegmentIgnore / Segment
+
+  private val redactGroups =
+    (Slash ~ "api").? / "groups" / Segment
+
   private val redactWorkflowIds =
     (Slash ~ "api").? / "workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / (Segment ~ SegmentIgnore.repeat(separator = Slash))
 
@@ -38,13 +44,27 @@ trait InstrumentationDirectives extends RawlsInstrumented {
   private val redactMethodConfigs =
     (Slash ~ "api").? / "workspaces" / Segment / Segment / "methodconfigs" / Segment / (Segment ~ SegmentIgnore.repeat(separator = Slash))
 
+  private val redactGenomicsOperations =
+    (Slash ~ "api").? / "workspaces" / Segment / Segment / "genomics" / "operations" / Segment
+
   private val redactWorkspaceNames =
     (Slash ~ "api").? / "workspaces" / (!"entities" ~ Segment) / (Segment ~ SegmentIgnore.repeat(separator = Slash))
 
+  private val redactAdminBilling =
+    (Slash ~ "admin").? / "billing" / Segment / SegmentIgnore / Segment
+
+  private val redactAdminAllUserReadAccess =
+    (Slash ~ "admin").? / "allUserReadAccess" / Segment / Segment
+
+  private val redactNotifications =
+    (Slash ~ "api").? / "notifications" / "workspace" / Segment / Segment
+
+
   // Strip out unique IDs from metrics by providing a redactedUriExpansion
   override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
-    redactBillingProject | redactBillingProjectRoleEmail | redactUserGroup | redactUserGroupRoleEmail | redactWorkflowIds
-      | redactSubmissionIds | redactEntityIds | redactMethodConfigs | redactWorkspaceNames
+    redactBillingProject | redactBillingProjectRoleEmail | redactUserGroup | redactUserGroupRoleEmail | redactGroupAndUser | redactGroups
+      | redactWorkflowIds | redactSubmissionIds | redactEntityIds | redactMethodConfigs | redactGenomicsOperations | redactWorkspaceNames
+      | redactAdminBilling | redactAdminAllUserReadAccess | redactNotifications
   )
 
   def instrumentRequest: Directive0 = requestInstance flatMap { request =>

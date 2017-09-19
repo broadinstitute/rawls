@@ -787,17 +787,22 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 getting method inputs and outputs" in withTestDataApiServices { services =>
-    val method = MethodRepoMethod("dsde","three_step",1)
-    Post("/methodconfigs/inputsOutputs", httpJson(method)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expectedIn = Seq(MethodInput("three_step.cgrep.pattern","String",false))
-        val expectedOut = Seq(MethodOutput("three_step.ps.procs","File"), MethodOutput("three_step.cgrep.count","Int"), MethodOutput("three_step.wc.count","Int"))
-        val result = responseAs[MethodInputsOutputs]
-        assertSameElements(expectedIn, result.inputs)
-        assertSameElements(expectedOut, result.outputs)
-      }
+    withStatsD {
+      val method = MethodRepoMethod("dsde", "three_step", 1)
+      Post("/methodconfigs/inputsOutputs", httpJson(method)) ~>
+        sealRoute(services.methodConfigRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) { status }
+          val expectedIn = Seq(MethodInput("three_step.cgrep.pattern", "String", false))
+          val expectedOut = Seq(MethodOutput("three_step.ps.procs", "File"), MethodOutput("three_step.cgrep.count", "Int"), MethodOutput("three_step.wc.count", "Int"))
+          val result = responseAs[MethodInputsOutputs]
+          assertSameElements(expectedIn, result.inputs)
+          assertSameElements(expectedOut, result.outputs)
+        }
+    } { capturedMetrics =>
+      val expected = expectedHttpRequestMetrics("get", "methods.redacted.redacted.redacted", StatusCodes.OK.intValue, 1, Some(Subsystems.Agora))
+      assertSubsetOf(expected, capturedMetrics)
+    }
   }
 
   it should "return 404 when generating a method config template from a missing method" in withTestDataApiServices { services =>
