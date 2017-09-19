@@ -149,8 +149,8 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def saveGlobalJobExecCounts(submissionStatuses: Map[SubmissionStatus, Int], workflowStatus: Map[WorkflowStatus, Int]) = {
-    this.globalSubmissionStatusCounts ++= submissionStatuses
-    this.globalWorkflowStatusCounts ++= workflowStatus
+    this.globalSubmissionStatusCounts = submissionStatuses
+    this.globalWorkflowStatusCounts = workflowStatus
   }
 
   // restart the actor on failure (e.g. a DB deadlock or failed transaction)
