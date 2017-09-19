@@ -181,6 +181,11 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     assert(Option(1) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Aborted.toString))
   }
 
+  it should "count submissions by their statuses across all workspaces" in withConstantTestDatabase {
+    val statusMap = runAndWait(submissionQuery.countAllStatuses)
+    statusMap shouldBe Map(SubmissionStatuses.Submitted.toString -> 3)
+  }
+
   //if this unit test breaks, chances are you have added a submission to the test data which has changed the values below
   it should "gather submission statistics" in withConstantTestDatabase {
     val submissionsRun = runAndWait(submissionQuery.SubmissionStatisticsQueries.countSubmissionsInWindow("2010-01-01", "2100-01-01"))
@@ -263,6 +268,11 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     intercept[RawlsConcurrentModificationException] {
       runAndWait(workflowQuery.updateStatus(workflowRecBefore, WorkflowStatuses.Failed))
     }
+  }
+
+  it should "count workflow statuses in aggregate" in withConstantTestDatabase {
+    val statusMap = runAndWait(workflowQuery.countAllStatuses)
+    statusMap shouldBe Map(WorkflowStatuses.Submitted.toString -> 6)
   }
 
   it should "count workflows by queue status" in withDefaultTestDatabase {

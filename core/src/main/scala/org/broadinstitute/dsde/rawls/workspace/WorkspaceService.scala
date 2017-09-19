@@ -1506,7 +1506,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     submissionFuture map {
       case RequestComplete((StatusCodes.Created, submissionReport: SubmissionReport)) =>
         if (submissionReport.status == SubmissionStatuses.Submitted) {
-          submissionSupervisor ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId), gcsDAO.getBucketServiceAccountCredential)
+          submissionSupervisor ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId))
         }
         RequestComplete(StatusCodes.Created, submissionReport)
 

@@ -101,7 +101,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       slickDataSource,
+      gcsDAO.getBucketServiceAccountCredential,
       5 seconds,
+      trackDetailedSubmissionMetrics = true,
       workbenchMetricBaseName
     ).withDispatcher("submission-monitor-dispatcher"))
 

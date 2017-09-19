@@ -42,6 +42,9 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
         (if (m == "") m else m + ".") + implicitly[Expansion[A]].makeNameWithKey(key, a))
     }
 
+    def getFullName(name: String): String =
+      metricBaseName.append(makeName(name)).name
+
     def asCounter(name: String): Counter =
       metrics.counter(makeName(name))
 
@@ -50,7 +53,7 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
 
     def asGaugeIfAbsent[T](name: String)(fn: => T): Gauge[T] = {
       // Get the fully qualified metric name for inspecting the registry.
-      val gaugeName = metricBaseName.append(makeName(name)).name
+      val gaugeName = getFullName(name)
       metricRegistry.getGauges().asScala.get(gaugeName) match {
         case None =>
           // If the gauge does not exist in the registry, create it
@@ -67,6 +70,11 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
 
     def asHistogram(name: String): Histogram =
       metrics.histogram(makeName(name))
+
+    def unregisterMetric(name: String): Boolean = {
+      val metricName = getFullName(name)
+      metricRegistry.remove(metricName)
+    }
 
     private def makeName(name: String): String =
       if (m.nonEmpty) s"$m.$name" else name

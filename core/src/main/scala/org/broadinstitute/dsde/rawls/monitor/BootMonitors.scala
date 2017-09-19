@@ -39,7 +39,7 @@ object BootMonitors extends LazyLogging {
         val wsName = WorkspaceName(activeSub.workspaceNamespace, activeSub.workspaceName)
         val subId = activeSub.submission.submissionId
 
-        submissionSupervisor ! SubmissionStarted(wsName, UUID.fromString(subId), gcsDAO.getBucketServiceAccountCredential)
+        submissionSupervisor ! SubmissionStarted(wsName, UUID.fromString(subId))
       }}
     } onFailure {
       case t: Throwable => logger.error("Error starting submission monitor", t)
