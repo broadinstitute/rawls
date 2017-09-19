@@ -16,11 +16,9 @@ import org.scalatest.concurrent.Eventually
 
 import scala.concurrent.duration._
 
-class SubmissionSupervisorSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with RawlsTestUtils with MockitoTestUtils with RawlsStatsDTestUtils {
+class SubmissionSupervisorSpec extends TestKit(ActorSystem("SubmissionSupervisorSpec")) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with RawlsTestUtils with MockitoTestUtils with RawlsStatsDTestUtils {
 
   import driver.api._
-
-  def this() = this(ActorSystem("SubmissionSupervisorSpec"))
 
   val testDbName = "SubmissionSupervisorSpec"
   val submissionSupervisorActorName = "test-subsupervisorspec-submission-supervisor"
