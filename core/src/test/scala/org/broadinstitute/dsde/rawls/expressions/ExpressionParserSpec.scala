@@ -1,22 +1,28 @@
 package org.broadinstitute.dsde.rawls.expressions
 
+import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.model.{AttributeString}
 import org.scalatest.FlatSpec
 
-class ExpressionParserSpec extends FlatSpec with TestDriverComponent {
+class ExpressionParserSpec extends FlatSpec with TestDriverComponent with ExpressionFixture with RawlsTestUtils  {
+
+  // assumes that expressions have already been validated: see ExpressionValidatorSpec for that step
 
   it should "parse method config expressions" in {
-    val shouldBeValid = ExpressionParser.parseMCExpressions(testData.methodConfigValidExprs, this)
-    assertResult(6) { shouldBeValid.validInputs.size }
-    assertResult(4) { shouldBeValid.validOutputs.size }
-    assertResult(0) { shouldBeValid.invalidInputs.size }
-    assertResult(0) { shouldBeValid.invalidOutputs.size }
+    def toExpressionMap(expressions: Seq[String]): Map[String, AttributeString] =
+      expressions.map { expr => expr.toString -> AttributeString(expr) }.toMap
 
-    val shouldBeInvalid = ExpressionParser.parseMCExpressions(testData.methodConfigInvalidExprs, this)
-    assertResult(1) { shouldBeInvalid.validInputs.size }
-    assertResult(0) { shouldBeInvalid.validOutputs.size }
-    assertResult(1) { shouldBeInvalid.invalidInputs.size }
-    assertResult(4) { shouldBeInvalid.invalidOutputs.size }
+    val actualParseable = ExpressionParser.parseMCExpressions(toExpressionMap(parseableInputExpressions), toExpressionMap(parseableOutputExpressions), this)
+    assertSameElements(parseableInputExpressions, actualParseable.validInputs)
+    assertSameElements(parseableOutputExpressions, actualParseable.validOutputs)
+    actualParseable.invalidInputs shouldBe 'empty
+    actualParseable.invalidOutputs shouldBe 'empty
+
+    val actualUnparseable = ExpressionParser.parseMCExpressions(toExpressionMap(unparseableInputExpressions), toExpressionMap(unparseableOutputExpressions), this)
+    actualUnparseable.validInputs shouldBe 'empty
+    actualUnparseable.validOutputs shouldBe 'empty
+    actualUnparseable.invalidInputs should have size unparseableInputExpressions.size
+    actualUnparseable.invalidOutputs should have size unparseableOutputExpressions.size
   }
-
 }

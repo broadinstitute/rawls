@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.model._
 class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
   import driver.api._
 
-  "MethodConfigurationComponenent" should "save and get a method config" in withDefaultTestDatabase {
+  "MethodConfigurationComponent" should "save and get a method config" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     val methodConfig2 = MethodConfiguration(

@@ -236,6 +236,12 @@ case class ValidatedMethodConfiguration(
                                          validOutputs: Seq[String],
                                          invalidOutputs: Map[String,String])
 
+case class ParsedMCExpressions(
+                                         validInputs: Seq[String],
+                                         invalidInputs: Map[String,String],
+                                         validOutputs: Seq[String],
+                                         invalidOutputs: Map[String,String])
+
 case class MethodRepoConfigurationImport(
                                          methodRepoNamespace: String,
                                          methodRepoName: String,

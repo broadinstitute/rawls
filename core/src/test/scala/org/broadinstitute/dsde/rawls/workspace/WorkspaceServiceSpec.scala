@@ -132,7 +132,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-
   "WorkspaceService" should "add attribute to entity" in withTestDataServices { services =>
     assertResult(Some(AttributeString("foo"))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo")))).attributes.get(AttributeName.withDefaultNS("newAttribute"))

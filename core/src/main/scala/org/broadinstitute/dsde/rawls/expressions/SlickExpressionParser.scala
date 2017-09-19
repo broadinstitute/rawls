@@ -45,7 +45,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   // Entity expressions take the general form entity.ref.ref.attribute.
   // For now, we expect the initial entity to be the special token "this", which is bound at evaluation time to a root entity.
 
-  //Parser for expressions ending in a value (not a reference)
+  //Parser for expressions ending in an attribute value (not an entity reference)
   private def attributeExpression: Parser[PipelineQuery] = {
     // the basic case: this.(ref.)*attribute
     entityRootDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
@@ -64,10 +64,12 @@ trait SlickExpressionParser extends JavaTokenParsers {
   }
 
   //Parser for output expressions: this.attribute or workspace.attribute (no entity references in the middle)
-  private def outputExpression: Parser[PipelineQuery] = {
+  private def outputAttributeExpression: Parser[PipelineQuery] = {
+    // this.attribute
     entityRootDot ~ valueAttribute ^^ {
       case root ~ attr => PipelineQuery(Option(root), List.empty, attr)
     } |
+    // workspace.attribute
     workspaceAttribute ^^ {
       case workspace => PipelineQuery(None, List.empty, workspace)
     }
@@ -145,8 +147,8 @@ trait SlickExpressionParser extends JavaTokenParsers {
     parse(expression, attributeExpression)
   }
 
-  def parseOutputExpr(expression: String): Try[PipelineQuery] = {
-    parse(expression, outputExpression)
+  def parseOutputAttributeExpr(expression: String): Try[PipelineQuery] = {
+    parse(expression, outputAttributeExpression)
   }
 
   def parseEntityExpr(expression: String): Try[PipelineQuery] = {
