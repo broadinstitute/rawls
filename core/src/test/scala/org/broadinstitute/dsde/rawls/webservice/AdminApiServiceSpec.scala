@@ -309,7 +309,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
     } { capturedMetrics =>
       val expected = expectedHttpRequestMetrics("post", "billing", StatusCodes.Created.intValue, 1) ++
-        expectedHttpRequestMetrics("delete", s"admin.billing.${projectName.value}.user.nobody", StatusCodes.NotFound.intValue, 1)
+        expectedHttpRequestMetrics("delete", "admin.billing.redacted.user.redacted", StatusCodes.NotFound.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
   }
@@ -361,7 +361,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
     } { capturedMetrics =>
       val expected = expectedHttpRequestMetrics("get", s"admin.billing.list.${testUser.userEmail.value}", StatusCodes.OK.intValue, 2) ++
-        expectedHttpRequestMetrics("put", s"admin.billing.${project1.projectName.value}.user.${testUser.userEmail.value}", StatusCodes.OK.intValue, 1)
+        expectedHttpRequestMetrics("put", s"admin.billing.redacted.user.redacted", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
   }

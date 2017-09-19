@@ -125,8 +125,11 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
       saveGlobalJobExecCounts(submissionStatuses, workflowStatuses)
   }
 
-  private def restartCounter(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable): Counter =
+  private def restartCounter(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable): Counter = {
+    // Note the restart counter is _not_ marked transient() because restarts are relatively rare and
+    // we want to track them over a longer time frame.
     workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand("cause", cause).asCounter("monitorRestarted")
+  }
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential): ActorRef = {
     actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, workbenchMetricBaseName), submissionId.toString)
@@ -193,12 +196,12 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     if( trackDetailedSubmissionMetrics ) {
       try {
         WorkflowStatuses.allStatuses.foreach { status =>
-          workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).asGaugeIfAbsent("current") {
+          workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).transient().asGaugeIfAbsent("current") {
             activeWorkflowStatusCounts.get(submissionId).map(_.getOrElse(status, 0)).getOrElse(0)
           }
         }
         SubmissionStatuses.allStatuses.foreach { status =>
-          workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).asGaugeIfAbsent("current") {
+          workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).transient().asGaugeIfAbsent("current") {
             activeSubmissionStatusCounts.get(workspaceName).map(_.getOrElse(status, 0)).getOrElse(0)
           }
         }
@@ -211,7 +214,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   private def unregisterWorkflowGauges(workspaceName: WorkspaceName, submissionId: UUID): Unit = {
     if( trackDetailedSubmissionMetrics ) {
       WorkflowStatuses.allStatuses.foreach { status =>
-        workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).unregisterMetric("current")
+        workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).transient().unregisterMetric("current")
       }
       activeWorkflowStatusCounts -= submissionId
     }
@@ -220,7 +223,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   private def unregisterSubmissionGauges(workspaceName: WorkspaceName): Unit = {
     if( trackDetailedSubmissionMetrics ) {
       SubmissionStatuses.allStatuses.foreach { status =>
-        workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).unregisterMetric("current")
+        workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).transient().unregisterMetric("current")
       }
       activeSubmissionStatusCounts -= workspaceName
     }

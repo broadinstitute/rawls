@@ -24,7 +24,7 @@ trait RawlsStatsDTestUtils extends StatsDTestUtils { this: Eventually with Mocki
   }
 
   private def expectedWorkflowStatusBase(workspaceName: WorkspaceName, submissionId: String, workflowStatus: WorkflowStatus): String =
-    s"${workbenchMetricBaseName}.workspace.${workspaceName.toString.replace('/', '.')}.submission.$submissionId.workflowStatus.${workflowStatus.toString}"
+    s"${workbenchMetricBaseName}.transient.workspace.${workspaceName.toString.replace('/', '.')}.submission.$submissionId.workflowStatus.${workflowStatus.toString}"
 
   protected def expectedWorkflowStatusMetric(workspaceName: WorkspaceName, submissionId: String, workflowStatus: WorkflowStatus, expectedTimes: Int): (String, String) =
     (s"${expectedWorkflowStatusBase(workspaceName, submissionId, workflowStatus)}.count", expectedTimes.toString)
@@ -39,7 +39,7 @@ trait RawlsStatsDTestUtils extends StatsDTestUtils { this: Eventually with Mocki
     expectedWorkflowStatusMetric(workspace, submission, workflowStatus, submission.workflows.size)
 
   private def expectedSubmissionStatusBase(workspaceName: WorkspaceName, submissionStatus: SubmissionStatus): String =
-    s"${workbenchMetricBaseName}.workspace.${workspaceName.toString.replace('/', '.')}.submissionStatus.${submissionStatus.toString}"
+    s"${workbenchMetricBaseName}.transient.workspace.${workspaceName.toString.replace('/', '.')}.submissionStatus.${submissionStatus.toString}"
 
   protected def expectedSubmissionStatusMetric(workspace: Workspace, submissionStatus: SubmissionStatus, expectedTimes: Int = 1): (String, String) =
     expectedSubmissionStatusMetric(workspace.toWorkspaceName, submissionStatus, expectedTimes)

@@ -943,7 +943,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
               }
             }
         } { capturedMetrics =>
-          val expected = expectedHttpRequestMetrics("get", s"groups.$testGroupName", expectedStatus.intValue, 1)
+          val expected = expectedHttpRequestMetrics("get", "groups.redacted", expectedStatus.intValue, 1)
           assertSubsetOf(expected, capturedMetrics)
         }
       }

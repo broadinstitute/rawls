@@ -43,6 +43,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
   protected def submissionStatusCounter(builder: ExpandedMetricBuilder): SubmissionStatus => Counter =
     status => builder
       .expand(SubmissionStatusMetricKey, status)
+      .transient()
       .asCounter("count")
 
   /**
@@ -53,6 +54,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
   protected def workflowStatusCounter(builder: ExpandedMetricBuilder): WorkflowStatus => Counter =
     status => builder
       .expand(WorkflowStatusMetricKey, status)
+      .transient()
       .asCounter("count")
 }
 
