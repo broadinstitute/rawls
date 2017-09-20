@@ -159,7 +159,9 @@ object Boot extends App with LazyLogging {
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
       slickDataSource,
+      gcsDAO.getBucketServiceAccountCredential,
       util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
+      submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),
       workbenchMetricBaseName = metricsPrefix
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 

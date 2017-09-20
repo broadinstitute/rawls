@@ -5,7 +5,7 @@ import spray.json._
 
 import scala.util.Try
 
-object JsonExpressionParsing {
+object JsonExpressionEvaluator {
   def evaluate(expression: String): Try[Iterable[AttributeValue]] = {
     val jsonExprT = Try(expression.parseJson)
     jsonExprT map { jsonExpr =>

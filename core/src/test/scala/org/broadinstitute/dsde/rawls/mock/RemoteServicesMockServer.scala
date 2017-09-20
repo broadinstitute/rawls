@@ -455,7 +455,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
             """
               |{
               |  "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
-              |  "logs": {
+              |  "calls": {
               |    "wf.x": [{
               |      "stdout": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
               |      "stderr": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt"
@@ -570,7 +570,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
             """
               |{
               |  "id": "8afafe21-2b70-4180-a565-748cb573e10c",
-              |  "logs": {
+              |  "calls": {
               |  }
               |}
             """.stripMargin)

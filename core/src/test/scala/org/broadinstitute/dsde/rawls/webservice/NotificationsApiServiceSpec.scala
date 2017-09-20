@@ -39,7 +39,7 @@ class NotificationsApiServiceSpec extends ApiServiceSpec {
            }
          }
      } { capturedMetrics =>
-       val wsPathForRequestMetrics = "notifications.workspace.foo.bar"
+       val wsPathForRequestMetrics = "notifications.workspace.redacted.redacted"
        val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
        assertSubsetOf(expected, capturedMetrics)
      }

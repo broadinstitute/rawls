@@ -74,11 +74,11 @@ object MethodConfigResolver {
     for ((name, expression) <- methodConfig.inputs.toSeq) yield MethodInput(agoraInputs(name), expression.value)
   }
 
-  def resolveInputsForEntities(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
+  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
     if( inputs.isEmpty ) {
-      //no inputs to resolve = just return an empty map back!
+      //no inputs to evaluate = just return an empty map back!
       DBIO.successful(entities.map( _.name -> Seq.empty[SubmissionValidationValue] ).toMap)
     } else {
       ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
@@ -87,10 +87,10 @@ object MethodConfigResolver {
           evaluator.evalFinalAttribute(workspaceContext, input.expression).asTry.map { tryAttribsByEntity =>
             val validationValuesByEntity: Seq[(String, SubmissionValidationValue)] = tryAttribsByEntity match {
               case Failure(regret) =>
-                //The DBIOAction failed - this input expression was unparseable. Make an error for each entity.
+                //The DBIOAction failed - this input expression was not evaluated. Make an error for each entity.
                 entities.map(e => (e.name, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.fqn)))
               case Success(attributeMap) =>
-                //The expression was parseable, but that doesn't mean we got results...
+                //The expression was evaluated, but that doesn't mean we got results...
                 attributeMap.map {
                   case (key, Success(attrSeq)) => key -> unpackResult(attrSeq.toSeq, input.workflowInput)
                   case (key, Failure(regret)) => key -> SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.fqn)

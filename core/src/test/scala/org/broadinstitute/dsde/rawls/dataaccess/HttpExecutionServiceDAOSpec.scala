@@ -89,7 +89,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
     withStatsD {
       val result = test.logs("8afafe21-2b70-4180-a565-748cb573e10c", userInfo).futureValue
       result.id shouldBe "8afafe21-2b70-4180-a565-748cb573e10c"
-      result.logs shouldBe 'empty
+      result.calls shouldBe 'empty
     } { capturedMetrics =>
       capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "workflows.v1.redacted.logs", 201, 1, Option(Subsystems.Cromwell)))
     }
