@@ -184,6 +184,10 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     runAndWait(rawlsGroupQuery.save(group2))
     runAndWait(rawlsGroupQuery.save(group3))
 
+    assertResult(Set(group1, group2, group3)) {
+      runAndWait(rawlsGroupQuery.loadGroupsRecursive(Set(groupRef3)))
+    }
+
     assertResult(Some(group1)) {
       runAndWait(rawlsGroupQuery.loadGroupIfMember(groupRef1, userRef1))
     }
@@ -255,6 +259,10 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     runAndWait(rawlsGroupQuery.save(group1))
 
     Seq(group1, group2, group3) foreach { group =>
+      assertResult(Set(group1, group2, group3)) {
+        runAndWait(rawlsGroupQuery.loadGroupsRecursive(Set(group)))
+      }
+
       assertResult(Some(group)) {
         runAndWait(rawlsGroupQuery.loadGroupIfMember(group, user1))
       }
