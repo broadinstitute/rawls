@@ -918,9 +918,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def updateIntersectionGroupMembers(groupsToIntersect: Set[GroupsToIntersect], dataAccess:DataAccess): ReadWriteAction[Iterable[RawlsGroupRef]] = {
 
+    def flattenGroup(group: RawlsGroup, allGroupsByName: Map[RawlsGroupName, RawlsGroup], visited: Set[RawlsGroupRef] = Set.empty): Set[RawlsUserRef] = {
+      val newVisited = visited + group
+      val subGroupsToVisit = group.subGroups -- newVisited
+      group.users ++ subGroupsToVisit.flatMap(sg => { flattenGroup(allGroupsByName(sg.groupName), allGroupsByName, newVisited) })
+    }
+
     val allGroupRefs = groupsToIntersect.flatMap(_.groups)
 
-    dataAccess.rawlsGroupQuery.load(allGroupRefs).flatMap { allGroups =>
+    dataAccess.rawlsGroupQuery.loadGroupsRecursive(allGroupRefs).flatMap { allGroups =>
       // load all the groups first because this is fast and most are likely to be empty or with no subgroups
       // only with subgroups do we need to go back to rawlsGroupQuery to do the intersection (which is expensive)
       val groupsByName = allGroups.map(g => g.groupName -> g).toMap
@@ -928,13 +934,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       // this set makes sure to query once per set of groups
       val intersectionsToMake = Set() ++ groupsToIntersect.map(_.groups)
       val intersections = DBIO.sequence(intersectionsToMake.toSeq.map { groups =>
-        if (groups.exists(g => groupsByName(g.groupName).subGroups.size > 0)) {
-          // subgroups exist, need to go back to the data store to unroll them
-          dataAccess.rawlsGroupQuery.intersectGroupMembership(groups).map(members => groups -> members)
-        } else {
-          // no subgroups exist, have all the users already so just do it
-          DBIO.successful(groups -> groups.map(ref => groupsByName(ref.groupName).users).reduce(_ intersect _))
-        }
+        // this is the right thing to call when we know how to make it perform well
+        // dataAccess.rawlsGroupQuery.intersectGroupMembership(groups).map(members => groups -> members)
+        DBIO.successful(groups -> groups.map(g => flattenGroup(groupsByName(g.groupName), groupsByName)).reduce(_ intersect _))
       })
 
       val intersectionMemberships = intersections.map { sourceGroupsWithMembers =>
