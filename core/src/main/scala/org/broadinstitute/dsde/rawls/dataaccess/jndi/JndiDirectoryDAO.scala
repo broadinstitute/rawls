@@ -199,6 +199,21 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }.toSeq
     } }
 
+    /** talk to doge before calling this function - loads groups and subgroups and subgroups ... */
+    def loadGroupsRecursive(groups: Set[RawlsGroupRef], accumulated: Set[RawlsGroup] = Set.empty): ReadWriteAction[Set[RawlsGroup]] = {
+      load(groups).flatMap { thisLevel =>
+        val newAccumulated = accumulated ++ thisLevel
+        val nextLevelRefs = thisLevel.toSet[RawlsGroup].flatMap(_.subGroups)
+        val unvisitedNextLevelRefs = nextLevelRefs -- newAccumulated.map(RawlsGroup.toRef)
+
+        if (unvisitedNextLevelRefs.isEmpty) {
+          DBIO.successful(newAccumulated)
+        } else {
+          loadGroupsRecursive(unvisitedNextLevelRefs, newAccumulated)
+        }
+      }
+    }
+
     def flattenGroupMembership(groupRef: RawlsGroupRef): ReadWriteAction[Set[RawlsUserRef]] = withContextUsingIsMemberOf { ctx =>
       ctx.search(peopleOu, new BasicAttributes(Attr.memberOf, groupDn(groupRef.groupName), true)).asScala.map { result =>
         RawlsUserRef(unmarshalUser(result.getAttributes).userSubjectId)
