@@ -157,19 +157,6 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       })
   }
 
-  it should "return a non-ok for LDAP" in {
-    val actor = newHealthMonitorActor(userDirectoryDAO = mockUserDirectoryDAO_noUsers)
-    actor ! CheckAll
-    checkCurrentStatus(actor, false,
-      successes = AllSubsystems.filterNot(_ == LDAP),
-      failures = Set(LDAP),
-      errorMessages = {
-        case (LDAP, Some(messages)) =>
-          messages.size should be (1)
-          messages(0) should be ("Could not find any users in LDAP")
-      })
-  }
-
   def checkCurrentStatus(actor: ActorRef,
                          overall: Boolean,
                          successes: Set[Subsystem] = Set.empty,
@@ -205,8 +192,8 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   }
 
   def newHealthMonitorActor(googleServicesDAO: => GoogleServicesDAO = mockGoogleServicesDAO, googlePubSubDAO: => GooglePubSubDAO = mockGooglePubSubDAO,
-                            methodRepoDAO: => MethodRepoDAO = mockMethodRepoDAO, userDirectoryDAO: => UserDirectoryDAO = mockUserDirectoryDAO): ActorRef = {
-    system.actorOf(HealthMonitor.props(slickDataSource, googleServicesDAO, googlePubSubDAO, userDirectoryDAO, methodRepoDAO,
+                            methodRepoDAO: => MethodRepoDAO = mockMethodRepoDAO): ActorRef = {
+    system.actorOf(HealthMonitor.props(slickDataSource, googleServicesDAO, googlePubSubDAO, methodRepoDAO,
       Seq("group1", "group2"), Seq("topic1", "topic2"), Seq("bucket1", "bucket2"), 1 second, 3 seconds))
   }
 

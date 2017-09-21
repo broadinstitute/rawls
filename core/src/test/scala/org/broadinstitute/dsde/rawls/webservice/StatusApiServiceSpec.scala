@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import com.google.api.services.storage.model.Bucket
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
@@ -12,11 +14,17 @@ import org.scalatest.time.{Seconds, Span}
 import spray.http.HttpMethods._
 import spray.http.StatusCodes
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Created by rtitle on 5/21/17.
   */
+
+
+class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
+  override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(None)
+}
+
 class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
   // This configures how long the calls to `whenReady(Future)` and `eventually` will wait
   // before giving up and failing the test.
@@ -25,8 +33,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource, subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+  def withApiServices[T](dataSource: SlickDataSource, subsystemsOk: Boolean, apiService: TestApiService)(testCode: TestApiService => T): T = {
     try {
       initializeSubsystems(apiService, subsystemsOk)
       testCode(apiService)
@@ -37,14 +44,19 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
 
   def withConstantTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
     withConstantTestDatabase { dataSource: SlickDataSource =>
-      withApiServices(dataSource, subsystemsOk)(testCode)
+      val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+      withApiServices(dataSource, subsystemsOk, apiService)(testCode)
+    }
+  }
+
+  def withConstantErrorTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
+    withConstantTestDatabase { dataSource: SlickDataSource =>
+      val apiService = new TestApiService(dataSource, new MockGoogleServicesErrorDAO, new MockGooglePubSubDAO)
+      withApiServices(dataSource, subsystemsOk, apiService)(testCode)
     }
   }
 
   def initializeSubsystems(apiService: TestApiService, subsystemsOk: Boolean) = {
-    if (subsystemsOk) {
-      apiService.directoryDAO.createUser(testData.userOwner.userSubjectId, testData.userOwner.userEmail)
-    }
     apiService.healthMonitor ! CheckAll
   }
 
@@ -68,7 +80,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
     }
   }
 
-  it should "return 500 for non-ok status for any subsystem" in withConstantTestDataApiServices(false) { services =>
+  it should "return 500 for non-ok status for any subsystem" in withConstantErrorTestDataApiServices(false) { services =>
     eventually {
       withStatsD {
         Get("/status") ~>
@@ -78,7 +90,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
               status
             }
             assertResult(StatusCheckResponse(false, AllSubsystems.map {
-              case LDAP => LDAP -> SubsystemStatus(false, Some(List("Could not find any users in LDAP")))
+              case GoogleBuckets => GoogleBuckets -> SubsystemStatus(false, Some(List("Could not find bucket: my-favorite-bucket")))
               case other => other -> SubsystemStatus(true, None)
             }.toMap)) {
               responseAs[StatusCheckResponse]

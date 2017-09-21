@@ -33,16 +33,6 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
     }
   }
 
-  val getUserStatusRoute = requireUserInfo() { userInfo =>
-    path("user") {
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.UserGetUserStatus)
-      }
-    }
-  }
-
   // standard /api routes begin here
 
   val userRoutes = requireUserInfo() { userInfo =>

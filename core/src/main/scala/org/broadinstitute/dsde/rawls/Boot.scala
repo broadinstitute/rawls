@@ -133,19 +133,10 @@ object Boot extends App with LazyLogging {
       workbenchMetricBaseName = metricsPrefix
     )
 
-    val ldapConfig = conf.getConfig("userLdap")
-    val userDirDAO = new JndiUserDirectoryDAO(
-      ldapConfig.getString("providerUrl"),
-      ldapConfig.getString("user"),
-      ldapConfig.getString("password"),
-      ldapConfig.getString("groupDn"),
-      ldapConfig.getString("memberAttribute"),
-      ldapConfig.getStringList("userObjectClasses").toList,
-      ldapConfig.getStringList("userAttributes").toList,
-      ldapConfig.getString("userDnFormat")
-    )
+    val samConfig = conf.getConfig("sam")
+    val samDAO = new HttpSamDAO(samConfig.getString("server"))
 
-    enableServiceAccount(gcsDAO, userDirDAO)
+    enableServiceAccount(gcsDAO, samDAO)
 
     system.registerOnTermination {
       slickDataSource.databaseConfig.db.shutdown
@@ -183,7 +174,7 @@ object Boot extends App with LazyLogging {
 
     val notificationDAO = new PubSubNotificationDAO(pubSubDAO, gcsConfig.getString("notifications.topicName"))
 
-    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO)
+    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO)
 
     system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
 
@@ -198,8 +189,8 @@ object Boot extends App with LazyLogging {
 
     BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
 
-    val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO, userDirDAO)
-    val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO, userDirDAO)
+    val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
+    val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
     val agoraConfig = conf.getConfig("methodrepo")
     val methodRepoDAO = new HttpMethodRepoDAO(agoraConfig.getString("server"), agoraConfig.getString("path"), metricsPrefix)
 
@@ -227,7 +218,6 @@ object Boot extends App with LazyLogging {
         slickDataSource,
         gcsDAO,
         pubSubDAO,
-        userDirDAO,
         methodRepoDAO,
         groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
         topicsToCheck = Seq(gcsConfig.getString("notifications.topicName"), gcsConfig.getString("groupMonitor.topicName")),
@@ -282,16 +272,14 @@ object Boot extends App with LazyLogging {
   /**
    * Enables the rawls service account in ldap. Allows service to service auth through the proxy.
    * @param gcsDAO
-   * @param userDirDAO
    */
-  def enableServiceAccount(gcsDAO: HttpGoogleServicesDAO, userDirDAO: JndiUserDirectoryDAO): Unit = {
-    val enableServiceAccountFuture = for {
-      serviceAccountUser <- gcsDAO.getServiceAccountRawlsUser()
-      _ <- userDirDAO.createUser(serviceAccountUser.userSubjectId, serviceAccountUser.userEmail).recover { case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.Conflict) => Unit } // if it already exists, ok
-      _ <- userDirDAO.enableUser(serviceAccountUser.userSubjectId).recover { case e: AttributeInUseException => Unit } // if it is already enabled, ok
-    } yield Unit
+  def enableServiceAccount(gcsDAO: HttpGoogleServicesDAO, samDAO: HttpSamDAO): Unit = {
+    val credential = gcsDAO.getBucketServiceAccountCredential
+    val serviceAccountUserInfo = UserInfo.buildFromTokens(credential)
 
-    enableServiceAccountFuture.onFailure {
+    val registerServiceAccountFuture = samDAO.registerUser(serviceAccountUserInfo)
+
+    registerServiceAccountFuture.onFailure {
       // this is logged as a warning because almost always the service account is already enabled
       // so this is a problem only the first time rawls is started with a new service account
       case t: Throwable => logger.warn("error enabling service account", t)
