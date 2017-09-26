@@ -223,10 +223,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             for {
               catalog <- getUserCatalogPermissions(workspaceContext, dataAccess)
               canShare <- getUserSharePermissions(workspaceContext, accessLevel, dataAccess)
+              canCompute <- getUserComputePermissions(workspaceContext, accessLevel, dataAccess)
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
               owners <- getWorkspaceOwners(workspaceContext.workspace, dataAccess)
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, catalog, workspaceContext.workspace, stats, owners))
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, catalog, workspaceContext.workspace, stats, owners))
             }
           }
         }
