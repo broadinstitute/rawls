@@ -2,10 +2,10 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.model._
 
-class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
+class JndiDirectoryDAOUserSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   import driver.api._
 
-  "RawlsUserComponent" should "save and load users" in withEmptyTestDatabase {
+  "JndiDirectoryDAOUserSpec" should "save and load users" in withEmptyTestDatabase {
     val subjId1 = RawlsUserSubjectId("Subject Number One")
     val email1 = RawlsUserEmail("email@one-direction.net")
     val user1 = RawlsUser(subjId1, email1)

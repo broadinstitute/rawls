@@ -3,9 +3,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.model._
 import java.sql.SQLException
 
-class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
+class JndiDirectoryDAOGroupSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
-  "RawlsGroupComponent" should "save, load and delete" in withEmptyTestDatabase {
+  "JndiDirectoryDAOGroupSpec" should "save, load and delete" in withEmptyTestDatabase {
     val groupName = RawlsGroupName("The-Avengers")
     val groupEmail = RawlsGroupEmail("avengers@marvel.net")
 
