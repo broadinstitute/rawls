@@ -263,6 +263,7 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
 
 case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
                              canShare: Boolean,
+                             canCompute: Boolean,
                              catalog: Boolean,
                              workspace: Workspace,
                              workspaceSubmissionStats: WorkspaceSubmissionStats,
@@ -433,7 +434,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceListResponseFormat = jsonFormat5(WorkspaceListResponse)
 
-  implicit val WorkspaceResponseFormat = jsonFormat6(WorkspaceResponse)
+  implicit val WorkspaceResponseFormat = jsonFormat7(WorkspaceResponse)
 
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 
