@@ -510,7 +510,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   it should "return non-existent users during patch ACLs" in withTestDataServices { services =>
     val aclUpdates = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
     val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]q
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
     val responseFromUpdate = WorkspaceACLUpdateResponseList(Seq.empty, Seq.empty, Seq.empty, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)))
 
     assertResult((StatusCodes.OK, responseFromUpdate), "Add ACL shouldn't error") {
