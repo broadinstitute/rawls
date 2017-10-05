@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor}
-import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.openam.{MockUserInfoDirectives, MockUserInfoDirectivesWithUser}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
@@ -23,7 +23,7 @@ import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http.{StatusCode, StatusCodes}
+import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
 import spray.testkit.ScalatestRouteTest
 
 import scala.concurrent.duration.{Duration, FiniteDuration, _}
@@ -53,9 +53,10 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     Map.empty
   )
 
-  case class TestApiService(dataSource: SlickDataSource)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
-    lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
-    lazy val userService: UserService = TestActorRef(UserService.props(userServiceConstructor, userInfo)).underlyingActor
+  case class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
+    private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
+    lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo1)).underlyingActor
+    lazy val userService: UserService = TestActorRef(UserService.props(userServiceConstructor, userInfo1)).underlyingActor
     val mockServer = RemoteServicesMockServer()
 
 
@@ -122,13 +123,17 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   def withTestDataServices[T](testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
-      val apiService = new TestApiService(dataSource)
-      try {
-        testData.createWorkspaceGoogleGroups(apiService.gcsDAO)
-        testCode(apiService)
-      } finally {
-        apiService.cleanupSupervisor
-      }
+      withServices(dataSource, testData.userOwner)(testCode)
+    }
+  }
+
+  private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
+    val apiService = new TestApiService(dataSource, user)
+    try {
+      testData.createWorkspaceGoogleGroups(apiService.gcsDAO)
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
     }
   }
 
@@ -466,6 +471,39 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //realm ACLs should be maintained and this should return successfully
     assertResult(StatusCodes.OK) {
       getACLResponse.response._1
+    }
+  }
+
+  it should "allow can share user to share when there are multiple project owners" in withDefaultTestDatabase { datasource: SlickDataSource =>
+    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+    runAndWait(rawlsUserQuery.createUser(user))
+
+    withServices(datasource, testData.userOwner) { services =>
+      //add the owner as an owner on the billing project
+      Await.result(services.userService.addUserToBillingProject(RawlsBillingProjectName(testData.workspace.namespace), ProjectAccessUpdate(testData.userOwner.userEmail.value, ProjectRoles.Owner)), Duration.Inf)
+
+      val aCLUpdates = Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true)), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)))
+      val aCLUpdatesResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aCLUpdates, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+
+      assertResult(StatusCodes.OK) {
+        aCLUpdatesResponse.response._1
+      }
+    }
+    withServices(datasource, testData.userReader) { services =>
+      val addRead = Seq(
+        WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
+        WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
+        WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)),
+        WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true), Option(false)),
+        WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))
+
+      val addReadResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, addRead, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+      assertResult(StatusCodes.OK) {
+        addReadResponse.response._1
+      }
+      assertResult(Seq(WorkspaceACLUpdateResponse(user.userSubjectId.value, WorkspaceAccessLevels.Read))) {
+        addReadResponse.response._2.usersUpdated
+      }
     }
   }
 

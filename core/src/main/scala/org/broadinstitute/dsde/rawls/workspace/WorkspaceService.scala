@@ -801,7 +801,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val membersWithComputePermission = actualComputeChangesToMake.filter { case (_, canCompute) => canCompute.isDefined }
 
       if(membersWithSharePermission.nonEmpty && userAccessLevel < WorkspaceAccessLevels.Owner) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the share permissions of users unless you are a workspace owner. Please correct these entries: $membersWithHigherAccessLevelThanGranter"))
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the share permissions of users unless you are a workspace owner. Please correct these entries: $membersWithSharePermission"))
       }
       if(membersWithComputePermission.nonEmpty && userAccessLevel < WorkspaceAccessLevels.Owner) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the compute permissions of users unless you are a workspace owner. Please correct these entries: $membersWithComputePermission"))

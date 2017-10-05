@@ -837,16 +837,18 @@ trait WorkspaceComponent {
         user <- userQuery
         canShare <- userShareQuery
         canCompute <- userComputeQuery
-      } yield user.map { case (_, subjectId, accessLevel) =>
-        (Left(RawlsUserRef(subjectId)), (WorkspaceAccessLevels.withName(accessLevel), canShare.contains(subjectId.value), canCompute.contains(subjectId.value)))
+      } yield user.map { case (_, subjectId, accessLevelString) =>
+        val accessLevel = WorkspaceAccessLevels.withName(accessLevelString)
+        (Left(RawlsUserRef(subjectId)), (accessLevel, canShare.contains(subjectId.value) || accessLevel >= WorkspaceAccessLevels.Owner, canCompute.contains(subjectId.value)  || accessLevel >= WorkspaceAccessLevels.Owner))
       }
 
       val groups = for {
         group <- subGroupQuery
         canShare <- subGroupShareQuery
         canCompute <- subGroupComputeQuery
-      } yield group.map { case (_, groupName, accessLevel) =>
-        (Right(RawlsGroupRef(groupName)), (WorkspaceAccessLevels.withName(accessLevel), canShare.contains(groupName.value), canCompute.contains(groupName.value)))
+      } yield group.map { case (_, groupName, accessLevelString) =>
+        val accessLevel = WorkspaceAccessLevels.withName(accessLevelString)
+        (Right(RawlsGroupRef(groupName)), (accessLevel, canShare.contains(groupName.value) || accessLevel >= WorkspaceAccessLevels.Owner, canCompute.contains(groupName.value) || accessLevel >= WorkspaceAccessLevels.Owner))
       }
 
       users.flatMap { usersResult =>
