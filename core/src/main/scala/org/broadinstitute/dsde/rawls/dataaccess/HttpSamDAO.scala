@@ -50,7 +50,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     val pipeline = sendReceive
     pipeline(Get(url)) map { response =>
       val ok = response.status.isSuccess
-      SubsystemStatus(ok, if (ok) Option(List(response.entity.asString)) else None)
+      SubsystemStatus(ok, if (ok) None else Option(List(response.entity.asString)))
     }
   }
 
