@@ -228,10 +228,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
 
   private def checkSam: Future[SubsystemStatus] = {
     logger.debug("Checking Sam...")
-    samDAO.getStatus().map { case (ok, response) =>
-      if (ok) OkStatus
-      else failedStatus(response)
-    }
+    samDAO.getStatus()
   }
 
   private def processSubsystemResult(subsystemAndResult: (Subsystem, Future[SubsystemStatus])): Unit = {

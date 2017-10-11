@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.{UserInfo, UserStatus}
+import org.broadinstitute.dsde.rawls.model.{SubsystemStatus, UserInfo, UserStatus}
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
@@ -45,12 +45,12 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
   }
 
-  override def getStatus(): Future[(Boolean, String)] = {
+  override def getStatus(): Future[SubsystemStatus] = {
     val url = samServiceURL + "/status"
     val pipeline = sendReceive
     pipeline(Get(url)) map { response =>
       val ok = response.status.isSuccess
-      (ok, response.entity.asString)
+      SubsystemStatus(ok, if (ok) Option(List(response.entity.asString)) else None)
     }
   }
 

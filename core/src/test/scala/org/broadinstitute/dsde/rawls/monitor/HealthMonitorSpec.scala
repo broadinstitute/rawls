@@ -269,7 +269,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     val dao = mock[SamDAO]
     when {
       dao.getStatus()
-    } thenReturn Future.successful((true, ""))
+    } thenReturn Future.successful(SubsystemStatus(true, None))
     dao
   }
 
@@ -304,7 +304,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     val dao = mock[SamDAO]
     when {
       dao.getStatus()
-    } thenReturn Future.successful((false, """{"some": "json"}"""))
+    } thenReturn Future.successful(SubsystemStatus(false, Option(List("""{"some": "json"}"""))))
     dao
   }
 }
