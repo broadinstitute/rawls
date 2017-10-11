@@ -13,6 +13,7 @@ import spray.httpx.SprayJsonSupport._
 import spray.httpx.UnsuccessfulResponseException
 import spray.httpx.unmarshalling.FromResponseUnmarshaller
 import spray.json.DefaultJsonProtocol._
+import spray.json.{JsString, JsValue}
 
 import scala.concurrent.Future
 
@@ -41,6 +42,15 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
       case ure: spray.client.UnsuccessfulResponseException => ure.responseStatus.intValue / 100 == 5
       case ure: spray.httpx.UnsuccessfulResponseException => ure.response.status.intValue / 100 == 5
       case _ => false
+    }
+  }
+
+  override def getStatus(): Future[(Boolean, String)] = {
+    val url = samServiceURL + "/status"
+    val pipeline = sendReceive
+    pipeline(Get(url)) map { response =>
+      val ok = response.status.isSuccess
+      (ok, response.entity.asString)
     }
   }
 
