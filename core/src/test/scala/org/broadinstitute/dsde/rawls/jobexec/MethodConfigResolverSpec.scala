@@ -69,6 +69,23 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       |}
     """.stripMargin
 
+  val optionalDoubleArrayWdl =
+    """
+      |task t1 {
+      |  Array[Int] aint_arg
+      |  command {
+      |    echo ${aint_arg}
+      |  }
+      |}
+      |
+      |workflow w1 {
+      |  Array[Array[Int]]? aint_array
+      |  scatter(ai in aint_array) {
+      |    call t1 { input: aint_arg = i }
+      |  }
+      |}
+    """.stripMargin
+
   val badWdl = littleWdl.replace("workflow", "not-a-workflow")
 
   val intArgName = "w1.t1.int_arg"
@@ -199,14 +216,10 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       val context = SlickWorkspaceContext(workspace)
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configRawJsonDoubleArray, sampleSet2, doubleArrayWdl, this))
-      println(resolvedInputs)
-
       val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
         svv.inputName -> svv.value.get
       }
-
       val wdlInputs: String = MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-      println(wdlInputs)
 
       wdlInputs shouldBe """{"w1.aint_array":[[0,1,2],[3,4,5]]}"""
 
@@ -218,8 +231,19 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
            - what about double-array RawJson on a single participant, deref'd (into a triple?) from a participant set of size one?
            - what about normal attribute lists
            configRawJsonDoubleArray
-           - what about optionals for these?
        */
+    }
+
+    "unpack AttributeValueRawJson into optional WDL-arrays" in withConfigData {
+      val context = SlickWorkspaceContext(workspace)
+
+      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configRawJsonDoubleArray, sampleSet2, optionalDoubleArrayWdl, this))
+      val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
+        svv.inputName -> svv.value.get
+      }
+      val wdlInputs: String = MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+
+      wdlInputs shouldBe """{"w1.aint_array":[[0,1,2],[3,4,5]]}"""
     }
 
     "parse WDL" in withConfigData {
