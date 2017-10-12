@@ -151,6 +151,13 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     }
   }
 
+  private def monitorNewActiveSubmissions() = {
+
+    datasource.dataAccess.submissionQuery.listAllActiveSubmissions().flatMap { x =>
+      this ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId))
+    }
+  }
+
   private def saveGlobalJobExecCounts(submissionStatuses: Map[SubmissionStatus, Int], workflowStatus: Map[WorkflowStatus, Int]) = {
     this.globalSubmissionStatusCounts = submissionStatuses
     this.globalWorkflowStatusCounts = workflowStatus

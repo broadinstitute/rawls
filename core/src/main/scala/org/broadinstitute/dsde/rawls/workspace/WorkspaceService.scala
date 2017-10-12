@@ -1504,15 +1504,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
     }
 
-    submissionFuture map {
-      case RequestComplete((StatusCodes.Created, submissionReport: SubmissionReport)) =>
-        if (submissionReport.status == SubmissionStatuses.Submitted) {
-          submissionSupervisor ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId))
-        }
-        RequestComplete(StatusCodes.Created, submissionReport)
-
-      case somethingWrong => somethingWrong // this is the case where something was not found in withSubmissionParameters
-    }
+    submissionFuture
+    //Monitoring is DB triggered now-- we don't automatically create an actor for every new submission
+//    submissionFuture map {
+//      case RequestComplete((StatusCodes.Created, submissionReport: SubmissionReport)) =>
+//        if (submissionReport.status == SubmissionStatuses.Submitted) {
+//          submissionSupervisor ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId))
+//        }
+//        RequestComplete(StatusCodes.Created, submissionReport)
+//
+//      case somethingWrong => somethingWrong // this is the case where something was not found in withSubmissionParameters
+//    }
   }
 
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] =
