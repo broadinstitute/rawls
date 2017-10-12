@@ -69,9 +69,6 @@ object Boot extends App with LazyLogging {
       slickDataSource.initWithLiquibase(liquibaseChangeLog, changelogParams)
     }
 
-    // create or replace ldap schema
-    Await.result(slickDataSource.database.run(slickDataSource.dataAccess.initLdap()), Duration.Inf)
-
     val metricsConf = conf.getConfig("metrics")
     val metricsPrefix = {
       val basePrefix = metricsConf.getString("prefix")
