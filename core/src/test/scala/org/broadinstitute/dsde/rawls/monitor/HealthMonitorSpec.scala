@@ -95,6 +95,19 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       })
   }
 
+  it should "return a non-ok for Sam" in {
+    val actor = newHealthMonitorActor(samDAO = failingSamDAO)
+    actor ! CheckAll
+    checkCurrentStatus(actor, false,
+      successes = AllSubsystems.filterNot(_ == Sam),
+      failures = Set(Sam),
+      errorMessages = {
+        case (Sam, Some(messages)) =>
+          messages.size should be(1)
+          messages(0) should equal("""{"some": "json"}""")
+      })
+  }
+
   it should "return a non-ok for Cromwell" ignore {
     // Stubbed; Cromwell doesn't have a health check yet
   }
@@ -192,8 +205,8 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   }
 
   def newHealthMonitorActor(googleServicesDAO: => GoogleServicesDAO = mockGoogleServicesDAO, googlePubSubDAO: => GooglePubSubDAO = mockGooglePubSubDAO,
-                            methodRepoDAO: => MethodRepoDAO = mockMethodRepoDAO): ActorRef = {
-    system.actorOf(HealthMonitor.props(slickDataSource, googleServicesDAO, googlePubSubDAO, methodRepoDAO,
+                            methodRepoDAO: => MethodRepoDAO = mockMethodRepoDAO, samDAO: SamDAO = mockSamDAO): ActorRef = {
+    system.actorOf(HealthMonitor.props(slickDataSource, googleServicesDAO, googlePubSubDAO, methodRepoDAO, samDAO,
       Seq("group1", "group2"), Seq("topic1", "topic2"), Seq("bucket1", "bucket2"), 1 second, 3 seconds))
   }
 
@@ -252,6 +265,14 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     dao
   }
 
+  def mockSamDAO: SamDAO = {
+    val dao = mock[SamDAO]
+    when {
+      dao.getStatus()
+    } thenReturn Future.successful(SubsystemStatus(true, None))
+    dao
+  }
+
   def exceptionalMethodRepoDAO: MethodRepoDAO = {
     val dao = mock[MethodRepoDAO]
     when {
@@ -276,6 +297,14 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     when {
       dao.getStatus(any[ExecutionContext])
     } thenReturn Future.successful(AgoraStatus(false, Seq("agora failed")))
+    dao
+  }
+
+  def failingSamDAO: SamDAO = {
+    val dao = mock[SamDAO]
+    when {
+      dao.getStatus()
+    } thenReturn Future.successful(SubsystemStatus(false, Option(List("""{"some": "json"}"""))))
     dao
   }
 }

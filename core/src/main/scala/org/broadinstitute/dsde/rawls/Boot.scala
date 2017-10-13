@@ -216,6 +216,7 @@ object Boot extends App with LazyLogging {
         gcsDAO,
         pubSubDAO,
         methodRepoDAO,
+        samDAO,
         groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
         topicsToCheck = Seq(gcsConfig.getString("notifications.topicName"), gcsConfig.getString("groupMonitor.topicName")),
         bucketsToCheck = Seq(gcsDAO.tokenBucketName)
