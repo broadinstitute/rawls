@@ -184,6 +184,7 @@ object Boot extends App with LazyLogging {
       gcsConfig.getInt("groupMonitor.workerCount"),
       userServiceConstructor))
 
+    //if(config.isBackRawls==true)
     BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
 
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)

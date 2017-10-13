@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses, WorkspaceName}
-import org.broadinstitute.dsde.rawls.util.ThresholdOneForOneStrategy
+import org.broadinstitute.dsde.rawls.util.{ThresholdOneForOneStrategy, addJitter}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -29,6 +29,8 @@ object SubmissionSupervisor {
   sealed trait SubmissionSupervisorMessage
 
   case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: UUID)
+  case object StartMonitorPass
+  case object SubmissionMonitorPassComplete
 
   /**
     * A periodic collection of all current workflow and submission status counts.
@@ -93,15 +95,21 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   override def preStart(): Unit = {
     super.preStart()
 
+    scheduleInitialMonitorPass
     registerGlobalJobExecGauges()
     system.scheduler.schedule(0 seconds, submissionPollInterval, self, RefreshGlobalJobExecGauges)
   }
 
   override def receive = {
+    case StartMonitorPass =>
+      startMonitoringNewSubmissions()
     case SubmissionStarted(workspaceName, submissionId) =>
       val child = startSubmissionMonitor(workspaceName, submissionId, bucketCredential)
       scheduleNextCheckCurrentWorkflowStatus(child)
       registerDetailedJobExecGauges(workspaceName, submissionId)
+
+    case SubmissionMonitorPassComplete =>
+      scheduleNextMonitorPass
 
     case SaveCurrentWorkflowStatusCounts(workspaceName, submissionId, workflowStatusCounts, submissionStatusCounts, reschedule) =>
       this.activeWorkflowStatusCounts += submissionId -> workflowStatusCounts
@@ -123,6 +131,15 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
 
     case SaveGlobalJobExecCounts(submissionStatuses, workflowStatuses) =>
       saveGlobalJobExecCounts(submissionStatuses, workflowStatuses)
+  }
+
+  private def scheduleInitialMonitorPass: Cancellable = {
+    //Wait anything _up to_ the poll interval for a much wider distribution of submission monitor start times when Rawls starts up
+    system.scheduler.scheduleOnce(addJitter(0 seconds, submissionPollInterval), self, StartMonitorPass)
+  }
+
+  private def scheduleNextMonitorPass: Cancellable = {
+    system.scheduler.scheduleOnce(addJitter(submissionPollInterval), self, StartMonitorPass)
   }
 
   private def restartCounter(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable): Counter = {
@@ -151,11 +168,23 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     }
   }
 
-  private def monitorNewActiveSubmissions() = {
+  private def startMonitoringNewSubmissions(): Unit = {
+    datasource.inTransaction { dataAccess =>
+      dataAccess.submissionQuery.listAllActiveSubmissions() map { activeSubs =>
+        val monitoredSubmissions = context.children.map(_.path.name).toSet
+        val unmonitoredSubmissions = activeSubs.filterNot(sub => monitoredSubmissions.contains(sub.submission.submissionId))
 
-    datasource.dataAccess.submissionQuery.listAllActiveSubmissions().flatMap { x =>
-      this ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId))
+        unmonitoredSubmissions.map { activeSub =>
+          val wsName = WorkspaceName(activeSub.workspaceNamespace, activeSub.workspaceName)
+          val subId = activeSub.submission.submissionId
+
+          self ! SubmissionStarted(wsName, UUID.fromString(subId))
+        }
+      }
+    } onFailure {
+      case t: Throwable => logger.error("Error starting submission monitor actors for new submissions", t)
     }
+    self ! SubmissionMonitorPassComplete
   }
 
   private def saveGlobalJobExecCounts(submissionStatuses: Map[SubmissionStatus, Int], workflowStatus: Map[WorkflowStatus, Int]) = {
