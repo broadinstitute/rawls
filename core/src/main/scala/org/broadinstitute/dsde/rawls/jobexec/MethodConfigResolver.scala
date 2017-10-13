@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
 import wdl4s.parser.WdlParser.SyntaxError
-import wdl4s.types.WdlArrayType
+import wdl4s.types.{WdlArrayType, WdlOptionalType}
 import wdl4s.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
 
 import scala.concurrent.ExecutionContext
@@ -37,6 +37,7 @@ object MethodConfigResolver {
 
   private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: WorkflowInput): SubmissionValidationValue = wfInput.wdlType match {
     case arrayType: WdlArrayType => getArrayResult(wfInput.fqn, mcSequence)
+    case WdlOptionalType(_:WdlArrayType) => getArrayResult(wfInput.fqn, mcSequence) //send optional-arrays down the same codepath as arrays
     case _ => getSingleResult(wfInput.fqn, mcSequence, wfInput.optional)
   }
 
