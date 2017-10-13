@@ -46,7 +46,7 @@ object Dependencies {
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.1.0"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.4.3"
+  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.10"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.4"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.3.0"
@@ -54,17 +54,13 @@ object Dependencies {
   val swaggerUI: ModuleID =       "org.webjars"                   % "swagger-ui"            % "2.1.1"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats"                 % "0.9.0"
+  val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.0.6"
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.38"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.1.6"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.2"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.0.1" % "test"
   val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.7.22" % "test"
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
-
-  val spraySwagger: ModuleID = ("com.gettyimages" %% "spray-swagger" % "0.5.0"
-    exclude("com.typesafe.scala-logging", "scala-logging-slf4j_2.11")
-    exclude("com.typesafe.scala-logging", "scala-logging-api_2.11")
-    exclude("com.google.guava", "guava"))
 
   val wdl4s: ModuleID = ("org.broadinstitute" %% "wdl4s" % wdl4sV
     exclude("org.typelevel", "cats_2.11")
@@ -122,7 +118,7 @@ object Dependencies {
 
   val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ metricsDependencies ++ Seq(
     typesafeConfig,
-    spraySwagger,
+    parserCombinators,
     ravenLogback,
     slick,
     slickHikariCP,
