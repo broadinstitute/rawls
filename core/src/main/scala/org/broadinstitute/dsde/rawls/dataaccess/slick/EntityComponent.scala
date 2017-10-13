@@ -414,7 +414,9 @@ trait EntityComponent {
 
           for {
             _ <- applyEntityPatch(workspaceContext, entityRecord, upserts, deletes)
-            _ <- optimisticLockUpdate(entityRecord)
+            updatedEntities <- entityQuery.getEntities(Seq(entityRecord.id))
+            newRecord = populateAllAttributeValues(entityRecs, updatedEntities.map(elem => elem._2)).head
+            _ <- optimisticLockUpdate(newRecord)
           } yield {}
         }
       }
