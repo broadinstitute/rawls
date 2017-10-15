@@ -337,7 +337,9 @@ case object AttributeNull extends AttributeValue
 case class AttributeString(val value: String) extends AttributeValue
 case class AttributeNumber(val value: BigDecimal) extends AttributeValue
 case class AttributeBoolean(val value: Boolean) extends AttributeValue
-case class AttributeValueRawJson(val value: JsValue) extends AttributeValue
+case class AttributeValueRawJson(val value: JsValue) extends AttributeValue {
+  def isSecretlyArray: Boolean = value.isInstanceOf[JsArray]
+}
 case object AttributeValueEmptyList extends AttributeList[AttributeValue] { val list = Seq.empty }
 case object AttributeEntityReferenceEmptyList extends AttributeList[AttributeEntityReference] { val list = Seq.empty }
 case class AttributeValueList(val list: Seq[AttributeValue]) extends AttributeList[AttributeValue]

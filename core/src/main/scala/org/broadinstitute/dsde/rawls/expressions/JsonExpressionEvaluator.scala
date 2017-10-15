@@ -6,27 +6,22 @@ import spray.json._
 import scala.util.Try
 
 object JsonExpressionEvaluator {
-  def evaluate(expression: String): Try[Iterable[AttributeValue]] = {
-    val jsonExprT = Try(expression.parseJson)
+  def evaluate(expression: String): Try[Attribute] = {
+    val jsonExprT: Try[JsValue] = Try(expression.parseJson)
     jsonExprT map { jsonExpr =>
       WDLJsonSupport.attributeFormat.read(expression.parseJson)
     } map {
       //handle the user typing in JSON that looks like our representation of references, which aren't legit WDL inputs.
       //turn it back into raw JSON.
-      case _: AttributeEntityReference => Seq(AttributeValueRawJson(jsonExprT.get))
-      case _: AttributeEntityReferenceList => Seq(AttributeValueRawJson(jsonExprT.get))
-      case AttributeNull => Seq.empty
-      case av: AttributeValue => Seq(av)
-      case avl: AttributeValueList => avl.list
-      case AttributeValueEmptyList => Seq.empty
+      case _: AttributeEntityReference => AttributeValueRawJson(jsonExprT.get)
+      case _: AttributeEntityReferenceList => AttributeValueRawJson(jsonExprT.get)
 
-      //we should never get here, because there's no way to deserialize an empty reference list with the plain array parser
-      //but if we skip this, the compiler warns
-      case AttributeEntityReferenceEmptyList => Seq.empty
+      //otherwise, we're cool
+      case a: Attribute => a
     } recover {
       //DeserializationException will be thrown if the user gives us JSON that we fail to parse as one of our
       //Attribute types, but is still legit JSON. In this case we treat it as raw JSON, because it is.
-      case _: DeserializationException => Seq(AttributeValueRawJson(jsonExprT.get))
+      case _: DeserializationException => AttributeValueRawJson(jsonExprT.get)
     }
   }
 }

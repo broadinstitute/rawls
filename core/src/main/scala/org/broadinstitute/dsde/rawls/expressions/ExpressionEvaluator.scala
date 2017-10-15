@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.model.AttributeValue
+import org.broadinstitute.dsde.rawls.model.Attribute
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -30,7 +30,7 @@ object ExpressionEvaluator {
 }
 
 class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEntities: Seq[EntityRecord]) {
-  def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
+  def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Attribute]]] = {
     import slickEvaluator.parser.driver.api._
 
     JsonExpressionEvaluator.evaluate(expression) match {

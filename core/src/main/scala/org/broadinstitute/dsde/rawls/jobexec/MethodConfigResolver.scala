@@ -15,30 +15,40 @@ import scala.util.{Failure, Success, Try}
 
 object MethodConfigResolver {
   val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
-  val multipleResultError  = "Expected single value for workflow input, but evaluated result set had multiple values"
+  val multipleResultError  = "Expected single value for workflow input, but evaluated result set was a list"
   val missingMandatoryValueError  = "Mandatory workflow input is not specified in method config"
 
-  private def getSingleResult(inputName: String, seq: Iterable[AttributeValue], optional: Boolean): SubmissionValidationValue = {
+  private def getSingleResult(inputName: String, attr: Attribute, optional: Boolean): SubmissionValidationValue = {
     def handleEmpty = if (optional) None else Some(emptyResultError)
-    seq match {
-      case Seq() => SubmissionValidationValue(None, handleEmpty, inputName)
-      case Seq(null) => SubmissionValidationValue(None, handleEmpty, inputName)
-      case Seq(AttributeNull) => SubmissionValidationValue(None, handleEmpty, inputName)
-      case Seq(singleValue) => SubmissionValidationValue(Some(singleValue), None, inputName)
-      case multipleValues => SubmissionValidationValue(Some(AttributeValueList(multipleValues.toSeq)), Some(multipleResultError), inputName)
+    attr match {
+      //RawJson check has to come first because RawJson is an AttributeValue
+      case arj: AttributeValueRawJson if arj.isSecretlyArray => SubmissionValidationValue(Some(arj), Some(multipleResultError), inputName)
+      //normal cases
+      case AttributeNull => SubmissionValidationValue(None, handleEmpty, inputName)
+      case av: AttributeValue => SubmissionValidationValue(Some(av), None, inputName)
+      //ya dun goofed
+      case AttributeValueEmptyList => SubmissionValidationValue(Some(AttributeValueEmptyList), Some(multipleResultError), inputName)
+      case avl: AttributeValueList => SubmissionValidationValue(Some(avl), Some(multipleResultError), inputName)
     }
   }
 
-  private def getArrayResult(inputName: String, seq: Iterable[AttributeValue]): SubmissionValidationValue = {
-    val notNull = seq.filter(v => v != null && v != AttributeNull)
-    val attr = if (notNull.isEmpty) Option(AttributeValueEmptyList) else Option(AttributeValueList(notNull.toSeq))
-    SubmissionValidationValue(attr, None, inputName)
+  private def getArrayResult(inputName: String, attr: Attribute): SubmissionValidationValue = {
+    val arrayResult = attr match {
+      case AttributeValueEmptyList => AttributeValueEmptyList
+      case avl: AttributeValueList => avl
+      case arj: AttributeValueRawJson if arj.isSecretlyArray => arj
+
+      //upcast singles into lists
+      case AttributeNull => AttributeValueEmptyList
+      case a: AttributeValue => AttributeValueList(Seq(a))
+    }
+    SubmissionValidationValue(Option(arrayResult), None, inputName)
   }
 
-  private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: WorkflowInput): SubmissionValidationValue = wfInput.wdlType match {
-    case arrayType: WdlArrayType => getArrayResult(wfInput.fqn, mcSequence)
-    case WdlOptionalType(_:WdlArrayType) => getArrayResult(wfInput.fqn, mcSequence) //send optional-arrays down the same codepath as arrays
-    case _ => getSingleResult(wfInput.fqn, mcSequence, wfInput.optional)
+  private def unpackResult(evaluatedResult: Attribute, wfInput: WorkflowInput): SubmissionValidationValue = wfInput.wdlType match {
+    case _: WdlArrayType => getArrayResult(wfInput.fqn, evaluatedResult)
+    case WdlOptionalType(_:WdlArrayType) => getArrayResult(wfInput.fqn, evaluatedResult) //send optional-arrays down the same codepath as arrays
+    case _ => getSingleResult(wfInput.fqn, evaluatedResult, wfInput.optional)
   }
 
   def parseWDL(wdl: String): Try[wdl4s.Workflow] = {
@@ -93,7 +103,7 @@ object MethodConfigResolver {
               case Success(attributeMap) =>
                 //The expression was evaluated, but that doesn't mean we got results...
                 attributeMap.map {
-                  case (key, Success(attrSeq)) => key -> unpackResult(attrSeq.toSeq, input.workflowInput)
+                  case (key, Success(attr)) => key -> unpackResult(attr, input.workflowInput)
                   case (key, Failure(regret)) => key -> SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.fqn)
                 }.toSeq
             }

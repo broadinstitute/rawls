@@ -58,35 +58,34 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
     parser.exprEvalQuery.filter(_.transactionId === transactionId).delete
   }
 
-  def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Iterable[Attribute]]]] = {
+  private def liftToRawJson(attrs: Iterable[Attribute]): AttributeValueRawJson = {
+    import spray.json._
+    import org.broadinstitute.dsde.rawls.model.WDLJsonSupport
+    AttributeValueRawJson( JsArray( attrs.map( a => a.toJson(WDLJsonSupport.attributeFormat)).toVector ) )
+  }
+
+  def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Attribute]]] = {
     parser.parseAttributeExpr(expression) match {
       case Failure(regret) => DBIO.failed(new RawlsException(regret.getMessage))
       case Success(pipelineQuery) =>
         runPipe(SlickExpressionContext(workspaceContext, rootEntities, transactionId), pipelineQuery) map { (exprResults: Map[String, Iterable[Attribute]]) =>
           val results: Map[String, Try[Attribute]] = exprResults map { case (key: String, attrVals: Iterable[Attribute]) =>
             //In the case of this.participants.boo, attrVals might be [ [1,2,3], [4,5,6], "bees" ] if the participants have different types on "boo"
+            key -> Try(attrVals match {
+              //forbidden things
+              case attrs if attrs.exists( _.isInstanceOf[AttributeEntityReference] ) => throw new RawlsException("Attribute expression returned a reference to an entity.")
+              case attrs if attrs.exists( _.isInstanceOf[AttributeEntityReferenceList] ) => throw new RawlsException("Attribute expression returned a list of entities.")
+              case attrs if attrs.exists( _ == AttributeEntityReferenceEmptyList ) => throw new RawlsException("Attribute expression returned a list of entities.")
 
-            /* THINGS WE KNOW:
-              - if attrVals.size == 0 -- TODO: dunno? maybe c'est impossible.
-              - if attrVals.size == 1, there was no intermediate ref-array in this expression (i.e. not a set type). this is the normal case
-                  - if .head is an AttributeValue, all cool
-                  - if .head is an AttributeValueList of any size (empty or otherwise), the last element was a list
-                  - if .head is a Ref or a RefList, ya dun goofed
-              - if attrVals.size > 1, there was an intermediate ref-array
-                  - if all elems are AttributeValue, you can return a single AttributeValueList
-                  - if any elem is an AttributeValueList, lift the entire thing into JSON and store that
-                  - if any elem is a Ref or a RefList, ya dun goofed
-             */
+              //normal things
+              case Nil => AttributeNull //I don't think this is possible -- we only populate the map with entities who have values
+              case (a:AttributeValue) :: Nil => a
+              case attrs if attrs.forall( _.isInstanceOf[AttributeValue] ) => AttributeValueList(attrs.asInstanceOf[Iterable[AttributeValue]].toSeq)
 
+              //2D array things
+              case attrs if attrs.exists( _ == AttributeValueEmptyList ) => liftToRawJson(attrVals)
+              case attrs if attrs.exists( _.isInstanceOf[AttributeValueList] ) => liftToRawJson(attrVals)
 
-            val boop: Try[Iterable[Attribute]] = Try(attrVals.collect {
-              case AttributeNull => AttributeNull
-              case AttributeValueEmptyList => AttributeValueEmptyList
-              case av: AttributeValue => av
-              case avl: AttributeValueList => avl
-              case ae: AttributeEntityReference => throw new RawlsException("Attribute expression returned a reference to an entity.")
-              case ael: AttributeEntityReferenceList => throw new RawlsException("Attribute expression returned a list of entities.")
-              case AttributeEntityReferenceEmptyList => throw new RawlsException("Attribute expression returned a list of entities.")
               case badType =>
                 val message = s"unsupported type resulting from attribute expression: $badType: ${badType.getClass}"
                 val MAX_ERROR_SIZE = 997
@@ -97,11 +96,9 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
                 }
                 throw new RawlsException(trimmed)
             })
-            key -> boop.flatten // NO! DON'T FLATTEN!! BAD RAWLS!!!
-            Map.empty[String, Try[Attribute]]
-          }.toMap
+          }
           //add any missing entities (i.e. those missing the attribute) back into the result map
-          results ++ rootEntities.map(_.name).filterNot( results.keySet.contains ).map { missingKey => missingKey -> Success(Seq()) }
+          results ++ rootEntities.map(_.name).filterNot( results.keySet.contains ).map { missingKey => missingKey -> Success(AttributeNull) }
         }
     }
   }
