@@ -1,4 +1,3 @@
-
 swagger: '2.0'
 info:
   version: 1.0.0
@@ -1634,7 +1633,8 @@ paths:
           description: Expression
           name: expression
           required: true
-          type: string
+          schema:
+            type: string
       security:
         - authorization:
             - openid
@@ -4616,11 +4616,11 @@ definitions:
         type: string
         description: The root entity type that the method will be running on
       prerequisites:
-        $ref: ''
+        type: object
       inputs:
-        $ref: ''
+        type: object
       outputs:
-        $ref: ''
+        type: object
       methodRepoMethod:
         $ref: '#/definitions/MethodRepoMethod'
         description: The properties of the method from the method store that this config is associated with
@@ -4639,13 +4639,13 @@ definitions:
         items:
           type: string
       invalidInputs:
-        $ref: ''
+        type: object
       validOutputs:
         type: array
         items:
           type: string
       invalidOutputs:
-        $ref: ''
+        type: object
       methodConfiguration:
         $ref: '#/definitions/MethodConfiguration'
 
@@ -4958,7 +4958,7 @@ definitions:
           $ref: '#/definitions/ManagedGroupRef'
         description: The list of groups in the Authorization Domain (empty if no AD is set)
       attributes:
-        $ref: ''
+        type: object
 
   BucketUsageResponse:
     description: ''

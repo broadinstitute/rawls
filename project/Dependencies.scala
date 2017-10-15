@@ -2,7 +2,8 @@ import sbt._
 
 object Dependencies {
   val akkaV = "2.3.6"
-  val sprayV = "1.3.3"
+  val sprayV = "1.3.4"
+  val olderSprayV = "1.3.3" // "latest" is different for various spray packages
   val slickV = "3.1.1"
 
   val googleV = "1.22.0"
@@ -12,7 +13,7 @@ object Dependencies {
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
-  val sprayJson: ModuleID =     "io.spray" %% "spray-json"    % sprayV
+  val sprayJson: ModuleID =     "io.spray" %% "spray-json"    % olderSprayV
   val sprayHttp: ModuleID =     "io.spray" %% "spray-http"    % sprayV
   val sprayHttpx: ModuleID =    "io.spray" %% "spray-httpx"   % sprayV
   val sprayCan: ModuleID =      "io.spray" %% "spray-can"     % sprayV
@@ -51,11 +52,12 @@ object Dependencies {
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.3.0"
   val ravenLogback: ModuleID =    "com.getsentry.raven"           % "raven-logback"         % "7.8.6"
-  val swaggerUI: ModuleID =       "org.webjars"                   % "swagger-ui"            % "2.1.1"
+  val swaggerUI: ModuleID =       "org.webjars"                   % "swagger-ui"            % "2.2.5"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
+  val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats"                 % "0.9.0"
   val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.0.6"
-  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.38"
+  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.42"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.2"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.0.1" % "test"
@@ -112,6 +114,7 @@ object Dependencies {
     jodaTime,
     jodaConvert,
     scalaLogging,
+    httpClient,
     googleApiClient,
     scalatest
   )
