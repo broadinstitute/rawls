@@ -176,6 +176,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         execServiceCluster,
         slickDataSource,
         gcsDAO.getBucketServiceAccountCredential,
+        250 milliseconds,
         workbenchMetricBaseName = workbenchMetricBaseName
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
       val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
@@ -276,7 +277,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val tr = Try(Await.result(system.actorSelection("/user/" + submissionSupervisorActorName + "/" + submissionId).resolveOne(100 milliseconds), Duration.Inf))
       subActor = tr.toOption
       tr.isSuccess
-    }, 250 milliseconds)
+    }, 1 second)
     subActor.get
   }
 
