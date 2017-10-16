@@ -58,7 +58,7 @@ trait RootRawlsApiService extends HttpService {
     }
   }
 
-  private val swaggerUiPath = "META-INF/resources/webjars/swagger-ui/2.1.1"
+  private val swaggerUiPath = "META-INF/resources/webjars/swagger-ui/2.2.5"
 
   val swaggerRoute = {
     get {
@@ -94,6 +94,7 @@ trait RootRawlsApiService extends HttpService {
           .replace("scopeSeparator: \",\"", "scopeSeparator: \" \"")
           .replace("url = \"http://petstore.swagger.io/v2/swagger.json\";",
             "url = '/rawls.yaml';")
+          .replace("jsonEditor: false,", "jsonEditor: false, validatorUrl: null, apisSorter: 'alpha',")
       )
     }
   }
