@@ -102,7 +102,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
 
   override def receive = {
     case StartMonitorPass =>
-      startMonitoringNewSubmissions()
+      startMonitoringNewSubmissions pipeTo self
     case SubmissionStarted(workspaceName, submissionId) =>
       val child = startSubmissionMonitor(workspaceName, submissionId, bucketCredential)
       scheduleNextCheckCurrentWorkflowStatus(child)
@@ -168,7 +168,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     }
   }
 
-  private def startMonitoringNewSubmissions(): Unit = {
+  private def startMonitoringNewSubmissions: Future[SubmissionMonitorPassComplete.type] = {
     datasource.inTransaction { dataAccess =>
       dataAccess.submissionQuery.listAllActiveSubmissions() map { activeSubs =>
         val monitoredSubmissions = context.children.map(_.path.name).toSet
@@ -179,12 +179,15 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
           val subId = activeSub.submission.submissionId
 
           self ! SubmissionStarted(wsName, UUID.fromString(subId))
+
         }
+        SubmissionMonitorPassComplete
       }
-    } onFailure {
-      case t: Throwable => logger.error("Error starting submission monitor actors for new submissions", t)
+    } recover {
+      case t: Throwable =>
+        logger.error("Error starting submission monitor actors for new submissions", t)
+        SubmissionMonitorPassComplete
     }
-    self ! SubmissionMonitorPassComplete
   }
 
   private def saveGlobalJobExecCounts(submissionStatuses: Map[SubmissionStatus, Int], workflowStatus: Map[WorkflowStatus, Int]) = {
