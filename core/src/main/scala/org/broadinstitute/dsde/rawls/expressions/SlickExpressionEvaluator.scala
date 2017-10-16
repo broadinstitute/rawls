@@ -71,19 +71,22 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
         runPipe(SlickExpressionContext(workspaceContext, rootEntities, transactionId), pipelineQuery) map { (exprResults: Map[String, Iterable[Attribute]]) =>
           val results: Map[String, Try[Attribute]] = exprResults map { case (key: String, attrVals: Iterable[Attribute]) =>
             //In the case of this.participants.boo, attrVals might be [ [1,2,3], [4,5,6], "bees" ] if the participants have different types on "boo"
-            key -> Try(attrVals match {
+            key -> Try(attrVals.toList match {
               //forbidden things
               case attrs if attrs.exists( _.isInstanceOf[AttributeEntityReference] ) => throw new RawlsException("Attribute expression returned a reference to an entity.")
               case attrs if attrs.exists( _.isInstanceOf[AttributeEntityReferenceList] ) => throw new RawlsException("Attribute expression returned a list of entities.")
-              case attrs if attrs.exists( _ == AttributeEntityReferenceEmptyList ) => throw new RawlsException("Attribute expression returned a list of entities.")
+              case attrs if attrs.contains( AttributeEntityReferenceEmptyList ) => throw new RawlsException("Attribute expression returned a list of entities.")
 
               //normal things
               case Nil => AttributeNull //I don't think this is possible -- we only populate the map with entities who have values
-              case (a:AttributeValue) :: Nil => a
+                //case attrs if attrs.size == 1 && attrs.head.isInstanceOf[AttributeValue] => attrs.head
+              //case AttributeValueEmptyList :: Nil => AttributeValueEmptyList
+              //case (a: AttributeValueList) :: Nil => a
+              case a :: Nil => a
               case attrs if attrs.forall( _.isInstanceOf[AttributeValue] ) => AttributeValueList(attrs.asInstanceOf[Iterable[AttributeValue]].toSeq)
 
               //2D array things
-              case attrs if attrs.exists( _ == AttributeValueEmptyList ) => liftToRawJson(attrVals)
+              case attrs if attrs.contains( AttributeValueEmptyList ) => liftToRawJson(attrVals)
               case attrs if attrs.exists( _.isInstanceOf[AttributeValueList] ) => liftToRawJson(attrVals)
 
               case badType =>

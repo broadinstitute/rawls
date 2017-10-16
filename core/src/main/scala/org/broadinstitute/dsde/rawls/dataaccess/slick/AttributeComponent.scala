@@ -415,6 +415,7 @@ trait AttributeComponent {
     }
 
     private def assertConsistentValueListMembers(attributes: Seq[AttributeValue]): Unit = {
+
       if(!attributes.isEmpty) {
         val headAttribute = attributes.head
         if (!attributes.forall(_.getClass == headAttribute.getClass)) {
