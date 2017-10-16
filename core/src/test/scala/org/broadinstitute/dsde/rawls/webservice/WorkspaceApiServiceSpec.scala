@@ -826,7 +826,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
     }
 
-    runMultipleAndWait(100)(generator)
+    runMultipleAndWait(10)(generator)
   }
 
   it should "clone a workspace if the source exists" in withTestDataApiServices { services =>

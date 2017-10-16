@@ -33,7 +33,7 @@ Spin up mysql and opendj locally and validate that it is working:
 ```
 Run tests.
 ```
-export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310 -Ddirectory.url=ldap://localhost:3389 -Ddirectory.password=testtesttest"
+export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310 -Ddirectory.url=ldap://localhost:3389 -Ddirectory.password=testtesttest -Dcom.sun.jndi.ldap.connect.pool.maxsize=100"
 sbt clean compile test
 ```
 And when you're done, spin down mysql and opendj (it is also fine to leave them running for your next round of tests):
@@ -54,7 +54,7 @@ sudo ln -s <path_to_rawls_src>/config/billing-account.pem
 ```
 Run tests using mysql similarly to unit tests.
 ```
-export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310 -Ddirectory.url=ldap://localhost:3389 -Ddirectory.password=testtesttest"
+export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310 -Ddirectory.url=ldap://localhost:3389 -Ddirectory.password=testtesttest -Dcom.sun.jndi.ldap.connect.pool.maxsize=100"
 sbt clean compile it:test
 ```
 
