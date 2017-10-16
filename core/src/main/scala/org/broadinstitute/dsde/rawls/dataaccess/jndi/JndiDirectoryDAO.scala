@@ -214,10 +214,18 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }
     }
 
-    def flattenGroupMembership(groupRef: RawlsGroupRef): ReadWriteAction[Set[RawlsUserRef]] = withContextUsingIsMemberOf { ctx =>
+    // Doge: this is what we want the code to look like but does not perform well on opendj
+    def DONT_CALL_ME_ON_OPENDJ_flattenGroupMembership(groupRef: RawlsGroupRef): ReadWriteAction[Set[RawlsUserRef]] = withContextUsingIsMemberOf { ctx =>
       ctx.search(peopleOu, new BasicAttributes(Attr.memberOf, groupDn(groupRef.groupName), true)).asScala.map { result =>
         RawlsUserRef(unmarshalUser(result.getAttributes).userSubjectId)
       }.toSet
+    }
+
+    def flattenGroupMembership(groupRef: RawlsGroupRef): ReadWriteAction[Set[RawlsUserRef]] = {
+      loadGroupsRecursive(Set(groupRef)).map { allGroups =>
+        val groupsByName = allGroups.map(g => g.groupName -> g).toMap
+        flattenGroup(groupsByName(groupRef.groupName), groupsByName)
+      }
     }
 
     def isGroupMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef): ReadWriteAction[Boolean] = withContext { ctx =>
@@ -331,14 +339,30 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       groups.toSet
     }
 
-    def intersectGroupMembership(groups: Set[RawlsGroupRef]): ReadWriteAction[Set[RawlsUserRef]] = withContextUsingIsMemberOf { ctx =>
+    // Doge: this is what we want the code to look like but does not perform well on opendj
+    def DONT_CALL_ME_ON_OPENDJ_intersectGroupMembership(groups: Set[RawlsGroupRef]): ReadWriteAction[Set[RawlsUserRef]] = withContextUsingIsMemberOf { ctx =>
       val groupFilters = groups.map(g => s"(${Attr.memberOf}=${groupDn(g.groupName)})")
       ctx.search(peopleOu, s"(&${groupFilters.mkString})", new SearchControls()).asScala.map { result =>
         RawlsUserRef(dnToUserSubjectId(result.getNameInNamespace))
       }.toSet
     }
 
+    def intersectGroupMembership(groups: Set[RawlsGroupRef]): ReadWriteAction[Set[RawlsUserRef]] = {
+      loadGroupsRecursive(groups).map { allGroups =>
+        val groupsByName = allGroups.map(g => g.groupName -> g).toMap
+
+        groups.map(g => flattenGroup(groupsByName(g.groupName), groupsByName)).reduce(_ intersect _)
+      }
+    }
+
+    def flattenGroup(group: RawlsGroup, allGroupsByName: Map[RawlsGroupName, RawlsGroup], visited: Set[RawlsGroupRef] = Set.empty): Set[RawlsUserRef] = {
+      val newVisited = visited + group
+      val subGroupsToVisit = group.subGroups -- newVisited
+      group.users ++ subGroupsToVisit.flatMap(sg => { flattenGroup(allGroupsByName(sg.groupName), allGroupsByName, newVisited) })
+    }
+
   }
+
 
   private def unmarshallGroup(attributes: Attributes) = {
     val cn = getAttribute[String](attributes, Attr.cn).getOrElse(throw new RawlsException(s"${Attr.cn} attribute missing"))

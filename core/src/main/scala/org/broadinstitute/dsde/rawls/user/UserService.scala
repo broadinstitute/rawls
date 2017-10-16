@@ -836,12 +836,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def updateIntersectionGroupMembers(groupsToIntersect: Set[GroupsToIntersect], dataAccess:DataAccess): ReadWriteAction[Iterable[RawlsGroupRef]] = {
 
-    def flattenGroup(group: RawlsGroup, allGroupsByName: Map[RawlsGroupName, RawlsGroup], visited: Set[RawlsGroupRef] = Set.empty): Set[RawlsUserRef] = {
-      val newVisited = visited + group
-      val subGroupsToVisit = group.subGroups -- newVisited
-      group.users ++ subGroupsToVisit.flatMap(sg => { flattenGroup(allGroupsByName(sg.groupName), allGroupsByName, newVisited) })
-    }
-
     val allGroupRefs = groupsToIntersect.flatMap(_.groups)
 
     dataAccess.rawlsGroupQuery.loadGroupsRecursive(allGroupRefs).flatMap { allGroups =>
@@ -854,7 +848,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       val intersections = DBIO.sequence(intersectionsToMake.toSeq.map { groups =>
         // this is the right thing to call when we know how to make it perform well
         // dataAccess.rawlsGroupQuery.intersectGroupMembership(groups).map(members => groups -> members)
-        DBIO.successful(groups -> groups.map(g => flattenGroup(groupsByName(g.groupName), groupsByName)).reduce(_ intersect _))
+        DBIO.successful(groups -> groups.map(g => dataAccess.rawlsGroupQuery.flattenGroup(groupsByName(g.groupName), groupsByName)).reduce(_ intersect _))
       })
 
       val intersectionMemberships = intersections.map { sourceGroupsWithMembers =>
