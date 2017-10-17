@@ -9,7 +9,7 @@
 
 ## Getting started
 ```
-$ git clone https://github.com/broadinstitute/rawls.git
+$ git clone git@github.com:broadinstitute/rawls.git
 $ brew install git-secrets # if not already installed
 $ cd rawls
 $ cp -r hooks/ .git/hooks  #this step can be skipped if you use the rsync script to spin up locally
