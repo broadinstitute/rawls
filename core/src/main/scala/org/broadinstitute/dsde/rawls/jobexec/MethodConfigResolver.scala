@@ -7,8 +7,8 @@ import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
 import wdl4s.parser.WdlParser.SyntaxError
-import wdl4s.types.{WdlArrayType, WdlOptionalType}
-import wdl4s.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
+import wdl4s.wdl.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow, WorkflowInput}
+import wdl4s.wdl.types.{WdlArrayType, WdlOptionalType}
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -50,7 +50,7 @@ object MethodConfigResolver {
     case _ => getSingleResult(wfInput.fqn, mcSequence, wfInput.optional)
   }
 
-  def parseWDL(wdl: String): Try[wdl4s.Workflow] = {
+  def parseWDL(wdl: String): Try[WdlWorkflow] = {
     val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq()).recoverWith { case t: SyntaxError =>
       Failure(new RawlsException("Failed to parse WDL: " + t.getMessage()))
     }
