@@ -10,9 +10,10 @@
 ## Getting started
 ```
 $ git clone https://github.com/broadinstitute/rawls.git
+$ brew install git-secrets # if not already installed
+$ cd rawls
 $ cp -r hooks/ .git/hooks  #this step can be skipped if you use the rsync script to spin up locally
 $ chmod 755 .git/hooks/apply-git-secrets.sh #this step as well
-$ cd rawls
 $ sbt clean compile test
 ```
 
