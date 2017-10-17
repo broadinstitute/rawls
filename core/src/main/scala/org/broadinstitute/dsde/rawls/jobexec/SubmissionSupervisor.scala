@@ -172,14 +172,11 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     val monitoredSubmissions = context.children.map(_.path.name).toSet
 
     datasource.inTransaction { dataAccess =>
-      dataAccess.submissionQuery.listAllActiveSubmissions() map { activeSubs =>
-        val unmonitoredSubmissions = activeSubs.filterNot(sub => monitoredSubmissions.contains(sub.submission.submissionId))
+      dataAccess.submissionQuery.listAllActiveSubmissionIdsWithWorkspace() map { activeSubs =>
+        val unmonitoredSubmissions = activeSubs.filterNot { case (subId, _) => monitoredSubmissions.contains(subId.toString) }
 
-        unmonitoredSubmissions.foreach { activeSub =>
-          val wsName = WorkspaceName(activeSub.workspaceNamespace, activeSub.workspaceName)
-          val subId = activeSub.submission.submissionId
-
-          self ! SubmissionStarted(wsName, UUID.fromString(subId))
+        unmonitoredSubmissions.foreach { case (subId, wsName) =>
+          self ! SubmissionStarted(wsName, subId)
         }
         SubmissionMonitorPassComplete
       }
