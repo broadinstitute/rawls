@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses, WorkspaceName}
-import org.broadinstitute.dsde.rawls.util.{ThresholdOneForOneStrategy, addJitter}
+import org.broadinstitute.dsde.rawls.util.ThresholdOneForOneStrategy
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -134,12 +134,11 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def scheduleInitialMonitorPass: Cancellable = {
-    //Wait anything _up to_ the poll interval for a much wider distribution of submission monitor start times when Rawls starts up
     system.scheduler.scheduleOnce(submissionPollInterval, self, StartMonitorPass)
   }
 
   private def scheduleNextMonitorPass: Cancellable = {
-    system.scheduler.scheduleOnce(addJitter(submissionPollInterval), self, StartMonitorPass)
+    system.scheduler.scheduleOnce(submissionPollInterval, self, StartMonitorPass)
   }
 
   private def restartCounter(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable): Counter = {
