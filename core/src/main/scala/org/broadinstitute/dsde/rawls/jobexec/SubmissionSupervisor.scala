@@ -135,7 +135,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
 
   private def scheduleInitialMonitorPass: Cancellable = {
     //Wait anything _up to_ the poll interval for a much wider distribution of submission monitor start times when Rawls starts up
-    system.scheduler.scheduleOnce(addJitter(0 seconds, submissionPollInterval), self, StartMonitorPass)
+    system.scheduler.scheduleOnce(submissionPollInterval, self, StartMonitorPass)
   }
 
   private def scheduleNextMonitorPass: Cancellable = {
@@ -169,17 +169,17 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def startMonitoringNewSubmissions: Future[SubmissionMonitorPassComplete.type] = {
+    val monitoredSubmissions = context.children.map(_.path.name).toSet
+
     datasource.inTransaction { dataAccess =>
       dataAccess.submissionQuery.listAllActiveSubmissions() map { activeSubs =>
-        val monitoredSubmissions = context.children.map(_.path.name).toSet
         val unmonitoredSubmissions = activeSubs.filterNot(sub => monitoredSubmissions.contains(sub.submission.submissionId))
 
-        unmonitoredSubmissions.map { activeSub =>
+        unmonitoredSubmissions.foreach { activeSub =>
           val wsName = WorkspaceName(activeSub.workspaceNamespace, activeSub.workspaceName)
           val subId = activeSub.submission.submissionId
 
           self ! SubmissionStarted(wsName, UUID.fromString(subId))
-
         }
         SubmissionMonitorPassComplete
       }
