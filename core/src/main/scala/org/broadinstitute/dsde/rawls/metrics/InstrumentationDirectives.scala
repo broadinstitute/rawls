@@ -4,7 +4,8 @@ import java.util.concurrent.TimeUnit
 
 import shapeless._
 import spray.http.Uri
-import spray.routing._
+import spray.routing.{Directive0, PathMatcher0}
+import spray.routing.PathMatchers.Segment
 import spray.routing.directives.BasicDirectives.mapHttpResponse
 import spray.routing.directives.MiscDirectives.requestInstance
 import spray.routing.directives.PathDirectives._
