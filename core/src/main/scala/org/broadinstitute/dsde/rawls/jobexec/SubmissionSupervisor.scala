@@ -29,6 +29,8 @@ object SubmissionSupervisor {
   sealed trait SubmissionSupervisorMessage
 
   case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: UUID)
+  case object StartMonitorPass
+  case object SubmissionMonitorPassComplete
 
   /**
     * A periodic collection of all current workflow and submission status counts.
@@ -93,15 +95,21 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   override def preStart(): Unit = {
     super.preStart()
 
+    scheduleInitialMonitorPass
     registerGlobalJobExecGauges()
     system.scheduler.schedule(0 seconds, submissionPollInterval, self, RefreshGlobalJobExecGauges)
   }
 
   override def receive = {
+    case StartMonitorPass =>
+      startMonitoringNewSubmissions pipeTo self
     case SubmissionStarted(workspaceName, submissionId) =>
       val child = startSubmissionMonitor(workspaceName, submissionId, bucketCredential)
       scheduleNextCheckCurrentWorkflowStatus(child)
       registerDetailedJobExecGauges(workspaceName, submissionId)
+
+    case SubmissionMonitorPassComplete =>
+      scheduleNextMonitorPass
 
     case SaveCurrentWorkflowStatusCounts(workspaceName, submissionId, workflowStatusCounts, submissionStatusCounts, reschedule) =>
       this.activeWorkflowStatusCounts += submissionId -> workflowStatusCounts
@@ -123,6 +131,14 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
 
     case SaveGlobalJobExecCounts(submissionStatuses, workflowStatuses) =>
       saveGlobalJobExecCounts(submissionStatuses, workflowStatuses)
+  }
+
+  private def scheduleInitialMonitorPass: Cancellable = {
+    system.scheduler.scheduleOnce(submissionPollInterval, self, StartMonitorPass)
+  }
+
+  private def scheduleNextMonitorPass: Cancellable = {
+    system.scheduler.scheduleOnce(submissionPollInterval, self, StartMonitorPass)
   }
 
   private def restartCounter(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable): Counter = {
@@ -148,6 +164,25 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
         SaveGlobalJobExecCounts( subStatuses.map { case (k, v) => SubmissionStatuses.withName(k) -> v },
                                  wfStatuses.map  { case (k, v) => WorkflowStatuses.withName(k) -> v } )
       }
+    }
+  }
+
+  private def startMonitoringNewSubmissions: Future[SubmissionMonitorPassComplete.type] = {
+    val monitoredSubmissions = context.children.map(_.path.name).toSet
+
+    datasource.inTransaction { dataAccess =>
+      dataAccess.submissionQuery.listAllActiveSubmissionIdsWithWorkspace() map { activeSubs =>
+        val unmonitoredSubmissions = activeSubs.filterNot { case (subId, _) => monitoredSubmissions.contains(subId.toString) }
+
+        unmonitoredSubmissions.foreach { case (subId, wsName) =>
+          self ! SubmissionStarted(wsName, subId)
+        }
+        SubmissionMonitorPassComplete
+      }
+    } recover {
+      case t: Throwable =>
+        logger.error("Error starting submission monitor actors for new submissions", t)
+        SubmissionMonitorPassComplete
     }
   }
 
