@@ -102,9 +102,9 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def loadAllGroups(): ReadWriteAction[Seq[RawlsGroup]] = withContext { ctx =>
-      ctx.search(groupsOu, new BasicAttributes("objectclass", "workbenchGroup", true)).asScala.map { result =>
+      withSearchResults(ctx, groupsOu, new BasicAttributes("objectclass", "workbenchGroup", true)) { _.map { result =>
         unmarshallGroup(result.getAttributes)
-      }.toSeq
+      }.toSeq }
     }
 
     def save(group: RawlsGroup): ReadWriteAction[RawlsGroup] = withContext { ctx =>
@@ -194,9 +194,9 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
 
     def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = batchedLoad(groupRefs.toSeq) { batch => { ctx =>
       val filters = batch.toSet[RawlsGroupRef].map { ref => s"(${Attr.cn}=${ref.groupName.value})" }
-      ctx.search(groupsOu, s"(|${filters.mkString})", new SearchControls()).asScala.map { result =>
+      withSearchResults(ctx, groupsOu, s"(|${filters.mkString})", new SearchControls()) { _.map { result =>
         unmarshallGroup(result.getAttributes)
-      }.toSeq
+      }.toSeq }
     } }
 
     /** talk to doge before calling this function - loads groups and subgroups and subgroups ... */
@@ -214,11 +214,10 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }
     }
 
-    // Doge: this is what we want the code to look like but does not perform well on opendj
     def DONT_CALL_ME_ON_OPENDJ_flattenGroupMembership(groupRef: RawlsGroupRef): ReadWriteAction[Set[RawlsUserRef]] = withContextUsingIsMemberOf { ctx =>
-      ctx.search(peopleOu, new BasicAttributes(Attr.memberOf, groupDn(groupRef.groupName), true)).asScala.map { result =>
+      withSearchResults(ctx, peopleOu, new BasicAttributes(Attr.memberOf, groupDn(groupRef.groupName), true)) { _.map { result =>
         RawlsUserRef(unmarshalUser(result.getAttributes).userSubjectId)
-      }.toSet
+      }.toSet }
     }
 
     def flattenGroupMembership(groupRef: RawlsGroupRef): ReadWriteAction[Set[RawlsUserRef]] = {
@@ -229,8 +228,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def isGroupMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef): ReadWriteAction[Boolean] = withContext { ctx =>
-      val results = ctx.search(peopleOu, s"(&(${Attr.uid}=${userRef.userSubjectId.value})(${Attr.memberOf}=${groupDn(groupRef.groupName)}))", new SearchControls())
-      results.hasMore
+      withSearchResults(ctx, peopleOu, s"(&(${Attr.uid}=${userRef.userSubjectId.value})(${Attr.memberOf}=${groupDn(groupRef.groupName)}))", new SearchControls()) { _.hasNext }
     }
 
     def loadGroupIfMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef): ReadWriteAction[Option[RawlsGroup]] = {
@@ -255,18 +253,19 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def loadFromEmail(email: String): ReadWriteAction[Option[Either[RawlsUser, RawlsGroup]]] = withContext { ctx =>
-      val subjectResults = ctx.search(directoryConfig.baseDn, s"(${Attr.email}=${email})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)).asScala.toSeq
-      val subjects = subjectResults.map { result =>
-        dnToSubject(result.getNameInNamespace) match {
-          case Left(groupName) => Right(unmarshallGroup(result.getAttributes))
-          case Right(userSubjectId) => Left(unmarshalUser(result.getAttributes))
+      withSearchResults(ctx, directoryConfig.baseDn, s"(${Attr.email}=${email})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)) { subjectResults =>
+        val subjects = subjectResults.map { result =>
+          dnToSubject(result.getNameInNamespace) match {
+            case Left(groupName) => Right(unmarshallGroup(result.getAttributes))
+            case Right(userSubjectId) => Left(unmarshalUser(result.getAttributes))
+          }
         }
-      }
 
-      subjects match {
-        case Seq() => None
-        case Seq(subject) => Option(subject)
-        case _ => throw new RawlsException(s"Database error: email $email refers to too many subjects: $subjects")
+        subjects.toSeq match {
+          case Seq() => None
+          case Seq(subject) => Option(subject)
+          case _ => throw new RawlsException(s"Database error: email $email refers to too many subjects: $subjects")
+        }
       }
     }
 
@@ -298,11 +297,12 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def loadGroupByEmail(groupEmail: RawlsGroupEmail): ReadWriteAction[Option[RawlsGroup]] = withContext { ctx =>
-      val group = ctx.search(groupsOu, new BasicAttributes(Attr.email, groupEmail.value, true)).asScala.toSeq
-      group match {
-        case Seq() => None
-        case Seq(result) => Option(unmarshallGroup(result.getAttributes))
-        case _ => throw new RawlsException(s"Found more than one group for email ${groupEmail}")
+      withSearchResults(ctx, groupsOu, new BasicAttributes(Attr.email, groupEmail.value, true)) { group =>
+        group.toSeq match {
+          case Seq() => None
+          case Seq(result) => Option(unmarshallGroup(result.getAttributes))
+          case _ => throw new RawlsException(s"Found more than one group for email ${groupEmail}")
+        }
       }
     }
 
@@ -321,13 +321,14 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
 
     def removeUserFromAllGroups(userRef: RawlsUserRef): ReadWriteAction[Boolean] = withContext { ctx =>
       val userAttributes = new BasicAttributes(Attr.member, userDn(userRef.userSubjectId), true)
-      val groupResults = ctx.search(groupsOu, userAttributes, Array[String]()).asScala
+      withSearchResults(ctx, groupsOu, userAttributes, Array[String]()) { groupResults =>
 
-      groupResults.foreach { result =>
-        ctx.modifyAttributes(result.getNameInNamespace, DirContext.REMOVE_ATTRIBUTE, userAttributes)
+        groupResults.foreach { result =>
+          ctx.modifyAttributes(result.getNameInNamespace, DirContext.REMOVE_ATTRIBUTE, userAttributes)
+        }
+
+        !groupResults.isEmpty
       }
-
-      !groupResults.isEmpty
     }
 
     def listAncestorGroups(groupName: RawlsGroupName): ReadWriteAction[Set[RawlsGroupName]] = withContext { ctx =>
@@ -342,9 +343,9 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     // Doge: this is what we want the code to look like but does not perform well on opendj
     def DONT_CALL_ME_ON_OPENDJ_intersectGroupMembership(groups: Set[RawlsGroupRef]): ReadWriteAction[Set[RawlsUserRef]] = withContextUsingIsMemberOf { ctx =>
       val groupFilters = groups.map(g => s"(${Attr.memberOf}=${groupDn(g.groupName)})")
-      ctx.search(peopleOu, s"(&${groupFilters.mkString})", new SearchControls()).asScala.map { result =>
+      withSearchResults(ctx, peopleOu, s"(&${groupFilters.mkString})", new SearchControls()) { _.map { result =>
         RawlsUserRef(dnToUserSubjectId(result.getNameInNamespace))
-      }.toSet
+      }.toSet }
     }
 
     def intersectGroupMembership(groups: Set[RawlsGroupRef]): ReadWriteAction[Set[RawlsUserRef]] = {
@@ -360,7 +361,6 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       val subGroupsToVisit = group.subGroups -- newVisited
       group.users ++ subGroupsToVisit.flatMap(sg => { flattenGroup(allGroupsByName(sg.groupName), allGroupsByName, newVisited) })
     }
-
   }
 
 
@@ -379,17 +379,18 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
   object rawlsUserQuery {
 
     def loadAllUsers(): ReadWriteAction[Seq[RawlsUser]] = withContext { ctx =>
-      ctx.search(peopleOu, new BasicAttributes("objectclass", "inetOrgPerson", true)).asScala.map { result =>
+      withSearchResults(ctx, peopleOu, new BasicAttributes("objectclass", "inetOrgPerson", true)) { _.map { result =>
         unmarshalUser(result.getAttributes)
-      }.toSeq
+      }.toSeq }
     }
 
     def loadUserByEmail(email: RawlsUserEmail): ReadWriteAction[Option[RawlsUser]] = withContext { ctx =>
-      val person = ctx.search(peopleOu, new BasicAttributes(Attr.email, email.value, true)).asScala.toSeq
-      person match {
-        case Seq() => None
-        case Seq(result) => Option(unmarshalUser(result.getAttributes))
-        case _ => throw new RawlsException(s"Found more than one user for email ${email}")
+      withSearchResults(ctx, peopleOu, new BasicAttributes(Attr.email, email.value, true)) { person =>
+        person.toSeq match {
+          case Seq() => None
+          case Seq(result) => Option(unmarshalUser(result.getAttributes))
+          case _ => throw new RawlsException(s"Found more than one user for email ${email}")
+        }
       }
     }
 
@@ -433,9 +434,9 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
 
     def load(userRefs: TraversableOnce[RawlsUserRef]): ReadWriteAction[Seq[RawlsUser]] = batchedLoad(userRefs.toSeq) { batch => { ctx =>
       val filters = batch.toSet[RawlsUserRef].map { ref => s"(${Attr.uid}=${ref.userSubjectId.value})" }
-      ctx.search(peopleOu, s"(|${filters.mkString})", new SearchControls()).asScala.map { result =>
+      withSearchResults(ctx, peopleOu, s"(|${filters.mkString})", new SearchControls()) { _.map { result =>
         unmarshalUser(result.getAttributes)
-      }.toSeq
+      }.toSeq }
     } }
 
     def deleteUser(userId: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>

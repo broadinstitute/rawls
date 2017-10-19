@@ -10,6 +10,7 @@ import slick.dbio.DBIO
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
+import scala.collection.JavaConverters._
 
 trait JndiSupport extends LazyLogging {
   private val batchSize = 1000
@@ -34,8 +35,23 @@ trait JndiSupport extends LazyLogging {
     t.get
   }
 
+  protected def withSearchResults[T](ctx: DirContext, name: String, matchingAttributes: Attributes, attributesToReturn: Array[String] = Array.empty)(op: Iterator[SearchResult] => T): T = {
+    handleSearchResults(op, ctx.search(name, matchingAttributes, attributesToReturn))
+  }
+
+  protected def withSearchResults[T](ctx: DirContext, name: String, filter: String, cons: SearchControls)(op: Iterator[SearchResult] => T): T = {
+    handleSearchResults(op, ctx.search(name, filter, cons))
+  }
+
+  private def handleSearchResults[T](op: (Iterator[SearchResult]) => T, results: NamingEnumeration[SearchResult]) = {
+    val opResult = Try { op(results.asScala) }
+    results.close()
+    opResult.get
+  }
+
   /**
     * Given a possibly large collection of inputs, splits input into batches and calls op on each batch.
+    *
     * @param url
     * @param user
     * @param password
