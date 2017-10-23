@@ -5,7 +5,7 @@ import java.util.UUID
 import akka.actor.ActorRef
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor._
 import org.broadinstitute.dsde.rawls.model.{WorkflowStatuses, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 
@@ -18,6 +18,7 @@ object BootMonitors extends LazyLogging {
 
   def restartMonitors(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef): Unit = {
     startBucketDeletionMonitor(dataSource, bucketDeletionMonitor)
+    startSubmissionMonitor(submissionSupervisor)
     resetLaunchingWorkflows(dataSource)
   }
 
@@ -30,6 +31,10 @@ object BootMonitors extends LazyLogging {
     } onFailure {
       case t: Throwable => logger.error("Error starting bucket deletion monitor", t)
     }
+  }
+
+  private def startSubmissionMonitor(submissionSupervisor: ActorRef) = {
+    submissionSupervisor ! StartMonitorPass
   }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) = {

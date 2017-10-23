@@ -184,7 +184,10 @@ object Boot extends App with LazyLogging {
       gcsConfig.getInt("groupMonitor.workerCount"),
       userServiceConstructor))
 
-    BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
+    if(sys.env.getOrElse("BACK_RAWLS", "false").toBoolean) {
+      logger.info("This instance has been marked as BACK_RAWLS. Booting monitors...")
+      BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
+    }
 
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
