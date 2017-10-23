@@ -5,8 +5,8 @@ import java.util.UUID
 import akka.actor.ActorRef
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor._
-import org.broadinstitute.dsde.rawls.model.{WorkflowStatuses, WorkspaceName}
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.StartMonitorPass
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 
 import scala.concurrent.Await
