@@ -10,6 +10,8 @@ import slick.dbio.DBIO
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 trait JndiSupport extends LazyLogging {
   private val batchSize = 1000
@@ -34,8 +36,31 @@ trait JndiSupport extends LazyLogging {
     t.get
   }
 
+  protected def withSearchResults[T](ctx: DirContext, name: String, matchingAttributes: Attributes, attributesToReturn: Array[String] = Array.empty)(op: Iterator[SearchResult] => T): T = {
+    if (attributesToReturn.isEmpty) {
+      handleSearchResults(op, ctx.search(name, matchingAttributes))
+    } else {
+      handleSearchResults(op, ctx.search(name, matchingAttributes, attributesToReturn))
+    }
+  }
+
+  protected def withSearchResults[T](ctx: DirContext, name: String, filter: String, cons: SearchControls)(op: Iterator[SearchResult] => T): T = {
+    handleSearchResults(op, ctx.search(name, filter, cons))
+  }
+
+  private def handleSearchResults[T](op: (Iterator[SearchResult]) => T, results: NamingEnumeration[SearchResult]) = {
+    // need to copy the results out of the jndi enum otherwise scala is fancy and continues to use the
+    // enum behind the scenes which is a problem once the enum is closed :(
+    val b = new mutable.ListBuffer[SearchResult]
+    results.asScala.copyToBuffer(b)
+    val opResult = Try { op(b.toIterator) }
+    results.close()
+    opResult.get
+  }
+
   /**
     * Given a possibly large collection of inputs, splits input into batches and calls op on each batch.
+    *
     * @param url
     * @param user
     * @param password
