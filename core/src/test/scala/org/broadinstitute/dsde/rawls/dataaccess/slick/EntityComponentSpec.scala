@@ -4,7 +4,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.util.UUID
 
 import _root_.slick.dbio.DBIOAction
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 
@@ -159,6 +159,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "saveEntityPatch" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
+
       val inserts = Map(
         AttributeName.withDefaultNS("totallyNew") -> AttributeNumber(2),
         AttributeName.withDefaultNS("quot2") -> testData.aliquot2.toReference
@@ -180,6 +181,11 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         expected,
         runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
       )
+
+      // check that the all_attribute_values field was filled in correctly by searching on the new attributes and making sure one filtered result is found
+      assertResult(1) {
+        runAndWait(entityQuery.loadEntityPage(context, "Sample", model.EntityQuery(1, 10, "name", SortDirections.Ascending, Option("sample1 2 tumor aliquot2 aliquot1 aliquot2 itsfoo"))))._2
+      }
     }
   }
 

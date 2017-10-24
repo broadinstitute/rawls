@@ -14,7 +14,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -1458,7 +1457,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] = {
-    val submissionFuture: Future[PerRequestMessage] = withSubmissionParameters(workspaceName, submissionRequest) {
+    withSubmissionParameters(workspaceName, submissionRequest) {
       (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode]) =>
         requireComputePermission(workspaceContext.workspace, dataAccess) {
           val submissionId: UUID = UUID.randomUUID()
@@ -1502,16 +1501,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, successes))
           }
         }
-    }
-
-    submissionFuture map {
-      case RequestComplete((StatusCodes.Created, submissionReport: SubmissionReport)) =>
-        if (submissionReport.status == SubmissionStatuses.Submitted) {
-          submissionSupervisor ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId))
-        }
-        RequestComplete(StatusCodes.Created, submissionReport)
-
-      case somethingWrong => somethingWrong // this is the case where something was not found in withSubmissionParameters
     }
   }
 

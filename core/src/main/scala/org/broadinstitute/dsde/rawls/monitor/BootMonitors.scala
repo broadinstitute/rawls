@@ -18,7 +18,6 @@ object BootMonitors extends LazyLogging {
 
   def restartMonitors(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef): Unit = {
     startBucketDeletionMonitor(dataSource, bucketDeletionMonitor)
-    startSubmissionMonitor(dataSource, gcsDAO, submissionSupervisor)
     resetLaunchingWorkflows(dataSource)
   }
 
@@ -30,19 +29,6 @@ object BootMonitors extends LazyLogging {
       }
     } onFailure {
       case t: Throwable => logger.error("Error starting bucket deletion monitor", t)
-    }
-  }
-
-  private def startSubmissionMonitor(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef) = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.submissionQuery.listAllActiveSubmissions() map { _.map { activeSub =>
-        val wsName = WorkspaceName(activeSub.workspaceNamespace, activeSub.workspaceName)
-        val subId = activeSub.submission.submissionId
-
-        submissionSupervisor ! SubmissionStarted(wsName, UUID.fromString(subId))
-      }}
-    } onFailure {
-      case t: Throwable => logger.error("Error starting submission monitor", t)
     }
   }
 

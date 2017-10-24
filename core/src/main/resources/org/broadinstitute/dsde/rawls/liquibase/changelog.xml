@@ -55,4 +55,5 @@
     <include file="changesets/20170816_save_rawls_instance_for_workflow.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170911_add_user_run_permissions.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170926_drop_user_group_tables.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20171016_update_all_attributes_column.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

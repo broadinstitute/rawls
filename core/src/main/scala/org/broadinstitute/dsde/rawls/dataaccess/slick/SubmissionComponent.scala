@@ -211,6 +211,12 @@ trait SubmissionComponent {
       }))
     }
 
+    def listAllActiveSubmissionIdsWithWorkspace(): ReadAction[Seq[(UUID, WorkspaceName)]] = {
+      val query = findActiveSubmissions join workspaceQuery on(_.workspaceId === _.id)
+      val result = query.map{ case (sub, ws) => (sub.id, ws.namespace, ws.name) }.result
+      result.map(rows => rows.map { case (subId, wsNs, wsName) => (subId, WorkspaceName(wsNs, wsName)) } )
+    }
+
     private def deleteSubmissionAction(submissionId: UUID): ReadWriteAction[Int] = {
       val workflowDeletes = workflowQuery.filter(_.submissionId === submissionId).result flatMap { result =>
         DBIO.seq(result.map(wf => workflowQuery.deleteWorkflowAction(wf.id)).toSeq:_*)
