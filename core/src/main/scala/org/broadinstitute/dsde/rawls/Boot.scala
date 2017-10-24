@@ -184,8 +184,8 @@ object Boot extends App with LazyLogging {
       gcsConfig.getInt("groupMonitor.workerCount"),
       userServiceConstructor))
 
-    if(sys.env.getOrElse("BACK_RAWLS", "false").toBoolean) {
-      logger.info("This instance has been marked as BACK_RAWLS. Booting monitors...")
+    if(conf.getBooleanOption("backRawls").getOrElse(false)) {
+      logger.info("This instance has been marked as backRawls. Booting monitors...")
       BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
     }
 
