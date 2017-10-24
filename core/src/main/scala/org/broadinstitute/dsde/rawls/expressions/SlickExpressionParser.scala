@@ -311,7 +311,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
     def extractEntityTypeFromRecord( rec: EntityRecord ) = { AttributeString(rec.entityType) }
 
     //Helper function to group the result nicely and extract either name or entityType from the record as you please.
-    def returnMapOfRootEntityToReservedAttribute( baseQuery: PipeType, recordExtractionFn: EntityRecord => Attribute ): ReadAction[Map[String,Iterable[Attribute]]] = {
+    def returnMapOfRootEntityToReservedAttribute( baseQuery: PipeType, recordExtractionFn: EntityRecord => Attribute ): AttributeResult = {
       baseQuery.sortBy(_._2.name).distinct.result map { queryRes: Seq[(String, EntityRecord)] =>
         CollectionUtils.groupByTuples(queryRes).map({ case (k, v) => k -> v.map(recordExtractionFn(_)) })
       }

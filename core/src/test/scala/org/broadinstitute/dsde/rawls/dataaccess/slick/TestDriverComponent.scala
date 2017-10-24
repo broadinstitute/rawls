@@ -267,7 +267,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
       AttributeName.withDefaultNS("number") -> AttributeNumber(10),
-      AttributeName.withDefaultNS("empty") -> AttributeValueEmptyList,
+      AttributeName.withDefaultNS("emptyList") -> AttributeValueEmptyList,
       AttributeName.withDefaultNS("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
@@ -371,7 +371,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Map(AttributeName.withDefaultNS("hasSamples") -> AttributeEntityReferenceList(Seq(sample7.toReference))))
 
     val sset_empty = Entity("sset_empty", "SampleSet",
-      Map(AttributeName.withDefaultNS("samples") -> AttributeValueEmptyList ))
+      Map(AttributeName.withDefaultNS("empty_list") -> AttributeValueEmptyList ))
 
     val ps1 = Entity("ps1", "PairSet",
       Map(AttributeName.withDefaultNS("pairs") -> AttributeEntityReferenceList( Seq(pair1.toReference, pair2.toReference)) ) )

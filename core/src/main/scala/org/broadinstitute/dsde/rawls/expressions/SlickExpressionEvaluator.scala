@@ -77,12 +77,13 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
               case attrs if attrs.exists( _.isInstanceOf[AttributeEntityReferenceList] ) => throw new RawlsException("Attribute expression returned a list of entities.")
               case attrs if attrs.contains( AttributeEntityReferenceEmptyList ) => throw new RawlsException("Attribute expression returned a list of entities.")
 
-              //normal things
-              case Nil => AttributeNull //I don't think this is possible -- we only populate the map with entities who have values
-                //case attrs if attrs.size == 1 && attrs.head.isInstanceOf[AttributeValue] => attrs.head
-              //case AttributeValueEmptyList :: Nil => AttributeValueEmptyList
-              //case (a: AttributeValueList) :: Nil => a
+              //I don't think this is possible -- we only populate the map with entities who have values
+              case Nil => AttributeNull
+
+              //unwrap all single-element lists
               case a :: Nil => a
+
+              //convert
               case attrs if attrs.forall( _.isInstanceOf[AttributeValue] ) => AttributeValueList(attrs.asInstanceOf[Iterable[AttributeValue]].toSeq)
 
               //2D array things
