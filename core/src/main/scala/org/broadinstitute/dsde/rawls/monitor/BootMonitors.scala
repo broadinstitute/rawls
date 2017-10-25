@@ -57,8 +57,7 @@ object BootMonitors extends LazyLogging {
       userServiceConstructor))
   }
 
-  private def startSubmissionMonitor(system: ActorSystem, submissionMonitorConfig: Config, slickDataSource: SlickDataSource,
-                                     gcsDAO: HttpGoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {
+  private def startSubmissionMonitor(system: ActorSystem, submissionMonitorConfig: Config, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {
     system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
       slickDataSource,
