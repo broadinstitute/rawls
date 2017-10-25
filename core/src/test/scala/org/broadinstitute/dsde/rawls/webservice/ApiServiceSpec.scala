@@ -156,7 +156,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       execServiceBatchSize,
       gcsDAO,
       notificationDAO,
-      submissionSupervisor,
       bucketDeletionMonitor,
       userServiceConstructor,
       genomicsServiceConstructor,

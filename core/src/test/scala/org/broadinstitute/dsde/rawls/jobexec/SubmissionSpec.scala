@@ -162,7 +162,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  def withDataAndService[T](startMonitors: Boolean = true)(
+  def withDataAndService[T](
       testCode: WorkspaceService => T,
       withDataOp: (SlickDataSource => T) => T,
       executionServiceDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName) ): T = {
@@ -185,10 +185,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val directoryDAO = new MockUserDirectoryDAO
 
       val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")
-
-      if(startMonitors) {
-        BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
-      }
 
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
@@ -215,7 +211,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         execServiceBatchSize,
         gcsDAO,
         notificationDAO,
-        submissionSupervisor,
         bucketDeletionMonitor,
         userServiceConstructor,
         genomicsServiceConstructor,
@@ -237,20 +232,20 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   def withWorkspaceService[T](testCode: WorkspaceService => T): T = {
-    withDataAndService()(testCode, withDefaultTestDatabase[T])
+    withDataAndService(testCode, withDefaultTestDatabase[T])
   }
 
-  def withWorkspaceServiceMockExecution[T](startMonitors: Boolean = true)(testCode: (MockExecutionServiceDAO) => (WorkspaceService) => T): T = {
+  def withWorkspaceServiceMockExecution[T](testCode: (MockExecutionServiceDAO) => (WorkspaceService) => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO()
-    withDataAndService(startMonitors)(testCode(execSvcDAO), withDefaultTestDatabase[T], execSvcDAO)
+    withDataAndService(testCode(execSvcDAO), withDefaultTestDatabase[T], execSvcDAO)
   }
   def withWorkspaceServiceMockTimeoutExecution[T](testCode: (MockExecutionServiceDAO) => (WorkspaceService) => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO(true)
-    withDataAndService()(testCode(execSvcDAO), withDefaultTestDatabase[T], execSvcDAO)
+    withDataAndService(testCode(execSvcDAO), withDefaultTestDatabase[T], execSvcDAO)
   }
 
   def withSubmissionTestWorkspaceService[T](testCode: WorkspaceService => T): T = {
-    withDataAndService()(testCode, withCustomTestDatabase[T](new SubmissionTestData))
+    withDataAndService(testCode, withCustomTestDatabase[T](new SubmissionTestData))
   }
 
   private def checkSubmissionStatus(workspaceService:WorkspaceService, submissionId:String) = {
@@ -285,7 +280,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     subActor.get
   }
 
-  it should "return a successful Submission and spawn a submission monitor actor when given an entity expression that evaluates to a single entity" in withWorkspaceServiceMockExecution() { mockExecSvc => workspaceService =>
+  it should "return a successful Submission and spawn a submission monitor actor when given an entity expression that evaluates to a single entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"), false)
     val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
     val (status, newSubmissionReport) = rqComplete.response
@@ -301,24 +296,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
   }
 
-  it should "return a successful Submission and NOT spawn a submission monitor actor when monitors aren't booted" in withWorkspaceServiceMockExecution(startMonitors = false) { mockExecSvc => workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"), false)
-    val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-    val (status, newSubmissionReport) = rqComplete.response
-    assertResult(StatusCodes.Created) {
-      status
-    }
-
-    intercept[AssertionError] {
-      waitForSubmissionActor(newSubmissionReport.submissionId)
-    }
-
-    assert(newSubmissionReport.workflows.size == 1)
-
-    checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
-  }
-
-  it should "continue to monitor a Submission on a deleted entity" in withWorkspaceServiceMockExecution() { mockExecSvc => workspaceService =>
+  it should "continue to monitor a Submission on a deleted entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"), useCallCache = false)
     val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
     val (status, newSubmissionReport) = rqComplete.response
@@ -336,7 +314,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
   }
 
-  it should "fail to submit when given an entity expression that evaluates to a deleted entity" in withWorkspaceServiceMockExecution() { mockExecSvc => workspaceService =>
+  it should "fail to submit when given an entity expression that evaluates to a deleted entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
 
     runAndWait(entityQuery.hide(SlickWorkspaceContext(testData.workspace), Seq(testData.pair1.toReference)))
 

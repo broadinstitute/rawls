@@ -153,14 +153,6 @@ object Boot extends App with LazyLogging {
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
 
     val submissionMonitorConfig = conf.getConfig("submissionmonitor")
-    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      shardedExecutionServiceCluster,
-      slickDataSource,
-      gcsDAO.getBucketServiceAccountCredential,
-      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
-      submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),
-      workbenchMetricBaseName = metricsPrefix
-    ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
@@ -173,21 +165,30 @@ object Boot extends App with LazyLogging {
 
     val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO)
 
-    system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
-
-    system.actorOf(GoogleGroupSyncMonitorSupervisor.props(
-      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
-      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollIntervalJitter")),
-      pubSubDAO,
-      gcsConfig.getString("groupMonitor.topicName"),
-      gcsConfig.getString("groupMonitor.subscriptionName"),
-      gcsConfig.getInt("groupMonitor.workerCount"),
-      userServiceConstructor))
-
     if(conf.getBooleanOption("backRawls").getOrElse(false)) {
-      logger.info("This instance has been marked as backRawls. Booting monitors...")
-      BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
-    }
+      logger.info("This instance has been marked as BACK. Booting monitors...")
+      BootMonitors.restartMonitors(slickDataSource, gcsDAO, bucketDeletionMonitor) //TODO: once bucketDeletionMonitor is broken out and db-triggered, it can be handled the same way as the below monitors
+
+      system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
+
+      system.actorOf(GoogleGroupSyncMonitorSupervisor.props(
+        util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
+        util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollIntervalJitter")),
+        pubSubDAO,
+        gcsConfig.getString("groupMonitor.topicName"),
+        gcsConfig.getString("groupMonitor.subscriptionName"),
+        gcsConfig.getInt("groupMonitor.workerCount"),
+        userServiceConstructor))
+
+      system.actorOf(SubmissionSupervisor.props(
+        shardedExecutionServiceCluster,
+        slickDataSource,
+        gcsDAO.getBucketServiceAccountCredential,
+        util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
+        submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),
+        workbenchMetricBaseName = metricsPrefix
+      ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
+    } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")
 
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
@@ -239,7 +240,6 @@ object Boot extends App with LazyLogging {
         conf.getInt("executionservice.batchSize"),
         gcsDAO,
         notificationDAO,
-        submissionSupervisor,
         bucketDeletionMonitor,
         userServiceConstructor,
         genomicsServiceConstructor,

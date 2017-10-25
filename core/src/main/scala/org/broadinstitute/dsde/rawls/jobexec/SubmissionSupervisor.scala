@@ -95,6 +95,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   override def preStart(): Unit = {
     super.preStart()
 
+    scheduleInitialMonitorPass
     registerGlobalJobExecGauges()
     system.scheduler.schedule(0 seconds, submissionPollInterval, self, RefreshGlobalJobExecGauges)
   }
@@ -130,6 +131,10 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
 
     case SaveGlobalJobExecCounts(submissionStatuses, workflowStatuses) =>
       saveGlobalJobExecCounts(submissionStatuses, workflowStatuses)
+  }
+
+  private def scheduleInitialMonitorPass: Cancellable = {
+    system.scheduler.scheduleOnce(submissionPollInterval, self, StartMonitorPass)
   }
 
   private def scheduleNextMonitorPass: Cancellable = {
