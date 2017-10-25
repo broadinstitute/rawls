@@ -27,11 +27,26 @@ object BootMonitors extends LazyLogging {
     //TODO: once bucketDeletionMonitor is broken out and db-triggered, it can be handled the same way as the below monitors
     restartMonitors(slickDataSource, gcsDAO, bucketDeletionMonitor)
 
-    system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
+    //Boot billing project creation monitor
+    startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, projectTemplate)
 
     //Boot google group sync monitor
     val gcsConfig = conf.getConfig("gcs")
+    startGoogleGroupSyncMonitor(system, gcsConfig, pubSubDAO, userServiceConstructor)
 
+    //Boot submission monitor
+    val submissionMonitorConfig = conf.getConfig("submissionmonitor")
+    startSubmissionMonitor(system, submissionMonitorConfig, slickDataSource, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
+
+    //Boot workflow submission actors
+    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, methodRepoDAO, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix)
+  }
+
+  private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO, projectTemplate: ProjectTemplate): Unit = {
+    system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
+  }
+
+  private def startGoogleGroupSyncMonitor(system: ActorSystem, gcsConfig: Config, pubSubDAO: HttpGooglePubSubDAO, userServiceConstructor: (UserInfo) => UserService) = {
     system.actorOf(GoogleGroupSyncMonitorSupervisor.props(
       util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
       util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollIntervalJitter")),
@@ -40,10 +55,10 @@ object BootMonitors extends LazyLogging {
       gcsConfig.getString("groupMonitor.subscriptionName"),
       gcsConfig.getInt("groupMonitor.workerCount"),
       userServiceConstructor))
+  }
 
-    //Boot submission monitor
-    val submissionMonitorConfig = conf.getConfig("submissionmonitor")
-
+  private def startSubmissionMonitor(system: ActorSystem, submissionMonitorConfig: Config, slickDataSource: SlickDataSource,
+                                     gcsDAO: HttpGoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {
     system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
       slickDataSource,
@@ -52,8 +67,9 @@ object BootMonitors extends LazyLogging {
       submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),
       workbenchMetricBaseName = metricsPrefix
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
+  }
 
-    //Boot workflow submission actors
+  private def startWorkflowSubmissionActors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO, methodRepoDAO: MethodRepoDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, metricsPrefix: String) = {
     for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
       system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
