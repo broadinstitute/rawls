@@ -5,7 +5,7 @@ import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 import javax.naming.directory.AttributeInUseException
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem}
 import akka.io.IO
 import akka.pattern.ask
 import akka.util.Timeout
@@ -13,7 +13,7 @@ import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
-import com.typesafe.config.{ConfigFactory, ConfigObject, ConfigRenderOptions}
+import com.typesafe.config.{Config, ConfigFactory, ConfigObject, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import slick.backend.DatabaseConfig
 import slick.driver.JdbcDriver
@@ -167,27 +167,10 @@ object Boot extends App with LazyLogging {
 
     if(conf.getBooleanOption("backRawls").getOrElse(false)) {
       logger.info("This instance has been marked as BACK. Booting monitors...")
-      BootMonitors.restartMonitors(slickDataSource, gcsDAO, bucketDeletionMonitor) //TODO: once bucketDeletionMonitor is broken out and db-triggered, it can be handled the same way as the below monitors
-
-      system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
-
-      system.actorOf(GoogleGroupSyncMonitorSupervisor.props(
-        util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
-        util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollIntervalJitter")),
-        pubSubDAO,
-        gcsConfig.getString("groupMonitor.topicName"),
-        gcsConfig.getString("groupMonitor.subscriptionName"),
-        gcsConfig.getInt("groupMonitor.workerCount"),
-        userServiceConstructor))
-
-      system.actorOf(SubmissionSupervisor.props(
-        shardedExecutionServiceCluster,
-        slickDataSource,
-        gcsDAO.getBucketServiceAccountCredential,
-        util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
-        submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),
-        workbenchMetricBaseName = metricsPrefix
-      ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
+      bootMonitors(
+        system, slickDataSource, gcsDAO, pubSubDAO, shardedExecutionServiceCluster, bucketDeletionMonitor,
+        gcsConfig, submissionMonitorConfig, userServiceConstructor, projectTemplate, metricsPrefix
+      )
     } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")
 
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
@@ -295,6 +278,34 @@ object Boot extends App with LazyLogging {
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .build(WorkbenchStatsD(host, port))
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
+  }
+
+  def bootMonitors(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO,
+                   pubSubDAO: HttpGooglePubSubDAO, shardedExecutionServiceCluster: ExecutionServiceCluster,
+                   bucketDeletionMonitor: ActorRef, gcsConfig: Config, submissionMonitorConfig: Config,
+                   userServiceConstructor: (UserInfo) => UserService, projectTemplate: ProjectTemplate, metricsPrefix: String): Unit = {
+    //TODO: once bucketDeletionMonitor is broken out and db-triggered, it can be handled the same way as the below monitors
+    BootMonitors.restartMonitors(slickDataSource, gcsDAO, bucketDeletionMonitor)
+
+    system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
+
+    system.actorOf(GoogleGroupSyncMonitorSupervisor.props(
+      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
+      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollIntervalJitter")),
+      pubSubDAO,
+      gcsConfig.getString("groupMonitor.topicName"),
+      gcsConfig.getString("groupMonitor.subscriptionName"),
+      gcsConfig.getInt("groupMonitor.workerCount"),
+      userServiceConstructor))
+
+    system.actorOf(SubmissionSupervisor.props(
+      shardedExecutionServiceCluster,
+      slickDataSource,
+      gcsDAO.getBucketServiceAccountCredential,
+      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
+      submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),
+      workbenchMetricBaseName = metricsPrefix
+    ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
   }
 
   startup()
