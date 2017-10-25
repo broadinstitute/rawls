@@ -152,8 +152,6 @@ object Boot extends App with LazyLogging {
 
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
 
-    val submissionMonitorConfig = conf.getConfig("submissionmonitor")
-
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
     val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
@@ -165,14 +163,6 @@ object Boot extends App with LazyLogging {
 
     val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO)
 
-    if(conf.getBooleanOption("backRawls").getOrElse(false)) {
-      logger.info("This instance has been marked as BACK. Booting monitors...")
-      bootMonitors(
-        system, slickDataSource, gcsDAO, pubSubDAO, shardedExecutionServiceCluster, bucketDeletionMonitor,
-        gcsConfig, submissionMonitorConfig, userServiceConstructor, projectTemplate, metricsPrefix
-      )
-    } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")
-
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
     val agoraConfig = conf.getConfig("methodrepo")
@@ -180,22 +170,14 @@ object Boot extends App with LazyLogging {
 
     val maxActiveWorkflowsTotal = conf.getInt("executionservice.maxActiveWorkflowsPerServer") * executionServiceServers.size
     val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt("executionservice.activeWorkflowHogFactor")
-    for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
-      system.actorOf(WorkflowSubmissionActor.props(
-        slickDataSource,
-        methodRepoDAO,
-        gcsDAO,
-        shardedExecutionServiceCluster,
-        conf.getInt("executionservice.batchSize"),
-        gcsDAO.getBucketServiceAccountCredential,
-        util.toScalaDuration(conf.getDuration("executionservice.processInterval")),
-        util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
-        maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser,
-        Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
-        workbenchMetricBaseName = metricsPrefix
-      ))
-    }
+
+    if(conf.getBooleanOption("backRawls").getOrElse(false)) {
+      logger.info("This instance has been marked as BACK. Booting monitors...")
+      bootMonitors(
+        system, conf, slickDataSource, gcsDAO, pubSubDAO, methodRepoDAO, shardedExecutionServiceCluster, maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser, bucketDeletionMonitor, userServiceConstructor, projectTemplate, metricsPrefix
+      )
+    } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")
 
     val healthMonitor = system.actorOf(
       HealthMonitor.props(
@@ -280,14 +262,17 @@ object Boot extends App with LazyLogging {
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
-  def bootMonitors(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO,
-                   pubSubDAO: HttpGooglePubSubDAO, shardedExecutionServiceCluster: ExecutionServiceCluster,
-                   bucketDeletionMonitor: ActorRef, gcsConfig: Config, submissionMonitorConfig: Config,
+  def bootMonitors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO,
+                   pubSubDAO: HttpGooglePubSubDAO, methodRepoDAO: HttpMethodRepoDAO, shardedExecutionServiceCluster: ExecutionServiceCluster,
+                   maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, bucketDeletionMonitor: ActorRef,
                    userServiceConstructor: (UserInfo) => UserService, projectTemplate: ProjectTemplate, metricsPrefix: String): Unit = {
     //TODO: once bucketDeletionMonitor is broken out and db-triggered, it can be handled the same way as the below monitors
     BootMonitors.restartMonitors(slickDataSource, gcsDAO, bucketDeletionMonitor)
 
     system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
+
+    //Boot google group sync monitor
+    val gcsConfig = conf.getConfig("gcs")
 
     system.actorOf(GoogleGroupSyncMonitorSupervisor.props(
       util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
@@ -298,6 +283,9 @@ object Boot extends App with LazyLogging {
       gcsConfig.getInt("groupMonitor.workerCount"),
       userServiceConstructor))
 
+    //Boot submission monitor
+    val submissionMonitorConfig = conf.getConfig("submissionmonitor")
+
     system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
       slickDataSource,
@@ -306,6 +294,24 @@ object Boot extends App with LazyLogging {
       submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),
       workbenchMetricBaseName = metricsPrefix
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
+
+    //Boot workflow submission actors
+    for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
+      system.actorOf(WorkflowSubmissionActor.props(
+        slickDataSource,
+        methodRepoDAO,
+        gcsDAO,
+        shardedExecutionServiceCluster,
+        conf.getInt("executionservice.batchSize"),
+        gcsDAO.getBucketServiceAccountCredential,
+        util.toScalaDuration(conf.getDuration("executionservice.processInterval")),
+        util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
+        maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser,
+        Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
+        workbenchMetricBaseName = metricsPrefix
+      ))
+    }
   }
 
   startup()
