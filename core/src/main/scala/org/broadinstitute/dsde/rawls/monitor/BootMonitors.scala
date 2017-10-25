@@ -25,7 +25,7 @@ object BootMonitors extends LazyLogging {
                    maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, bucketDeletionMonitor: ActorRef,
                    userServiceConstructor: (UserInfo) => UserService, projectTemplate: ProjectTemplate, metricsPrefix: String): Unit = {
     //TODO: once bucketDeletionMonitor is broken out and db-triggered, it can be handled the same way as the below monitors
-    BootMonitors.restartMonitors(slickDataSource, gcsDAO, bucketDeletionMonitor)
+    restartMonitors(slickDataSource, gcsDAO, bucketDeletionMonitor)
 
     system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
 
