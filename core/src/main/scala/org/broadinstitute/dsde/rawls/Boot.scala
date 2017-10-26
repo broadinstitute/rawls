@@ -147,8 +147,6 @@ object Boot extends App with LazyLogging {
 
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
 
-    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
-
     val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
     val projectEditors = gcsConfig.getStringList("projectTemplate.editors")
     val projectServices = gcsConfig.getStringList("projectTemplate.services")
@@ -169,8 +167,8 @@ object Boot extends App with LazyLogging {
     if(conf.getBooleanOption("backRawls").getOrElse(false)) {
       logger.info("This instance has been marked as BACK. Booting monitors...")
       BootMonitors.bootMonitors(
-        system, conf, slickDataSource, gcsDAO, pubSubDAO, methodRepoDAO, shardedExecutionServiceCluster, maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser, bucketDeletionMonitor, userServiceConstructor, projectTemplate, metricsPrefix
+        system, conf, slickDataSource, gcsDAO, pubSubDAO, methodRepoDAO, shardedExecutionServiceCluster,
+        maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, userServiceConstructor, projectTemplate, metricsPrefix
       )
     } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")
 
