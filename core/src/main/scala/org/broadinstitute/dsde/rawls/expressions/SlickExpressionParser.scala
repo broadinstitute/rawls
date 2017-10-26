@@ -48,11 +48,11 @@ trait SlickExpressionParser extends JavaTokenParsers {
   // the types that FinalFuncs generate.
   // This is a map from entity name to whatever the result is:
   // - entity records (for entity expressions)
-  // - or some attributes (for attribute expressions)
-  type FinalResult[ResultType] = ReadAction[Map[String, Iterable[ResultType]]]
+  // - or attribute information w/ their owning entities (for attribute expressions)
+  type FinalResult[ResultType] = ReadAction[Map[String, ResultType]]
   // Imagine this here: type ResultType = EntityRecord | Attribute
-  type EntityResult = FinalResult[EntityRecord] //ReadAction[Map[String, Iterable[EntityRecord]]]
-  type AttributeResult = FinalResult[Attribute] //ReadAction[Map[String, Iterable[Attribute]]]
+  type EntityResult = FinalResult[Iterable[EntityRecord]] //ReadAction[Map[String, Iterable[EntityRecord]]]
+  type AttributeResult = FinalResult[Map[String, Attribute]] //ReadAction[Map[String, Map[String, Attribute]]]
 
   /** Parser definitions **/
   // Entity expressions take the general form entity.ref.ref.attribute.
@@ -202,11 +202,11 @@ trait SlickExpressionParser extends JavaTokenParsers {
       // unmarshalAttributes requires a structure of ((ws id, attribute rec), option[entity rec]) where
       // the optional entity rec is used for references. Since we know we are not dealing with a reference here
       // as this is the attribute final func, we can pass in None.
-      val attributesOption = workspaceAttributeQuery.unmarshalAttributes(wsIdAndAttributes.map((_, None))).get(context.workspaceContext.workspaceId)
-      val wsExprResult = attributesOption.map { attributes => Seq(attributes.getOrElse(attrName, AttributeNull)) }.getOrElse(Seq.empty)
+      val attributesOption: Option[AttributeMap] = workspaceAttributeQuery.unmarshalAttributes(wsIdAndAttributes.map((_, None))).get(context.workspaceContext.workspaceId)
+      val wsExprResult = attributesOption.map { attributes => attributes.getOrElse(attrName, AttributeNull) }.getOrElse(AttributeNull)
 
       //Return the value of the expression once for each entity we wanted to evaluate this expression against!
-      context.rootEntities.map( rec => (rec.name, wsExprResult) ).toMap
+      context.rootEntities.map( rec => (rec.name, Map(rec.name -> wsExprResult)) ).toMap
     }
   }
 
@@ -299,7 +299,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
           entityName1 < entityName2
         }
 
-        rootEnt -> orderedEntityNameAndAttributes.map { case (_, attribute) => attribute }
+        rootEnt -> orderedEntityNameAndAttributes.toMap
       }
     }
   }
@@ -313,7 +313,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
     //Helper function to group the result nicely and extract either name or entityType from the record as you please.
     def returnMapOfRootEntityToReservedAttribute( baseQuery: PipeType, recordExtractionFn: EntityRecord => Attribute ): AttributeResult = {
       baseQuery.sortBy(_._2.name).distinct.result map { queryRes: Seq[(String, EntityRecord)] =>
-        CollectionUtils.groupByTuples(queryRes).map({ case (k, v) => k -> v.map(recordExtractionFn(_)) })
+        CollectionUtils.groupByTuples(queryRes).map({ case (k, v: Seq[EntityRecord]) => k -> Map(v.head.name -> recordExtractionFn(v.head)) })
       }
     }
 
@@ -329,8 +329,10 @@ trait SlickExpressionParser extends JavaTokenParsers {
     assert(shouldBeNone.isEmpty)
 
     attributeName match {
-      case Attributable.nameReservedAttribute | Attributable.workspaceIdAttribute => DBIO.successful( context.rootEntities.map( _.name -> Seq(AttributeString(context.workspaceContext.workspace.name))).toMap )
-      case Attributable.entityTypeReservedAttribute => DBIO.successful( context.rootEntities.map( _.name -> Seq(AttributeString(Attributable.workspaceEntityType))).toMap )
+      case Attributable.nameReservedAttribute | Attributable.workspaceIdAttribute =>
+        DBIO.successful( context.rootEntities.map( rootEnt => rootEnt.name -> Map(rootEnt.name -> AttributeString(context.workspaceContext.workspace.name))).toMap )
+      case Attributable.entityTypeReservedAttribute =>
+        DBIO.successful( context.rootEntities.map( rootEnt => rootEnt.name -> Map(rootEnt.name -> AttributeString(Attributable.workspaceEntityType))).toMap )
     }
   }
 
