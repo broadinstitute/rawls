@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSou
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses
 
 import scala.concurrent.Await
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.Try
 
