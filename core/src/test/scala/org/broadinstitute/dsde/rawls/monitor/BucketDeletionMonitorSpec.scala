@@ -43,7 +43,7 @@ class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) w
     when(mockGoogleServicesDAO.deleteBucket(errorBucketName)).thenReturn(Future.failed(new RuntimeException(":(")))
 
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, mockGoogleServicesDAO, 0 seconds, 100 milliseconds))
-    
+
     implicit val patienceConfig = PatienceConfig(timeout = 1 second)
 
     eventually {
