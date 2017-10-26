@@ -211,7 +211,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         execServiceBatchSize,
         gcsDAO,
         notificationDAO,
-        submissionSupervisor,
         bucketDeletionMonitor,
         userServiceConstructor,
         genomicsServiceConstructor,

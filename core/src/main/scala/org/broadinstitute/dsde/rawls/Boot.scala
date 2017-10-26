@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls
 import java.io.StringReader
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
-import javax.naming.directory.AttributeInUseException
 
 import akka.actor.ActorSystem
 import akka.io.IO
@@ -13,7 +12,7 @@ import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
-import com.typesafe.config.{ConfigFactory, ConfigObject, ConfigRenderOptions}
+import com.typesafe.config.{ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import slick.backend.DatabaseConfig
 import slick.driver.JdbcDriver
@@ -21,25 +20,21 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor}
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
+import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
-import spray.http.StatusCodes
-import spray.json._
 
 import scala.collection.JavaConversions._
-import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 object Boot extends App with LazyLogging {
   private def startup(): Unit = {
@@ -152,16 +147,6 @@ object Boot extends App with LazyLogging {
 
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
 
-    val submissionMonitorConfig = conf.getConfig("submissionmonitor")
-    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      shardedExecutionServiceCluster,
-      slickDataSource,
-      gcsDAO.getBucketServiceAccountCredential,
-      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
-      submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),
-      workbenchMetricBaseName = metricsPrefix
-    ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
-
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
     val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
@@ -173,19 +158,6 @@ object Boot extends App with LazyLogging {
 
     val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO)
 
-    system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
-
-    system.actorOf(GoogleGroupSyncMonitorSupervisor.props(
-      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
-      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollIntervalJitter")),
-      pubSubDAO,
-      gcsConfig.getString("groupMonitor.topicName"),
-      gcsConfig.getString("groupMonitor.subscriptionName"),
-      gcsConfig.getInt("groupMonitor.workerCount"),
-      userServiceConstructor))
-
-    BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
-
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
     val agoraConfig = conf.getConfig("methodrepo")
@@ -193,22 +165,14 @@ object Boot extends App with LazyLogging {
 
     val maxActiveWorkflowsTotal = conf.getInt("executionservice.maxActiveWorkflowsPerServer") * executionServiceServers.size
     val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt("executionservice.activeWorkflowHogFactor")
-    for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
-      system.actorOf(WorkflowSubmissionActor.props(
-        slickDataSource,
-        methodRepoDAO,
-        gcsDAO,
-        shardedExecutionServiceCluster,
-        conf.getInt("executionservice.batchSize"),
-        gcsDAO.getBucketServiceAccountCredential,
-        util.toScalaDuration(conf.getDuration("executionservice.processInterval")),
-        util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
-        maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser,
-        Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
-        workbenchMetricBaseName = metricsPrefix
-      ))
-    }
+
+    if(conf.getBooleanOption("backRawls").getOrElse(false)) {
+      logger.info("This instance has been marked as BACK. Booting monitors...")
+      BootMonitors.bootMonitors(
+        system, conf, slickDataSource, gcsDAO, pubSubDAO, methodRepoDAO, shardedExecutionServiceCluster, maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser, bucketDeletionMonitor, userServiceConstructor, projectTemplate, metricsPrefix
+      )
+    } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")
 
     val healthMonitor = system.actorOf(
       HealthMonitor.props(
@@ -236,7 +200,6 @@ object Boot extends App with LazyLogging {
         conf.getInt("executionservice.batchSize"),
         gcsDAO,
         notificationDAO,
-        submissionSupervisor,
         bucketDeletionMonitor,
         userServiceConstructor,
         genomicsServiceConstructor,
