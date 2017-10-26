@@ -147,7 +147,7 @@ object Boot extends App with LazyLogging {
 
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
 
-    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
+    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
 
     val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
     val projectEditors = gcsConfig.getStringList("projectTemplate.editors")
@@ -200,7 +200,6 @@ object Boot extends App with LazyLogging {
         conf.getInt("executionservice.batchSize"),
         gcsDAO,
         notificationDAO,
-        bucketDeletionMonitor,
         userServiceConstructor,
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,

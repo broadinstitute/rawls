@@ -107,11 +107,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       workbenchMetricBaseName
     ).withDispatcher("submission-monitor-dispatcher"))
 
-    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(
-      slickDataSource,
-      gcsDAO
-    ))
-
     val googleGroupSyncTopic = "test-topic-name"
 
     val notificationTopic = "test-notification-topic"
@@ -156,7 +151,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       execServiceBatchSize,
       gcsDAO,
       notificationDAO,
-      bucketDeletionMonitor,
       userServiceConstructor,
       genomicsServiceConstructor,
       maxActiveWorkflowsTotal,
@@ -167,7 +161,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
       googleGroupSyncMonitorSupervisor ! PoisonPill
-      bucketDeletionMonitor ! PoisonPill
     }
 
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")

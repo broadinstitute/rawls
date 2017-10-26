@@ -7,13 +7,13 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor}
 import org.broadinstitute.dsde.rawls.model.{UserInfo, WorkflowStatuses}
-import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util
 import spray.json._
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses
 
 import scala.concurrent.Await
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -88,19 +88,7 @@ object BootMonitors extends LazyLogging {
   }
 
   def restartMonitors(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, bucketDeletionMonitor: ActorRef): Unit = {
-    startBucketDeletionMonitor(dataSource, bucketDeletionMonitor)
     resetLaunchingWorkflows(dataSource)
-  }
-
-  private def startBucketDeletionMonitor(dataSource: SlickDataSource, bucketDeletionMonitor: ActorRef) = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.pendingBucketDeletionQuery.list() map { _.map { pbd =>
-          bucketDeletionMonitor ! DeleteBucket(pbd.bucket)
-        }
-      }
-    } onFailure {
-      case t: Throwable => logger.error("Error starting bucket deletion monitor", t)
-    }
   }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) = {
