@@ -68,8 +68,19 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
     parser.parseAttributeExpr(expression) match {
       case Failure(regret) => DBIO.failed(new RawlsException(regret.getMessage))
       case Success(pipelineQuery) =>
-        runPipe(SlickExpressionContext(workspaceContext, rootEntities, transactionId), pipelineQuery) map { (exprResults: Map[String, Iterable[Attribute]]) =>
-          val results: Map[String, Try[Attribute]] = exprResults map { case (key: String, attrVals: Iterable[Attribute]) =>
+        runPipe(SlickExpressionContext(workspaceContext, rootEntities, transactionId), pipelineQuery) map { (exprResults: Map[String, Map[String, Attribute]]) =>
+          val results: Map[String, Try[Attribute]] = exprResults map { case (key: String, attrMap: Map[String, Attribute]) =>
+            /*
+            TODO:
+              if attrMap.size == 1 and attrMap.head.key == key, unpack the attribute and return it wholesale
+              else return an AttributeValueList of the attrMap values
+            FIXME:
+              except this is wrong! if i do sample.participant.bam, this will try to return a list of one
+              so we need to know if any of the intermediate entities was ever a list.
+             */
+
+
+
             //In the case of this.participants.boo, attrVals might be [ [1,2,3], [4,5,6], "bees" ] if the participants have different types on "boo"
             key -> Try(attrVals.toList match {
               //forbidden things
@@ -129,9 +140,9 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
   }
 
   /* Runs the pipe and returns its result.
-   * The type parameter T here is either EntityRecord (for entity expressions) or Attribute (for attribute expressions).
+   * The type parameter T here is either Iterable[EntityRecord] (for entity expressions) or Map[String, Attribute] (for attribute expressions).
    */
-  private def runPipe[T](expressionContext: SlickExpressionContext, pipe: parser.PipelineQuery[parser.FinalResult[T]]): ReadAction[Map[String, Iterable[T]]] = {
+  private def runPipe[T](expressionContext: SlickExpressionContext, pipe: parser.PipelineQuery[parser.FinalResult[T]]): ReadAction[Map[String, T]] = {
     val builtPipe = pipe.rootStep.map(rootStep => pipe.steps.foldLeft(rootStep(expressionContext)){ ( queryPipeline, func ) => func(expressionContext, queryPipeline) })
 
     //Run the final step. This executes the pipeline and returns its output.

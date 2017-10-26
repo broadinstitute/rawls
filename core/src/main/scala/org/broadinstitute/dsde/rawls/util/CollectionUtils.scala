@@ -12,6 +12,10 @@ object CollectionUtils {
     tupleSeq groupBy { case (a, b) => a } map { case (k, v) => k -> v.map(_._2) }
   }
 
+  def groupByTuples[A, B, C]( tupleSeq: Seq[(A,B,C)] ): Map[A, Seq[(B, C)]] = {
+    tupleSeq groupBy { case (a, b, c) => a } map { case (k, v) => k -> v.map( triple => (triple._2, triple._3) ) }
+  }
+
   def groupByTuplesFlatten[A, B]( tupleSeq: Seq[(A, Seq[B])] ): Map[A, Seq[B]] = {
     tupleSeq groupBy { case (a,b) => a } map { case (k, v) => k -> v.flatMap(_._2) }
   }
