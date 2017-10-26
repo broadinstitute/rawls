@@ -278,9 +278,8 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       wdlInputs shouldBe """{"w1.aaint_array":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}"""
     }
 
-    /* IGNORED - Failure case.
-       This is the failure case described in MethodConfigResolver.getArrayResult.
    "unpack AttributeValueRawJson into single-element lists-of WDL-arrays" in withConfigData {
+     //This is the failure case described in MethodConfigResolver.getArrayResult.
      val context = SlickWorkspaceContext(workspace)
 
      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configRawJsonTripleArray, sampleSet3, tripleArrayWdl, this))
@@ -293,7 +292,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
      //actually returns: {"w1.aaint_array":[[0,1,2],[3,4,5]]}
      //(note the scalatest output adds an extra set of square brackets to everything for no reason i can discern)
    }
-   */
 
     "parse WDL" in withConfigData {
       val littleWorkflow = MethodConfigResolver.parseWDL(littleWdl).get
