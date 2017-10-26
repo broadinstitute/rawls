@@ -41,35 +41,22 @@ trait SlickExpressionParser extends JavaTokenParsers {
   // PipeType may be None when there is no pipeline (e.g. workspace attributes)
   // Returns a map of entity names to an iterable of the expression result
   type FinalFunc[FR <: FinalResult[_]] = (SlickExpressionContext, Option[PipeType]) => FR
-  type EntityFinalFunc = FinalFunc[EntityResult]
-  type AttributeFinalFunc = FinalFunc[AttributeResult]
+  type EntityFinalFunc = FinalFunc[FinalEntityResult]
+  type AttributeFinalFunc = FinalFunc[FinalAttributeResult]
 
   // a query that results in the root entity's name, entity records, whether any of the entities was ever part of a list, and a sort ordering
   type PipeType = Query[(Rep[String], EntityTable, Rep[Boolean]), (String, EntityRecord, Boolean), Seq]
 
   // the types that FinalFuncs generate.
-  // This is a map from entity name to whatever the result is:
-  // - entity records (for entity expressions)
-  // - or attribute information w/ their owning entities (for attribute expressions) and whether we exploded an entity list
+  // These are maps from entity name to whatever the result is.
   type FinalResult[ResultType] = ReadAction[Map[String, ResultType]]
-  // Imagine this here: type ResultType = EntityRecord | Attribute
-  type EntityResult = FinalResult[Iterable[EntityRecord]] //ReadAction[Map[String, Iterable[EntityRecord]]]
-  type AttributeResult = FinalResult[(Map[String, Attribute], Boolean)] //ReadAction[Map[String, (Map[String, Attribute], Boolean)]]
 
-  /* TODO: switch to case classes for better readability
-  case class FinalResult[ResultType]( dbRootToResultMap: ReadAction[Map[String, ResultType]] )
+  // For attribute expressions, attribute values w/ their owning entities and whether we exploded an entity list
+  case class AttributeResult(lastEntityToAttribute: Map[String, Attribute], hasExplodedEntity: Boolean )
+  type FinalAttributeResult = FinalResult[AttributeResult] //ReadAction[Map[String, AttributeResult]]
 
-  case class EntityResult(val entityRecords: Iterable[EntityRecord])
-  type FinalEntityResult = FinalResult[EntityResult]
-
-  case class AttributeResult( lastEntityToAttribute: Map[String, Attribute], hasExplodedEntity: Boolean )
-  type FinalAttributeResult = FinalResult[AttributeResult]
-   */
-
-  sealed case class BaseThing[BlahType]( result: Map[String, BlahType] ) {}
-  case class EntityThing(override val result: Map[String, EntityBlah]) extends BaseThing[EntityBlah](result)
-
-  case class EntityBlah(foo: Iterable[EntityRecord])
+  // For entity expressions, just the appropriate entity records
+  type FinalEntityResult = FinalResult[Iterable[EntityRecord]] //ReadAction[Map[String, Iterable[EntityRecord]]]
 
   /** Parser definitions **/
   // Entity expressions take the general form entity.ref.ref.attribute.
@@ -206,7 +193,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   }
 
   // final func that gets an attribute off a workspace
-  private def workspaceAttributeFinalFunc(attrName: AttributeName)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): AttributeResult = {
+  private def workspaceAttributeFinalFunc(attrName: AttributeName)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): FinalAttributeResult = {
     assert(shouldBeNone.isEmpty)
 
     val wsIdAndAttributeQuery = for {
@@ -223,7 +210,9 @@ trait SlickExpressionParser extends JavaTokenParsers {
       val wsExprResult = attributesOption.map { attributes => attributes.getOrElse(attrName, AttributeNull) }.getOrElse(AttributeNull)
 
       //Return the value of the expression once for each entity we wanted to evaluate this expression against!
-      context.rootEntities.map( rec => (rec.name, (Map(rec.name -> wsExprResult), false)) ).toMap
+      context.rootEntities.map { rec =>
+        rec.name -> AttributeResult(Map(rec.name -> wsExprResult), hasExplodedEntity = false)
+      }.toMap
     }
   }
 
@@ -248,7 +237,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
   // filter attributes to only the given attributeName and convert to attribute
   // Return a map from the entity names to the list of attribute values for each entity
-  private def entityAttributeFinalFunc(attrName: AttributeName)(context: SlickExpressionContext, queryPipeline: Option[PipeType]): AttributeResult = {
+  private def entityAttributeFinalFunc(attrName: AttributeName)(context: SlickExpressionContext, queryPipeline: Option[PipeType]): FinalAttributeResult = {
     // attributeForNameQuery will only contain attribute records of the given name but for possibly more than 1 entity
     // and in the case of a list there will be more than one attribute record for an entity
     val attributeQuery = for {
@@ -282,11 +271,15 @@ trait SlickExpressionParser extends JavaTokenParsers {
       }
 
     attributeForNameQuery.map { entityWithAttributeRecs =>
-      val byRootEnt: Map[String, Seq[(String, String, Boolean, EntityAttributeRecord)]] = entityWithAttributeRecs.groupBy { case (rootEntity, lastEntity, haveExplodedEntityList, attribRecord) => rootEntity }
+      //converting the complex query result into this case class makes it way easier to reason about
+      case class FinalAttributeQueryRecord(rootEntity: String, lastEntity: String, hasExplodedEntity: Boolean, eattrRec: EntityAttributeRecord)
+      val finalQueryRecords: Seq[FinalAttributeQueryRecord] = entityWithAttributeRecs.map(FinalAttributeQueryRecord.tupled)
 
-      byRootEnt.map { case (rootEnt, attrs: Seq[(String, String, Boolean, EntityAttributeRecord)]) =>
+      val byRootEnt: Map[String, Seq[FinalAttributeQueryRecord]] = finalQueryRecords.groupBy (_.rootEntity)
+
+      byRootEnt.map { case (rootEnt, attrs: Seq[FinalAttributeQueryRecord]) =>
         //Make a note of if we ever exploded an entity reference list while evaluating this expression.
-        val haveExplodedEntityList = attrs.exists(p => p._3)
+        val haveExplodedEntityList = attrs.exists(_.hasExplodedEntity)
 
         // unmarshalAttributes requires a structure of ((entity id, attribute rec), option[entity rec]) where the optional entity rec is used for entity references.
         // We're evaluating an attribute expression here, so this final attribute is NOT allowed to be an entity reference.
@@ -296,15 +289,15 @@ trait SlickExpressionParser extends JavaTokenParsers {
         // but we didn't do the extra JOIN in the SQL query to find out _which_ entity it is.
 
         // The upshot of all this is we have to handle these dangling and unwanted entity references separately. So first we filter out the well-behaved value attributes.
-        val (refAttrRecs, valueAttrRecs) = attrs.partition { case (_, _, _, attrRec) => isEntityRefRecord(attrRec) }
+        val (refAttrRecs, valueAttrRecs) = attrs.partition { faqr => isEntityRefRecord(faqr.eattrRec) }
 
         //Unmarshal the good ones. This is what the user actually meant.
-        val attributeData = valueAttrRecs.map { case (_, attrEnt, _, attrRec) => ((attrEnt, attrRec), None) }
+        val attributeData = valueAttrRecs.map( faqr => ((faqr.lastEntity, faqr.eattrRec), None) )
         val attributesByEntityId: Map[String, AttributeMap] = entityAttributeQuery.unmarshalAttributes(attributeData)
 
         // These are the bad ones. We gather together the dangling references and make dummy EntityRef or RefList attributes for them.
-        val refAttributesByEntityId: Map[String, AttributeMap] = refAttrRecs.groupBy { case (_, attrEnt, _, _) => attrEnt } map { case (attrEnt, groupSeq: Seq[(String, String, Boolean, EntityAttributeRecord)]) =>
-          val (_, _, _, attrRec) = groupSeq.head
+        val refAttributesByEntityId: Map[String, AttributeMap] = refAttrRecs.groupBy(_.lastEntity) map { case (attrEnt, groupSeq: Seq[FinalAttributeQueryRecord]) =>
+          val attrRec = groupSeq.head.eattrRec
           if( groupSeq.size == 1 ) {
             attrEnt -> Map(AttributeName(attrRec.namespace, attrRec.name) -> AttributeEntityReference(entityType = "BAD REFERENCE", entityName = "BAD REFERENCE"))
           } else {
@@ -320,21 +313,23 @@ trait SlickExpressionParser extends JavaTokenParsers {
           entityName1 < entityName2
         }
 
-        rootEnt -> (orderedEntityNameAndAttributes.toMap, haveExplodedEntityList)
+        rootEnt -> AttributeResult(orderedEntityNameAndAttributes.toMap, haveExplodedEntityList)
       }
     }
   }
 
   // final func that handles reserved attributes on an entity
-  private def entityReservedAttributeFinalFunc(attributeName: String)(context: SlickExpressionContext, queryPipeline: Option[PipeType]): AttributeResult = {
+  private def entityReservedAttributeFinalFunc(attributeName: String)(context: SlickExpressionContext, queryPipeline: Option[PipeType]): FinalAttributeResult = {
     //Given a single entity record, extract either name or entityType from it.
     def extractNameFromRecord( rec: EntityRecord ) = { AttributeString(rec.name) }
     def extractEntityTypeFromRecord( rec: EntityRecord ) = { AttributeString(rec.entityType) }
 
     //Helper function to group the result nicely and extract either name or entityType from the record as you please.
-    def returnMapOfRootEntityToReservedAttribute( baseQuery: PipeType, recordExtractionFn: EntityRecord => Attribute ): AttributeResult = {
+    def returnMapOfRootEntityToReservedAttribute( baseQuery: PipeType, recordExtractionFn: EntityRecord => Attribute ): FinalAttributeResult = {
       baseQuery.sortBy(_._2.name).distinct.result map { queryRes: Seq[(String, EntityRecord, Boolean)] =>
-        CollectionUtils.groupByTuples(queryRes).map({ case (k, v: Seq[(EntityRecord, Boolean)]) => k -> (Map(v.head._1.name -> recordExtractionFn(v.head._1)), v.head._2) })
+        CollectionUtils.groupByTuples(queryRes).map{ case (k, v: Seq[(EntityRecord, Boolean)]) =>
+          k -> AttributeResult(Map(v.head._1.name -> recordExtractionFn(v.head._1)), v.head._2)
+        }
       }
     }
 
@@ -346,26 +341,33 @@ trait SlickExpressionParser extends JavaTokenParsers {
   }
 
   // final func that handles reserved attributes on a workspace
-  private def workspaceReservedAttributeFinalFunc(attributeName: String)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): AttributeResult = {
+  private def workspaceReservedAttributeFinalFunc(attributeName: String)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): FinalAttributeResult = {
     assert(shouldBeNone.isEmpty)
 
     attributeName match {
       case Attributable.nameReservedAttribute | Attributable.workspaceIdAttribute =>
-        DBIO.successful( context.rootEntities.map( rootEnt => rootEnt.name -> (Map(rootEnt.name -> AttributeString(context.workspaceContext.workspace.name)), false) ).toMap )
+        DBIO.successful(
+          context.rootEntities.map { rootEnt =>
+            rootEnt.name -> AttributeResult(Map(rootEnt.name -> AttributeString(context.workspaceContext.workspace.name)), hasExplodedEntity = false)
+          }.toMap )
       case Attributable.entityTypeReservedAttribute =>
-        DBIO.successful( context.rootEntities.map( rootEnt => rootEnt.name -> (Map(rootEnt.name -> AttributeString(Attributable.workspaceEntityType)), false) ).toMap )
+        DBIO.successful(
+          context.rootEntities.map { rootEnt =>
+            rootEnt.name -> AttributeResult(Map(rootEnt.name -> AttributeString(Attributable.workspaceEntityType)), hasExplodedEntity = false)
+          }.toMap )
     }
   }
 
   //Takes a list of entities at the end of a pipeline and returns them in final format.
-  private def entityFinalFunc(context: SlickExpressionContext, queryPipeline: Option[PipeType]): EntityResult = {
+  private def entityFinalFunc(context: SlickExpressionContext, queryPipeline: Option[PipeType]): FinalEntityResult = {
     val pipeline: ReadAction[Seq[(String, EntityRecord, Boolean)]] = queryPipeline.get.sortBy(_._2.name.asc).result
-      pipeline.map { elem: Seq[(String, EntityRecord, Boolean)] =>
-        CollectionUtils.groupByTuples(elem.map( e => (e._1, e._2))) }
+    pipeline.map { elem: Seq[(String, EntityRecord, Boolean)] =>
+      CollectionUtils.groupByTuples(elem.map(e => (e._1, e._2)))
+    }
   }
 
   //Takes a list of entities at the end of a pipeline and returns them in final format.
-  private def workspaceEntityFinalFunc(attrName: AttributeName)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): EntityResult = {
+  private def workspaceEntityFinalFunc(attrName: AttributeName)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): FinalEntityResult = {
     assert(shouldBeNone.isEmpty)
 
     val query = for {
