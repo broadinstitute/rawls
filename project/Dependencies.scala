@@ -9,7 +9,7 @@ object Dependencies {
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
-  val wdl4sV = "0.13"
+  val wdl4sV = "0.15-814d203"
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
@@ -17,7 +17,7 @@ object Dependencies {
   val sprayHttp: ModuleID =     "io.spray" %% "spray-http"    % sprayV
   val sprayHttpx: ModuleID =    "io.spray" %% "spray-httpx"   % sprayV
   val sprayCan: ModuleID =      "io.spray" %% "spray-can"     % sprayV
-  val sprayRouting: ModuleID =  "io.spray" %% "spray-routing" % sprayV
+  val sprayRouting: ModuleID =  "io.spray" %% "spray-routing-shapeless23" % sprayV
   val sprayClient: ModuleID =   "io.spray" %% "spray-client"  % sprayV
   val sprayTestkit: ModuleID =  "io.spray" %% "spray-testkit" % sprayV % "test"
 

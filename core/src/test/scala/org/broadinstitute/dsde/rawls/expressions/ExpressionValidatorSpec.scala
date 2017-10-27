@@ -5,8 +5,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.model.{AttributeString, MethodConfiguration, MethodRepoMethod}
 import org.scalatest.FlatSpec
-import wdl4s.WorkflowInput
-import wdl4s.types.WdlStringType
+import wdl4s.wdl.WorkflowInput
+import wdl4s.wdl.types.WdlStringType
 
 class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with ExpressionFixture with RawlsTestUtils  {
 

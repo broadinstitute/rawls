@@ -5,6 +5,7 @@ import sbtassembly.{MergeStrategy, PathList}
 
 object Merging {
   def customMergeStrategy(oldStrategy: (String) => MergeStrategy):(String => MergeStrategy) = {
+    case x if x.endsWith("io.netty.versions.properties") => MergeStrategy.discard
     case PathList("org", "apache", xs @ _*) => MergeStrategy.last
     case PathList("com", "typesafe", xs @ _*) => MergeStrategy.last
     case "application.conf" => MergeStrategy.first
