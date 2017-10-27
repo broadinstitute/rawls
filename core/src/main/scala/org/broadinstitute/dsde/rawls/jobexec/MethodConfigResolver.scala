@@ -7,9 +7,8 @@ import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
 import wdl4s.parser.WdlParser.SyntaxError
-import wdl4s.wdl.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow, WorkflowInput}
-import wdl4s.wdl.types.{WdlArrayType, WdlOptionalType}
-import wdl4s.wdl.WdlNamespace.httpResolver
+import wdl4s.types.WdlArrayType
+import wdl4s.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -31,28 +30,18 @@ object MethodConfigResolver {
   }
 
   private def getArrayResult(inputName: String, seq: Iterable[AttributeValue]): SubmissionValidationValue = {
-    val notNull: Seq[AttributeValue] = seq.filter(v => v != null && v != AttributeNull).toSeq
-    val attr = notNull match {
-      case Nil => Option(AttributeValueEmptyList)
-      //GAWB-2509: don't pack single-elem RawJson array results into another layer of array
-      //NOTE: This works, except for the following situation: a participant with a RawJson double-array attribute, in a single-element participant set.
-      // Evaluating this.participants.raw_json on the pset will incorrectly hit this case and return a 2D array when it should return a 3D array.
-      // The true fix for this is to look into why the slick expression evaluator wraps deserialized AttributeValues in a Seq, and instead
-      // return the proper result type, removing the need to infer whether it's a scalar or array type from the WDL input.
-      case AttributeValueRawJson(JsArray(_)) +: Seq() => Option(notNull.head)
-      case _ => Option(AttributeValueList(notNull))
-    }
+    val notNull = seq.filter(v => v != null && v != AttributeNull)
+    val attr = if (notNull.isEmpty) Option(AttributeValueEmptyList) else Option(AttributeValueList(notNull.toSeq))
     SubmissionValidationValue(attr, None, inputName)
   }
 
   private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: WorkflowInput): SubmissionValidationValue = wfInput.wdlType match {
     case arrayType: WdlArrayType => getArrayResult(wfInput.fqn, mcSequence)
-    case WdlOptionalType(_:WdlArrayType) => getArrayResult(wfInput.fqn, mcSequence) //send optional-arrays down the same codepath as arrays
     case _ => getSingleResult(wfInput.fqn, mcSequence, wfInput.optional)
   }
 
-  def parseWDL(wdl: String): Try[WdlWorkflow] = {
-    val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq(httpResolver(_))).recoverWith { case t: SyntaxError =>
+  def parseWDL(wdl: String): Try[wdl4s.Workflow] = {
+    val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq()).recoverWith { case t: SyntaxError =>
       Failure(new RawlsException("Failed to parse WDL: " + t.getMessage()))
     }
 
