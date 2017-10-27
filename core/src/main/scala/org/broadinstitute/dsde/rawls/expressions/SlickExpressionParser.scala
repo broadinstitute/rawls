@@ -56,7 +56,8 @@ trait SlickExpressionParser extends JavaTokenParsers {
   type FinalAttributeResult = FinalResult[AttributeResult] //ReadAction[Map[String, AttributeResult]]
 
   // For entity expressions, just the appropriate entity records
-  type FinalEntityResult = FinalResult[Iterable[EntityRecord]] //ReadAction[Map[String, Iterable[EntityRecord]]]
+  type EntityResult = Iterable[EntityRecord]
+  type FinalEntityResult = FinalResult[EntityResult] //ReadAction[Map[String, Iterable[EntityRecord]]]
 
   /** Parser definitions **/
   // Entity expressions take the general form entity.ref.ref.attribute.
@@ -160,9 +161,6 @@ trait SlickExpressionParser extends JavaTokenParsers {
         else entityAttributeFinalFunc(attrName)
     }
 
-  /* Parses the given string as an attribute expression.
-   * Returns a pipeline if
-   */
   def parseAttributeExpr(expression: String): Try[AttributePipelineQuery] = {
     parse(expression, attributeExpression)
   }
@@ -232,7 +230,9 @@ trait SlickExpressionParser extends JavaTokenParsers {
       (rootEntityName, entity, haveExplodedEntityList) <- queryPipeline
       attribute <- entityAttributeQuery if entity.id === attribute.ownerId && attribute.name === attrName.name && attribute.namespace === attrName.namespace
       nextEntity <- entityQuery if attribute.valueEntityRef === nextEntity.id
-    } yield (rootEntityName, nextEntity, haveExplodedEntityList && attribute.listLength.isDefined )).sortBy({case (nm, ent, seenList) => ent.name })
+    } yield {
+      (rootEntityName, nextEntity, haveExplodedEntityList || attribute.listLength.isDefined)
+  }).sortBy({case (nm, ent, seenList) => ent.name })
   }
 
   // filter attributes to only the given attributeName and convert to attribute
@@ -308,12 +308,8 @@ trait SlickExpressionParser extends JavaTokenParsers {
         // The only piece of good news in all this nonsense is we know the IDs won't clash when we ++ the two maps together,
         // because we enforce consistent value/ref typing when we append list members.
         val namedAttributesOnlyByEntityId = (attributesByEntityId ++ refAttributesByEntityId).map({ case (k, v) => k -> v.getOrElse(attrName, AttributeNull) }).toSeq
-        // need to sort here because some of the manipulations above don't preserve order so we can't sort in the query
-        val orderedEntityNameAndAttributes = namedAttributesOnlyByEntityId.sortWith { case ((entityName1, _), (entityName2, _)) =>
-          entityName1 < entityName2
-        }
 
-        rootEnt -> AttributeResult(orderedEntityNameAndAttributes.toMap, haveExplodedEntityList)
+        rootEnt -> AttributeResult(namedAttributesOnlyByEntityId.toMap, haveExplodedEntityList)
       }
     }
   }
@@ -324,19 +320,22 @@ trait SlickExpressionParser extends JavaTokenParsers {
     def extractNameFromRecord( rec: EntityRecord ) = { AttributeString(rec.name) }
     def extractEntityTypeFromRecord( rec: EntityRecord ) = { AttributeString(rec.entityType) }
 
-    //Helper function to group the result nicely and extract either name or entityType from the record as you please.
-    def returnMapOfRootEntityToReservedAttribute( baseQuery: PipeType, recordExtractionFn: EntityRecord => Attribute ): FinalAttributeResult = {
+    //Helper function to extract the entity at the end of the pipeline and yank its name or entityType, then convert into the result type
+    def finalAttributeResult( baseQuery: PipeType, recordExtractionFn: EntityRecord => Attribute ): FinalAttributeResult = {
       baseQuery.sortBy(_._2.name).distinct.result map { queryRes: Seq[(String, EntityRecord, Boolean)] =>
-        CollectionUtils.groupByTuples(queryRes).map{ case (k, v: Seq[(EntityRecord, Boolean)]) =>
-          k -> AttributeResult(Map(v.head._1.name -> recordExtractionFn(v.head._1)), v.head._2)
+        CollectionUtils.groupByTriples(queryRes).map{ case (rootEntityName, entityRecords: Seq[(EntityRecord, Boolean)]) =>
+          val haveExplodedEntityList = entityRecords.exists(_._2)
+          rootEntityName -> AttributeResult((entityRecords map { case (rec: EntityRecord, _) =>
+            rec.name -> recordExtractionFn(rec)
+          }).toMap, haveExplodedEntityList)
         }
       }
     }
 
     //Might as well call the function now it exists.
     attributeName match {
-      case Attributable.nameReservedAttribute => returnMapOfRootEntityToReservedAttribute(queryPipeline.get, extractNameFromRecord)
-      case Attributable.entityTypeReservedAttribute => returnMapOfRootEntityToReservedAttribute(queryPipeline.get, extractEntityTypeFromRecord)
+      case Attributable.nameReservedAttribute => finalAttributeResult(queryPipeline.get, extractNameFromRecord)
+      case Attributable.entityTypeReservedAttribute => finalAttributeResult(queryPipeline.get, extractEntityTypeFromRecord)
     }
   }
 

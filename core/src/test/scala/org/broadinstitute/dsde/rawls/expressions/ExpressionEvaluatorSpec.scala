@@ -19,7 +19,7 @@ import scala.util.{Random, Success => TrySuccess}
 /**
  * Created by abaumann on 5/21/15.
  */
-class ExpressionParserTest extends FunSuite with TestDriverComponent {
+class ExpressionEvaluatorSpec extends FunSuite with TestDriverComponent {
   import driver.api._
 
   def withTestWorkspace[T](testCode: (SlickWorkspaceContext) => T): T = {
@@ -237,35 +237,37 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       assertResult(wsNameResults) { Map( "2" -> TrySuccess( AttributeValueList(wsEntityResults.map(e => AttributeString(e.name)).toSeq))) }
     }
 
-    def createEntities(entityType: String, entitiesNameAndAttributes: IndexedSeq[(String, AttributeMap)], wsc: SlickWorkspaceContext): IndexedSeq[AttributeEntityReference] = {
-      val saveActions = for ((nameAndAttributes, index) <- entitiesNameAndAttributes.zipWithIndex) yield {
-        entityQuery.save(wsc, Entity(nameAndAttributes._1, entityType, nameAndAttributes._2))
-      }
 
-      // save in random order
-      runAndWait(DBIO.sequence(Random.shuffle(saveActions)))
+  }
 
-      entitiesNameAndAttributes.map { case (name, _) => AttributeEntityReference(entityType, name)}
+  def createEntities(entityType: String, entitiesNameAndAttributes: IndexedSeq[(String, AttributeMap)], wsc: SlickWorkspaceContext): IndexedSeq[AttributeEntityReference] = {
+    val saveActions = for ((nameAndAttributes, index) <- entitiesNameAndAttributes.zipWithIndex) yield {
+      entityQuery.save(wsc, Entity(nameAndAttributes._1, entityType, nameAndAttributes._2))
     }
 
-    def createEntityStructure(wsc: SlickWorkspaceContext) = {
-      val aAttributes = for (a <- 0 until 5) yield {
-        val bAttributes = for (b <- 0 until 5) yield {
-          val cAttributes = for (c <- (0 until 20)) yield {
+    // save in random order
+    runAndWait(DBIO.sequence(Random.shuffle(saveActions)))
 
-            (s"${a}_${b}_${c}", Map(AttributeName.withDefaultNS("attr") -> AttributeString(s"${a}_${b}_${c}")))
-          }
+    entitiesNameAndAttributes.map { case (name, _) => AttributeEntityReference(entityType, name)}
+  }
 
-          (s"${a}_${b}", Map(AttributeName.withDefaultNS("cs") -> AttributeEntityReferenceList(createEntities("c", cAttributes, wsc))))
+  def createEntityStructure(wsc: SlickWorkspaceContext) = {
+    val aAttributes = for (a <- 0 until 5) yield {
+      val bAttributes = for (b <- 0 until 5) yield {
+        val cAttributes = for (c <- (0 until 20)) yield {
+
+          (s"${a}_${b}_${c}", Map(AttributeName.withDefaultNS("attr") -> AttributeString(s"${a}_${b}_${c}")))
         }
 
-        (s"$a", Map(AttributeName.withDefaultNS("bs") -> AttributeEntityReferenceList(createEntities("b", bAttributes, wsc))))
+        (s"${a}_${b}", Map(AttributeName.withDefaultNS("cs") -> AttributeEntityReferenceList(createEntities("c", cAttributes, wsc))))
       }
 
-      val as = createEntities("a", aAttributes, wsc)
-
-      runAndWait(workspaceQuery.save(wsc.workspace.copy(attributes = wsc.workspace.attributes + (AttributeName.withDefaultNS("as") -> AttributeEntityReferenceList(as)))))
+      (s"$a", Map(AttributeName.withDefaultNS("bs") -> AttributeEntityReferenceList(createEntities("b", bAttributes, wsc))))
     }
+
+    val as = createEntities("a", aAttributes, wsc)
+
+    runAndWait(workspaceQuery.save(wsc.workspace.copy(attributes = wsc.workspace.attributes + (AttributeName.withDefaultNS("as") -> AttributeEntityReferenceList(as)))))
   }
 
   test("string literals") {

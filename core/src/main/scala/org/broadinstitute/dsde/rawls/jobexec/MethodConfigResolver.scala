@@ -34,6 +34,7 @@ object MethodConfigResolver {
 
   private def getArrayResult(inputName: String, attr: Attribute): SubmissionValidationValue = {
     val arrayResult = attr match {
+      //handle arrays, including raw json
       case AttributeValueEmptyList => AttributeValueEmptyList
       case avl: AttributeValueList => avl
       case arj: AttributeValueRawJson if arj.isSecretlyArray => arj
