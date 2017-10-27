@@ -331,7 +331,7 @@ class HttpGoogleServicesDAO(
         //Google doesn't let you delete buckets that are full.
         //You can either remove all the objects manually, or you can set up lifecycle management on the bucket.
         //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
-        //More info: http://bit.ly/1WCYhhf and http://bit.ly/1Py6b6O
+        //More info: http://bit.ly/1WCYhhf
         val deleteEverythingRule = new Lifecycle.Rule()
           .setAction(new Action().setType("Delete"))
           .setCondition(new Condition().setAge(0))
