@@ -10,8 +10,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import java.util.UUID
 
 import spray.json.JsArray
-import wdl4s.WorkflowInput
-import wdl4s.types.{WdlArrayType, WdlIntegerType, WdlOptionalType}
+import wdl4s.wdl.WorkflowInput
+import wdl4s.wdl.types.{WdlArrayType, WdlIntegerType, WdlOptionalType}
 
 import scala.concurrent.ExecutionContext
 
