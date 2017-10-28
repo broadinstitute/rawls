@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
 import wdl4s.parser.WdlParser.SyntaxError
 import wdl4s.wdl.types.{WdlArrayType, WdlOptionalType}
-import wdl4s.wdl.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
+import wdl4s.wdl.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow, WorkflowInput}
 import wdl4s.wdl.WdlNamespace.httpResolver
 
 import scala.concurrent.ExecutionContext
