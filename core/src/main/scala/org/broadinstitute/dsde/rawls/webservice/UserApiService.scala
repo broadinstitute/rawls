@@ -25,124 +25,143 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
 
   val createUserRoute = requireUserInfo() { userInfo =>
     path("user") {
-      post {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.CreateUser)
+      detach() {
+        post {
+          requestContext =>
+            perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.CreateUser)
+        }
       }
     }
   }
-
   // standard /api routes begin here
 
-  val userRoutes = requireUserInfo() { userInfo =>
-    path("user" / "refreshToken") {
-      put {
-        entity(as[UserRefreshToken]) { token =>
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.SetRefreshToken(token))
-        }
-      }
-    } ~
-    path("user" / "refreshTokenDate") {
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.GetRefreshTokenDate)
-      }
-    } ~
-    path("user" / "billing") {
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.ListBillingProjects)
-      }
-    } ~
-    path("user" / "role" / "admin") {
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.IsAdmin(userInfo.userEmail))
-      }
-    } ~
-    path("user" / "role" / "curator") {
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.IsLibraryCurator(userInfo.userEmail))
-      }
-    } ~
-    path("user" / "billingAccounts") {
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.ListBillingAccounts)
-      }
-    } ~
-    path("user" / "groups") {
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.ListGroupsForUser(userInfo.userEmail))
-      }
-    } ~
-    path("user" / "group" / Segment) { groupName =>
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.GetUserGroup(RawlsGroupRef(RawlsGroupName(groupName))))
-      }
-    } ~
-    pathPrefix("groups") {
-      pathEnd {
-        get {
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.ListManagedGroupsForUser)
+  val userRoutes = detach() {
+    requireUserInfo() { userInfo =>
+      path("user" / "refreshToken") {
+        put {
+          entity(as[UserRefreshToken]) { token =>
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.SetRefreshToken(token))
+          }
         }
       } ~
-        pathPrefix(Segment) { groupName =>
-        val groupRef = ManagedGroupRef(RawlsGroupName(groupName))
-        path("requestAccess") {
-          post {
-            requestContext => perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.RequestAccessToManagedGroup(groupRef))
-          }
-        } ~
-        pathEnd {
+        path("user" / "refreshTokenDate") {
           get {
-            requestContext => perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.GetManagedGroup(groupRef))
-          } ~
-          post {
-            requestContext => perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.CreateManagedGroup(groupRef))
-          } ~
-          delete {
-            requestContext => perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.DeleteManagedGroup(groupRef))
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.GetRefreshTokenDate)
           }
         } ~
-        path(Segment / Segment) { (role, email) =>
-          put {
-            requestContext => perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.AddManagedGroupMembers(groupRef, ManagedRoles.withName(role), email))
-
-          } ~
-          delete {
-            requestContext => perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.RemoveManagedGroupMembers(groupRef, ManagedRoles.withName(role), email))
-
+        path("user" / "billing") {
+          get {
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.ListBillingProjects)
           }
+        } ~
+        path("user" / "role" / "admin") {
+          get {
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.IsAdmin(userInfo.userEmail))
+          }
+        } ~
+        path("user" / "role" / "curator") {
+          get {
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.IsLibraryCurator(userInfo.userEmail))
+          }
+        } ~
+        path("user" / "billingAccounts") {
+          get {
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.ListBillingAccounts)
+          }
+        } ~
+        path("user" / "groups") {
+          get {
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.ListGroupsForUser(userInfo.userEmail))
+          }
+        } ~
+        path("user" / "group" / Segment) { groupName =>
+          get {
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.GetUserGroup(RawlsGroupRef(RawlsGroupName(groupName))))
+          }
+        } ~
+        pathPrefix("groups") {
+          pathEnd {
+            get {
+              requestContext =>
+                perRequest(requestContext,
+                  UserService.props(userServiceConstructor, userInfo),
+                  UserService.ListManagedGroupsForUser)
+            }
+          } ~
+            pathPrefix(Segment) { groupName =>
+              val groupRef = ManagedGroupRef(RawlsGroupName(groupName))
+              path("requestAccess") {
+                post {
+                  requestContext =>
+                    perRequest(requestContext,
+                      UserService.props(userServiceConstructor, userInfo),
+                      UserService.RequestAccessToManagedGroup(groupRef))
+                }
+              } ~
+                pathEnd {
+                  get {
+                    requestContext =>
+                      perRequest(requestContext,
+                        UserService.props(userServiceConstructor, userInfo),
+                        UserService.GetManagedGroup(groupRef))
+                  } ~
+                    post {
+                      requestContext =>
+                        perRequest(requestContext,
+                          UserService.props(userServiceConstructor, userInfo),
+                          UserService.CreateManagedGroup(groupRef))
+                    } ~
+                    delete {
+                      requestContext =>
+                        perRequest(requestContext,
+                          UserService.props(userServiceConstructor, userInfo),
+                          UserService.DeleteManagedGroup(groupRef))
+                    }
+                } ~
+                path(Segment / Segment) { (role, email) =>
+                  put {
+                    requestContext =>
+                      perRequest(requestContext,
+                        UserService.props(userServiceConstructor, userInfo),
+                        UserService.AddManagedGroupMembers(groupRef, ManagedRoles.withName(role), email))
+
+                  } ~
+                    delete {
+                      requestContext =>
+                        perRequest(requestContext,
+                          UserService.props(userServiceConstructor, userInfo),
+                          UserService.RemoveManagedGroupMembers(groupRef, ManagedRoles.withName(role), email))
+
+                    }
+                }
+            }
         }
-      }
     }
   }
 }
