@@ -3,11 +3,10 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.{ActorRef, ActorSystem}
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource, _}
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor}
 import org.broadinstitute.dsde.rawls.model.{UserInfo, WorkflowStatuses}
-import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util
 import spray.json._
@@ -22,10 +21,10 @@ object BootMonitors extends LazyLogging {
 
   def bootMonitors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO,
                    pubSubDAO: HttpGooglePubSubDAO, methodRepoDAO: HttpMethodRepoDAO, shardedExecutionServiceCluster: ExecutionServiceCluster,
-                   maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, bucketDeletionMonitor: ActorRef,
-                   userServiceConstructor: (UserInfo) => UserService, projectTemplate: ProjectTemplate, metricsPrefix: String): Unit = {
-    //TODO: once bucketDeletionMonitor is broken out and db-triggered, it can be handled the same way as the below monitors
-    restartMonitors(slickDataSource, gcsDAO, bucketDeletionMonitor)
+                   maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, userServiceConstructor: (UserInfo) => UserService,
+                   projectTemplate: ProjectTemplate, metricsPrefix: String): Unit = {
+    //Reset "Launching" workflows to "Queued"
+    resetLaunchingWorkflows(slickDataSource)
 
     //Boot billing project creation monitor
     startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, projectTemplate)
@@ -40,6 +39,9 @@ object BootMonitors extends LazyLogging {
 
     //Boot workflow submission actors
     startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, methodRepoDAO, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix)
+
+    //Boot bucket deletion monitor
+    startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO, projectTemplate: ProjectTemplate): Unit = {
@@ -87,20 +89,8 @@ object BootMonitors extends LazyLogging {
     }
   }
 
-  def restartMonitors(dataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, bucketDeletionMonitor: ActorRef): Unit = {
-    startBucketDeletionMonitor(dataSource, bucketDeletionMonitor)
-    resetLaunchingWorkflows(dataSource)
-  }
-
-  private def startBucketDeletionMonitor(dataSource: SlickDataSource, bucketDeletionMonitor: ActorRef) = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.pendingBucketDeletionQuery.list() map { _.map { pbd =>
-          bucketDeletionMonitor ! DeleteBucket(pbd.bucket)
-        }
-      }
-    } onFailure {
-      case t: Throwable => logger.error("Error starting bucket deletion monitor", t)
-    }
+  private def startBucketDeletionMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO) = {
+    system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) = {

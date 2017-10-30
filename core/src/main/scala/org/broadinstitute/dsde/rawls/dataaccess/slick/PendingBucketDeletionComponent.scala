@@ -21,6 +21,8 @@ trait PendingBucketDeletionComponent {
       } map(_ => pendingBucketDeletion)
     }
 
+    def save(bucketName: String): ReadWriteAction[PendingBucketDeletionRecord] = save(PendingBucketDeletionRecord(bucketName))
+
     def list(): ReadAction[Seq[PendingBucketDeletionRecord]] = {
       pendingBucketDeletionQuery.result
     }

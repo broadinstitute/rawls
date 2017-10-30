@@ -76,7 +76,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       gcsDAO.getBucketServiceAccountCredential,
       workbenchMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"), "test-ws-submission-supervisor")
-    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
     val directoryDAO = new MockUserDirectoryDAO
 
@@ -105,7 +104,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       execServiceBatchSize,
       gcsDAO,
       notificationDAO,
-      bucketDeletionMonitor,
       userServiceConstructor,
       genomicsServiceConstructor,
       maxActiveWorkflowsTotal,
@@ -115,7 +113,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
-      bucketDeletionMonitor ! PoisonPill
       googleGroupSyncMonitorSupervisor ! PoisonPill
     }
   }

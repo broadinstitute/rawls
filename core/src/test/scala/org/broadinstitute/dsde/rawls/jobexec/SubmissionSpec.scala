@@ -179,7 +179,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         250 milliseconds,
         workbenchMetricBaseName = workbenchMetricBaseName
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
-      val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
       gcsDAO.storeToken(userInfo, subTestData.refreshToken)
       val directoryDAO = new MockUserDirectoryDAO
@@ -211,7 +210,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         execServiceBatchSize,
         gcsDAO,
         notificationDAO,
-        bucketDeletionMonitor,
         userServiceConstructor,
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
@@ -225,7 +223,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       finally {
         // for failed tests we also need to poison pill
         submissionSupervisor ! PoisonPill
-        bucketDeletionMonitor ! PoisonPill
         googleGroupSyncMonitorSupervisor ! PoisonPill
       }
     }

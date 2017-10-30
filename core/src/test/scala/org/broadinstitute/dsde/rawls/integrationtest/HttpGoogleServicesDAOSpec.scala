@@ -20,7 +20,6 @@ import org.broadinstitute.dsde.rawls.model.CreationStatuses.Ready
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
-import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 import org.broadinstitute.dsde.rawls.util.{MockitoTestUtils, Retry}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
@@ -57,7 +56,6 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   )
 
   slickDataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
-  val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
   val testProject = "broad-dsde-dev"
   val testWorkspaceId = UUID.randomUUID.toString
@@ -75,16 +73,16 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       RawlsGroup(groupName, groupEmail, Set.empty, Set.empty)
     }
 
-    Future.traverse(accessGroups) { gcsDAO.deleteGoogleGroup } map { _ => bucketDeletionMonitor ! DeleteBucket(bucketName) }
+    Future.traverse(accessGroups) { gcsDAO.deleteGoogleGroup } flatMap { _ => slickDataSource.inTransaction(da => da.pendingBucketDeletionQuery.save(bucketName)) }
   }
 
-  private def deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo: GoogleWorkspaceInfo, bucketDeletionMonitor: ActorRef) = {
+  private def deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo: GoogleWorkspaceInfo): Future[Future[Any]] = {
     val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.values
     val googleGroups = googleWorkspaceInfo.intersectionGroupsByLevel match {
       case Some(groups) => groups.values ++ accessGroups
       case None => accessGroups
     }
-    Future.traverse(googleGroups) { gcsDAO.deleteGoogleGroup } map { _ => bucketDeletionMonitor ! DeleteBucket(googleWorkspaceInfo.bucketName) }
+    Future.traverse(googleGroups) { gcsDAO.deleteGoogleGroup } map { _ => slickDataSource.inTransaction(da => da.pendingBucketDeletionQuery.save(googleWorkspaceInfo.bucketName)) }
   }
 
   override def afterAll(): Unit = {
@@ -155,7 +153,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val usage = Await.result(gcsDAO.getBucketUsage(RawlsBillingProjectName(testProject), s"fc-$testWorkspaceId"), Duration.Inf)
 
     // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
-    Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
+    Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo), Duration.Inf)
     Await.result(Future.traverse(project.groups.values) { group => gcsDAO.deleteGoogleGroup(group) }, Duration.Inf)
     intercept[GoogleJsonResponseException] { directory.groups.get(readerGroup.groupEmail.value).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(writerGroup.groupEmail.value).execute() }
@@ -236,7 +234,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     Await.result(retry(when500)(() => Future { directory.members.get(projectOwnerIG.groupEmail.value, gcsDAO.toProxyFromUser(testCreator)).execute() }), Duration.Inf)
 
     // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
-    Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
+    Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo), Duration.Inf)
     Await.result(Future.traverse(project.groups.values) { group => gcsDAO.deleteGoogleGroup(group) }, Duration.Inf)
 
     intercept[GoogleJsonResponseException] { directory.groups.get(readerAG.groupEmail.value).execute() }
@@ -286,7 +284,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
     assert(Await.result(gcsDAO.diagnosticBucketRead(userInfo.copy(userSubjectId = testUser.userSubjectId), googleWorkspaceInfo.bucketName), Duration.Inf).get.statusCode.get == StatusCodes.Unauthorized)
     Await.result(gcsDAO.deleteProxyGroup(user), Duration.Inf)
-    Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
+    Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo), Duration.Inf)
     Await.result(Future.traverse(project.groups.values) { group => gcsDAO.deleteGoogleGroup(group) }, Duration.Inf)
   }
 
@@ -427,7 +425,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     Await.result(retry(when500)(() => Future { bucketInserter.execute() }), Duration.Inf)
     insertObject(bucketName, s"HttpGoogleServiceDAOSpec-object-${UUID.randomUUID().toString}", "delete me")
 
-    Await.result(gcsDAO.deleteBucket(bucketName, bucketDeletionMonitor), Duration.Inf)
+    Await.result(gcsDAO.deleteBucket(bucketName), Duration.Inf)
 
     /*
      * There will be 2 Google calls in this case: one to delete the bucket (which will fail) and one to set the
@@ -450,7 +448,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     rule.getCondition.getAge should be (0)
 
     // Final clean-up to make sure that the test bucket will eventually be deleted
-    bucketDeletionMonitor ! DeleteBucket(bucketName)
+    slickDataSource.inTransaction(da => da.pendingBucketDeletionQuery.save(bucketName))
   }
 
   it should "determine bucket usage" in {
@@ -512,7 +510,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       val usage = Await.result(gcsDAO.getBucketUsage(projectName, bucketName), Duration.Inf)
       usage should be (0)
     } finally {
-      Await.result(gcsDAO.deleteBucket(bucketName, bucketDeletionMonitor), Duration.Inf)
+      Await.result(gcsDAO.deleteBucket(bucketName), Duration.Inf)
     }
   }
 
@@ -542,7 +540,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
         usage should be(0)
       } finally {
         Await.result(retry(when500)(() => Future { storage.objects().delete(bucketName, "test-object").execute() }), Duration.Inf)
-        Await.result(gcsDAO.deleteBucket(bucketName, bucketDeletionMonitor), Duration.Inf)
+        Await.result(gcsDAO.deleteBucket(bucketName), Duration.Inf)
       }
     }
     caught.getMessage should be("Not Available")
