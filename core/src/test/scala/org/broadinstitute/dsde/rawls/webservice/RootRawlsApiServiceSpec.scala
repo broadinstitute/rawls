@@ -14,7 +14,7 @@ class RootRawlsApiServiceSpec extends ApiServiceSpec with RootRawlsApiService {
   "RootRawlsApiService" should "get a version" in  {
     withStatsD {
       Get("/version") ~>
-        sealRoute(instrumentRequest {versionRoute} ) ~>
+        sealRoute(instrumentRequest {versionRoutes} ) ~>
         check {
           assertResult(StatusCodes.OK) {status}
           assertResult(appVersion) {responseAs[ApplicationVersion]}

@@ -35,6 +35,9 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
     (Slash ~ "api").? / "workflows" / "v1" / Segment / Neutral
   )
 
+  private def pipelineNoAuth[A: FromResponseUnmarshaller] =
+    instrumentedGzSendReceive ~> unmarshal[A]
+
   private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =
     addAuthHeader(userInfo) ~> instrumentedGzSendReceive ~> unmarshal[A]
 
@@ -43,39 +46,39 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
 
   override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]] = {
     val timeout = Timeout(submissionTimeout)
-    val url = executionServiceURL+"/workflows/v1/batch"
+    val url = executionServiceURL+"/api/workflows/v1/batch"
     val formData = Map("workflowSource" -> BodyPart(wdl), "workflowInputs" -> BodyPart(inputs.mkString("[", ",", "]"))) ++ options.map("workflowOptions" -> BodyPart(_))
     pipelineWithTimeout[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]](userInfo, timeout) apply (Post(url, MultipartFormData(formData)))
   }
 
   override def status(id: String, userInfo: UserInfo): Future[ExecutionServiceStatus] = {
-    val url = executionServiceURL + s"/workflows/v1/${id}/status"
+    val url = executionServiceURL + s"/api/workflows/v1/${id}/status"
     retry(when500) { () => pipeline[ExecutionServiceStatus](userInfo) apply Get(url) }
   }
 
   override def callLevelMetadata(id: String, userInfo: UserInfo): Future[JsObject] = {
-    val url = executionServiceURL + s"/workflows/v1/${id}/metadata"
+    val url = executionServiceURL + s"/api/workflows/v1/${id}/metadata"
     retry(when500) { () => pipeline[JsObject](userInfo) apply Get(url) }
   }
 
   override def outputs(id: String, userInfo: UserInfo): Future[ExecutionServiceOutputs] = {
-    val url = executionServiceURL + s"/workflows/v1/${id}/outputs"
+    val url = executionServiceURL + s"/api/workflows/v1/${id}/outputs"
     retry(when500) { () => pipeline[ExecutionServiceOutputs](userInfo) apply Get(url) }
   }
 
   override def logs(id: String, userInfo: UserInfo): Future[ExecutionServiceLogs] = {
-    val url = executionServiceURL + s"/workflows/v1/${id}/logs"
+    val url = executionServiceURL + s"/api/workflows/v1/${id}/logs"
     retry(when500) { () => pipeline[ExecutionServiceLogs](userInfo) apply Get(url) }
   }
 
   override def abort(id: String, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]] = {
-    val url = executionServiceURL + s"/workflows/v1/${id}/abort"
+    val url = executionServiceURL + s"/api/workflows/v1/${id}/abort"
     retry(when500) { () => toFutureTry(pipeline[ExecutionServiceStatus](userInfo) apply Post(url)) }
   }
 
-  override def version(userInfo: UserInfo): Future[ExecutionServiceVersion] = {
+  override def version: Future[ExecutionServiceVersion] = {
     val url = executionServiceURL + s"/engine/v1/version"
-    retry(when500) { () => pipeline[ExecutionServiceVersion](userInfo) apply Get(url) }
+    retry(when500) { () => pipelineNoAuth[ExecutionServiceVersion] apply Get(url) }
   }
 
   private def when500( throwable: Throwable ): Boolean = {

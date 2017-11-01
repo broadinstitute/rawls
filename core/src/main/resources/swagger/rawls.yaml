@@ -37,7 +37,7 @@ paths:
         - status
       summary: status check for underlying systems
       operationId: systemStatus
-  '/api/version/executionEngine':
+  '/version/executionEngine':
     get:
       responses:
         '200':
@@ -49,11 +49,6 @@ paths:
         - version
       summary: get version information of the execution engine
       operationId: execVersion
-      security:
-        - authorization:
-          - openid
-          - email
-          - profile
   '/api/admin/billing/list/{userEmail}':
     get:
       responses:
