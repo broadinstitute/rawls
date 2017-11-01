@@ -19,6 +19,7 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with UserI
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val submissionTimeout: FiniteDuration
 
+
   val submissionRoutes = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "submissions" ) { (workspaceNamespace, workspaceName) =>
       get {
@@ -80,13 +81,6 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with UserI
         requestContext => perRequest(requestContext,
           WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.WorkflowQueueStatus)
-      }
-    } ~
-    path("version" / "executionEngine") {
-      get {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.ExecutionEngineVersion)
       }
     }
   }

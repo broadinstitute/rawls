@@ -177,7 +177,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val sealedInstrumentedRoutes: Route = sealRoute {
       instrumentRequest {
         adminRoutes ~ billingRoutes ~ entityRoutes ~  methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
-          submissionRoutes ~ userRoutes ~ createUserRoute ~ versionRoute ~ workspaceRoutes
+          submissionRoutes ~ userRoutes ~ createUserRoute ~ versionRoutes ~ workspaceRoutes
       }
     }
   }

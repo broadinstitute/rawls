@@ -53,7 +53,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       lefts.filter(_.status == "Submitted").size shouldBe 2
       lefts.filter(_.status == "Failed").size shouldBe 1
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("post", "workflows.v1.batch", 201, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("post", "api.workflows.v1.batch", 201, 1, Option(Subsystems.Cromwell)))
     }
   }
 
@@ -62,7 +62,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       val result = test.status("foo", userInfo).futureValue
       result.status shouldBe "Running"
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "workflows.v1.redacted.status", 200, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "api.workflows.v1.redacted.status", 200, 1, Option(Subsystems.Cromwell)))
     }
   }
 
@@ -71,7 +71,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       val result = test.callLevelMetadata("8afafe21-2b70-4180-a565-748cb573e10c", userInfo).futureValue
       result shouldBe a [JsObject]
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "workflows.v1.redacted.metadata", 201, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "api.workflows.v1.redacted.metadata", 201, 1, Option(Subsystems.Cromwell)))
     }
   }
 
@@ -81,7 +81,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       result.id shouldBe "this_workflow_exists"
       result.outputs.size shouldBe 3
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "workflows.v1.redacted.outputs", 201, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "api.workflows.v1.redacted.outputs", 201, 1, Option(Subsystems.Cromwell)))
     }
   }
 
@@ -91,7 +91,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       result.id shouldBe "8afafe21-2b70-4180-a565-748cb573e10c"
       result.calls shouldBe 'empty
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "workflows.v1.redacted.logs", 201, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "api.workflows.v1.redacted.logs", 201, 1, Option(Subsystems.Cromwell)))
     }
   }
 
@@ -102,13 +102,13 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       result.get.id shouldBe "workflowA"
       result.get.status shouldBe "Aborted"
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("post", "workflows.v1.redacted.abort", 200, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("post", "api.workflows.v1.redacted.abort", 200, 1, Option(Subsystems.Cromwell)))
     }
   }
 
   it should "get the version" in {
     withStatsD {
-      val result = test.version(userInfo).futureValue
+      val result = test.version.futureValue
       result.cromwell shouldBe "25"
     } { capturedMetrics =>
       capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "engine.v1.version", 200, 1, Option(Subsystems.Cromwell)))
