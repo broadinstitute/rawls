@@ -108,7 +108,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
 
   it should "get the version" in {
     withStatsD {
-      val result = test.version(userInfo).futureValue
+      val result = test.version.futureValue
       result.cromwell shouldBe "25"
     } { capturedMetrics =>
       capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "engine.v1.version", 200, 1, Option(Subsystems.Cromwell)))
