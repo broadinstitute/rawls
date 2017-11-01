@@ -148,7 +148,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential): ActorRef = {
-    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, workbenchMetricBaseName), submissionId.toString)
+    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, workbenchMetricBaseName).withDispatcher("submission-monitor-dispatcher"), submissionId.toString)
   }
 
   private def scheduleNextCheckCurrentWorkflowStatus(actor: ActorRef): Cancellable = {

@@ -33,9 +33,9 @@ object BootMonitors extends LazyLogging {
     val gcsConfig = conf.getConfig("gcs")
     startGoogleGroupSyncMonitor(system, gcsConfig, pubSubDAO, userServiceConstructor)
 
-    //Boot submission monitor
+    //Boot submission monitor supervisor
     val submissionMonitorConfig = conf.getConfig("submissionmonitor")
-    startSubmissionMonitor(system, submissionMonitorConfig, slickDataSource, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
+    startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
 
     //Boot workflow submission actors
     startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, methodRepoDAO, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix)
@@ -59,7 +59,7 @@ object BootMonitors extends LazyLogging {
       userServiceConstructor))
   }
 
-  private def startSubmissionMonitor(system: ActorSystem, submissionMonitorConfig: Config, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {
+  private def startSubmissionMonitorSupervisor(system: ActorSystem, submissionMonitorConfig: Config, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {
     system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
       slickDataSource,
@@ -67,7 +67,7 @@ object BootMonitors extends LazyLogging {
       util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
       submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),
       workbenchMetricBaseName = metricsPrefix
-    ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
+    ), "rawls-submission-supervisor")
   }
 
   private def startWorkflowSubmissionActors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: HttpGoogleServicesDAO, methodRepoDAO: MethodRepoDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, metricsPrefix: String) = {
