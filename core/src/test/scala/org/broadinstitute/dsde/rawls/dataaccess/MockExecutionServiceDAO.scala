@@ -45,5 +45,5 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
 
   override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
 
-  override def version(userInfo: UserInfo) = Future.successful(ExecutionServiceVersion("25"))
+  override def version = Future.successful(ExecutionServiceVersion("25"))
 }
