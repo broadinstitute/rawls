@@ -36,28 +36,6 @@ trait JndiSupport extends LazyLogging {
     t.get
   }
 
-  protected def withSearchResults[T](ctx: DirContext, name: String, matchingAttributes: Attributes, attributesToReturn: Array[String] = Array.empty)(op: Iterator[SearchResult] => T): T = {
-    if (attributesToReturn.isEmpty) {
-      handleSearchResults(op, ctx.search(name, matchingAttributes))
-    } else {
-      handleSearchResults(op, ctx.search(name, matchingAttributes, attributesToReturn))
-    }
-  }
-
-  protected def withSearchResults[T](ctx: DirContext, name: String, filter: String, cons: SearchControls)(op: Iterator[SearchResult] => T): T = {
-    handleSearchResults(op, ctx.search(name, filter, cons))
-  }
-
-  private def handleSearchResults[T](op: (Iterator[SearchResult]) => T, results: NamingEnumeration[SearchResult]) = {
-    // need to copy the results out of the jndi enum otherwise scala is fancy and continues to use the
-    // enum behind the scenes which is a problem once the enum is closed :(
-    val b = new mutable.ListBuffer[SearchResult]
-    results.asScala.copyToBuffer(b)
-    val opResult = Try { op(b.toIterator) }
-    results.close()
-    opResult.get
-  }
-
   /**
     * Given a possibly large collection of inputs, splits input into batches and calls op on each batch.
     *
@@ -94,6 +72,28 @@ trait JndiSupport extends LazyLogging {
     schema.createSubcontext(s"AttributeDefinition/$name", attributes)
   }
 
+  import scala.language.implicitConversions
+  /**
+    * Use this implicit conversion class and following call to extractResultsAndClose
+    * instead of JavaConverters and call to asScala
+    * because it makes sure the NamingEnumeration is closed and connections are not leaked.
+    * @param results results from a search, etc.
+    * @return object that can be used to safely handle and close NamingEnumeration
+    */
+  protected implicit class NamingEnumCloser[T](results: NamingEnumeration[T]) {
+    /**
+      * copy results enum into a Seq then close the enum
+      * @return results
+      */
+    def extractResultsAndClose: Seq[T] = {
+      import scala.collection.JavaConverters._
+      try {
+        Seq(results.asScala.toSeq:_*)
+      } finally {
+        results.close()
+      }
+    }
+  }
 }
 
 /**
