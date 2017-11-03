@@ -33,7 +33,7 @@ trait StandardUserInfoDirectives extends UserInfoDirectives with JndiDirectoryDA
     }
   }
   private def isPetSA(email:String) = email.matches(petSAdomain)
-  
+
   private def getWorkbenchUserEmailId(email:UserInfo):Future[Option[UserStatus]] = {
     if (isPetSA(email.userEmail.value))
       httpSamDAO.getUserStatus(email)
