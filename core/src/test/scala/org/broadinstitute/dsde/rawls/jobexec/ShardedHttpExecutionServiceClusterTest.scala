@@ -198,7 +198,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
   }
 
   it should "return execution service version" in withCustomTestDatabase(execClusterTestData) { dataSource: SlickDataSource =>
-    val version = Await.result(cluster.version(userInfo), Duration.Inf)
+    val version = Await.result(cluster.version, Duration.Inf)
     assertResult("25") {
       version.cromwell
     }
