@@ -10,6 +10,6 @@ import scala.concurrent.Future
 trait SamDAO extends ErrorReportable {
   val errorReportSource = ErrorReportSource("sam")
   def registerUser(userInfo: UserInfo): Future[Option[UserStatus]]
-
+  def getUserStatus(userInfo: UserInfo): Future[Option[UserStatus]]
   def getStatus(): Future[SubsystemStatus]
 }

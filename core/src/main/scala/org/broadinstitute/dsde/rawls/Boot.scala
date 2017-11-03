@@ -211,7 +211,8 @@ object Boot extends App with LazyLogging {
       ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
       clientSecrets.getDetails.getClientId,
       submissionTimeout,
-      rawlsMetricBaseName = metricsPrefix
+      rawlsMetricBaseName = metricsPrefix,
+      samDAO
     ),
       "rawls-service")
 

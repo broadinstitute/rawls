@@ -1,41 +1,22 @@
 package org.broadinstitute.dsde.rawls.openam
 
-import akka.actor.ActorSystem
-import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.dataaccess.DataSource
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.{DirectoryConfig, JndiDirectoryDAO}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
-import org.broadinstitute.dsde.rawls.model.{RawlsUser, RawlsUserEmail, RawlsUserRef, RawlsUserSubjectId, UserInfo}
-import org.broadinstitute.dsde.rawls.user.UserService
-import shapeless.HNil
-import slick.backend.DatabaseConfig
-import slick.driver.JdbcDriver
+import org.broadinstitute.dsde.rawls.dataaccess.{HttpSamDAO, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
+import org.broadinstitute.dsde.rawls.model.{RawlsUser, RawlsUserEmail, RawlsUserRef, RawlsUserSubjectId, UserInfo, UserStatus}
 import spray.http.{HttpHeader, OAuth2BearerToken}
-import spray.routing
 import spray.routing.Directive1
 import spray.routing.Directives._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 trait StandardUserInfoDirectives extends UserInfoDirectives with JndiDirectoryDAO {
 
-  val userServiceConstructor: UserInfo => UserService
+  val httpSamDAO: SamDAO
 
-  //  def requireUserInfo(): Directive1[UserInfo] = {
-  //    val userInfo= for (accessToken <- accessTokenHeaderDirective;
-  //        userEmail <- emailHeaderDirective;
-  //        accessTokenExpiresIn <- accessTokenExpiresInHeaderDirective;
-  //        userSubjectId <- userSubjectIdDirective;
-  //    ) yield UserInfo(RawlsUserEmail(userEmail), OAuth2BearerToken(accessToken), accessTokenExpiresIn.toLong, RawlsUserSubjectId(userSubjectId))
-  //    userInfo.map {
-  //      case a  => {
-  //        val userService = UserService.constructor(a,"","","","")
-  //        userService
-  //      }
-  //    }
-  //  }
-
-  def requireUserInfo: Directive1[UserInfo] = {
+  //TODO: project should be regex
+  val petSAdomain = "\\S+@\\S+.iam.gserviceaccount.com"
+  val petEmailPrefix = "pet-"
+  def requireUserInfo(): Directive1[UserInfo] = {
 
     val userInfo = for(
       accessToken <- accessTokenHeaderDirective;
@@ -45,31 +26,20 @@ trait StandardUserInfoDirectives extends UserInfoDirectives with JndiDirectoryDA
     ) yield UserInfo(RawlsUserEmail(userEmail), OAuth2BearerToken(accessToken), accessTokenExpiresIn.toLong, RawlsUserSubjectId(userSubjectId))
 
     userInfo flatMap { ui =>
-      onSuccess(getWorkbenchUserEmailId(ui.userEmail.toString)).map {
-        case Some(resourceType) => UserInfo(resourceType.userEmail, ui.accessToken, ui.accessTokenExpiresIn, resourceType.userSubjectId)
+      onSuccess(getWorkbenchUserEmailId(ui)).map {
+        case Some(resourceType) => UserInfo(resourceType.userInfo.userEmail, ui.accessToken, ui.accessTokenExpiresIn, resourceType.userInfo.userSubjectId)
         case None => UserInfo(ui.userEmail, ui.accessToken, ui.accessTokenExpiresIn, ui.userSubjectId)
       }
     }
   }
-
-    private def getWorkbenchUserEmailId(email:String):Future[Option[RawlsUser]] = {
-      val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
-
-
-      val directoryConfig = DirectoryConfig(
-        conf.getString("directory.url"),
-        conf.getString("directory.user"),
-        conf.getString("directory.password"),
-        conf.getString("directory.baseDn")
-      )
-
-      val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcDriver]("slick", conf), directoryConfig)
-
-      if (email.endsWith("gserviceaccount.com"))
-        slickDataSource.inTransaction(dataccess => dataccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(email.replaceFirst("pet-","").replace("@\\S+","")))))
-      else
-        Future(None)
-    }
+  private def isPetSA(email:String) = email.matches(petSAdomain)
+  
+  private def getWorkbenchUserEmailId(email:UserInfo):Future[Option[UserStatus]] = {
+    if (isPetSA(email.userEmail.value))
+      httpSamDAO.getUserStatus(email)
+    else
+      Future(None)
+  }
 
   private def accessTokenHeaderDirective: Directive1[String] = headerValueByName("OIDC_access_token")
 
