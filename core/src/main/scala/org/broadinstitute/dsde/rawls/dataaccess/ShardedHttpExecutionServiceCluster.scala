@@ -51,8 +51,8 @@ class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId,Ex
   def abort(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]] =
     getMember(workflowRec).abort(workflowRec.externalId.get, userInfo)
 
-  def version(userInfo: UserInfo): Future[ExecutionServiceVersion] =
-    getRandomReadMember.version(userInfo)
+  def version: Future[ExecutionServiceVersion] =
+    getRandomReadMember.version
 
   // ====================
   // facade-to-cluster entry points
