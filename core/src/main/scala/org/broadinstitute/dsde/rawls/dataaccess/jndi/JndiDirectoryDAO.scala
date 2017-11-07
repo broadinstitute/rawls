@@ -243,8 +243,9 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       val groups = Try {
         for (
           attr <- ctx.getAttributes(userDn(userRef.userSubjectId), Array(Attr.memberOf)).getAll.extractResultsAndClose;
-          attrE <- attr.getAll.extractResultsAndClose
-        ) yield RawlsGroupRef(dnToGroupName(attrE.asInstanceOf[String]))
+          attrE <- attr.getAll.extractResultsAndClose;
+          groupName <- dnToGroupName(attrE.asInstanceOf[String])
+        ) yield RawlsGroupRef(groupName)
       } recover {
         // user does not exist so they can't have any groups
         case t: NameNotFoundException => Iterator.empty
@@ -255,11 +256,9 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
 
     def loadFromEmail(email: String): ReadWriteAction[Option[Either[RawlsUser, RawlsGroup]]] = withContext { ctx =>
       val subjectResults = ctx.search(directoryConfig.baseDn, s"(${Attr.email}=${email})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)).extractResultsAndClose
-      val subjects = subjectResults.map { result =>
-        dnToSubject(result.getNameInNamespace) match {
-          case Left(groupName) => Right(unmarshallGroup(result.getAttributes))
-          case Right(userSubjectId) => Left(unmarshalUser(result.getAttributes))
-        }
+      val subjects = subjectResults.map(result => (result, dnToSubject(result.getNameInNamespace))).collect {
+        case (result, Some(Left(groupName))) => Right(unmarshallGroup(result.getAttributes))
+        case (result, Some(Right(userSubjectId))) => Left(unmarshalUser(result.getAttributes))
       }
 
       subjects match {
@@ -332,8 +331,9 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     def listAncestorGroups(groupName: RawlsGroupName): ReadWriteAction[Set[RawlsGroupName]] = withContext { ctx =>
       val groups = for (
         attr <- ctx.getAttributes(groupDn(groupName), Array(Attr.memberOf)).getAll.extractResultsAndClose;
-        attrE <- attr.getAll.extractResultsAndClose
-      ) yield dnToGroupName(attrE.asInstanceOf[String])
+        attrE <- attr.getAll.extractResultsAndClose;
+        group <- dnToGroupName(attrE.asInstanceOf[String])
+      ) yield group
 
       groups.toSet
     }
@@ -341,8 +341,8 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     // Doge: this is what we want the code to look like but does not perform well on opendj
     def DONT_CALL_ME_ON_OPENDJ_intersectGroupMembership(groups: Set[RawlsGroupRef]): ReadWriteAction[Set[RawlsUserRef]] = withContextUsingIsMemberOf { ctx =>
       val groupFilters = groups.map(g => s"(${Attr.memberOf}=${groupDn(g.groupName)})")
-      ctx.search(peopleOu, s"(&${groupFilters.mkString})", new SearchControls()).extractResultsAndClose.map { result =>
-        RawlsUserRef(dnToUserSubjectId(result.getNameInNamespace))
+      ctx.search(peopleOu, s"(&${groupFilters.mkString})", new SearchControls()).extractResultsAndClose.map(r => dnToUserSubjectId(r.getNameInNamespace)).collect {
+        case Some(id) => RawlsUserRef(id)
       }.toSet
     }
 
@@ -369,8 +369,8 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     val memberDns = getAttributes[String](attributes, Attr.member).getOrElse(Set.empty).toSet
 
     val members = memberDns.map(dnToSubject)
-    val users = members.collect { case Right(user) => RawlsUserRef(user) }
-    val groups = members.collect { case Left(group) => RawlsGroupRef(group) }
+    val users = members.collect { case Some(Right(user)) => RawlsUserRef(user) }
+    val groups = members.collect { case Some(Left(group)) => RawlsGroupRef(group) }
     val group = RawlsGroup(RawlsGroupName(cn), RawlsGroupEmail(email), users, groups)
     group
   }
