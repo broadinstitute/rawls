@@ -2,18 +2,16 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
+import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
+import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{SubsystemStatus, UserInfo, UserStatus}
 import org.broadinstitute.dsde.rawls.util.Retry
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
-import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
-import spray.client.pipelining.sendReceive
-import spray.client.pipelining._
-import spray.http._
+import spray.client.pipelining.{sendReceive, _}
+import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
 import spray.httpx.UnsuccessfulResponseException
 import spray.httpx.unmarshalling.FromResponseUnmarshaller
-import spray.json.DefaultJsonProtocol._
-import spray.json.{JsString, JsValue}
 
 import scala.concurrent.Future
 
@@ -33,6 +31,15 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     retry(when500) { () =>
       pipeline[Option[UserStatus]](userInfo) apply Post(url) recover {
         case notOK: UnsuccessfulResponseException if StatusCodes.Conflict == notOK.response.status => None
+      }
+    }
+  }
+
+  override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Option[UserStatus]] = {
+    val url = samServiceURL + s"/api/resources/${resourceTypeName.value}/$resourceId/action/${action.value}"
+    retry(when500) { () =>
+      pipeline[Option[UserStatus]](userInfo) apply Get(url) recover {
+        case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
       }
     }
   }

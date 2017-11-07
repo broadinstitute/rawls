@@ -121,11 +121,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
   import dataSource.dataAccess.driver.api._
 
   implicit val timeout = Timeout(5 minutes)
@@ -1990,7 +1990,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def requireCreateWorkspaceAccess(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)(op: => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
-    dataAccess.rawlsBillingProjectQuery.hasOneOfProjectRole(projectName, RawlsUser(userInfo), ProjectRoles.all) flatMap {
+    DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamResourceActions.createWorkspace, userInfo)) flatMap {
       case true =>
         dataAccess.rawlsBillingProjectQuery.load(projectName).flatMap {
           case Some(RawlsBillingProject(_, _, _, CreationStatuses.Ready, _, _)) =>
