@@ -6,24 +6,30 @@ import org.broadinstitute.dsde.rawls.model.{RawlsUser, RawlsUserEmail, RawlsUser
 import spray.http.{HttpHeader, OAuth2BearerToken}
 import spray.routing.Directive1
 import spray.routing.Directives._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.concurrent.Future
 
-trait StandardUserInfoDirectives extends UserInfoDirectives with JndiDirectoryDAO {
+trait StandardUserInfoDirectives extends UserInfoDirectives {
 
   val httpSamDAO: SamDAO
 
-  //TODO: project should be regex
-  val petSAdomain = "\\S+@\\S+.iam.gserviceaccount.com"
-  val petEmailPrefix = "pet-"
+
+  val petSAdomain = "\\S+@\\S+\\.iam\\.gserviceaccount\\.com".r
+
+  private def isPetSA(email: String) = {
+    petSAdomain.pattern.matcher(email).matches
+  }
+
+
   def requireUserInfo(): Directive1[UserInfo] = {
 
-    val userInfo = for(
-      accessToken <- accessTokenHeaderDirective;
-      userEmail <- emailHeaderDirective;
-      accessTokenExpiresIn <- accessTokenExpiresInHeaderDirective;
+    val userInfo = for {
+      accessToken <- accessTokenHeaderDirective
+      userEmail <- emailHeaderDirective
+      accessTokenExpiresIn <- accessTokenExpiresInHeaderDirective
       userSubjectId <- userSubjectIdDirective
-    ) yield UserInfo(RawlsUserEmail(userEmail), OAuth2BearerToken(accessToken), accessTokenExpiresIn.toLong, RawlsUserSubjectId(userSubjectId))
+    } yield UserInfo(RawlsUserEmail(userEmail), OAuth2BearerToken(accessToken), accessTokenExpiresIn.toLong, RawlsUserSubjectId(userSubjectId))
 
     userInfo flatMap { ui =>
       onSuccess(getWorkbenchUserEmailId(ui)).map {
@@ -32,7 +38,6 @@ trait StandardUserInfoDirectives extends UserInfoDirectives with JndiDirectoryDA
       }
     }
   }
-  private def isPetSA(email:String) = email.matches(petSAdomain)
 
   private def getWorkbenchUserEmailId(email:UserInfo):Future[Option[UserStatus]] = {
     if (isPetSA(email.userEmail.value))
