@@ -23,14 +23,16 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
 
   // these routes have different access control and their paths have /register instead of /api
 
-  val createUserRoute = requireUserInfo() { userInfo =>
-    path("user") {
-      detach() {
-        post {
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.CreateUser)
+  val createUserRoute = detach() {
+    requireUserInfo() { userInfo =>
+      path("user") {
+        detach() {
+          post {
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.CreateUser)
+          }
         }
       }
     }

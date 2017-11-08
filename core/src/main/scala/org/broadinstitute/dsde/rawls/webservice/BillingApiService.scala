@@ -21,34 +21,40 @@ trait BillingApiService extends HttpService with PerRequestCreator with UserInfo
 
   val userServiceConstructor: UserInfo => UserService
 
-  val billingRoutes = requireUserInfo() { userInfo =>
-    path("billing" / Segment / "members") { projectId =>
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.GetBillingProjectMembers(RawlsBillingProjectName(projectId)))
+  val billingRoutes = detach() {
+    requireUserInfo() { userInfo =>
+      path("billing" / Segment / "members") { projectId =>
+        get {
+          requestContext =>
+            perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.GetBillingProjectMembers(RawlsBillingProjectName(projectId)))
         }
-    } ~
-    path("billing" / Segment / Segment / Segment) { (projectId, role, userEmail) =>
-      put {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(role))))
       } ~
-      delete {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(role))))
-      }
-    } ~
-    path("billing") {
-      post {
-        entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
-          requestContest => perRequest(requestContest,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.CreateBillingProjectFull(createProjectRequest.projectName, createProjectRequest.billingAccount), 7 minutes) // it can take a while
+        path("billing" / Segment / Segment / Segment) { (projectId, role, userEmail) =>
+          put {
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(role))))
+          } ~
+            delete {
+              requestContext =>
+                perRequest(requestContext,
+                  UserService.props(userServiceConstructor, userInfo),
+                  UserService.RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(role))))
+            }
+        } ~
+        path("billing") {
+          post {
+            entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
+              requestContest =>
+                perRequest(requestContest,
+                  UserService.props(userServiceConstructor, userInfo),
+                  UserService.CreateBillingProjectFull(createProjectRequest.projectName, createProjectRequest.billingAccount), 7 minutes) // it can take a while
+            }
+          }
         }
-      }
     }
   }
 }

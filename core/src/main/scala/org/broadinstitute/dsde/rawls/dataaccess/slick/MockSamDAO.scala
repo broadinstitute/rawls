@@ -20,5 +20,8 @@ class MockSamDAO(ok: Boolean = true) extends SamDAO {
   }
 
 
-  override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = ???
+  override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = {
+    if(ok) Future.successful(Some(userAccount))
+    else Future.successful(None)
+  }
 }
