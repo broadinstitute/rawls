@@ -8,22 +8,22 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{SubsystemStatus, UserInfo, UserStatus}
 import org.broadinstitute.dsde.rawls.util.Retry
 import spray.client.pipelining.{sendReceive, _}
-import spray.http.StatusCodes
+import spray.http.{HttpResponse, StatusCodes}
 import spray.httpx.SprayJsonSupport._
 import spray.httpx.UnsuccessfulResponseException
-import spray.httpx.unmarshalling.FromResponseUnmarshaller
+import spray.httpx.unmarshalling.{Unmarshaller, _}
 
 import scala.concurrent.Future
 
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) extends SamDAO with DsdeHttpDAO with Retry with LazyLogging {
+class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) extends SamDAO with DsdeHttpDAO with Retry with LazyLogging  with spray.httpx.RequestBuilding {
   import system.dispatcher
 
   private val samServiceURL = baseSamServiceURL
 
-  private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =
+  private def pipeline[A: Unmarshaller](userInfo: UserInfo) =
     addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[A]
 
   override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = {
@@ -35,11 +35,18 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
   }
 
-  override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Option[UserStatus]] = {
-    val url = samServiceURL + s"/api/resources/${resourceTypeName.value}/$resourceId/action/${action.value}"
+  override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
+    val url = samServiceURL + s"/api/resource/workflow-collection/foo/action/view"
+    val httpRequest = Get(url)
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive
+    val result: Future[HttpResponse] = pipeline(httpRequest)
+
     retry(when500) { () =>
-      pipeline[Option[UserStatus]](userInfo) apply Get(url) recover {
-        case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
+      result.map { response =>
+        response.status match {
+          case s if s.isSuccess => response.entity.asString.toBoolean
+          case _ => false
+        }
       }
     }
   }
