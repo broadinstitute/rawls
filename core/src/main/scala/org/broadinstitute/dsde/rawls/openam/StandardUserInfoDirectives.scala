@@ -39,9 +39,9 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
     }
   }
 
-  private def getWorkbenchUserEmailId(email:UserInfo):Future[Option[UserStatus]] = {
-    if (isPetSA(email.userEmail.value))
-      httpSamDAO.getUserStatus(email)
+  private def getWorkbenchUserEmailId(userInfo:UserInfo):Future[Option[UserStatus]] = {
+    if (isPetSA(userInfo.userEmail.value))
+      httpSamDAO.getUserStatus(userInfo)
     else
       Future(None)
   }
