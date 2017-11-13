@@ -36,7 +36,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
   }
 
   override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
-    val url = samServiceURL + s"/api/resource/workflow-collection/foo/action/view"
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/${resourceId}/action/${action.value}"
     val httpRequest = Get(url)
     val pipeline = addAuthHeader(userInfo) ~> sendReceive
     val result: Future[HttpResponse] = pipeline(httpRequest)
