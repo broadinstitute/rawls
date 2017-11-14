@@ -1,14 +1,15 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.MockSamDAO
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import java.util.UUID
-import org.broadinstitute.dsde.rawls.dataaccess._
+
+import org.broadinstitute.dsde.rawls.dataaccess.{MockSamDAO, _}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import spray.http._
+
 import scala.concurrent.ExecutionContext
 
 class PetSASpec extends ApiServiceSpec {

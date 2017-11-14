@@ -1,8 +1,7 @@
 package org.broadinstitute.dsde.rawls.openam
 
-import org.broadinstitute.dsde.rawls.dataaccess.{HttpSamDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsUser, RawlsUserEmail, RawlsUserRef, RawlsUserSubjectId, UserInfo, UserStatus}
+import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo, UserStatus}
 import spray.http.{HttpHeader, OAuth2BearerToken}
 import spray.routing.Directive1
 import spray.routing.Directives._
@@ -15,10 +14,10 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
   val httpSamDAO: SamDAO
 
 
-  val petSAdomain = "\\S+@\\S+\\.iam\\.gserviceaccount\\.com".r
+  val serviceAccountDomain = "\\S+@\\S+\\.iam\\.gserviceaccount\\.com".r
 
-  private def isPetSA(email: String) = {
-    petSAdomain.pattern.matcher(email).matches
+  private def isServiceAccount(email: String) = {
+    serviceAccountDomain.pattern.matcher(email).matches
   }
 
 
@@ -32,17 +31,19 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
 
     userInfo flatMap { ui =>
       onSuccess(getWorkbenchUserEmailId(ui)).map {
-        case Some(resourceType) => UserInfo(resourceType.userInfo.userEmail, ui.accessToken, ui.accessTokenExpiresIn, resourceType.userInfo.userSubjectId)
+        case Some(samUserInfo) => UserInfo(samUserInfo.userInfo.userEmail, ui.accessToken, ui.accessTokenExpiresIn, samUserInfo.userInfo.userSubjectId)
         case None => UserInfo(ui.userEmail, ui.accessToken, ui.accessTokenExpiresIn, ui.userSubjectId)
       }
     }
   }
 
   private def getWorkbenchUserEmailId(userInfo:UserInfo):Future[Option[UserStatus]] = {
-    if (isPetSA(userInfo.userEmail.value))
+    if (isServiceAccount(userInfo.userEmail.value)) {
       httpSamDAO.getUserStatus(userInfo)
-    else
-      Future(None)
+    }
+    else {
+      Future.successful(None)
+    }
   }
 
   private def accessTokenHeaderDirective: Directive1[String] = headerValueByName("OIDC_access_token")

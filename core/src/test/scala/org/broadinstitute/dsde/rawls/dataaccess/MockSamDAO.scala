@@ -1,7 +1,7 @@
-package org.broadinstitute.dsde.rawls.dataaccess.slick
+package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsUser, RawlsUserEmail, RawlsUserSubjectId, SubsystemStatus, UserInfo, UserStatus}
+
 import scala.concurrent.Future
 
 class MockSamDAO(ok: Boolean = true) extends SamDAO {
@@ -24,7 +24,6 @@ class MockSamDAO(ok: Boolean = true) extends SamDAO {
     }
     else Future.successful(None)
   }
-
 
   override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = {
     if(ok) Future.successful(Some(userAccount))

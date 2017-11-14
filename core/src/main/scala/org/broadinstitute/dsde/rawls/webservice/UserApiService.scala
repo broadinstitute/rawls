@@ -25,7 +25,7 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
 
   val createUserRoute = requireUserInfo() { userInfo =>
     path("user") {
-      detach() {
+      {
         post {
           requestContext =>
             perRequest(requestContext,

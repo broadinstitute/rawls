@@ -42,7 +42,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     val url = samServiceURL + "/register/user"
     retry(when500) { () =>
       pipeline[Option[UserStatus]](userInfo) apply Get(url) recover {
-        case notOK: UnsuccessfulResponseException if StatusCodes.Conflict == notOK.response.status => None
+        case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
       }
     }
   }
