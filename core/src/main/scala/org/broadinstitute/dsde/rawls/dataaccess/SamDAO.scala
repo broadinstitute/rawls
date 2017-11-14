@@ -15,6 +15,7 @@ trait SamDAO extends ErrorReportable {
   def registerUser(userInfo: UserInfo): Future[Option[UserStatus]]
   def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean]
   def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Boolean]
+  def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]]
 
   def getStatus(): Future[SubsystemStatus]
 }
@@ -32,7 +33,9 @@ object SamResourceTypeNames {
 }
 
 case class SamPolicy(memberEmails: Seq[String], actions: Seq[String], roles: Seq[String])
+case class SamPolicyWithName(policyName: String, policy: SamPolicy)
 
 class SamModelJsonSupport extends JsonSupport {
   implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
+  implicit val SamPolicyWithNameFormat = jsonFormat2(SamPolicyWithName)
 }

@@ -40,8 +40,8 @@ object UserService {
     Props(userServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, gpsDAO, gpsGroupSyncTopic, notificationDAO)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, gpsDAO, gpsGroupSyncTopic, notificationDAO, samDAO)
 
   sealed trait UserServiceMessage
   case class SetRefreshToken(token: UserRefreshToken) extends UserServiceMessage
@@ -98,7 +98,7 @@ object UserService {
   case class AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths with LazyLogging {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths with LazyLogging {
 
   import dataSource.dataAccess.driver.api._
   import spray.json.DefaultJsonProtocol._
@@ -336,8 +336,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.loadDirectProjectMembersWithEmail(projectName).map(RequestComplete(_))
+    samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo).flatMap { x =>
+      println(x)
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.loadDirectProjectMembersWithEmail(projectName).map(RequestComplete(_))
+      }
     }
   }
 

@@ -71,6 +71,14 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
   }
 
+  override def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = {
+    implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
+    implicit val SamPolicyWithNameFormat = jsonFormat2(SamPolicyWithName)
+    import spray.json.DefaultJsonProtocol._
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/${resourceId}/policies"
+    pipeline[Set[SamPolicyWithName]](userInfo) apply Get(url)
+  }
+
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
       case ure: spray.client.UnsuccessfulResponseException => ure.responseStatus.intValue / 100 == 5
