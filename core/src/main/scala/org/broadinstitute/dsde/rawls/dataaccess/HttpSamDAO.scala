@@ -10,15 +10,17 @@ import org.broadinstitute.dsde.rawls.util.Retry
 import spray.client.pipelining.{sendReceive, _}
 import spray.http.{HttpResponse, StatusCodes}
 import spray.httpx.SprayJsonSupport._
+import spray.json.DefaultJsonProtocol._
 import spray.httpx.UnsuccessfulResponseException
 import spray.httpx.unmarshalling.{Unmarshaller, _}
+import spray.json.DefaultJsonProtocol.jsonFormat3
 
 import scala.concurrent.Future
 
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) extends SamDAO with DsdeHttpDAO with Retry with LazyLogging  with spray.httpx.RequestBuilding {
+class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) extends SamDAO with DsdeHttpDAO with Retry with LazyLogging {
   import system.dispatcher
 
   private val samServiceURL = baseSamServiceURL
@@ -45,6 +47,24 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
       result.map { response =>
         response.status match {
           case s if s.isSuccess => response.entity.asString.toBoolean
+          case _ => false
+        }
+      }
+    }
+  }
+
+  override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Boolean] = {
+    implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
+
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/${resourceId}/policies/${policyName}"
+    val httpRequest = Put(url, policy)
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive
+    val result: Future[HttpResponse] = pipeline(httpRequest)
+
+    retry(when500) { () =>
+      result.map { response =>
+        response.status match {
+          case s if s.isSuccess => true
           case _ => false
         }
       }
