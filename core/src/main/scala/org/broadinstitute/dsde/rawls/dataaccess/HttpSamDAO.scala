@@ -37,6 +37,17 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
   }
 
+
+  override def getUserStatus(userInfo: UserInfo): Future[Option[UserStatus]] = {
+    val url = samServiceURL + "/register/user"
+    retry(when500) { () =>
+      pipeline[Option[UserStatus]](userInfo) apply Get(url) recover {
+        case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
+      }
+    }
+  }
+
+
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
       case ure: spray.client.UnsuccessfulResponseException => ure.responseStatus.intValue / 100 == 5
