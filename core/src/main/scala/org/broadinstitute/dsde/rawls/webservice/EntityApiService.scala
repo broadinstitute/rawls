@@ -25,8 +25,7 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
 
-  val entityRoutes = detach() {
-    requireUserInfo() { userInfo =>
+  val entityRoutes = requireUserInfo() { userInfo =>
       path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
         get {
           parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
@@ -146,5 +145,4 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
           }
         }
     }
-  }
 }

@@ -11,8 +11,8 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
 /**
- * Created by dvoet on 6/4/15.
- */
+  * Created by dvoet on 6/4/15.
+  */
 trait SubmissionApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
@@ -20,79 +20,77 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with UserI
   val submissionTimeout: FiniteDuration
 
 
-  val submissionRoutes = detach() {
-    requireUserInfo() { userInfo =>
-      path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
+  val submissionRoutes = requireUserInfo() { userInfo =>
+    path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
+      get {
+        requestContext =>
+          perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.ListSubmissions(WorkspaceName(workspaceNamespace, workspaceName)))
+      }
+    } ~
+      path("workspaces" / Segment / Segment / "submissionsCount") { (workspaceNamespace, workspaceName) =>
         get {
           requestContext =>
             perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.ListSubmissions(WorkspaceName(workspaceNamespace, workspaceName)))
+              WorkspaceService.CountSubmissions(WorkspaceName(workspaceNamespace, workspaceName)))
         }
       } ~
-        path("workspaces" / Segment / Segment / "submissionsCount") { (workspaceNamespace, workspaceName) =>
-          get {
-            requestContext =>
-              perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.CountSubmissions(WorkspaceName(workspaceNamespace, workspaceName)))
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
-          post {
-            entity(as[SubmissionRequest]) { submission =>
-              requestContext =>
-                perRequest(requestContext,
-                  WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                  WorkspaceService.CreateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission),
-                  submissionTimeout)
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "submissions" / "validate") { (workspaceNamespace, workspaceName) =>
-          post {
-            entity(as[SubmissionRequest]) { submission =>
-              requestContext =>
-                perRequest(requestContext,
-                  WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                  WorkspaceService.ValidateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission))
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
-          get {
-            requestContext =>
-              perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.GetSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
-          delete {
-            requestContext =>
-              perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.AbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment) { (workspaceNamespace, workspaceName, submissionId, workflowId) =>
-          get {
-            requestContext =>
-              perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.GetWorkflowMetadata(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId))
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment / "outputs") { (workspaceNamespace, workspaceName, submissionId, workflowId) =>
-          get {
-            requestContext =>
-              perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.GetWorkflowOutputs(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId))
-          }
-        } ~
-        path("submissions" / "queueStatus") {
-          get {
+      path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
+        post {
+          entity(as[SubmissionRequest]) { submission =>
             requestContext =>
               perRequest(requestContext,
                 WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.WorkflowQueueStatus)
+                WorkspaceService.CreateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission),
+                submissionTimeout)
           }
         }
-    }
+      } ~
+      path("workspaces" / Segment / Segment / "submissions" / "validate") { (workspaceNamespace, workspaceName) =>
+        post {
+          entity(as[SubmissionRequest]) { submission =>
+            requestContext =>
+              perRequest(requestContext,
+                WorkspaceService.props(workspaceServiceConstructor, userInfo),
+                WorkspaceService.ValidateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission))
+          }
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
+        get {
+          requestContext =>
+            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.GetSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
+        delete {
+          requestContext =>
+            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.AbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment) { (workspaceNamespace, workspaceName, submissionId, workflowId) =>
+        get {
+          requestContext =>
+            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.GetWorkflowMetadata(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId))
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment / "outputs") { (workspaceNamespace, workspaceName, submissionId, workflowId) =>
+        get {
+          requestContext =>
+            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.GetWorkflowOutputs(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId))
+        }
+      } ~
+      path("submissions" / "queueStatus") {
+        get {
+          requestContext =>
+            perRequest(requestContext,
+              WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.WorkflowQueueStatus)
+        }
+      }
   }
 }

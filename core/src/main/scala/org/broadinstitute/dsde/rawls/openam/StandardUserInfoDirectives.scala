@@ -22,8 +22,7 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
   }
 
 
-  def requireUserInfo(): Directive1[UserInfo] = {
-
+  def requireUserInfo(): Directive1[UserInfo] = detach(()) & {
     val userInfo = for {
       accessToken <- accessTokenHeaderDirective
       userEmail <- emailHeaderDirective
