@@ -12,6 +12,8 @@ import scala.concurrent.Future
 class MockSamDAO extends SamDAO {
   override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = Future.successful(None)
 
+  override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Boolean] = Future.successful(true)
+
   override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = Future.successful(true)
 
   override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Boolean] = Future.successful(true)

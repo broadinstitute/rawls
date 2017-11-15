@@ -221,19 +221,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def getOrCreateAllUsersGroup(dataAccess: DataAccess): ReadWriteAction[RawlsGroup] = {
-    dataAccess.rawlsGroupQuery.load(allUsersGroupRef) flatMap {
-      case Some(g) => DBIO.successful(g)
-      case None => createGroupInternal(allUsersGroupRef, dataAccess).asTry flatMap {
-        case Success(group) => DBIO.successful(group)
-        case Failure(t: HttpResponseException) if t.getStatusCode == StatusCodes.Conflict.intValue =>
-          // this case is where the group was not in our db but already in google
-          dataAccess.rawlsGroupQuery.save(RawlsGroup(allUsersGroupRef.groupName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(allUsersGroupRef.groupName)), Set.empty, Set.empty))
-        case Failure(regrets) => DBIO.failed(regrets)
-      }
-    }
-  }
-
   private def loadUser(userRef: RawlsUserRef): Future[RawlsUser] = dataSource.inTransaction { dataAccess => withUser(userRef, dataAccess)(DBIO.successful) }
 
   def listGroupsForUser(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
@@ -336,12 +323,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-//    for {
+//    val x: Future[Seq[RawlsBillingProjectMember]] = for {
 //      policies <- samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo)
 //      policyWithName <- policies
 //      role <- policyWithName.policy.roles
 //      email <- policyWithName.policy.memberEmails
 //    } yield RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(role))
+//
+//    x
 
     samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo).map { policies =>
       policies.flatMap { policyWithName =>
@@ -359,21 +348,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     gcsDAO.deleteProject(projectName) flatMap {
       _ => unregisterBillingProject(projectName)
     }
-  }
-
-  private def createBillingProjectGroupsNoGoogle(dataAccess: DataAccess, projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef]): ReadWriteAction[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
-    val groupsByRole = ProjectRoles.all.map { role =>
-      val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
-      val members: Set[RawlsUserRef] = role match {
-        case ProjectRoles.Owner => creators
-        case _ => Set.empty
-      }
-      role -> RawlsGroup(name, RawlsGroupEmail(gcsDAO.toGoogleGroupName(name)), members, Set.empty)
-    }.toMap
-
-    val groupSaves = DBIO.sequence(groupsByRole.values.map { dataAccess.rawlsGroupQuery.save })
-
-    groupSaves.map(_ => groupsByRole.toMap)
   }
 
   def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
@@ -404,22 +378,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     for {
       _ <- samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, projectAccessUpdate.role.toString, projectAccessUpdate.email, userInfo)
     } yield RequestComplete(StatusCodes.OK)
-  }
-
-  def loadMembersAndProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[(RawlsBillingProject, Set[RawlsUserRef], Set[RawlsGroupRef])] = {
-    dataSource.inTransaction { dataAccess =>
-      for {
-        (addUsers, addSubGroups) <- dataAccess.rawlsGroupQuery.loadFromEmail(projectAccessUpdate.email).map {
-          case Some(Left(user)) => (Set[RawlsUserRef](user), Set.empty[RawlsGroupRef])
-          case Some(Right(group)) => (Set.empty[RawlsUserRef], Set[RawlsGroupRef](group))
-          case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Member ${projectAccessUpdate.email} not found"))
-        }
-        projectOption <- dataAccess.rawlsBillingProjectQuery.load(projectName)
-      } yield {
-        (projectOption.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Project ${projectName.value} not found"))),
-          addUsers, addSubGroups)
-      }
-    }
   }
 
   def listGroupMembers(groupRef: RawlsGroupRef): Future[PerRequestMessage] = {
@@ -902,8 +860,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             _ <- dataSource.inTransaction { dataAccess =>
               dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
                 case None =>
-                  createBillingProjectGroupsNoGoogle(dataAccess, projectName, Set(RawlsUser(userInfo))) flatMap { groups =>
-                    dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
+                  DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)) flatMap { groups => //todo: groups is kinda screwy now because they're in sam
+                    dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, Map.empty, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
                   }
 
                 case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))

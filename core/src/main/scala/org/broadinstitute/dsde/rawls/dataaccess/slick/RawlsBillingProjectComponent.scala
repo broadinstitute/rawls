@@ -60,10 +60,7 @@ trait RawlsBillingProjectComponent {
       validateUserDefinedString(billingProject.projectName.value)
       uniqueResult(findBillingProjectByName(billingProject.projectName).result) flatMap {
         case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProject.projectName.value}] in database because it already exists")
-        case None =>
-          (rawlsBillingProjectQuery += marshalBillingProject(billingProject)) andThen
-            (rawlsBillingProjectGroupQuery ++= billingProject.groups.map { case (role, group) =>
-              RawlsBillingProjectGroupRecord(billingProject.projectName.value, group.groupName.value, role.toString)}).map { _ => billingProject }
+        case None => (rawlsBillingProjectQuery += marshalBillingProject(billingProject)).map { _ => billingProject }
       }
     }
 

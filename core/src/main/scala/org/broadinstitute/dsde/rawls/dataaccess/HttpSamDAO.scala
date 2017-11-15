@@ -37,8 +37,24 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
   }
 
+  override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Boolean] = {
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId"
+    val httpRequest = Post(url)
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive
+    val result: Future[HttpResponse] = pipeline(httpRequest)
+
+    retry(when500) { () =>
+      result.map { response =>
+        response.status match {
+          case s if s.isSuccess => true
+          case _ => false
+        }
+      }
+    }
+  }
+
   override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/${resourceId}/action/${action.value}"
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/action/${action.value}"
     val httpRequest = Get(url)
     val pipeline = addAuthHeader(userInfo) ~> sendReceive
     val result: Future[HttpResponse] = pipeline(httpRequest)
@@ -56,7 +72,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
   override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Boolean] = {
     implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
 
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/${resourceId}/policies/${policyName}"
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/$policyName"
     val httpRequest = Put(url, policy)
     val pipeline = addAuthHeader(userInfo) ~> sendReceive
     val result: Future[HttpResponse] = pipeline(httpRequest)
