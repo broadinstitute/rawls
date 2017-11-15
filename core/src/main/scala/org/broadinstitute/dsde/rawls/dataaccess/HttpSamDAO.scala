@@ -71,6 +71,26 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
   }
 
+  override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Boolean] = {
+    getResourcePolicies(resourceTypeName, resourceId, userInfo).flatMap { resourcePolicies =>
+      val targetPolicy = resourcePolicies.filter(_.policyName.equalsIgnoreCase(policyName)).head //get or else return 404 or something
+      val updatedMembers = targetPolicy.policy.memberEmails :+ memberEmail
+      val updatedPolicy = targetPolicy.policy.copy(memberEmails = updatedMembers)
+
+      overwritePolicy(resourceTypeName, resourceId, policyName, updatedPolicy, userInfo)
+    }
+  }
+
+  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Boolean] = {
+    getResourcePolicies(resourceTypeName, resourceId, userInfo).flatMap { resourcePolicies =>
+      val targetPolicy = resourcePolicies.filter(_.policyName.equalsIgnoreCase(policyName)).head //get or else return 404 or something
+      val updatedMembers = targetPolicy.policy.memberEmails.filterNot(_.equalsIgnoreCase(memberEmail))
+      val updatedPolicy = targetPolicy.policy.copy(memberEmails = updatedMembers)
+
+      overwritePolicy(resourceTypeName, resourceId, policyName, updatedPolicy, userInfo)
+    }
+  }
+
   override def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = {
     implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
     implicit val SamPolicyWithNameFormat = jsonFormat2(SamPolicyWithName)

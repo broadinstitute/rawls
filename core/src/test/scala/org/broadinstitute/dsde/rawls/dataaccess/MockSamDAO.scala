@@ -18,5 +18,9 @@ class MockSamDAO extends SamDAO {
 
   override def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicy]] = Future.successful(Set.empty)
 
+  override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Boolean] = Future.successful(true)
+
+  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Boolean] = Future.successful(true)
+
   override def getStatus(): Future[SubsystemStatus] = Future.successful(SubsystemStatus(true, None))
 }
