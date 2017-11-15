@@ -197,6 +197,7 @@ object Boot extends App with LazyLogging {
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO,
+        samDAO,
         notificationDAO,
         userServiceConstructor,
         genomicsServiceConstructor,

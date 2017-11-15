@@ -2,30 +2,31 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
+import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
+import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{SubsystemStatus, UserInfo, UserStatus}
 import org.broadinstitute.dsde.rawls.util.Retry
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
-import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
-import spray.client.pipelining.sendReceive
-import spray.client.pipelining._
+import spray.client.pipelining.{sendReceive, _}
 import spray.http._
 import spray.httpx.SprayJsonSupport._
-import spray.httpx.UnsuccessfulResponseException
-import spray.httpx.unmarshalling.FromResponseUnmarshaller
 import spray.json.DefaultJsonProtocol._
-import spray.json.{JsString, JsValue}
+import spray.httpx.UnsuccessfulResponseException
+import spray.httpx.marshalling.Marshaller
+import spray.httpx.unmarshalling.{Unmarshaller, _}
+import spray.json.{DefaultJsonProtocol, JsBoolean, JsValue, JsonParser, JsonPrinter, JsonReader, JsonWriter, PrettyPrinter, RootJsonReader, RootJsonWriter, jsonReader}
 
 import scala.concurrent.Future
 
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) extends SamDAO with DsdeHttpDAO with Retry with LazyLogging {
+class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) extends SamDAO with DsdeHttpDAO with Retry with LazyLogging  with spray.httpx.RequestBuilding {
   import system.dispatcher
 
   private val samServiceURL = baseSamServiceURL
 
-  private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =
+  private def pipeline[A: Unmarshaller](userInfo: UserInfo) =
     addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[A]
 
   override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = {
@@ -35,6 +36,18 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
         case notOK: UnsuccessfulResponseException if StatusCodes.Conflict == notOK.response.status => None
       }
     }
+  }
+
+  override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/${resourceId}/action/${action.value}"
+
+    // special RootJsonReader because DefaultJsonProtocol.BooleanJsonFormat is not root and the implicit
+    // conversion to an Unmarshaller needs a root
+    implicit val rootJsBooleanReader = new RootJsonReader[Boolean] {
+      override def read(json: JsValue): Boolean = DefaultJsonProtocol.BooleanJsonFormat.read(json)
+    }
+    
+    retry(when500) { () => pipeline[Boolean](userInfo) apply Get(url) }
   }
 
   private def when500( throwable: Throwable ): Boolean = {
