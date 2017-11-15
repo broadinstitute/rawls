@@ -165,9 +165,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def hasOneOfProjectRole(projectName: RawlsBillingProjectName, roles: Set[ProjectRoles.ProjectRole], userInfo: UserInfo): Future[Boolean] = {
-    samDAO.
-  }
+//  private def hasOneOfProjectRole(projectName: RawlsBillingProjectName, roles: Set[ProjectRoles.ProjectRole], userInfo: UserInfo): Future[Boolean] = {
+//    samDAO.
+//  }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
     gcsDAO.storeToken(userInfo, userRefreshToken.refreshToken).map(_ => RequestComplete(StatusCodes.Created))
@@ -315,8 +315,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def listBillingProjects(): Future[PerRequestMessage] = {
     samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo).map { x =>
-      x
-    }
+      x.map { y =>
+        RawlsBillingProjectMembership(RawlsBillingProjectName(y.resourceId), ProjectRoles.withName(y.accessPolicyName), CreationStatuses.Ready) //the project role coming from the accessPolicyName is wrong-ish, creation status is hardcoded, and project messages are missing!
+//        RawlsBillingProjectMembership(RawlsBillingProjectName(project.projectName), ProjectRoles.withName(projectGroup.role), CreationStatuses.withName(project.creationStatus), project.message)
+
+      }
+    }.map(RequestComplete(_))
   }
 //    dataSource.inTransaction { dataAccess =>
 //      withUser(userEmail, dataAccess) { user =>
@@ -865,7 +869,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             _ <- dataSource.inTransaction { dataAccess =>
               dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
                 case None =>
-                  DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)) flatMap { groups => //todo: groups is kinda screwy now because they're in sam
+                  //create the resource in sam
+                  //sync the owner policy to google in sam
+                  //get back that email address and to fire it off create (requires changing signature of RawlsBillingProject)
+                  //do we store that email in the billing project table?? or do we request the email from sam every time
+
+
+
+
+                  DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)) flatMap { groups => //todo: groups are kinda screwy now because they're in sam
                     dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, Map.empty, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
                   }
 
