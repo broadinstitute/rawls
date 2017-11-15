@@ -56,6 +56,7 @@ trait RawlsBillingProjectComponent {
 
   object rawlsBillingProjectQuery extends TableQuery(new RawlsBillingProjectTable(_)) {
 
+    //already updated
     def create(billingProject: RawlsBillingProject): ReadWriteAction[RawlsBillingProject] = {
       validateUserDefinedString(billingProject.projectName.value)
       uniqueResult(findBillingProjectByName(billingProject.projectName).result) flatMap {
@@ -64,10 +65,12 @@ trait RawlsBillingProjectComponent {
       }
     }
 
+    //no changes necessary
     def updateBillingProjects(projects: Traversable[RawlsBillingProject]): WriteAction[Seq[Int]] = {
       DBIO.sequence(projects.map(project => rawlsBillingProjectQuery.filter(_.projectName === project.projectName.value).update(marshalBillingProject(project))).toSeq)
     }
 
+    //no changes necessary
     def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadWriteAction[Seq[RawlsBillingProject]] = {
       filter(_.creationStatus === status.toString).result.flatMap { projectRecords =>
         DBIO.sequence(projectRecords.map { projectRec => load(projectRec) })
@@ -81,6 +84,7 @@ trait RawlsBillingProjectComponent {
       }
     }
 
+    //requires changes
     def load(projectRec: RawlsBillingProjectRecord): ReadWriteAction[RawlsBillingProject] = {
       findBillingProjectGroups(RawlsBillingProjectName(projectRec.projectName)).result.flatMap { groups =>
         DBIO.sequence(groups.map { group =>
@@ -93,31 +97,7 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    /**
-     * loads the immediate (i.e. not recursive) users and groups for a project
-     * @param rawlsProjectName
-     * @return
-     */
-    def loadDirectProjectMembersWithEmail(rawlsProjectName: RawlsBillingProjectName): ReadWriteAction[Seq[RawlsBillingProjectMember]] = {
-      for {
-        roleGroupRecs <- rawlsBillingProjectGroupQuery.filter(_.projectName === rawlsProjectName.value).result
-        roleGroups <- rawlsGroupQuery.load(roleGroupRecs.map(roleRec => RawlsGroupRef(RawlsGroupName(roleRec.groupName))))
-        users <- rawlsUserQuery.load(roleGroups.flatMap(_.users))
-        subGroups <- rawlsGroupQuery.load(roleGroups.flatMap(_.subGroups))
-      } yield {
-        val userEmailsById = users.map(u => u.userSubjectId -> u.userEmail).toMap
-        val groupEmailsById = subGroups.map(sg => sg.groupName -> sg.groupEmail).toMap
-        val groupAndRole = roleGroupRecs.map { rec => rec.groupName -> rec.role }.toMap
-
-        roleGroups.flatMap { group =>
-          val subGroupMembers = group.subGroups.map(sg => RawlsBillingProjectMember(RawlsUserEmail(groupEmailsById(sg.groupName).value), ProjectRoles.withName(groupAndRole(group.groupName.value))))
-          val userMembers = group.users.map(u => RawlsBillingProjectMember(userEmailsById(u.userSubjectId), ProjectRoles.withName(groupAndRole(group.groupName.value))))
-
-          subGroupMembers ++ userMembers
-        }
-      }
-    }
-
+    //requires changes
     def delete(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] = {
       findBillingGroups(billingProjectName).result.flatMap { groupNames =>
         rawlsBillingProjectGroupQuery.filter(_.projectName === billingProjectName.value).delete andThen
@@ -126,6 +106,7 @@ trait RawlsBillingProjectComponent {
       }
     }
 
+    //requires changes
     private def findBillingGroups(billingProjectName: RawlsBillingProjectName) = {
       rawlsBillingProjectGroupQuery.filter(_.projectName === billingProjectName.value).map(_.groupName)
     }

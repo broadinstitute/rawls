@@ -69,7 +69,6 @@ object UserService {
   case object AdminDeleteAllRefreshTokens extends UserServiceMessage
 
   case object ListBillingProjects extends UserServiceMessage
-  case class AdminListBillingProjectsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AdminAddUserToBillingProject(projectName: RawlsBillingProjectName, accessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class AdminRemoveUserFromBillingProject(projectName: RawlsBillingProjectName, accessUpdate: ProjectAccessUpdate) extends UserServiceMessage
@@ -112,8 +111,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case ListGroupsForUser(userEmail) => listGroupsForUser(userEmail) pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
-    case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
-    case AdminListBillingProjectsForUser(userEmail) => asFCAdmin { listBillingProjects(userEmail) } pipeTo sender
+    case ListBillingProjects => listBillingProjects pipeTo sender
     case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
     case AdminAddUserToBillingProject(projectName, projectAccessUpdate) => asFCAdmin { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
     case AdminRemoveUserFromBillingProject(projectName, projectAccessUpdate) => asFCAdmin { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
@@ -165,6 +163,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case true => op
       case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a project owner.")))
     }
+  }
+
+  private def hasOneOfProjectRole(projectName: RawlsBillingProjectName, roles: Set[ProjectRoles.ProjectRole], userInfo: UserInfo): Future[Boolean] = {
+    samDAO.
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
@@ -311,16 +313,19 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def listBillingAccounts(): Future[PerRequestMessage] =
     gcsDAO.listBillingAccounts(userInfo) map(RequestComplete(_))
 
-  // when called for the current user, admin access is not required
-  def listBillingProjects(userEmail: RawlsUserEmail): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withUser(userEmail, dataAccess) { user =>
-        for {
-          groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
-          memberships <- dataAccess.rawlsBillingProjectQuery.listProjectMembershipsForGroups(groups)
-        } yield memberships
-      } map(RequestComplete(_))
+  def listBillingProjects(): Future[PerRequestMessage] = {
+    samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo).map { x =>
+      x
     }
+  }
+//    dataSource.inTransaction { dataAccess =>
+//      withUser(userEmail, dataAccess) { user =>
+//        for {
+//          groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
+//          memberships <- dataAccess.rawlsBillingProjectQuery.listProjectMembershipsForGroups(groups)
+//        } yield memberships
+//      } map(RequestComplete(_))
+//    }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
 //    val x: Future[Seq[RawlsBillingProjectMember]] = for {

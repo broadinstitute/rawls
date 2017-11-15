@@ -107,6 +107,14 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
   }
 
+  override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
+    implicit val SamResourceIdWithPolicyNameFormat = jsonFormat2(SamResourceIdWithPolicyName)
+    import spray.json.DefaultJsonProtocol._
+
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}"
+    pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply Get(url)
+  }
+
   override def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = {
     implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
     implicit val SamPolicyWithNameFormat = jsonFormat2(SamPolicyWithName)
