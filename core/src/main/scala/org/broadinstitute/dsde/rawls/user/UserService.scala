@@ -324,10 +324,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo).map { policies =>
       policies.flatMap { policyWithName =>
-        policyWithName.policy.roles.flatMap { role =>
-          policyWithName.policy.memberEmails.map { email =>
-            RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(role))
-          }
+        policyWithName.policy.memberEmails.map { email =>
+          RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(policyWithName.policyName))
         }
       }.toSeq
     }.map(RequestComplete(_))
