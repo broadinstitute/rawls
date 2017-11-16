@@ -111,22 +111,14 @@ trait RawlsBillingProjectComponent {
       rawlsBillingProjectGroupQuery.filter(_.projectName === billingProjectName.value).map(_.groupName)
     }
 
-    /**
-     * Given a list of groups, only some of which may be associated to projects, figure out which groups
-     * are associated to projects and the role for the group.
-     *
-     * @param groups
-     * @return
-     */
-    def listProjectMembershipsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[RawlsBillingProjectMembership]] = {
+    def getBillingProjectDetails(projectNames: Set[RawlsBillingProjectName]): ReadAction[Map[String, (CreationStatuses.CreationStatus, Option[String])]] = {
       val query = for {
-        projectGroup <- rawlsBillingProjectGroupQuery if (projectGroup.groupName.inSetBind(groups.map(_.groupName.value)))
-        project <- rawlsBillingProjectQuery if (project.projectName === projectGroup.projectName)
-      } yield (project, projectGroup)
+        project <- rawlsBillingProjectQuery if (project.projectName.inSetBind(projectNames.map(_.value)))
+      } yield project
 
-      query.result.map(_.map { case (project, projectGroup) =>
-        RawlsBillingProjectMembership(RawlsBillingProjectName(project.projectName), ProjectRoles.withName(projectGroup.role), CreationStatuses.withName(project.creationStatus), project.message)
-      })
+      query.result.map(_.map { project =>
+        project.projectName -> (CreationStatuses.withName(project.creationStatus), project.message)
+      }.toMap)
     }
 
     /**

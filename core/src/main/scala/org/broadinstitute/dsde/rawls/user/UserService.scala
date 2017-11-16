@@ -308,28 +308,22 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   import spray.json.DefaultJsonProtocol._
-  import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsBillingProjectNameFormat
 
   def listBillingAccounts(): Future[PerRequestMessage] =
     gcsDAO.listBillingAccounts(userInfo) map(RequestComplete(_))
 
   def listBillingProjects(): Future[PerRequestMessage] = {
-    samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo).map { x =>
-      x.map { y =>
-        RawlsBillingProjectMembership(RawlsBillingProjectName(y.resourceId), ProjectRoles.withName(y.accessPolicyName), CreationStatuses.Ready) //the project role coming from the accessPolicyName is wrong-ish, creation status is hardcoded, and project messages are missing!
-//        RawlsBillingProjectMembership(RawlsBillingProjectName(project.projectName), ProjectRoles.withName(projectGroup.role), CreationStatuses.withName(project.creationStatus), project.message)
-
-      }
-    }.map(RequestComplete(_))
+    dataSource.inTransaction { dataAccess =>
+      DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).flatMap { resourceIdsWithPolicyNames =>
+        dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))).map { projectDetails =>
+          resourceIdsWithPolicyNames.map { idWithPolicyName =>
+            println(projectDetails(idWithPolicyName.resourceId)._2)
+            RawlsBillingProjectMembership(RawlsBillingProjectName(idWithPolicyName.resourceId), ProjectRoles.withName(idWithPolicyName.accessPolicyName), projectDetails(idWithPolicyName.resourceId)._1, Option("this is a fake message used as a sanity check"))
+          }
+        }
+      }.map(RequestComplete(_))
+    }
   }
-//    dataSource.inTransaction { dataAccess =>
-//      withUser(userEmail, dataAccess) { user =>
-//        for {
-//          groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
-//          memberships <- dataAccess.rawlsBillingProjectQuery.listProjectMembershipsForGroups(groups)
-//        } yield memberships
-//      } map(RequestComplete(_))
-//    }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
 //    val x: Future[Seq[RawlsBillingProjectMember]] = for {
