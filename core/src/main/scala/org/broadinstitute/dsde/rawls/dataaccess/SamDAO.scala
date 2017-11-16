@@ -43,7 +43,7 @@ case class SamPolicyWithName(policyName: String, policy: SamPolicy)
 case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: String)
 //case class SamSyncReport(report: Map[RawlsGroupEmail, Seq[SyncReportItem]])
 
-class SamModelJsonSupport extends JsonSupport {
+object SamModelJsonSupport extends JsonSupport {
   implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
   implicit val SamPolicyWithNameFormat = jsonFormat2(SamPolicyWithName)
   implicit val SamResourceIdWithPolicyNameFormat = jsonFormat2(SamResourceIdWithPolicyName)

@@ -2,10 +2,12 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{RawlsGroupEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus, WorkspaceJsonSupport}
+import org.broadinstitute.dsde.rawls.dataaccess.SamModelJsonSupport._
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsGroupEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus, WorkspaceJsonSupport}
 import org.broadinstitute.dsde.rawls.util.Retry
 import spray.client.pipelining.{sendReceive, _}
 import spray.http._
@@ -72,20 +74,17 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
   }
 
   override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/action/${action.value}"
-
     // special RootJsonReader because DefaultJsonProtocol.BooleanJsonFormat is not root and the implicit
     // conversion to an Unmarshaller needs a root
     implicit val rootJsBooleanReader = new RootJsonReader[Boolean] {
       override def read(json: JsValue): Boolean = DefaultJsonProtocol.BooleanJsonFormat.read(json)
     }
 
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/action/${action.value}"
     retry(when500) { () => pipeline[Boolean](userInfo) apply Get(url) }
   }
 
   override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Boolean] = {
-    implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
-
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/$policyName"
     val httpRequest = Put(url, policy)
     val pipeline = addAuthHeader(userInfo) ~> sendReceive
@@ -103,7 +102,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
 
   override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Boolean] = {
     getResourcePolicies(resourceTypeName, resourceId, userInfo).flatMap { resourcePolicies =>
-      val targetPolicy = resourcePolicies.filter(_.policyName.equalsIgnoreCase(policyName)).head //get or else return 404 or something
+      val targetPolicy = resourcePolicies.find(_.policyName.equalsIgnoreCase(policyName)).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"policy $policyName not found")))
       val updatedMembers = targetPolicy.policy.memberEmails :+ memberEmail
       val updatedPolicy = targetPolicy.policy.copy(memberEmails = updatedMembers)
 
@@ -113,7 +112,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
 
   override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Boolean] = {
     getResourcePolicies(resourceTypeName, resourceId, userInfo).flatMap { resourcePolicies =>
-      val targetPolicy = resourcePolicies.filter(_.policyName.equalsIgnoreCase(policyName)).head //get or else return 404 or something
+      val targetPolicy = resourcePolicies.find(_.policyName.equalsIgnoreCase(policyName)).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"policy $policyName not found")))
       val updatedMembers = targetPolicy.policy.memberEmails.filterNot(_.equalsIgnoreCase(memberEmail))
       val updatedPolicy = targetPolicy.policy.copy(memberEmails = updatedMembers)
 
@@ -128,25 +127,19 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
 //    import WorkspaceJsonSupport.ErrorReportFormat
 //    implicit val SyncReportItemFormat = jsonFormat3(SyncReportItem)
 //
-//    pipeline[Map[RawlsGroupEmail, Seq[SyncReportItem]]](userInfo) apply Post(url) //todo: retries
+//    retry(when500) { () => pipeline[Map[RawlsGroupEmail, Seq[SyncReportItem]]](userInfo) apply Post(url) }
 
     Future.successful(Map.empty)
   }
 
   override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
-    implicit val SamResourceIdWithPolicyNameFormat = jsonFormat2(SamResourceIdWithPolicyName)
-    import spray.json.DefaultJsonProtocol._
-
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}"
-    pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply Get(url) //todo: retries
+    retry(when500) { () => pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply Get(url) }
   }
 
   override def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = {
-    implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
-    implicit val SamPolicyWithNameFormat = jsonFormat2(SamPolicyWithName)
-    import spray.json.DefaultJsonProtocol._
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/${resourceId}/policies"
-    pipeline[Set[SamPolicyWithName]](userInfo) apply Get(url) //todo: retries
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies"
+    retry(when500) { () => pipeline[Set[SamPolicyWithName]](userInfo) apply Get(url) }
   }
 
   private def when500( throwable: Throwable ): Boolean = {
