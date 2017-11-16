@@ -7,6 +7,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAc
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.dataaccess.SamModelJsonSupport._
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsGroupEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus, WorkspaceJsonSupport}
 import org.broadinstitute.dsde.rawls.util.Retry
 import spray.client.pipelining.{sendReceive, _}
@@ -121,15 +123,8 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
   }
 
   override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, userInfo: UserInfo): Future[Map[RawlsGroupEmail, Seq[SyncReportItem]]] = {
-//    val url = samServiceURL + s"/api/google/${resourceTypeName.value}/$resourceId/$policyName/sync"
-//
-//    import spray.json.DefaultJsonProtocol._
-//    import WorkspaceJsonSupport.ErrorReportFormat
-//    implicit val SyncReportItemFormat = jsonFormat3(SyncReportItem)
-//
-//    retry(when500) { () => pipeline[Map[RawlsGroupEmail, Seq[SyncReportItem]]](userInfo) apply Post(url) }
-
-    Future.successful(Map.empty)
+    val url = samServiceURL + s"/api/google/${resourceTypeName.value}/$resourceId/$policyName/sync"
+    retry(when500) { () => pipeline[Map[RawlsGroupEmail, Seq[SyncReportItem]]](userInfo) apply Post(url) }
   }
 
   override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
