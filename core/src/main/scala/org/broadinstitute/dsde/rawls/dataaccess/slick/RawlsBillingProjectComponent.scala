@@ -25,16 +25,6 @@ trait RawlsBillingProjectComponent {
     def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount, message) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
 
-  class RawlsBillingProjectGroupTable(tag: Tag) extends Table[RawlsBillingProjectGroupRecord](tag, "BILLING_PROJECT_GROUP") {
-    def projectName = column[String]("PROJECT_NAME", O.Length(254))
-    def groupName = column[String]("GROUP_NAME", O.Length(254))
-    def role = column[String]("PROJECT_ROLE", O.Length(254))
-
-    def pk = primaryKey("PK_BILLING_PROJECT_GROUP", (projectName, groupName, role))
-
-    def * = (projectName, groupName, role) <> (RawlsBillingProjectGroupRecord.tupled, RawlsBillingProjectGroupRecord.unapply)
-  }
-
   class RawlsBillingProjectOperationTable(tag: Tag) extends Table[RawlsBillingProjectOperationRecord](tag, "BILLING_PROJECT_OPERATION") {
     def projectName = column[String]("PROJECT_NAME", O.Length(254))
     def operationName = column[String]("OPERATION_NAME", O.Length(254))
@@ -48,11 +38,9 @@ trait RawlsBillingProjectComponent {
     def * = (projectName, operationName, operationId, done, errorMessage, api) <> (RawlsBillingProjectOperationRecord.tupled, RawlsBillingProjectOperationRecord.unapply)
   }
 
-  protected val rawlsBillingProjectGroupQuery = TableQuery[RawlsBillingProjectGroupTable]
   protected val rawlsBillingProjectOperationQuery = TableQuery[RawlsBillingProjectOperationTable]
 
   private type RawlsBillingProjectQuery = Query[RawlsBillingProjectTable, RawlsBillingProjectRecord, Seq]
-  private type RawlsBillingProjectGroupQuery = Query[RawlsBillingProjectGroupTable, RawlsBillingProjectGroupRecord, Seq]
 
   object rawlsBillingProjectQuery extends TableQuery(new RawlsBillingProjectTable(_)) {
 
@@ -70,45 +58,24 @@ trait RawlsBillingProjectComponent {
       DBIO.sequence(projects.map(project => rawlsBillingProjectQuery.filter(_.projectName === project.projectName.value).update(marshalBillingProject(project))).toSeq)
     }
 
-    //no changes necessary
+    //requires changes
     def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadWriteAction[Seq[RawlsBillingProject]] = {
       filter(_.creationStatus === status.toString).result.flatMap { projectRecords =>
-        DBIO.sequence(projectRecords.map { projectRec => load(projectRec) })
+        DBIO.sequence(projectRecords.map { projectRec => load(RawlsBillingProjectName(projectRec.projectName)).map(_.get) }) //todo (get)
       }
     }
 
+    //updated
     def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
-      uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).flatMap {
-        case None => DBIO.successful(None)
-        case Some(projectRec) => load(projectRec).map(Option(_))
+      uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).map {
+        case None => None
+        case Some(projectRec) => Option(unmarshalBillingProject(projectRec, Map.empty))
       }
     }
 
-    //requires changes
-    def load(projectRec: RawlsBillingProjectRecord): ReadWriteAction[RawlsBillingProject] = {
-      findBillingProjectGroups(RawlsBillingProjectName(projectRec.projectName)).result.flatMap { groups =>
-        DBIO.sequence(groups.map { group =>
-          for {
-            loadedGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(group.groupName)))
-          } yield (ProjectRoles.withName(group.role), loadedGroup.get)
-        }) map { groups =>
-          unmarshalBillingProject(projectRec, groups.toMap)
-        }
-      }
-    }
-
-    //requires changes
+    //already updated
     def delete(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] = {
-      findBillingGroups(billingProjectName).result.flatMap { groupNames =>
-        rawlsBillingProjectGroupQuery.filter(_.projectName === billingProjectName.value).delete andThen
-          DBIO.sequence(groupNames.map { groupName => rawlsGroupQuery.delete(RawlsGroupRef(RawlsGroupName(groupName)))}) andThen
-            rawlsBillingProjectQuery.filter(_.projectName === billingProjectName.value).delete map { count => count > 0 }
-      }
-    }
-
-    //requires changes
-    private def findBillingGroups(billingProjectName: RawlsBillingProjectName) = {
-      rawlsBillingProjectGroupQuery.filter(_.projectName === billingProjectName.value).map(_.groupName)
+      rawlsBillingProjectQuery.filter(_.projectName === billingProjectName.value).delete map { count => count > 0 }
     }
 
     def getBillingProjectDetails(projectNames: Set[RawlsBillingProjectName]): ReadAction[Map[String, (CreationStatuses.CreationStatus, Option[String])]] = {
@@ -121,22 +88,22 @@ trait RawlsBillingProjectComponent {
       }.toMap)
     }
 
-    /**
-     * Checks that user has at least one of roles for the project specified by projectName. Will recurse through sub groups.
-     * @param projectName
-     * @param user
-     * @param roles
-     * @return
-     */
-    def hasOneOfProjectRole(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]): ReadWriteAction[Boolean] = {
-      val projectUsersAction = findBillingProjectGroupsForRoles(projectName, roles).result.flatMap { groups =>
-        DBIO.sequence(groups.map { group =>
-          rawlsGroupQuery.isGroupMember(RawlsGroupRef(RawlsGroupName(group.groupName)), user)
-        })
-      }
-
-      projectUsersAction.map { isMembers => isMembers.contains(true) }
-    }
+//    /**
+//     * Checks that user has at least one of roles for the project specified by projectName. Will recurse through sub groups.
+//     * @param projectName
+//     * @param user
+//     * @param roles
+//     * @return
+//     */
+//    def hasOneOfProjectRole(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]): ReadWriteAction[Boolean] = {
+//      val projectUsersAction = findBillingProjectGroupsForRoles(projectName, roles).result.flatMap { groups =>
+//        DBIO.sequence(groups.map { group =>
+//          rawlsGroupQuery.isGroupMember(RawlsGroupRef(RawlsGroupName(group.groupName)), user)
+//        })
+//      }
+//
+//      projectUsersAction.map { isMembers => isMembers.contains(true) }
+//    }
 
     def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] = {
       (rawlsBillingProjectOperationQuery ++= operations).map(_ => ())
@@ -160,14 +127,6 @@ trait RawlsBillingProjectComponent {
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {
       filter(_.projectName === name.value)
-    }
-
-    private def findBillingProjectGroups(name: RawlsBillingProjectName): RawlsBillingProjectGroupQuery = {
-      rawlsBillingProjectGroupQuery filter (_.projectName === name.value)
-    }
-
-    private def findBillingProjectGroupsForRoles(name: RawlsBillingProjectName, roles: Set[ProjectRole]): RawlsBillingProjectGroupQuery = {
-      rawlsBillingProjectGroupQuery filter { rec => rec.projectName === name.value && rec.role.inSetBind(roles.map(_.toString)) }
     }
   }
 }

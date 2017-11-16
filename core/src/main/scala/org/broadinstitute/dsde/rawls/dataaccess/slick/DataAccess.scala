@@ -32,7 +32,6 @@ trait DataAccess
     // if table X has a Foreign Key to table Y, delete table X first
 
     TableQuery[WorkspaceAccessTable].delete andThen             // FK to group, workspace
-      TableQuery[RawlsBillingProjectGroupTable].delete andThen    // FK to group, billingproject
       TableQuery[EntityAttributeTable].delete andThen             // FK to entity
       TableQuery[WorkspaceAttributeTable].delete andThen          // FK to entity, workspace
       TableQuery[SubmissionAttributeTable].delete andThen         // FK to entity, submissionvalidation

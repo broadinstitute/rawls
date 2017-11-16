@@ -54,19 +54,13 @@ object ProjectRoles {
   def withName(name: String): ProjectRole = name.toLowerCase match {
     case "owner" => Owner
     case "user" => User
-    case "workspace-creator" => WorkspaceCreator
-    case "batch-compute-user" => BatchComputeUser
-    case "notebook-user" => NotebookUser
     case _ => throw new RawlsException(s"invalid ProjectRole [${name}]")
   }
 
   case object Owner extends ProjectRole
   case object User extends ProjectRole
-  case object WorkspaceCreator extends ProjectRole
-  case object BatchComputeUser extends ProjectRole
-  case object NotebookUser extends ProjectRole
 
-  val all: Set[ProjectRole] = Set(Owner, User, WorkspaceCreator, BatchComputeUser, NotebookUser)
+  val all: Set[ProjectRole] = Set(Owner, User)
 }
 
 object CreationStatuses {

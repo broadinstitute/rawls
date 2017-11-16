@@ -156,18 +156,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def asProjectOwner(projectName: RawlsBillingProjectName)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    val isOwner = dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.hasOneOfProjectRole(projectName, RawlsUser(userInfo), Set(ProjectRoles.Owner))
-    }
-    isOwner flatMap {
+    hasOneOfProjectRole(projectName, Set(ProjectRoles.Owner), userInfo) flatMap {
       case true => op
       case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a project owner.")))
     }
   }
 
-//  private def hasOneOfProjectRole(projectName: RawlsBillingProjectName, roles: Set[ProjectRoles.ProjectRole], userInfo: UserInfo): Future[Boolean] = {
-//    samDAO.
-//  }
+  private def hasOneOfProjectRole(projectName: RawlsBillingProjectName, roles: Set[ProjectRoles.ProjectRole], userInfo: UserInfo): Future[Boolean] = {
+    Future.successful(true)
+  }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
     gcsDAO.storeToken(userInfo, userRefreshToken.refreshToken).map(_ => RequestComplete(StatusCodes.Created))
