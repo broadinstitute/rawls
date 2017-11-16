@@ -32,7 +32,7 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
 
   // Strip out unique IDs from metrics by providing a redactedUriExpansion
   override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
-    (Slash ~ "api" ~ Slash ~ "v1").? / "configurations" / Segment / Segment / Segment
+    (Slash ~ "api" ~ Slash ~ "v1").? / ("configurations" | "methods") / Segment / Segment / Segment
   )
 
   private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =

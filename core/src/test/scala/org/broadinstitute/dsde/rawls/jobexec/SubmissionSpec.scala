@@ -175,9 +175,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         execServiceCluster,
         slickDataSource,
+        gcsDAO.getBucketServiceAccountCredential,
+        250 milliseconds,
         workbenchMetricBaseName = workbenchMetricBaseName
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
-      val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
       gcsDAO.storeToken(userInfo, subTestData.refreshToken)
       val directoryDAO = new MockUserDirectoryDAO
@@ -187,7 +188,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
-        directoryDAO,
         gpsDAO,
         "test-topic-name",
         notificationDAO
@@ -195,8 +195,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
       val genomicsServiceConstructor = GenomicsService.constructor(
         slickDataSource,
-        gcsDAO,
-        directoryDAO
+        gcsDAO
       )_
 
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
@@ -211,8 +210,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         execServiceBatchSize,
         gcsDAO,
         notificationDAO,
-        submissionSupervisor,
-        bucketDeletionMonitor,
         userServiceConstructor,
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
@@ -226,7 +223,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       finally {
         // for failed tests we also need to poison pill
         submissionSupervisor ! PoisonPill
-        bucketDeletionMonitor ! PoisonPill
         googleGroupSyncMonitorSupervisor ! PoisonPill
       }
     }
@@ -277,7 +273,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val tr = Try(Await.result(system.actorSelection("/user/" + submissionSupervisorActorName + "/" + submissionId).resolveOne(100 milliseconds), Duration.Inf))
       subActor = tr.toOption
       tr.isSuccess
-    }, 250 milliseconds)
+    }, 1 second)
     subActor.get
   }
 
@@ -381,15 +377,63 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  it should "return a successful Submission but no started workflows when given a method configuration with unparseable inputs" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "UnparseableMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+  it should "400 when given a method configuration with unparseable inputs" in withWorkspaceService { workspaceService =>
+    val submissionRq = SubmissionRequest("dsde", "UnparseableInputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val rqComplete = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+    }
+
+    assertResult(StatusCodes.BadRequest) {
+      rqComplete.errorReport.statusCode.get
+    }
+
+    assert {
+      rqComplete.errorReport.message.contains("Invalid inputs: three_step.cgrep.pattern")
+    }
+  }
+
+  it should "400 when given a method configuration with unparseable outputs" in withWorkspaceService { workspaceService =>
+    val submissionRq = SubmissionRequest("dsde", "UnparseableOutputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val rqComplete = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+    }
+
+    assertResult(StatusCodes.BadRequest) {
+      rqComplete.errorReport.statusCode.get
+    }
+
+    assert {
+      rqComplete.errorReport.message.contains("Invalid outputs: three_step.cgrep.count")
+    }
+  }
+
+  it should "400 when given a method configuration with unparseable inputs and outputs" in withWorkspaceService { workspaceService =>
+    val submissionRq = SubmissionRequest("dsde", "UnparseableBothMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val rqComplete = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+    }
+
+    assertResult(StatusCodes.BadRequest) {
+      rqComplete.errorReport.statusCode.get
+    }
+
+    assert {
+      rqComplete.errorReport.message.contains("Invalid inputs: three_step.cgrep.pattern")
+    }
+    assert {
+      rqComplete.errorReport.message.contains("Invalid outputs: three_step.cgrep.count")
+    }
+  }
+
+  it should "return a successful Submission when given a method configuration with empty outputs" in withWorkspaceService { workspaceService =>
+    val submissionRq = SubmissionRequest("dsde", "EmptyOutputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
     val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
     val (status, newSubmissionReport) = rqComplete.response
     assertResult(StatusCodes.Created) {
       status
     }
 
-    assert( newSubmissionReport.workflows.size == 0 )
+    assert( newSubmissionReport.workflows.size == 3 )
 
     checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
   }
@@ -492,16 +536,46 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  it should "report validated inputs and unrunnable workflows when given a method configuration with unparseable inputs" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "UnparseableMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
-    val vComplete = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
-    val (vStatus, vData) = vComplete.response
-    assertResult(StatusCodes.OK) {
-      vStatus
+  it should "400 when given a method configuration with unparseable inputs" in withWorkspaceService { workspaceService =>
+    val submissionRq = SubmissionRequest("dsde", "UnparseableInputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val rqComplete = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
 
-    assert(vData.validEntities.isEmpty)
-    assertResult(testData.sset1.attributes(AttributeName.withDefaultNS("samples")).asInstanceOf[AttributeEntityReferenceList].list.size) { vData.invalidEntities.length }
+    assertResult(StatusCodes.BadRequest) {
+      rqComplete.errorReport.statusCode.get
+    }
+
+    assert {
+      rqComplete.errorReport.message.contains("Invalid inputs: three_step.cgrep.pattern")
+    }
+  }
+
+  it should "400 when given a method configuration with unparseable outputs" in withWorkspaceService { workspaceService =>
+    val submissionRq = SubmissionRequest("dsde", "UnparseableOutputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val rqComplete = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+    }
+
+    assertResult(StatusCodes.BadRequest) {
+      rqComplete.errorReport.statusCode.get
+    }
+
+    assert {
+      rqComplete.errorReport.message.contains("Invalid outputs: three_step.cgrep.count")
+    }
+  }
+
+  it should "report a successful validation when given a method configuration with empty outputs" in withWorkspaceService { workspaceService =>
+    val submissionRq = SubmissionRequest("dsde", "EmptyOutputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val rqComplete = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
+    val (status, validation) = rqComplete.response
+    assertResult(StatusCodes.OK) {
+      status
+    }
+
+    assertResult(3) { validation.validEntities.size }
+    assert { validation.invalidEntities.isEmpty }
   }
 
   it should "report validated inputs and a mixture of started and unstarted workflows where method configuration inputs are missing on some entities" in withWorkspaceService { workspaceService =>

@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls
 import java.io.StringReader
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
-import javax.naming.directory.AttributeInUseException
 
 import akka.actor.ActorSystem
 import akka.io.IO
@@ -13,7 +12,7 @@ import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
-import com.typesafe.config.{ConfigFactory, ConfigObject, ConfigRenderOptions}
+import com.typesafe.config.{ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import slick.backend.DatabaseConfig
 import slick.driver.JdbcDriver
@@ -21,25 +20,21 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor}
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
+import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
-import spray.http.StatusCodes
-import spray.json._
 
 import scala.collection.JavaConversions._
-import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 object Boot extends App with LazyLogging {
   private def startup(): Unit = {
@@ -68,9 +63,6 @@ object Boot extends App with LazyLogging {
     if(initWithLiquibase) {
       slickDataSource.initWithLiquibase(liquibaseChangeLog, changelogParams)
     }
-
-    // create or replace ldap schema
-    Await.result(slickDataSource.database.run(slickDataSource.dataAccess.initLdap()), Duration.Inf)
 
     val metricsConf = conf.getConfig("metrics")
     val metricsPrefix = {
@@ -133,19 +125,10 @@ object Boot extends App with LazyLogging {
       workbenchMetricBaseName = metricsPrefix
     )
 
-    val ldapConfig = conf.getConfig("userLdap")
-    val userDirDAO = new JndiUserDirectoryDAO(
-      ldapConfig.getString("providerUrl"),
-      ldapConfig.getString("user"),
-      ldapConfig.getString("password"),
-      ldapConfig.getString("groupDn"),
-      ldapConfig.getString("memberAttribute"),
-      ldapConfig.getStringList("userObjectClasses").toList,
-      ldapConfig.getStringList("userAttributes").toList,
-      ldapConfig.getString("userDnFormat")
-    )
+    val samConfig = conf.getConfig("sam")
+    val samDAO = new HttpSamDAO(samConfig.getString("server"))
 
-    enableServiceAccount(gcsDAO, userDirDAO)
+    enableServiceAccount(gcsDAO, samDAO)
 
     system.registerOnTermination {
       slickDataSource.databaseConfig.db.shutdown
@@ -164,16 +147,6 @@ object Boot extends App with LazyLogging {
 
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
 
-    val submissionMonitorConfig = conf.getConfig("submissionmonitor")
-    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      shardedExecutionServiceCluster,
-      slickDataSource,
-      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
-      workbenchMetricBaseName = metricsPrefix
-    ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
-
-    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
-
     val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
     val projectEditors = gcsConfig.getStringList("projectTemplate.editors")
     val projectServices = gcsConfig.getStringList("projectTemplate.services")
@@ -181,52 +154,31 @@ object Boot extends App with LazyLogging {
 
     val notificationDAO = new PubSubNotificationDAO(pubSubDAO, gcsConfig.getString("notifications.topicName"))
 
-    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO)
+    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO)
 
-    system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
-
-    system.actorOf(GoogleGroupSyncMonitorSupervisor.props(
-      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
-      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollIntervalJitter")),
-      pubSubDAO,
-      gcsConfig.getString("groupMonitor.topicName"),
-      gcsConfig.getString("groupMonitor.subscriptionName"),
-      gcsConfig.getInt("groupMonitor.workerCount"),
-      userServiceConstructor))
-
-    BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
-
-    val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO, userDirDAO)
-    val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO, userDirDAO)
+    val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
+    val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
     val agoraConfig = conf.getConfig("methodrepo")
     val methodRepoDAO = new HttpMethodRepoDAO(agoraConfig.getString("server"), agoraConfig.getString("path"), metricsPrefix)
 
     val maxActiveWorkflowsTotal = conf.getInt("executionservice.maxActiveWorkflowsPerServer") * executionServiceServers.size
     val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt("executionservice.activeWorkflowHogFactor")
-    for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
-      system.actorOf(WorkflowSubmissionActor.props(
-        slickDataSource,
-        methodRepoDAO,
-        gcsDAO,
-        shardedExecutionServiceCluster,
-        conf.getInt("executionservice.batchSize"),
-        gcsDAO.getBucketServiceAccountCredential,
-        util.toScalaDuration(conf.getDuration("executionservice.processInterval")),
-        util.toScalaDuration(conf.getDuration("executionservice.pollInterval")),
-        maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser,
-        Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
-        workbenchMetricBaseName = metricsPrefix
-      ))
-    }
+
+    if(conf.getBooleanOption("backRawls").getOrElse(false)) {
+      logger.info("This instance has been marked as BACK. Booting monitors...")
+      BootMonitors.bootMonitors(
+        system, conf, slickDataSource, gcsDAO, pubSubDAO, methodRepoDAO, shardedExecutionServiceCluster,
+        maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, userServiceConstructor, projectTemplate, metricsPrefix
+      )
+    } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")
 
     val healthMonitor = system.actorOf(
       HealthMonitor.props(
         slickDataSource,
         gcsDAO,
         pubSubDAO,
-        userDirDAO,
         methodRepoDAO,
+        samDAO,
         groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
         topicsToCheck = Seq(gcsConfig.getString("notifications.topicName"), gcsConfig.getString("groupMonitor.topicName")),
         bucketsToCheck = Seq(gcsDAO.tokenBucketName)
@@ -246,8 +198,6 @@ object Boot extends App with LazyLogging {
         conf.getInt("executionservice.batchSize"),
         gcsDAO,
         notificationDAO,
-        submissionSupervisor,
-        bucketDeletionMonitor,
         userServiceConstructor,
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
@@ -257,10 +207,12 @@ object Boot extends App with LazyLogging {
       genomicsServiceConstructor,
       statisticsServiceConstructor,
       statusServiceConstructor,
+      shardedExecutionServiceCluster,
       ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
       clientSecrets.getDetails.getClientId,
       submissionTimeout,
-      rawlsMetricBaseName = metricsPrefix
+      rawlsMetricBaseName = metricsPrefix,
+      samDAO
     ),
       "rawls-service")
 
@@ -280,16 +232,14 @@ object Boot extends App with LazyLogging {
   /**
    * Enables the rawls service account in ldap. Allows service to service auth through the proxy.
    * @param gcsDAO
-   * @param userDirDAO
    */
-  def enableServiceAccount(gcsDAO: HttpGoogleServicesDAO, userDirDAO: JndiUserDirectoryDAO): Unit = {
-    val enableServiceAccountFuture = for {
-      serviceAccountUser <- gcsDAO.getServiceAccountRawlsUser()
-      _ <- userDirDAO.createUser(serviceAccountUser.userSubjectId, serviceAccountUser.userEmail).recover { case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.Conflict) => Unit } // if it already exists, ok
-      _ <- userDirDAO.enableUser(serviceAccountUser.userSubjectId).recover { case e: AttributeInUseException => Unit } // if it is already enabled, ok
-    } yield Unit
+  def enableServiceAccount(gcsDAO: HttpGoogleServicesDAO, samDAO: HttpSamDAO): Unit = {
+    val credential = gcsDAO.getBucketServiceAccountCredential
+    val serviceAccountUserInfo = UserInfo.buildFromTokens(credential)
 
-    enableServiceAccountFuture.onFailure {
+    val registerServiceAccountFuture = samDAO.registerUser(serviceAccountUserInfo)
+
+    registerServiceAccountFuture.onFailure {
       // this is logged as a warning because almost always the service account is already enabled
       // so this is a problem only the first time rawls is started with a new service account
       case t: Throwable => logger.warn("error enabling service account", t)

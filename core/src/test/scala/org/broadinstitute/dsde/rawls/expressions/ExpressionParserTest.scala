@@ -567,31 +567,31 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
   test("output expressions") {
     withTestWorkspace { workspaceContext =>
-      assert(parseOutputExpr("this.attribute").isSuccess, "this.attribute should parse correctly" )
-      assert(parseOutputExpr("this..attribute").isFailure, "this..attribute should not parse correctly" )
-      assert(parseOutputExpr("this.chained.expression").isFailure, "this.chained.expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("this.attribute").isSuccess, "this.attribute should parse correctly" )
+      assert(parseOutputAttributeExpr("this..attribute").isFailure, "this..attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("this.chained.expression").isFailure, "this.chained.expression should not parse correctly" )
 
-      assert(parseOutputExpr("workspace.attribute").isSuccess, "workspace.attribute should parse correctly" )
-      assert(parseOutputExpr("workspace..attribute").isFailure, "workspace..attribute should not parse correctly" )
-      assert(parseOutputExpr("workspace.chained.expression").isFailure, "workspace.chained.expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("workspace.attribute").isSuccess, "workspace.attribute should parse correctly" )
+      assert(parseOutputAttributeExpr("workspace..attribute").isFailure, "workspace..attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("workspace.chained.expression").isFailure, "workspace.chained.expression should not parse correctly" )
 
-      assert(parseOutputExpr("bonk.attribute").isFailure, "bonk.attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("bonk.attribute").isFailure, "bonk.attribute should not parse correctly" )
     }
   }
 
   test("library output expressions") {
     withTestWorkspace { workspaceContext =>
-      assert(parseOutputExpr("this.library:attribute").isSuccess, "this.library:attribute should parse correctly" )
-      assert(parseOutputExpr("this..library:attribute").isFailure, "this..library:attribute should not parse correctly" )
-      assert(parseOutputExpr("this.library:chained.expression").isFailure, "this.library:chained.expression should not parse correctly" )
-      assert(parseOutputExpr("this.chained.library:expression").isFailure, "this.chained.library:expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("this.library:attribute").isSuccess, "this.library:attribute should parse correctly" )
+      assert(parseOutputAttributeExpr("this..library:attribute").isFailure, "this..library:attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("this.library:chained.expression").isFailure, "this.library:chained.expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("this.chained.library:expression").isFailure, "this.chained.library:expression should not parse correctly" )
 
-      assert(parseOutputExpr("workspace.library:attribute").isSuccess, "workspace.library:attribute should parse correctly" )
-      assert(parseOutputExpr("workspace..library:attribute").isFailure, "workspace..library:attribute should not parse correctly" )
-      assert(parseOutputExpr("workspace.library:chained.expression").isFailure, "workspace.library:chained.expression should not parse correctly" )
-      assert(parseOutputExpr("workspace.chained.library:expression").isFailure, "workspace.chained.library:expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("workspace.library:attribute").isSuccess, "workspace.library:attribute should parse correctly" )
+      assert(parseOutputAttributeExpr("workspace..library:attribute").isFailure, "workspace..library:attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("workspace.library:chained.expression").isFailure, "workspace.library:chained.expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("workspace.chained.library:expression").isFailure, "workspace.chained.library:expression should not parse correctly" )
 
-      assert(parseOutputExpr("bonk.library:attribute").isFailure, "bonk.library:attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("bonk.library:attribute").isFailure, "bonk.library:attribute should not parse correctly" )
     }
   }
 

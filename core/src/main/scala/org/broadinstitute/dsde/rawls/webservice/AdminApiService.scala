@@ -157,44 +157,6 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           UserService.AdminRemoveLibraryCurator(RawlsUserEmail(userEmail)))
       }
     } ~
-    path("admin" / "user" / Segment) { userSubjectId =>
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminGetUserStatus(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
-      } ~
-      delete {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminDeleteUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
-      }
-    } ~
-    path("admin" / "user" / "ldap" / Segment / Segment) { (userSubjectId, email) =>
-      put {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminAddToLDAP(RawlsUserSubjectId(userSubjectId), RawlsUserEmail(email)))
-      } ~
-      delete {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminRemoveFromLDAP(RawlsUserSubjectId(userSubjectId)))
-      }
-    } ~
-    path("admin"/ "user" / Segment / "enable") { userSubjectId =>
-      post {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminEnableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
-      }
-    } ~
-    path("admin"/ "user" / Segment / "disable") { userSubjectId =>
-      post {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminDisableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
-      }
-    } ~
     path("admin" / "allUserReadAccess" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       get {
         requestContext => perRequest(requestContext,

@@ -54,6 +54,15 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
     }
   }
 
+  it should "increment transient counters in statsd" in {
+    for (_ <- 0 until 100) test.increment
+
+    // counter value should be 100
+    verifyStatsD { order =>
+      order.verify(statsD).send(argEq("test.transient.a.transientCounter.count"), argEq("100"))
+    }
+  }
+
   it should "update gauges in statsd" in {
     test.set(42)
 
@@ -142,7 +151,7 @@ class MetricsSpec extends FlatSpec with Matchers with BeforeAndAfter with Eventu
 
     // Histogram should have been updated
     verifyStatsD { order =>
-      verifyHistogram(order, "test.histogram", 100)
+      verifyHistogram(order, "test.a.histogram.histo", 100)
     }
   }
 
@@ -244,8 +253,9 @@ object MetricsSpec {
 
     // Define a counter and a timer metric
     lazy val counter = ExpandedMetricBuilder.expand("a", "counter").asCounter("count")
+    lazy val aTransientTimer = ExpandedMetricBuilder.expand("a", "transientCounter").transient().asCounter("count")
     lazy val timer = ExpandedMetricBuilder.expand("a", "timer").asTimer("latency")
-    lazy val histogram = metrics.histogram("histogram")
+    lazy val histogram = ExpandedMetricBuilder.expand("a", "histogram").asHistogram("histo")
     lazy val meter = metrics.meter("meter")
 
     // Non-instrumented methods:
@@ -271,6 +281,7 @@ object MetricsSpec {
     def increment: Unit = {
       n = n + 1
       counter += 1
+      aTransientTimer += 1
       histogram += n
       meter.mark()
     }

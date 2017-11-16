@@ -38,7 +38,6 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time
@@ -319,20 +318,20 @@ class HttpGoogleServicesDAO(
   private def newObjectAccessControl(entity: String, accessLevel: String) =
     new ObjectAccessControl().setEntity(entity).setRole(accessLevel)
 
-  override def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Unit] = {
+  override def deleteBucket(bucketName: String): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.Storage
     val buckets = getStorage(getBucketServiceAccountCredential).buckets
     val deleter = buckets.delete(bucketName)
     retryWithRecoverWhen500orGoogleError(() => {
       executeGoogleRequest(deleter)
-      monitorRef ! BucketDeleted(bucketName)
+      true
     }) {
       //Google returns 409 Conflict if the bucket isn't empty.
       case t: HttpResponseException if t.getStatusCode == 409 =>
         //Google doesn't let you delete buckets that are full.
         //You can either remove all the objects manually, or you can set up lifecycle management on the bucket.
         //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
-        //More info: http://bit.ly/1WCYhhf and http://bit.ly/1Py6b6O
+        //More info: http://bit.ly/1WCYhhf
         val deleteEverythingRule = new Lifecycle.Rule()
           .setAction(new Action().setType("Delete"))
           .setCondition(new Condition().setAge(0))
@@ -340,12 +339,10 @@ class HttpGoogleServicesDAO(
         val patcher = buckets.patch(bucketName, new Bucket().setLifecycle(lifecycle))
         retryWhen500orGoogleError(() => { executeGoogleRequest(patcher) })
 
-        system.scheduler.scheduleOnce(deletedBucketCheckSeconds seconds, monitorRef, DeleteBucket(bucketName))
+        false
       // Bucket is already deleted
       case t: HttpResponseException if t.getStatusCode == 404 =>
-        monitorRef ! BucketDeleted(bucketName)
-      case _ =>
-      //TODO: I am entirely unsure what other cases might want to be handled here.
+        true
     }
   }
 

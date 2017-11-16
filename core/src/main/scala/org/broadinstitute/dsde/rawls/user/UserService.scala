@@ -40,8 +40,8 @@ object UserService {
     Props(userServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO, gpsDAO, gpsGroupSyncTopic, notificationDAO)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, gpsDAO, gpsGroupSyncTopic, notificationDAO)
 
   sealed trait UserServiceMessage
   case class SetRefreshToken(token: UserRefreshToken) extends UserServiceMessage
@@ -50,11 +50,8 @@ object UserService {
   case object CreateUser extends UserServiceMessage
   case class AdminGetUserStatus(userRef: RawlsUserRef) extends UserServiceMessage
   case object UserGetUserStatus extends UserServiceMessage
-  case class AdminEnableUser(userRef: RawlsUserRef) extends UserServiceMessage
-  case class AdminDisableUser(userRef: RawlsUserRef) extends UserServiceMessage
+
   case class AdminDeleteUser(userRef: RawlsUserRef) extends UserServiceMessage
-  case class AdminAddToLDAP(userSubjectId: RawlsUserSubjectId, email: RawlsUserEmail) extends UserServiceMessage
-  case class AdminRemoveFromLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
 
@@ -101,7 +98,7 @@ object UserService {
   case class AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths with LazyLogging {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths with LazyLogging {
 
   import dataSource.dataAccess.driver.api._
   import spray.json.DefaultJsonProtocol._
@@ -111,13 +108,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender
 
     case CreateUser => createUser() pipeTo sender
-    case AdminGetUserStatus(userRef) => asFCAdmin { getUserStatus(userRef) } pipeTo sender
-    case UserGetUserStatus => getUserStatus() pipeTo sender
-    case AdminEnableUser(userRef) => asFCAdmin { enableUser(userRef) } pipeTo sender
-    case AdminDisableUser(userRef) => asFCAdmin { disableUser(userRef) } pipeTo sender
     case AdminDeleteUser(userRef) => asFCAdmin { deleteUser(userRef) } pipeTo sender
-    case AdminAddToLDAP(userSubjectId, email) => asFCAdmin { addToLDAP(userSubjectId, email) } pipeTo sender
-    case AdminRemoveFromLDAP(userSubjectId) => asFCAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
     case ListGroupsForUser(userEmail) => listGroupsForUser(userEmail) pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
@@ -190,26 +181,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
+  //Note: As of Sam Phase I, this function only fires off the welcome email and updates pending workspace access
+  //The rest of user registration now takes place in Sam
   def createUser(): Future[PerRequestMessage] = {
     val user = RawlsUser(userInfo)
 
-    // if there is any error, may leave user in weird state which can be seen with getUserStatus
-    // retrying this call will retry the failures, failures due to already created groups/entries are ok
-    handleFutures(
-      Future.sequence(Seq(
-        toFutureTry(gcsDAO.createProxyGroup(user) flatMap( _ => gcsDAO.addUserToProxyGroup(user))),
-        toFutureTry(for {
-        // these things need to be done in order
-          _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.createUser(user) }
-          _ <- dataSource.inTransaction { dataAccess => getOrCreateAllUsersGroup(dataAccess) }
-          _ <- updateGroupMembership(allUsersGroupRef, addUsers = Set(user))
-        } yield ()),
-        toFutureTry(userDirectoryDAO.createUser(user.userSubjectId, user.userEmail) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
-
-      )).flatMap{ _ => Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user))))})(_ => {
+    handleFutures(Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user)))))(_ => {
       notificationDAO.fireAndForgetNotification(ActivationNotification(user.userSubjectId))
-      RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}") }, handleException("Errors creating user")
-    )
+      RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}")
+    }, handleException("Errors creating user"))
   }
 
   def turnInvitesIntoRealAccess(user: RawlsUser) = {
@@ -254,25 +234,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def getUserStatus(): Future[PerRequestMessage] = {
-    getUserStatus(RawlsUserRef(userInfo.userSubjectId))
-  }
-
   private def loadUser(userRef: RawlsUserRef): Future[RawlsUser] = dataSource.inTransaction { dataAccess => withUser(userRef, dataAccess)(DBIO.successful) }
-
-  def getUserStatus(userRef: RawlsUserRef): Future[PerRequestMessage] = loadUser(userRef) flatMap { user =>
-    handleFutures(Future.sequence(Seq(
-      toFutureTry(gcsDAO.isUserInProxyGroup(user).map("google" -> _)),
-      toFutureTry(userDirectoryDAO.isEnabled(user.userSubjectId).map("ldap" -> _)),
-      toFutureTry {
-        dataSource.inTransaction { dataAccess =>
-          val allUsersGroup = getOrCreateAllUsersGroup(dataAccess)
-          allUsersGroup.map("allUsersGroup" -> _.users.contains(userRef))
-        }
-      }
-
-    )))(statuses => RequestComplete(UserStatus(user, statuses.toMap)), handleException("Error checking if a user is enabled"))
-  }
 
   def listGroupsForUser(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
@@ -284,30 +246,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         }
       }
     } map(RequestComplete(_))
-  }
-
-  def enableUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
-    // if there is any error, may leave user in weird state which can be seen with getUserStatus
-    // retrying this call will retry the failures, failures due to already added entries are ok
-    loadUser(userRef) flatMap { user =>
-      handleFutures(Future.sequence(Seq(
-        toFutureTry(gcsDAO.addUserToProxyGroup(user)),
-        toFutureTry(userDirectoryDAO.enableUser(user.userSubjectId))
-
-      )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors enabling user"))
-    }
-  }
-
-  def disableUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
-    // if there is any error, may leave user in weird state which can be seen with getUserStatus
-    // retrying this call will retry the failures, failures due to already removed entries are ok
-    loadUser(userRef) flatMap { user =>
-      handleFutures(Future.sequence(Seq(
-        toFutureTry(gcsDAO.removeUserFromProxyGroup(user)),
-        toFutureTry(userDirectoryDAO.disableUser(user.userSubjectId))
-
-      )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors disabling user"))
-    }
   }
 
   private def verifyNoSubmissions(userRef: RawlsUserRef, dataAccess: DataAccess): ReadAction[Unit] = {
@@ -338,32 +276,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       } yield ()
     }
 
-    val userDirectoryRemoval = for {
-      _ <- userDirectoryDAO.disableUser(userRef.userSubjectId) recover { case _ => () }   // may not be strictly necessary, but does not hurt
-      _ <- userDirectoryDAO.removeUser(userRef.userSubjectId) recover { case _ => () }
-    } yield ()
-
     val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup) recover { case e: HttpResponseException if e.getStatusCode == 404 => Unit }
 
     for {
-      _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion, deleteRefreshTokenInternal(userRef)))
+      _ <- Future.sequence(Seq(dbTablesRemoval, proxyGroupDeletion, deleteRefreshTokenInternal(userRef)))
       _ <- deleteUserFromDB(userRef)
     } yield RequestComplete(StatusCodes.NoContent)
-  }
-
-  def addToLDAP(userSubjectId: RawlsUserSubjectId, email: RawlsUserEmail): Future[PerRequestMessage] = {
-    userDirectoryDAO.createUser(userSubjectId, email) flatMap { _ =>
-      userDirectoryDAO.enableUser(userSubjectId) } map { _ =>
-        RequestComplete(StatusCodes.Created)
-    }
-  }
-
-  def removeFromLDAP(userSubjectId: RawlsUserSubjectId): Future[PerRequestMessage] = {
-    userDirectoryDAO.disableUser(userSubjectId) flatMap { _ =>
-      userDirectoryDAO.removeUser(userSubjectId) map { _ =>
-        RequestComplete(StatusCodes.NoContent)
-      }
-    }
   }
 
   def isAdmin(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
@@ -917,11 +835,31 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def updateIntersectionGroupMembers(groupsToIntersect: Set[GroupsToIntersect], dataAccess:DataAccess): ReadWriteAction[Iterable[RawlsGroupRef]] = {
-    val intersectionMemberships = DBIO.sequence(groupsToIntersect.toSeq.map { gti =>
-      dataAccess.rawlsGroupQuery.intersectGroupMembership(gti.groups).map(members => gti.target -> members)
-    })
 
-    intersectionMemberships.flatMap(dataAccess.rawlsGroupQuery.overwriteGroupUsers).map(_ => groupsToIntersect.map(_.target))
+    val allGroupRefs = groupsToIntersect.flatMap(_.groups)
+
+    dataAccess.rawlsGroupQuery.loadGroupsRecursive(allGroupRefs).flatMap { allGroups =>
+      // load all the groups first because this is fast and most are likely to be empty or with no subgroups
+      // only with subgroups do we need to go back to rawlsGroupQuery to do the intersection (which is expensive)
+      val groupsByName = allGroups.map(g => g.groupName -> g).toMap
+
+      // this set makes sure to query once per set of groups
+      val intersectionsToMake = Set() ++ groupsToIntersect.map(_.groups)
+      val intersections = DBIO.sequence(intersectionsToMake.toSeq.map { groups =>
+        // this is the right thing to call when we know how to make it perform well
+        // dataAccess.rawlsGroupQuery.intersectGroupMembership(groups).map(members => groups -> members)
+        DBIO.successful(groups -> groups.map(g => dataAccess.rawlsGroupQuery.flattenGroup(groupsByName(g.groupName), groupsByName)).reduce(_ intersect _))
+      })
+
+      val intersectionMemberships = intersections.map { sourceGroupsWithMembers =>
+        val membersBySourceGroups = sourceGroupsWithMembers.toMap
+        groupsToIntersect.map { gti =>
+          gti.target -> membersBySourceGroups(gti.groups)
+        }.toSeq
+      }
+
+      intersectionMemberships.flatMap(dataAccess.rawlsGroupQuery.overwriteGroupUsers).map(_ => groupsToIntersect.map(_.target))
+    }
   }
 
   def deleteRefreshToken(rawlsUserRef: RawlsUserRef): Future[PerRequestMessage] = {

@@ -37,6 +37,8 @@ case class GroupsToIntersect(target: RawlsGroupRef, groups: Set[RawlsGroupRef])
 
 case class WorkspaceUserShareRecord(workspaceId: UUID, subjectId: String)
 case class WorkspaceGroupShareRecord(workspaceId: UUID, groupName: String)
+case class WorkspaceUserComputeRecord(workspaceId: UUID, subjectId: String)
+case class WorkspaceGroupComputeRecord(workspaceId: UUID, groupName: String)
 case class WorkspaceUserCatalogRecord(workspaceId: UUID, subjectId: String)
 case class WorkspaceGroupCatalogRecord(workspaceId: UUID, groupName: String)
 case class WorkspaceAuthDomainRecord(workspaceId: UUID, groupName: String)
@@ -120,6 +122,24 @@ trait WorkspaceComponent {
     def * = (workspaceId, groupName) <> (WorkspaceGroupShareRecord.tupled, WorkspaceGroupShareRecord.unapply)
   }
 
+  class WorkspaceUserComputeTable(tag: Tag) extends Table[WorkspaceUserComputeRecord](tag, "WORKSPACE_USER_COMPUTE") {
+    def workspaceId = column[UUID]("workspace_id")
+    def userSubjectId = column[String]("user_subject_id")
+
+    def workspace = foreignKey("FK_USER_COMPUTE_PERMS_WS", workspaceId, workspaceQuery)(_.id)
+
+    def * = (workspaceId, userSubjectId) <> (WorkspaceUserComputeRecord.tupled, WorkspaceUserComputeRecord.unapply)
+  }
+
+  class WorkspaceGroupComputeTable(tag: Tag) extends Table[WorkspaceGroupComputeRecord](tag, "WORKSPACE_GROUP_COMPUTE") {
+    def workspaceId = column[UUID]("workspace_id")
+    def groupName = column[String]("group_name")
+
+    def workspace = foreignKey("FK_GROUP_COMPUTE_PERMS_WS", workspaceId, workspaceQuery)(_.id)
+
+    def * = (workspaceId, groupName) <> (WorkspaceGroupComputeRecord.tupled, WorkspaceGroupComputeRecord.unapply)
+  }
+
   class WorkspaceUserCatalogTable(tag: Tag) extends Table[WorkspaceUserCatalogRecord](tag, "WORKSPACE_USER_CATALOG") {
     def workspaceId = column[UUID]("workspace_id")
     def userSubjectId = column[String]("user_subject_id")
@@ -153,6 +173,8 @@ trait WorkspaceComponent {
   protected val pendingWorkspaceAccessQuery = TableQuery[PendingWorkspaceAccessTable]
   protected val workspaceUserShareQuery = TableQuery[WorkspaceUserShareTable]
   protected val workspaceGroupShareQuery = TableQuery[WorkspaceGroupShareTable]
+  protected val workspaceUserComputeQuery = TableQuery[WorkspaceUserComputeTable]
+  protected val workspaceGroupComputeQuery = TableQuery[WorkspaceGroupComputeTable]
   protected val workspaceUserCatalogQuery = TableQuery[WorkspaceUserCatalogTable]
   protected val workspaceGroupCatalogQuery = TableQuery[WorkspaceGroupCatalogTable]
   protected val workspaceAuthDomainQuery = TableQuery[WorkspaceAuthDomainTable]
@@ -355,6 +377,41 @@ trait WorkspaceComponent {
       }
     }
 
+    def insertUserComputePermissions(workspaceId: UUID, userRefs: Seq[RawlsUserRef]) = {
+      val recordsToInsert = userRefs.map(userRef => WorkspaceUserComputeRecord(workspaceId, userRef.userSubjectId.value))
+      workspaceUserComputeQuery ++= recordsToInsert
+    }
+
+    def insertGroupComputePermissions(workspaceId: UUID, groupRefs: Seq[RawlsGroupRef]) = {
+      val recordsToInsert = groupRefs.map(groupRef => WorkspaceGroupComputeRecord(workspaceId, groupRef.groupName.value))
+      workspaceGroupComputeQuery ++= recordsToInsert
+    }
+
+    def deleteUserComputePermissions(workspaceId: UUID, userRefs: Seq[RawlsUserRef]) = {
+      val usersToRemove = userRefs.map(_.userSubjectId.value)
+      workspaceUserComputeQuery.filter(rec => rec.workspaceId === workspaceId && rec.userSubjectId.inSetBind(usersToRemove)).delete
+    }
+
+    def deleteGroupComputePermissions(workspaceId: UUID, groupRefs: Seq[RawlsGroupRef]) = {
+      val groupsToRemove = groupRefs.map(_.groupName.value)
+      workspaceGroupComputeQuery.filter(rec => rec.workspaceId === workspaceId && rec.groupName.inSetBind(groupsToRemove)).delete
+    }
+
+    def deleteWorkspaceComputePermissions(workspaceId: UUID) = {
+      workspaceUserComputeQuery.filter(_.workspaceId === workspaceId).delete andThen
+        workspaceGroupComputeQuery.filter(_.workspaceId === workspaceId).delete
+    }
+
+    def getUserComputePermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
+      workspaceUserComputeQuery.filter(rec => rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId).countDistinct.result.map(rows => rows > 0) flatMap { hasComputePermission =>
+        if(hasComputePermission) DBIO.successful(hasComputePermission)
+        else rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
+          val groupNames = userGroups.map(_.groupName.value)
+          workspaceGroupComputeQuery.filter(rec => (rec.workspaceId === workspaceContext.workspaceId) && rec.groupName.inSetBind(groupNames)).countDistinct.result.map(rows => rows > 0)
+        }
+      }
+    }
+
     def insertUserCatalogPermissions(workspaceId: UUID, userRefs: Seq[RawlsUserRef]) = {
       val recordsToInsert = userRefs.map(userRef => WorkspaceUserCatalogRecord(workspaceId, userRef.userSubjectId.value))
       workspaceUserCatalogQuery ++= recordsToInsert
@@ -444,17 +501,21 @@ trait WorkspaceComponent {
 
       for {
         userShareQuery <- workspaceUserShareQuery.filter(_.workspaceId === workspaceContext.workspaceId).result
+        userComputeQuery <- workspaceUserComputeQuery.filter(_.workspaceId === workspaceContext.workspaceId).result
         usersWithShare <- DBIO.sequence(userShareQuery.map{result => rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(result.subjectId)))})
+        usersWithCompute <- DBIO.sequence(userComputeQuery.map{result => rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(result.subjectId)))})
         userResults <- accessAndUserEmail.map(results => results.map(r =>
-          (r._2.value, r._1, usersWithShare.map(u => u.get.userSubjectId).contains(r._3))))
+          (r._2.value, r._1, usersWithShare.map(u => u.get.userSubjectId).contains(r._3), usersWithCompute.map(u => u.get.userSubjectId).contains(r._3))))
         groupShareQuery <- workspaceGroupShareQuery.filter(_.workspaceId === workspaceContext.workspaceId).result
+        groupComputeQuery <- workspaceGroupComputeQuery.filter(_.workspaceId === workspaceContext.workspaceId).result
         groupsWithShare <- DBIO.sequence(groupShareQuery.map{result => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(result.groupName)))})
+        groupsWithCompute <- DBIO.sequence(groupComputeQuery.map{result => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(result.groupName)))})
         groupResults <- accessAndSubGroupEmail.map(results => results.map(r =>
-          (r._2.value, r._1, groupsWithShare.map(g => g.get.groupName).contains(r._3))))
+          (r._2.value, r._1, groupsWithShare.map(g => g.get.groupName).contains(r._3), groupsWithCompute.map(g => g.get.groupName).contains(r._3))))
       } yield {
-        (userResults ++ groupResults).map{ case (email, access, hasShare) =>
+        (userResults ++ groupResults).map{ case (email, access, hasShare, hasCompute) =>
         val accessLevel = WorkspaceAccessLevels.withName(access)
-          (email, accessLevel, hasShare)}
+          (email, accessLevel, hasShare, hasCompute)}
       }
     }
 
@@ -752,7 +813,7 @@ trait WorkspaceComponent {
       (userQuery, subGroupQuery)
     }
 
-    def findWorkspaceUsersAndAccessLevel(workspaceId: UUID): ReadWriteAction[Set[(Either[RawlsUserRef, RawlsGroupRef], (WorkspaceAccessLevel, Boolean))]] = {
+    def findWorkspaceUsersAndAccessLevel(workspaceId: UUID): ReadWriteAction[Set[(Either[RawlsUserRef, RawlsGroupRef], (WorkspaceAccessLevel, Boolean, Boolean))]] = {
 
 
       val (userQuery, subGroupQuery) = findWorkspaceUsers(workspaceId)
@@ -764,18 +825,30 @@ trait WorkspaceComponent {
         val groupNames = subGroupsInWorkspace.map{ case (_, groupName, _) => groupName.value }
         workspaceGroupShareQuery.filter(share => share.workspaceId === workspaceId && share.groupName.inSetBind(groupNames)).map(_.groupName).result
       }
+      val userComputeQuery = userQuery.flatMap { usersInWorkspace =>
+        val userIds = usersInWorkspace.map{ case (_, userSubjectId, _) => userSubjectId.value }
+        workspaceUserComputeQuery.filter(compute => compute.workspaceId === workspaceId && compute.userSubjectId.inSetBind(userIds)).map(_.userSubjectId).result
+      }
+      val subGroupComputeQuery = subGroupQuery.flatMap { subGroupsInWorkspace =>
+        val groupNames = subGroupsInWorkspace.map{ case (_, groupName, _) => groupName.value }
+        workspaceGroupComputeQuery.filter(compute => compute.workspaceId === workspaceId && compute.groupName.inSetBind(groupNames)).map(_.groupName).result
+      }
       val users = for {
         user <- userQuery
         canShare <- userShareQuery
-      } yield user.map { case (_, subjectId, accessLevel) =>
-        (Left(RawlsUserRef(subjectId)), (WorkspaceAccessLevels.withName(accessLevel), canShare.contains(subjectId.value)))
+        canCompute <- userComputeQuery
+      } yield user.map { case (_, subjectId, accessLevelString) =>
+        val accessLevel = WorkspaceAccessLevels.withName(accessLevelString)
+        (Left(RawlsUserRef(subjectId)), (accessLevel, canShare.contains(subjectId.value) || accessLevel >= WorkspaceAccessLevels.Owner, canCompute.contains(subjectId.value)  || accessLevel >= WorkspaceAccessLevels.Owner))
       }
 
       val groups = for {
         group <- subGroupQuery
         canShare <- subGroupShareQuery
-      } yield group.map { case (_, groupName, accessLevel) =>
-        (Right(RawlsGroupRef(groupName)), (WorkspaceAccessLevels.withName(accessLevel), canShare.contains(groupName.value)))
+        canCompute <- subGroupComputeQuery
+      } yield group.map { case (_, groupName, accessLevelString) =>
+        val accessLevel = WorkspaceAccessLevels.withName(accessLevelString)
+        (Right(RawlsGroupRef(groupName)), (accessLevel, canShare.contains(groupName.value) || accessLevel >= WorkspaceAccessLevels.Owner, canCompute.contains(groupName.value) || accessLevel >= WorkspaceAccessLevels.Owner))
       }
 
       users.flatMap { usersResult =>

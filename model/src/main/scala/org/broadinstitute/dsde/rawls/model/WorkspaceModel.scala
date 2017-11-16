@@ -236,6 +236,12 @@ case class ValidatedMethodConfiguration(
                                          validOutputs: Seq[String],
                                          invalidOutputs: Map[String,String])
 
+case class ParsedMCExpressions(
+                                         validInputs: Seq[String],
+                                         invalidInputs: Map[String,String],
+                                         validOutputs: Seq[String],
+                                         invalidOutputs: Map[String,String])
+
 case class MethodRepoConfigurationImport(
                                          methodRepoNamespace: String,
                                          methodRepoName: String,
@@ -257,6 +263,7 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
 
 case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
                              canShare: Boolean,
+                             canCompute: Boolean,
                              catalog: Boolean,
                              workspace: Workspace,
                              workspaceSubmissionStats: WorkspaceSubmissionStats,
@@ -427,7 +434,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceListResponseFormat = jsonFormat5(WorkspaceListResponse)
 
-  implicit val WorkspaceResponseFormat = jsonFormat6(WorkspaceResponse)
+  implicit val WorkspaceResponseFormat = jsonFormat7(WorkspaceResponse)
 
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 

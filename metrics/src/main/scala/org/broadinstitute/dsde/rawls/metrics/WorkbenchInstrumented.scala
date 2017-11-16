@@ -20,6 +20,8 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
   protected val workbenchMetricBaseName: String
   override lazy val metricBaseName = MetricName(workbenchMetricBaseName)
 
+  final val transientPrefix = "transient"
+
   /**
     * Utility for building expanded metric names in a typesafe way. Example usage:
     * {{{
@@ -36,11 +38,23 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
     *
     * Note the above will only compile if there are [[Expansion]] instances for the types passed to the expand method.
     */
-  protected class ExpandedMetricBuilder private (m: String = "") {
+  protected class ExpandedMetricBuilder private (m: String = "", _transient: Boolean = false) {
     def expand[A: Expansion](key: String, a: A): ExpandedMetricBuilder = {
       new ExpandedMetricBuilder(
-        (if (m == "") m else m + ".") + implicitly[Expansion[A]].makeNameWithKey(key, a))
+        (if (m == "") m else m + ".") + implicitly[Expansion[A]].makeNameWithKey(key, a), _transient)
     }
+
+    /**
+      * Marks a metric as "transient". Transient metrics will automatically be deleted in Hosted
+      * Graphite if they haven't received an update in X amount of time. It's usually good to set
+      * metrics with high granularity (e.g. workspace or submission-level) as transient.
+      */
+    def transient(): ExpandedMetricBuilder = {
+      new ExpandedMetricBuilder(m, true)
+    }
+
+    def getFullName(name: String): String =
+      metricBaseName.append(makeName(name)).name
 
     def asCounter(name: String): Counter =
       metrics.counter(makeName(name))
@@ -50,7 +64,7 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
 
     def asGaugeIfAbsent[T](name: String)(fn: => T): Gauge[T] = {
       // Get the fully qualified metric name for inspecting the registry.
-      val gaugeName = metricBaseName.append(makeName(name)).name
+      val gaugeName = getFullName(name)
       metricRegistry.getGauges().asScala.get(gaugeName) match {
         case None =>
           // If the gauge does not exist in the registry, create it
@@ -68,8 +82,15 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
     def asHistogram(name: String): Histogram =
       metrics.histogram(makeName(name))
 
-    private def makeName(name: String): String =
-      if (m.nonEmpty) s"$m.$name" else name
+    def unregisterMetric(name: String): Boolean = {
+      val metricName = getFullName(name)
+      metricRegistry.remove(metricName)
+    }
+
+    private def makeName(name: String): String = {
+      val expandedName = if (m.nonEmpty) s"$m.$name" else name
+      if (_transient) s"$transientPrefix.$expandedName" else expandedName
+    }
 
     override def toString: String = m
   }

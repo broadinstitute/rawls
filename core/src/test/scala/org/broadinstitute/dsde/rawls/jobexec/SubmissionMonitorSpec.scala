@@ -698,7 +698,7 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
   }
   override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
 
-  override def version(userInfo: UserInfo) = Future.successful(ExecutionServiceVersion("25"))
+  override def version = Future.successful(ExecutionServiceVersion("25"))
 }
 
 class TestSubmissionMonitor(val workspaceName: WorkspaceName,

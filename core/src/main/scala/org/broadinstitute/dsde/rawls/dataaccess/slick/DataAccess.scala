@@ -48,6 +48,8 @@ trait DataAccess
       TableQuery[PendingWorkspaceAccessTable].delete andThen      // FK to workspace, user
       TableQuery[WorkspaceUserShareTable].delete andThen          // FK to workspace, user
       TableQuery[WorkspaceGroupShareTable].delete andThen         // FK to workspace, group
+      TableQuery[WorkspaceUserComputeTable].delete andThen          // FK to workspace, user
+      TableQuery[WorkspaceGroupComputeTable].delete andThen         // FK to workspace, group
       TableQuery[WorkspaceUserCatalogTable].delete andThen        // FK to workspace, user
       TableQuery[WorkspaceGroupCatalogTable].delete andThen       // FK to workspace, group
       TableQuery[WorkspaceAuthDomainTable].delete andThen         // FK to workspace, managed group

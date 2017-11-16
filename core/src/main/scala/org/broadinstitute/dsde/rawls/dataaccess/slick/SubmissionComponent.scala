@@ -139,6 +139,12 @@ trait SubmissionComponent {
       }
     }
 
+    def countAllStatuses: ReadAction[Map[String, Int]] = {
+      groupBy(s => s.status).map { case (status, submissions) => (status, submissions.length) }.result map { r =>
+        r.toMap
+      }
+    }
+
     def countByStatus(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Int]] = {
       filter(_.workspaceId === workspaceContext.workspaceId).groupBy(s => s.status).map { case (status, submissions) =>
         (status, submissions.length)
@@ -203,6 +209,12 @@ trait SubmissionComponent {
       findActiveSubmissions.result.flatMap(recs => DBIO.sequence(recs.map{ rec =>
         loadActiveSubmission(rec.id)
       }))
+    }
+
+    def listAllActiveSubmissionIdsWithWorkspace(): ReadAction[Seq[(UUID, WorkspaceName)]] = {
+      val query = findActiveSubmissions join workspaceQuery on(_.workspaceId === _.id)
+      val result = query.map{ case (sub, ws) => (sub.id, ws.namespace, ws.name) }.result
+      result.map(rows => rows.map { case (subId, wsNs, wsName) => (subId, WorkspaceName(wsNs, wsName)) } )
     }
 
     private def deleteSubmissionAction(submissionId: UUID): ReadWriteAction[Int] = {

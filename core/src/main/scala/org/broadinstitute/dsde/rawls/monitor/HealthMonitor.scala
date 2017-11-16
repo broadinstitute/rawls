@@ -7,7 +7,7 @@ import akka.pattern.{after, pipe}
 import cats._
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MethodRepoDAO, SlickDataSource, UserDirectoryDAO}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
@@ -38,10 +38,10 @@ object HealthMonitor {
   /** Retrieves current status and sends back to caller */
   case object GetCurrentStatus extends HealthMonitorMessage
 
-  def props(slickDataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, googlePubSubDAO: GooglePubSubDAO, userDirectoryDAO: UserDirectoryDAO, methodRepoDAO: MethodRepoDAO,
+  def props(slickDataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, googlePubSubDAO: GooglePubSubDAO, methodRepoDAO: MethodRepoDAO, samDAO: SamDAO,
             groupsToCheck: Seq[String], topicsToCheck: Seq[String], bucketsToCheck: Seq[String],
             futureTimeout: FiniteDuration = DefaultFutureTimeout, staleThreshold: FiniteDuration = DefaultStaleThreshold): Props =
-    Props(new HealthMonitor(slickDataSource, googleServicesDAO, googlePubSubDAO, userDirectoryDAO, methodRepoDAO, groupsToCheck, topicsToCheck, bucketsToCheck, futureTimeout, staleThreshold))
+    Props(new HealthMonitor(slickDataSource, googleServicesDAO, googlePubSubDAO, methodRepoDAO, samDAO, groupsToCheck, topicsToCheck, bucketsToCheck, futureTimeout, staleThreshold))
 }
 
 /**
@@ -74,7 +74,6 @@ object HealthMonitor {
   * @param slickDataSource the slick data source for DB operations
   * @param googleServicesDAO the GCS DAO for Google API calls
   * @param googlePubSubDAO the GPS DAO for Google PubSub API calls
-  * @param userDirectoryDAO the user DAO for LDAP calls
   * @param methodRepoDAO the method repo DAO for Agora calls
   * @param groupsToCheck Set of Google groups to check for existence
   * @param topicsToCheck Set of Google PubSub topics to check for existence
@@ -86,7 +85,7 @@ object HealthMonitor {
   *                       reasonable future timeouts; however it is still a defensive check in case something
   *                       unexpected goes wrong. Default 15 minutes.
   */
-class HealthMonitor private (val slickDataSource: SlickDataSource, val googleServicesDAO: GoogleServicesDAO, val googlePubSubDAO: GooglePubSubDAO, val userDirectoryDAO: UserDirectoryDAO, val methodRepoDAO: MethodRepoDAO,
+class HealthMonitor private (val slickDataSource: SlickDataSource, val googleServicesDAO: GoogleServicesDAO, val googlePubSubDAO: GooglePubSubDAO, val methodRepoDAO: MethodRepoDAO, val samDAO: SamDAO,
                              val groupsToCheck: Seq[String], val topicsToCheck: Seq[String], val bucketsToCheck: Seq[String],
                              val futureTimeout: FiniteDuration, val staleThreshold: FiniteDuration) extends Actor with LazyLogging {
   // Use the execution context for this actor's dispatcher for all asynchronous operations.
@@ -119,7 +118,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
       (GoogleGenomics, checkGoogleGenomics),
       (GoogleGroups, checkGoogleGroups),
       (GooglePubSub, checkGooglePubsub),
-      (LDAP, checkLDAP)
+      (Sam, checkSam)
     ).foreach(processSubsystemResult)
   }
 
@@ -227,15 +226,9 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     }
   }
 
-  /**
-    * Checks LDAP status by doing a search and validating that we can retrieve at least one user.
-    */
-  private def checkLDAP: Future[SubsystemStatus] = {
-    logger.debug("Checking LDAP...")
-    userDirectoryDAO.listUsers.map { users =>
-      if (users.isEmpty) failedStatus("Could not find any users in LDAP")
-      else OkStatus
-    }
+  private def checkSam: Future[SubsystemStatus] = {
+    logger.debug("Checking Sam...")
+    samDAO.getStatus()
   }
 
   private def processSubsystemResult(subsystemAndResult: (Subsystem, Future[SubsystemStatus])): Unit = {

@@ -7,8 +7,9 @@ import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
 import wdl4s.parser.WdlParser.SyntaxError
-import wdl4s.types.WdlArrayType
-import wdl4s.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
+import wdl4s.wdl.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow, WorkflowInput}
+import wdl4s.wdl.types.{WdlArrayType, WdlOptionalType}
+import wdl4s.wdl.WdlNamespace.httpResolver
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -30,18 +31,28 @@ object MethodConfigResolver {
   }
 
   private def getArrayResult(inputName: String, seq: Iterable[AttributeValue]): SubmissionValidationValue = {
-    val notNull = seq.filter(v => v != null && v != AttributeNull)
-    val attr = if (notNull.isEmpty) Option(AttributeValueEmptyList) else Option(AttributeValueList(notNull.toSeq))
+    val notNull: Seq[AttributeValue] = seq.filter(v => v != null && v != AttributeNull).toSeq
+    val attr = notNull match {
+      case Nil => Option(AttributeValueEmptyList)
+      //GAWB-2509: don't pack single-elem RawJson array results into another layer of array
+      //NOTE: This works, except for the following situation: a participant with a RawJson double-array attribute, in a single-element participant set.
+      // Evaluating this.participants.raw_json on the pset will incorrectly hit this case and return a 2D array when it should return a 3D array.
+      // The true fix for this is to look into why the slick expression evaluator wraps deserialized AttributeValues in a Seq, and instead
+      // return the proper result type, removing the need to infer whether it's a scalar or array type from the WDL input.
+      case AttributeValueRawJson(JsArray(_)) +: Seq() => Option(notNull.head)
+      case _ => Option(AttributeValueList(notNull))
+    }
     SubmissionValidationValue(attr, None, inputName)
   }
 
   private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: WorkflowInput): SubmissionValidationValue = wfInput.wdlType match {
     case arrayType: WdlArrayType => getArrayResult(wfInput.fqn, mcSequence)
+    case WdlOptionalType(_:WdlArrayType) => getArrayResult(wfInput.fqn, mcSequence) //send optional-arrays down the same codepath as arrays
     case _ => getSingleResult(wfInput.fqn, mcSequence, wfInput.optional)
   }
 
-  def parseWDL(wdl: String): Try[wdl4s.Workflow] = {
-    val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq()).recoverWith { case t: SyntaxError =>
+  def parseWDL(wdl: String): Try[WdlWorkflow] = {
+    val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq(httpResolver(_))).recoverWith { case t: SyntaxError =>
       Failure(new RawlsException("Failed to parse WDL: " + t.getMessage()))
     }
 
@@ -74,11 +85,11 @@ object MethodConfigResolver {
     for ((name, expression) <- methodConfig.inputs.toSeq) yield MethodInput(agoraInputs(name), expression.value)
   }
 
-  def resolveInputsForEntities(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
+  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
     if( inputs.isEmpty ) {
-      //no inputs to resolve = just return an empty map back!
+      //no inputs to evaluate = just return an empty map back!
       DBIO.successful(entities.map( _.name -> Seq.empty[SubmissionValidationValue] ).toMap)
     } else {
       ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
@@ -87,10 +98,10 @@ object MethodConfigResolver {
           evaluator.evalFinalAttribute(workspaceContext, input.expression).asTry.map { tryAttribsByEntity =>
             val validationValuesByEntity: Seq[(String, SubmissionValidationValue)] = tryAttribsByEntity match {
               case Failure(regret) =>
-                //The DBIOAction failed - this input expression was unparseable. Make an error for each entity.
+                //The DBIOAction failed - this input expression was not evaluated. Make an error for each entity.
                 entities.map(e => (e.name, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.fqn)))
               case Success(attributeMap) =>
-                //The expression was parseable, but that doesn't mean we got results...
+                //The expression was evaluated, but that doesn't mean we got results...
                 attributeMap.map {
                   case (key, Success(attrSeq)) => key -> unpackResult(attrSeq.toSeq, input.workflowInput)
                   case (key, Failure(regret)) => key -> SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.fqn)

@@ -18,7 +18,7 @@ case class StatusCheckResponse(
 )
 
 object Subsystems {
-  val AllSubsystems = Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub, LDAP)
+  val AllSubsystems = Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub, Sam)
   val GoogleSubsystems = Set(GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub)
 
   sealed trait Subsystem extends RawlsEnumeration[Subsystem] {
@@ -37,7 +37,7 @@ object Subsystems {
       case "GoogleGenomics" => GoogleGenomics
       case "GoogleGroups" => GoogleGroups
       case "GooglePubSub" => GooglePubSub
-      case "LDAP" => LDAP
+      case "Sam" => Sam
       case _ => throw new RawlsException(s"invalid Subsystem [$name]")
     }
   }
@@ -50,7 +50,7 @@ object Subsystems {
   case object GoogleGenomics extends Subsystem
   case object GoogleGroups extends Subsystem
   case object GooglePubSub extends Subsystem
-  case object LDAP extends Subsystem
+  case object Sam extends Subsystem
 }
 
 object StatusJsonSupport extends JsonSupport {

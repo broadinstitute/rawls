@@ -4,7 +4,7 @@ import org.broadinstitute.dsde.rawls.metrics.Expansion.UriExpansion
 import org.broadinstitute.dsde.rawls.model.{RawlsEnumeration, WorkspaceName}
 import shapeless._
 import spray.http.Uri
-import spray.http.Uri.Path._
+import spray.http.Uri.Path.{Segment, Slash, Empty}
 import spray.routing.PathMatcher.Matched
 import spray.routing.PathMatcher
 

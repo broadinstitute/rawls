@@ -10,6 +10,8 @@ import slick.dbio.DBIO
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 trait JndiSupport extends LazyLogging {
   private val batchSize = 1000
@@ -36,6 +38,7 @@ trait JndiSupport extends LazyLogging {
 
   /**
     * Given a possibly large collection of inputs, splits input into batches and calls op on each batch.
+    *
     * @param url
     * @param user
     * @param password
@@ -69,6 +72,28 @@ trait JndiSupport extends LazyLogging {
     schema.createSubcontext(s"AttributeDefinition/$name", attributes)
   }
 
+  import scala.language.implicitConversions
+  /**
+    * Use this implicit conversion class and following call to extractResultsAndClose
+    * instead of JavaConverters and call to asScala
+    * because it makes sure the NamingEnumeration is closed and connections are not leaked.
+    * @param results results from a search, etc.
+    * @return object that can be used to safely handle and close NamingEnumeration
+    */
+  protected implicit class NamingEnumCloser[T](results: NamingEnumeration[T]) {
+    /**
+      * copy results enum into a Seq then close the enum
+      * @return results
+      */
+    def extractResultsAndClose: Seq[T] = {
+      import scala.collection.JavaConverters._
+      try {
+        Seq(results.asScala.toSeq:_*)
+      } finally {
+        results.close()
+      }
+    }
+  }
 }
 
 /**

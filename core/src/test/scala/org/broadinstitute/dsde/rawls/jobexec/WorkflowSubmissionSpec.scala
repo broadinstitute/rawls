@@ -308,7 +308,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Submitted, 2))
       capturedMetrics should contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Failed, 1))
 
-      val expected = expectedHttpRequestMetrics("post", "workflows.v1.batch", StatusCodes.Created.intValue, 1, Some(Subsystems.Cromwell))
+      val expected = expectedHttpRequestMetrics("post", "api.workflows.v1.batch", StatusCodes.Created.intValue, 1, Some(Subsystems.Cromwell))
       assertSubsetOf(expected, capturedMetrics)
     }
   }
@@ -391,7 +391,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       mockServer.mockServer.verify(
         HttpRequest.request()
           .withMethod("POST")
-          .withPath("/workflows/v1/batch")
+          .withPath("/api/workflows/v1/batch")
           .withBody(mockServerContains(arrayWdl))
           .withBody(mockServerContains(inputs)),
         VerificationTimes.once()
@@ -408,7 +408,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     mockServer.mockServer.verify(
       HttpRequest.request()
         .withMethod("POST")
-        .withPath("/workflows/v1/batch")
+        .withPath("/api/workflows/v1/batch")
         .withBody(mockServerContains("workflow_failure_mode"))
         .withBody(mockServerContains("ContinueWhilePossible")),
       VerificationTimes.once()

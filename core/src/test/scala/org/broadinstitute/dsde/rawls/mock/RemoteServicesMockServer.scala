@@ -289,10 +289,11 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
+    val submissionPath = "/api"
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/workflows/v1/.*/status")
+        .withPath(submissionPath + "/workflows/v1/.*/status")
     ).respond(
       response()
         .withHeaders(jsonHeader)
@@ -307,7 +308,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       mockServer.when(
         request()
           .withMethod("POST")
-          .withPath("/workflows/v1/batch")
+          .withPath(submissionPath + "/workflows/v1/batch")
           .withBody(mockServerContains("two_second_delay"))
       ).respond(
         response()
@@ -326,7 +327,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("POST")
-        .withPath("/workflows/v1/batch")
+        .withPath(submissionPath + "/workflows/v1/batch")
     ).respond(
       response()
         .withHeaders(jsonHeader)
@@ -341,7 +342,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       request()
         .withMethod("POST")
         // this workflow exists
-        .withPath("/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/abort")
+        .withPath(submissionPath + "/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -356,7 +357,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("POST")
-        .withPath("/workflows/v1/workflowA/abort")
+        .withPath(submissionPath + "/workflows/v1/workflowA/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -371,7 +372,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("POST")
-        .withPath("/workflows/v1/workflowB/abort")
+        .withPath(submissionPath + "/workflows/v1/workflowB/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -386,7 +387,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("POST")
-        .withPath("/workflows/v1/workflowC/abort")
+        .withPath(submissionPath + "/workflows/v1/workflowC/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -401,7 +402,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("POST")
-        .withPath("/workflows/v1/workflowD/abort")
+        .withPath(submissionPath + "/workflows/v1/workflowD/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -417,7 +418,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       request()
         .withMethod("POST")
          // already_terminal_workflow
-        .withPath("/workflows/v1/45def17d-40c2-44cc-89bf-9e77bc2c8778/abort")
+        .withPath(submissionPath + "/workflows/v1/45def17d-40c2-44cc-89bf-9e77bc2c8778/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -427,7 +428,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("POST")
-        .withPath("/workflows/v1/45def17d-40c2-44cc-89bf-9e77bc2c9999/abort")
+        .withPath(submissionPath + "/workflows/v1/45def17d-40c2-44cc-89bf-9e77bc2c9999/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -437,7 +438,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("POST")
-        .withPath("/workflows/v1/malformed_workflow/abort")
+        .withPath(submissionPath + "/workflows/v1/malformed_workflow/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -447,7 +448,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/logs")
+        .withPath(submissionPath + "/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/logs")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -455,7 +456,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
             """
               |{
               |  "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
-              |  "logs": {
+              |  "calls": {
               |    "wf.x": [{
               |      "stdout": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
               |      "stderr": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt"
@@ -482,7 +483,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/outputs")
+        .withPath(submissionPath + "/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/outputs")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -503,7 +504,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/metadata")
+        .withPath(submissionPath + "/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/metadata")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -523,7 +524,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/workflows/v1/8afafe21-2b70-4180-a565-748cb573e10c/outputs")
+        .withPath(submissionPath + "/workflows/v1/8afafe21-2b70-4180-a565-748cb573e10c/outputs")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -542,7 +543,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/workflows/v1/8afafe21-2b70-4180-a565-748cb573e10c/metadata")
+        .withPath(submissionPath + "/workflows/v1/8afafe21-2b70-4180-a565-748cb573e10c/metadata")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -562,7 +563,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/workflows/v1/8afafe21-2b70-4180-a565-748cb573e10c/logs")
+        .withPath(submissionPath + "/workflows/v1/8afafe21-2b70-4180-a565-748cb573e10c/logs")
     ).respond(
         response()
           .withHeaders(jsonHeader)
@@ -570,7 +571,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
             """
               |{
               |  "id": "8afafe21-2b70-4180-a565-748cb573e10c",
-              |  "logs": {
+              |  "calls": {
               |  }
               |}
             """.stripMargin)
@@ -580,7 +581,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/outputs")
+        .withPath(submissionPath + "/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/outputs")
     ).respond(
       response()
         .withHeaders(jsonHeader)
@@ -590,7 +591,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/metadata")
+        .withPath(submissionPath + "/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/metadata")
     ).respond(
       response()
         .withHeaders(jsonHeader)

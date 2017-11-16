@@ -41,7 +41,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val syncedGroups = Collections.synchronizedSet(new util.HashSet[RawlsGroupRef]()).asScala
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null) {
         override def receive = {
           case UserService.InternalSynchronizeGroupMembers(rawlsGroupRef) =>
             syncedGroups.add(rawlsGroupRef)
@@ -70,7 +70,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val topic = "topic"
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null) {
         override def receive = {
           case _ => throw new RawlsException("I am a failure")
         }
@@ -97,7 +97,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val topic = "topic"
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null) {
         override def receive = {
           case _ => sender() ! SyncReport(RawlsGroupEmail("foo@bar.com"), Seq(SyncReportItem("op", "email", Option(ErrorReport("I am another failure")))))
         }
@@ -126,7 +126,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     import akka.pattern._
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null) {
         override def receive = {
           case _ => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "group not found"))) pipeTo sender
         }

@@ -74,13 +74,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
       val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
       group.isEmpty || ! group.get.users.contains(user)
     }
-
-    assert {
-      !services.gcsDAO.containsProxyGroup(user)
-    }
-    assert {
-      !services.directoryDAO.exists(user.userSubjectId)
-    }
   }
 
   def assertUserExists(services: TestApiService, user: RawlsUser): Unit = {
@@ -91,56 +84,16 @@ class UserApiServiceSpec extends ApiServiceSpec {
       val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
       group.isDefined && group.get.users.contains(user)
     }
-
-    assert {
-      services.gcsDAO.containsProxyGroup(user)
-    }
-    assert {
-      services.directoryDAO.exists(user.userSubjectId)
-    }
-  }
-
-  it should "create a DB user, user proxy group, ldap entry, and add them to all users group, and enable them" in withEmptyTestDatabase { dataSource: SlickDataSource =>
-    withApiServices(dataSource) { services =>
-
-      // values from MockUserInfoDirectives
-      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
-
-      assertUserMissing(services, user)
-
-      Post("/user") ~>
-        sealRoute(services.createUserRoute) ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
-          }
-        }
-
-      assertUserExists(services, user)
-
-      Get(s"/admin/user/${user.userSubjectId.value}") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(UserStatus(user, Map("google" -> true, "ldap" -> true, "allUsersGroup" -> true))) {
-            responseAs[UserStatus]
-          }
-        }
-    }
   }
 
   it should "fully create a user and grant them pending access to a workspace" in withMinimalTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
+      runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace.workspaceId), testData.userReader.userSubjectId.value, WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Read, None)))
+      runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace2.workspaceId), testData.userReader.userSubjectId.value, WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Write, None)))
 
-      // values from MockUserInfoDirectives
-      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
+      val startingInvites = runAndWait(services.dataSource.dataAccess.workspaceQuery.findWorkspaceInvitesForUser(testData.userOwner.userEmail))
 
-      assertUserMissing(services, user)
-
-      runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace.workspaceId), minimalTestData.userReader.userSubjectId.value, WorkspaceACLUpdate("owner-access", WorkspaceAccessLevels.Read, None)))
-      runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace2.workspaceId), minimalTestData.userReader.userSubjectId.value, WorkspaceACLUpdate("owner-access", WorkspaceAccessLevels.Write, None)))
+      runAndWait(dataSource.dataAccess.rawlsUserQuery.createUser(testData.userOwner))
 
       withStatsD {
         Post("/user") ~> services.sealedInstrumentedRoutes ~>
@@ -149,8 +102,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
               status
             }
           }
-
-        assertUserExists(services, user)
 
         import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
 
@@ -169,23 +120,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
         assertSubsetOf(expected, capturedMetrics)
       }
 
-      val leftoverInvites = runAndWait(dataSource.dataAccess.workspaceQuery.findWorkspaceInvitesForUser(user.userEmail))
+      val leftoverInvites = runAndWait(services.dataSource.dataAccess.workspaceQuery.findWorkspaceInvitesForUser(testData.userOwner.userEmail))
       assert(leftoverInvites.size == 0)
 
     }
-  }
-
-  it should "get a users own status" in withTestDataApiServices { services =>
-    Get("/user") ~>
-      sealRoute(services.getUserStatusRoute) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        assertResult(UserStatus(testData.userOwner, Map("google" -> false, "ldap" -> false, "allUsersGroup" -> false))) {
-          responseAs[UserStatus]
-        }
-      }
   }
 
   it should "list a user's billing projects" in withTestDataApiServices { services =>
@@ -943,7 +881,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
               }
             }
         } { capturedMetrics =>
-          val expected = expectedHttpRequestMetrics("get", s"groups.$testGroupName", expectedStatus.intValue, 1)
+          val expected = expectedHttpRequestMetrics("get", "groups.redacted", expectedStatus.intValue, 1)
           assertSubsetOf(expected, capturedMetrics)
         }
       }

@@ -101,16 +101,11 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       slickDataSource,
+      gcsDAO.getBucketServiceAccountCredential,
       5 seconds,
+      trackDetailedSubmissionMetrics = true,
       workbenchMetricBaseName
     ).withDispatcher("submission-monitor-dispatcher"))
-
-    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(
-      slickDataSource,
-      gcsDAO
-    ))
-
-    val directoryDAO = new MockUserDirectoryDAO
 
     val googleGroupSyncTopic = "test-topic-name"
 
@@ -120,7 +115,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      directoryDAO,
       gpsDAO,
       googleGroupSyncTopic,
       notificationDAO
@@ -130,21 +124,21 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
-      gcsDAO,
-      directoryDAO
+      gcsDAO
     )_
 
     val statisticsServiceConstructor = StatisticsService.constructor(
       slickDataSource,
-      gcsDAO,
-      directoryDAO
+      gcsDAO
     )_
 
     val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName)
 
+    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl)
+
     val healthMonitor = system.actorOf(HealthMonitor.props(
-      dataSource, gcsDAO, gpsDAO, directoryDAO, methodRepoDAO,
-      Seq.empty, Seq.empty, Seq.empty))
+      dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO,
+      Seq.empty, Seq.empty, Seq("my-favorite-bucket")))
     val statusServiceConstructor = StatusService.constructor(healthMonitor)_
 
     val execServiceBatchSize = 3
@@ -157,8 +151,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       execServiceBatchSize,
       gcsDAO,
       notificationDAO,
-      submissionSupervisor,
-      bucketDeletionMonitor,
       userServiceConstructor,
       genomicsServiceConstructor,
       maxActiveWorkflowsTotal,
@@ -169,7 +161,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
       googleGroupSyncMonitorSupervisor ! PoisonPill
-      bucketDeletionMonitor ! PoisonPill
     }
 
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
@@ -179,7 +170,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val sealedInstrumentedRoutes: Route = sealRoute {
       instrumentRequest {
         adminRoutes ~ billingRoutes ~ entityRoutes ~  methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
-          submissionRoutes ~ userRoutes ~ createUserRoute ~ getUserStatusRoute ~ versionRoute ~ workspaceRoutes
+          submissionRoutes ~ userRoutes ~ createUserRoute ~ versionRoutes ~ workspaceRoutes
       }
     }
   }

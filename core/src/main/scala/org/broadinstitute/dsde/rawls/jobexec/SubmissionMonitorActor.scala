@@ -428,7 +428,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       logger.error("Error occurred checking current workflow status counts", e)
       (Map.empty[WorkflowStatus, Int], Map.empty[SubmissionStatus, Int])
     }.map { case (wfCounts, subCounts) =>
-      SaveCurrentWorkflowStatusCounts(wfCounts, subCounts, reschedule)
+      SaveCurrentWorkflowStatusCounts(workspaceName, submissionId, wfCounts, subCounts, reschedule)
     }
   }
 }

@@ -216,6 +216,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   class DefaultTestData() extends TestData {
     // setup workspace objects
     val userProjectOwner = RawlsUser(UserInfo(RawlsUserEmail("project-owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543210101")))
+    val userSAProjectOwner = RawlsUser(UserInfo(RawlsUserEmail("project-owner-access-sa"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543210202")))
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
@@ -401,7 +402,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val methodConfigMissingOutputs = MethodConfiguration("ns", "testConfigMissingOutputs", "Sample", Map(), Map(), Map("some.workflow.output" -> AttributeString("this.might_not_be_here")), MethodRepoMethod("ns-config", "meth1", 1))
 
     val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableInputs = MethodConfiguration("dsde", "UnparseableInputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableOutputs = MethodConfiguration("dsde", "UnparseableOutputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), MethodRepoMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableBoth = MethodConfiguration("dsde", "UnparseableBothMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..is...bad")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), MethodRepoMethod("dsde", "three_step", 1))
+    val methodConfigEmptyOutputs = MethodConfiguration("dsde", "EmptyOutputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("")), MethodRepoMethod("dsde", "three_step", 1))
     val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
     val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
 
@@ -409,26 +413,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       inputs=Map("aggregate_data_workflow.aggregate_data.input_array" -> AttributeString("this.samples.type")),
       outputs=Map("aggregate_data_workflow.aggregate_data.output_array" -> AttributeString("this.output_array")),
       MethodRepoMethod("dsde", "array_task", 1))
-
-    val methodConfigValidExprs = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty,
-      inputs=Map(
-        "foo" -> AttributeString("this.thing.foo"),
-        "bar" -> AttributeString("workspace.bar"),
-        "baz" -> AttributeString("this.library:thing.baz"),
-        "quux" -> AttributeString("4"),
-        "splat" -> AttributeString("\"splat\""),
-        "bang" -> AttributeString("[1,2,3]")),
-      outputs=Map("foo" -> AttributeString("this.foo"), "bar" -> AttributeString("workspace.bar"), "baz" -> AttributeString("this.library:baz"), "quux" -> AttributeString("workspace.library:quux")),
-      MethodRepoMethod("dsde", "three_step", 1))
-
-    val methodConfigInvalidExprs = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty,
-      inputs=Map("foo" -> AttributeString("bonk.thing.foo"), "bar" -> AttributeString("workspace.bar")),
-      outputs=Map(
-        "foo" -> AttributeString("this.bonk.foo"),
-        "bar" -> AttributeString("foo.bar"),
-        "baz" -> AttributeString("4"),
-        "qux" -> AttributeString("[1,2,3]")),
-      MethodRepoMethod("dsde", "three_step", 1))
 
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, wsName)
     val methodConfigName2 = methodConfigName.copy(name="novelName")
@@ -618,7 +602,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                 methodConfigurationQuery.create(context, methodConfig2),
                 methodConfigurationQuery.create(context, methodConfig3),
                 methodConfigurationQuery.create(context, methodConfigValid),
-                methodConfigurationQuery.create(context, methodConfigUnparseable),
+                methodConfigurationQuery.create(context, methodConfigUnparseableInputs),
+                methodConfigurationQuery.create(context, methodConfigUnparseableOutputs),
+                methodConfigurationQuery.create(context, methodConfigUnparseableBoth),
+                methodConfigurationQuery.create(context, methodConfigEmptyOutputs),
                 methodConfigurationQuery.create(context, methodConfigNotAllSamples),
                 methodConfigurationQuery.create(context, methodConfigAttrTypeMixup),
                 methodConfigurationQuery.create(context, methodConfigArrayType),
@@ -868,16 +855,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
     val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
     val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
-
-    val methodConfigValidExprs = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty,
-      inputs=Map("foo" -> AttributeString("this.thing.foo"), "bar" -> AttributeString("workspace.bar")),
-      outputs=Map("foo" -> AttributeString("this.foo"), "bar" -> AttributeString("workspace.bar")),
-      MethodRepoMethod("dsde", "three_step", 1))
-
-    val methodConfigInvalidExprs = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty,
-      inputs=Map("foo" -> AttributeString("bonk.thing.foo"), "bar" -> AttributeString("workspace.bar")),
-      outputs=Map("foo" -> AttributeString("this.bonk.foo"), "bar" -> AttributeString("foo.bar")),
-      MethodRepoMethod("dsde", "three_step", 1))
 
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, wsName)
     val methodConfigName2 = methodConfigName.copy(name="novelName")
