@@ -53,4 +53,5 @@
     <include file="changesets/20170811_index_scratch_tables.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170821_removing_foreign_key_constraints.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170816_save_rawls_instance_for_workflow.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20171120_update_NDMS_toNMDS.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
