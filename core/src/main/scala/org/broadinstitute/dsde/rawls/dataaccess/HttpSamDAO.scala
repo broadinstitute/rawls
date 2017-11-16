@@ -53,6 +53,22 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
   }
 
+  override def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Boolean] = {
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId"
+    val httpRequest = Delete(url)
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive
+    val result: Future[HttpResponse] = pipeline(httpRequest)
+
+    retry(when500) { () =>
+      result.map { response =>
+        response.status match {
+          case s if s.isSuccess => true
+          case _ => false
+        }
+      }
+    }
+  }
+
   override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/action/${action.value}"
     val httpRequest = Get(url)

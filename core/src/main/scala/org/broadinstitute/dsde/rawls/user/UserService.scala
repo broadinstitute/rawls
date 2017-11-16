@@ -317,8 +317,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).flatMap { resourceIdsWithPolicyNames =>
         dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))).map { projectDetails =>
           resourceIdsWithPolicyNames.map { idWithPolicyName =>
-            println(projectDetails(idWithPolicyName.resourceId)._2)
-            RawlsBillingProjectMembership(RawlsBillingProjectName(idWithPolicyName.resourceId), ProjectRoles.withName(idWithPolicyName.accessPolicyName), projectDetails(idWithPolicyName.resourceId)._1, Option("this is a fake message used as a sanity check"))
+            RawlsBillingProjectMembership(RawlsBillingProjectName(idWithPolicyName.resourceId), ProjectRoles.withName(idWithPolicyName.accessPolicyName), projectDetails(idWithPolicyName.resourceId)._1, projectDetails(idWithPolicyName.resourceId)._2)
           }
         }
       }.map(RequestComplete(_))
@@ -326,15 +325,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-//    val x: Future[Seq[RawlsBillingProjectMember]] = for {
-//      policies <- samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo)
-//      policyWithName <- policies
-//      role <- policyWithName.policy.roles
-//      email <- policyWithName.policy.memberEmails
-//    } yield RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(role))
-//
-//    x
-
     samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo).map { policies =>
       policies.flatMap { policyWithName =>
         policyWithName.policy.roles.flatMap { role =>
@@ -347,28 +337,24 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-    // delete actual project in google-y way, then remove from Rawls DB
+    // delete actual project in google-y way, then remove from Rawls DB and Sam
     gcsDAO.deleteProject(projectName) flatMap {
       _ => unregisterBillingProject(projectName)
     }
   }
 
   def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-    for {
-      groups <- dataSource.inTransaction { dataAccess =>
-        withBillingProject(projectName, dataAccess) { project =>
-          dataAccess.rawlsBillingProjectQuery.delete(project.projectName) map {
-            case true => project.groups
-            case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
-          }
-        }
+    val isDeleted = dataSource.inTransaction { dataAccess =>
+      withBillingProject(projectName, dataAccess) { project =>
+        dataAccess.rawlsBillingProjectQuery.delete(project.projectName)
       }
-
-      _ <- Future.sequence(groups.map {case (_, group) => gcsDAO.deleteGoogleGroup(group) })
-
-    } yield {
-      RequestComplete(StatusCodes.OK)
     }
+
+    //make sure we actually deleted it in the rawls database before destroying the permissions in Sam
+    isDeleted.flatMap {
+      case true => samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
+      case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
+    }.map(_ => RequestComplete(StatusCodes.OK))
   }
 
   def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
