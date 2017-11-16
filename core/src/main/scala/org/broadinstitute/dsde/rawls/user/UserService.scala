@@ -323,11 +323,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo).map { policies =>
-      policies.flatMap { policyWithName =>
-        policyWithName.policy.memberEmails.map { email =>
-          RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(policyWithName.policyName))
-        }
-      }.toSeq
+      for {
+        policyWithName <- policies
+        email <- policyWithName.policy.memberEmails
+      } yield RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(policyWithName.policyName))
     }.map(RequestComplete(_))
   }
 
@@ -353,15 +352,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
-    for {
-      _ <- samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, projectAccessUpdate.role.toString, projectAccessUpdate.email, userInfo)
-    } yield RequestComplete(StatusCodes.OK)
+    samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, projectAccessUpdate.role.toString, projectAccessUpdate.email, userInfo).map(_ => RequestComplete(StatusCodes.OK))
   }
 
   def removeUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
-    for {
-      _ <- samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, projectAccessUpdate.role.toString, projectAccessUpdate.email, userInfo)
-    } yield RequestComplete(StatusCodes.OK)
+    samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, projectAccessUpdate.role.toString, projectAccessUpdate.email, userInfo).map(_ => RequestComplete(StatusCodes.OK))
   }
 
   def listGroupMembers(groupRef: RawlsGroupRef): Future[PerRequestMessage] = {

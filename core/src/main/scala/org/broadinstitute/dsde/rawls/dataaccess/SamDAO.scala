@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
-import org.broadinstitute.dsde.rawls.model.{ErrorReportSource, ErrorReportable, JsonSupport, SubsystemStatus, UserInfo, UserStatus}
+import org.broadinstitute.dsde.rawls.model.{ErrorReportSource, ErrorReportable, JsonSupport, RawlsGroupEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus}
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.Future
@@ -19,6 +19,7 @@ trait SamDAO extends ErrorReportable {
   def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Boolean]
   def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Boolean]
   def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Boolean]
+  def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, userInfo: UserInfo): Future[Map[RawlsGroupEmail, Seq[SyncReportItem]]]
   def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]]
   def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]]
 
@@ -40,6 +41,7 @@ object SamResourceTypeNames {
 case class SamPolicy(memberEmails: Seq[String], actions: Seq[String], roles: Seq[String])
 case class SamPolicyWithName(policyName: String, policy: SamPolicy)
 case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: String)
+//case class SamSyncReport(report: Map[RawlsGroupEmail, Seq[SyncReportItem]])
 
 class SamModelJsonSupport extends JsonSupport {
   implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
