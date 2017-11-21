@@ -234,7 +234,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
     val failureModes = Seq(pollOperationFutureFail _, pollOperationOpFail _)
 
-    failureModes.zipWithIndex.foreach { case (failureMode, index) =>
+    failureModes.foreach { case failureMode =>
       withEmptyTestDatabase { dataSource: SlickDataSource =>
         withApiServices(dataSource) { services =>
 
@@ -268,9 +268,8 @@ class UserApiServiceSpec extends ApiServiceSpec {
               }
             }
 
-          val operationRecords = runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName)))
           assertResult(1) {
-            operationRecords.size
+            runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
           }
 
           val billingProjectMonitor = new CreatingBillingProjectMonitor {
