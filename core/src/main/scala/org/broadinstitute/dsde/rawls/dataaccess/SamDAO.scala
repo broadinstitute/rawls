@@ -30,6 +30,7 @@ object SamResourceActions {
   case class SamResourceAction(value: String)
 
   val createWorkspace = SamResourceAction("create_workspace")
+  val launchBatchCompute = SamResourceAction("launch_batch_compute")
 }
 
 object SamResourceTypeNames {
@@ -41,7 +42,6 @@ object SamResourceTypeNames {
 case class SamPolicy(memberEmails: Seq[String], actions: Seq[String], roles: Seq[String])
 case class SamPolicyWithName(policyName: String, policy: SamPolicy)
 case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: String)
-//case class SamSyncReport(report: Map[RawlsGroupEmail, Seq[SyncReportItem]])
 
 object SamModelJsonSupport extends JsonSupport {
   implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
