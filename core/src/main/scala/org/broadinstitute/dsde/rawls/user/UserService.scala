@@ -163,7 +163,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   private def hasOneOfProjectRole(projectName: RawlsBillingProjectName, roles: Set[ProjectRoles.ProjectRole], userInfo: UserInfo): Future[Boolean] = {
-    Future.successful(true)
+    samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo).map { policies =>
+      val roles = policies.map(_.policy).flatMap(_.roles)
+
+      roles.contains(ProjectRoles.Owner.toString)
+    }
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
@@ -839,17 +843,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             _ <- dataSource.inTransaction { dataAccess =>
               dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
                 case None =>
-                  //create the resource in sam
-                  //sync the owner policy to google in sam
-                  //get back that email address and to fire it off create (requires changing signature of RawlsBillingProject)
-                  //do we store that email in the billing project table?? or do we request the email from sam every time
-
-
-
-
-                  DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)) flatMap { groups => //todo: groups are kinda screwy now because they're in sam
-                    dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, Map.empty, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
-                  }
+                  for {
+                    resource <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo))
+                    group <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, "owner", userInfo))
+                    project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, group.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")), "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
+                  } yield project
 
                 case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))
               }

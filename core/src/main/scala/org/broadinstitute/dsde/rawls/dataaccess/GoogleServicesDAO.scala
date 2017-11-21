@@ -209,11 +209,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
    *
    * @param project
    * @param projectTemplate
-   * @param groupEmailsByRef emails of any subgroups of the project owner or user groups
-   *                         (note that this is not required for users because we can infer their proxy group from subject id)
    * @return an operation for each service api specified in projectTemplate
    */
-  def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Seq[RawlsBillingProjectOperationRecord]]]
+  def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Seq[RawlsBillingProjectOperationRecord]]]
 
   /**
    * Last step of project creation. See createProject for more details.

@@ -1972,11 +1972,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             // we have already verified that the user is in all of the auth domain groups but the project owners might not be
             // so if there is an auth domain we have to do the intersection. There should not be any readers or writers
             // at this point (brand new workspace) so we don't need to do intersections for those
-            authDomainProjectOwnerIntersection <- DBIOUtils.maybeDbAction(workspaceRequest.authorizationDomain.flatMap(ad => if (ad.isEmpty) None else Option(ad))) { authDomain =>
-              dataAccess.rawlsGroupQuery.intersectGroupMembership(authDomain.map(_.toMembersGroupRef) ++ Set(RawlsGroupRef(project.get.groups(ProjectRoles.Owner).groupName)))
-            }
+//            authDomainProjectOwnerIntersection <- DBIOUtils.maybeDbAction(workspaceRequest.authorizationDomain.flatMap(ad => if (ad.isEmpty) None else Option(ad))) { authDomain =>
+//              dataAccess.rawlsGroupQuery.intersectGroupMembership(authDomain.map(_.toMembersGroupRef) ++ Set(RawlsGroupRef(project.get.groups(ProjectRoles.Owner).groupName)))
+//            }
+          //***************************MAJOR TODO: restore this functionality*****************************
 
-            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain.getOrElse(Set.empty), authDomainProjectOwnerIntersection))
+            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain.getOrElse(Set.empty), None))
 
             savedWorkspace <- saveNewWorkspace(workspaceId, googleWorkspaceInfo, workspaceRequest, dataAccess)
             response <- op(SlickWorkspaceContext(savedWorkspace))

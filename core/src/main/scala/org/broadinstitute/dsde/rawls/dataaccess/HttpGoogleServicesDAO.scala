@@ -245,7 +245,7 @@ class HttpGoogleServicesDAO(
 
     val bucketInsertion = for {
       accessGroupTries <- accessGroupInserts
-      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember map { _ + (ProjectOwner -> project.groups(ProjectRoles.Owner)) }
+      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember //map { _ + (ProjectOwner -> project.groups(ProjectRoles.Owner)) } //*******************TODO RESTORE THIS FUNCTIONALITY***********
       intersectionGroupTries <- intersectionGroupInserts
       intersectionGroups <- intersectionGroupTries match {
         case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertAuthDomainProjectOwnerIntersection map { Option(_) }
@@ -888,7 +888,7 @@ class HttpGoogleServicesDAO(
     s"${Option(message).getOrElse("")} - code ${code}"
   }
 
-  override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = {
+  override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = {
     implicit val instrumentedService = GoogleInstrumentedService.Billing
     val projectName = project.projectName
     val credential = getBillingServiceAccountCredential
@@ -901,21 +901,6 @@ class HttpGoogleServicesDAO(
 
     // all of these things should be idempotent
     toFutureTry(for {
-      _ <- Future.traverse(project.groups.values) { group =>
-        createGoogleGroup(group).recover {
-          case t: HttpResponseException if t.getStatusCode == 409 => group
-        }
-      }
-
-      _ <- Future.traverse(project.groups.values) { group =>
-        val memberEmails: Set[String] = group.users.map(u => toProxyFromUser(u.userSubjectId)) ++ group.subGroups.map(groupEmailsByRef(_).value)
-        Future.traverse(memberEmails) { email =>
-          addEmailToGoogleGroup(group.groupEmail.value, email).recover {
-            case t: HttpResponseException if t.getStatusCode == 409 => ()
-          }
-        }
-      }
-
       // set the billing account
       billing <- retryWhen500orGoogleError(() => {
         val billingAccount = project.billingAccount.getOrElse(throw new RawlsException(s"billing account undefined for project ${project.projectName.value}")).value
@@ -929,7 +914,8 @@ class HttpGoogleServicesDAO(
 
       // add any missing permissions
       policy <- retryWhen500orGoogleError(() => {
-        val updatedTemplate = projectTemplate.copy(policies = projectTemplate.policies + ("roles/viewer" -> Seq(s"group:${project.groups(ProjectRoles.Owner).groupEmail.value}")))
+        val ownerPolicyRoleEntry = "roles/viewer" -> Seq(s"group:${project.ownerPolicyEmail.value}")
+        val updatedTemplate = projectTemplate.copy(policies = projectTemplate.policies + ownerPolicyRoleEntry)
         val updatedPolicy = new Policy().setBindings(updateBindings(bindings, updatedTemplate).toSeq)
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, new SetIamPolicyRequest().setPolicy(updatedPolicy)))
       })
