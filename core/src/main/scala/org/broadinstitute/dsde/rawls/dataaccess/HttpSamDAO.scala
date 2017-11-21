@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
@@ -43,7 +43,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
   }
 
-  override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Boolean] = {
+  override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId"
     val httpRequest = Post(url)
     val pipeline = addAuthHeader(userInfo) ~> sendReceive
@@ -52,14 +52,14 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     retry(when500) { () =>
       result.map { response =>
         response.status match {
-          case s if s.isSuccess => true
-          case _ => false
+          case s if s.isSuccess => ()
+          case f => throw new RawlsException(s"createResource to SAM failed with code $f")
         }
       }
     }
   }
 
-  override def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Boolean] = {
+  override def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId"
     val httpRequest = Delete(url)
     val pipeline = addAuthHeader(userInfo) ~> sendReceive
@@ -68,8 +68,8 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     retry(when500) { () =>
       result.map { response =>
         response.status match {
-          case s if s.isSuccess => true
-          case _ => false
+          case s if s.isSuccess => ()
+          case f => throw new RawlsException(s"deleteResource to SAM failed with code $f")
         }
       }
     }
@@ -86,7 +86,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     retry(when500) { () => pipeline[Boolean](userInfo) apply Get(url) }
   }
 
-  override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Boolean] = {
+  override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/$policyName"
     val httpRequest = Put(url, policy)
     val pipeline = addAuthHeader(userInfo) ~> sendReceive
@@ -95,14 +95,14 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     retry(when500) { () =>
       result.map { response =>
         response.status match {
-          case s if s.isSuccess => true
-          case _ => false
+          case s if s.isSuccess => ()
+          case f => throw new RawlsException(s"overwritePolicy to SAM failed with code $f")
         }
       }
     }
   }
 
-  override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Boolean] = {
+  override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
     getResourcePolicies(resourceTypeName, resourceId, userInfo).flatMap { resourcePolicies =>
       val targetPolicy = resourcePolicies.find(_.policyName.equalsIgnoreCase(policyName)).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"policy $policyName not found")))
       val updatedMembers = targetPolicy.policy.memberEmails :+ memberEmail
@@ -112,7 +112,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
   }
 
-  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Boolean] = {
+  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
     getResourcePolicies(resourceTypeName, resourceId, userInfo).flatMap { resourcePolicies =>
       val targetPolicy = resourcePolicies.find(_.policyName.equalsIgnoreCase(policyName)).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"policy $policyName not found")))
       val updatedMembers = targetPolicy.policy.memberEmails.filterNot(_.equalsIgnoreCase(memberEmail))
