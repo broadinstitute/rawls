@@ -4,14 +4,13 @@ import akka.actor.Status.Failure
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, RawlsBillingProjectRecord}
-import org.broadinstitute.dsde.rawls.dataaccess.{ProjectTemplate, GoogleServicesDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, ProjectTemplate, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.{CheckDone, CheckNow}
-import scala.concurrent.duration._
 
-import scala.concurrent.{Future, ExecutionContext}
-import scala.util
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Success
 
 /**
@@ -73,7 +72,10 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
       updatedOperations <- Future.traverse(operations) { operation =>
         operation match {
           case RawlsBillingProjectOperationRecord(_, _, _, true, _, _) => Future.successful(operation)
-          case RawlsBillingProjectOperationRecord(_, _, _, false, _, _) => gcsDAO.pollOperation(operation)
+          case RawlsBillingProjectOperationRecord(_, _, _, false, _, _) => gcsDAO.pollOperation(operation).recover {
+            // if we don't mark this as done we might continue retrying forever and pollOperation already does some retrying
+            case t: Throwable => operation.copy(done = true, errorMessage = Option(s"error getting ${operation.operationName} operation status: ${t.getMessage}"))
+          }
         }
       }
 

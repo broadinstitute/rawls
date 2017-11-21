@@ -227,7 +227,19 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "handle errors creating a billing project" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+  it should "handle operation errors creating a billing project" in {
+    testWithPollingError { rawlsBillingProjectOperation =>
+      Future.successful(rawlsBillingProjectOperation.copy(done = true, errorMessage = Option("this failed")))
+    }
+  }
+
+  it should "handle polling errors creating a billing project" in {
+    testWithPollingError { _ =>
+      Future.failed(new RuntimeException("foo"))
+    }
+  }
+
+  private def testWithPollingError(failureMode: RawlsBillingProjectOperationRecord => Future[RawlsBillingProjectOperationRecord]) = withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // first add the project and user to the DB
@@ -268,9 +280,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         override val datasource: SlickDataSource = services.dataSource
         override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty, Seq("foo", "bar", "baz"))
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
-          override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
-            Future.successful(rawlsBillingProjectOperation.copy(done = true, errorMessage = Option("this failed")))
-          }
+          override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = failureMode(rawlsBillingProjectOperation)
         }
       }
 
@@ -290,10 +300,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Error, Option("this failed")))) {
-            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[Seq[RawlsBillingProjectMembership]].toSet
-          }
+          import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+          val memberships = responseAs[Seq[RawlsBillingProjectMembership]]
+          assert(memberships.forall(_.creationStatus == CreationStatuses.Error))
+          assert(memberships.forall(_.message.isDefined))
         }
     }
   }
