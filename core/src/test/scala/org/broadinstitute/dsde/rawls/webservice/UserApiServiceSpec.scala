@@ -227,84 +227,84 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "handle errors creating a billing project" in {
-    def pollOperationFutureFail(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = Future.failed(new RuntimeException("foo"))
+  it should "handle operation errors creating a billing project" in {
+    testWithPollingError { rawlsBillingProjectOperation =>
+      Future.successful(rawlsBillingProjectOperation.copy(done = true, errorMessage = Option("this failed")))
+    }
+  }
 
-    def pollOperationOpFail(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = Future.successful(rawlsBillingProjectOperation.copy(done = true, errorMessage = Option("this failed")))
+  it should "handle polling errors creating a billing project" in {
+    testWithPollingError { _ =>
+      Future.failed(new RuntimeException("foo"))
+    }
+  }
 
-    val failureModes = Seq(pollOperationFutureFail _, pollOperationOpFail _)
+  private def testWithPollingError(failureMode: RawlsBillingProjectOperationRecord => Future[RawlsBillingProjectOperationRecord]) = withEmptyTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
 
-    failureModes.foreach { case failureMode =>
-      withEmptyTestDatabase { dataSource: SlickDataSource =>
-        withApiServices(dataSource) { services =>
+      // first add the project and user to the DB
 
-          // first add the project and user to the DB
+      val billingUser = testData.userOwner
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
-          val billingUser = testData.userOwner
-          val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
+      runAndWait(rawlsUserQuery.createUser(billingUser))
 
-          runAndWait(rawlsUserQuery.createUser(billingUser))
+      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
-          val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+      import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 
-          import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
-
-          Post(s"/billing", httpJson(createRequest)) ~>
-            sealRoute(services.billingRoutes) ~>
-            check {
-              assertResult(StatusCodes.Created) {
-                status
-              }
-            }
-          Get("/user/billing") ~>
-            sealRoute(services.userRoutes) ~>
-            check {
-              assertResult(StatusCodes.OK) {
-                status
-              }
-              assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
-                import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-                responseAs[Seq[RawlsBillingProjectMembership]].toSet
-              }
-            }
-
-          assertResult(1) {
-            runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
+      Post(s"/billing", httpJson(createRequest)) ~>
+        sealRoute(services.billingRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
           }
-
-          val billingProjectMonitor = new CreatingBillingProjectMonitor {
-            override val datasource: SlickDataSource = services.dataSource
-            override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty, Seq("foo", "bar", "baz"))
-            override val gcsDAO = new MockGoogleServicesDAO("foo") {
-              override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = failureMode(rawlsBillingProjectOperation)
-            }
+        }
+      Get("/user/billing") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
           }
-
-          assertResult(CheckDone(0)) {
-            Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf)
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
+            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+            responseAs[Seq[RawlsBillingProjectMembership]].toSet
           }
+        }
 
-          assertResult(1) {
-            runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
-          }
+      assertResult(1) {
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
+      }
 
-          assertResult(1) {
-            runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
-          }
-
-          Get("/user/billing") ~>
-            sealRoute(services.userRoutes) ~>
-            check {
-              assertResult(StatusCodes.OK) {
-                status
-              }
-              import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-              val memberships = responseAs[Seq[RawlsBillingProjectMembership]]
-              assert(memberships.forall(_.message.isDefined))
-              assert(memberships.forall(_.creationStatus == CreationStatuses.Error))
-            }
+      val billingProjectMonitor = new CreatingBillingProjectMonitor {
+        override val datasource: SlickDataSource = services.dataSource
+        override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty, Seq("foo", "bar", "baz"))
+        override val gcsDAO = new MockGoogleServicesDAO("foo") {
+          override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = failureMode(rawlsBillingProjectOperation)
         }
       }
+
+      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
+
+      assertResult(1) {
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
+      }
+
+      assertResult(1) {
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
+      }
+
+      Get("/user/billing") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+          val memberships = responseAs[Seq[RawlsBillingProjectMembership]]
+          assert(memberships.forall(_.creationStatus == CreationStatuses.Error))
+          assert(memberships.forall(_.message.isDefined))
+        }
     }
   }
 

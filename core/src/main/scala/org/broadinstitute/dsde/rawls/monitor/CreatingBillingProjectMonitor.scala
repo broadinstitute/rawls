@@ -4,15 +4,13 @@ import akka.actor.Status.Failure
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, RawlsBillingProjectRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, ProjectTemplate, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.{CheckDone, CheckNow}
-import org.broadinstitute.dsde.rawls.util.FutureSupport
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util
 import scala.util.Success
 
 /**
@@ -43,7 +41,7 @@ class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gc
   }
 }
 
-trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
+trait CreatingBillingProjectMonitor extends LazyLogging {
   val datasource: SlickDataSource
   val gcsDAO: GoogleServicesDAO
   val projectTemplate: ProjectTemplate
