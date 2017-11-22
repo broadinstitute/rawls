@@ -245,7 +245,7 @@ class HttpGoogleServicesDAO(
 
     val bucketInsertion = for {
       accessGroupTries <- accessGroupInserts
-      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember //map { _ + (ProjectOwner -> project.groups(ProjectRoles.Owner)) } //*******************TODO RESTORE THIS FUNCTIONALITY***********
+      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember map { _ + (ProjectOwner -> project.ownerPolicyGroup) }
       intersectionGroupTries <- intersectionGroupInserts
       intersectionGroups <- intersectionGroupTries match {
         case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertAuthDomainProjectOwnerIntersection map { Option(_) }
