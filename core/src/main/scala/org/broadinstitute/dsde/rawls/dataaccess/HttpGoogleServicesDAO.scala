@@ -914,7 +914,7 @@ class HttpGoogleServicesDAO(
 
       // add any missing permissions
       policy <- retryWhen500orGoogleError(() => {
-        val updatedTemplate = projectTemplate.copy(policies = projectTemplate.policies + ("roles/viewer" -> Seq(s"group:${project.ownerPolicyEmail.value}")))
+        val updatedTemplate = projectTemplate.copy(policies = projectTemplate.policies + ("roles/viewer" -> Seq(s"group:${project.ownerPolicyGroup.groupEmail.value}")))
         val updatedPolicy = new Policy().setBindings(updateBindings(bindings, updatedTemplate).toSeq)
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, new SetIamPolicyRequest().setPolicy(updatedPolicy)))
       })

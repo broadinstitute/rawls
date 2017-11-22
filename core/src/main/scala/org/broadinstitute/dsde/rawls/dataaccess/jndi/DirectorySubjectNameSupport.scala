@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.jndi
 
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
 import org.broadinstitute.dsde.rawls.model.{RawlsGroupName, RawlsUserSubjectId}
 
 /**
@@ -19,9 +20,13 @@ trait DirectorySubjectNameSupport {
 
   val peopleOu = s"ou=people,${directoryConfig.baseDn}"
   val groupsOu = s"ou=groups,${directoryConfig.baseDn}"
+  val resourcesOu = s"ou=resources,${directoryConfig.baseDn}"
 
   protected def groupDn(groupName: RawlsGroupName) = s"cn=${groupName.value},$groupsOu"
   protected def userDn(RawlsUserSubjectId: RawlsUserSubjectId) = s"uid=${RawlsUserSubjectId.value},$peopleOu"
+  protected def resourceTypeDn(resourceTypeName: SamResourceTypeName) = s"resourceType=${resourceTypeName.value},$resourcesOu"
+  protected def resourceDn(resourceTypeName: SamResourceTypeName, resourceId: String) = s"resourceId=$resourceId,${resourceTypeDn(resourceTypeName)}"
+  protected def policyDn(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String): String = s"policy=$policyName,${resourceDn(resourceTypeName, resourceId)}"
 
   protected def dnToSubject(dn: String): Option[Either[RawlsGroupName,RawlsUserSubjectId]] = {
     val splitDn = dn.split(",")

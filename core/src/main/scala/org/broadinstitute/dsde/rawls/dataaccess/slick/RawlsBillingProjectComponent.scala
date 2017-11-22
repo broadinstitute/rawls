@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
@@ -68,9 +69,12 @@ trait RawlsBillingProjectComponent {
 
     //updated
     def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
-      uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).map {
-        case None => None
-        case Some(projectRec) => Option(unmarshalBillingProject(projectRec, Map.empty))
+      uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).flatMap {
+        case None => DBIO.successful(None)
+        case Some(projectRec) =>
+          rawlsGroupQuery.loadPolicyAsRawlsGroup(SamResourceTypeNames.billingProject, projectName.value, ProjectRoles.Owner.toString).map { x =>
+            Option(unmarshalBillingProject(projectRec, x.get)) //todo: get
+          }
       }
     }
 
@@ -119,11 +123,11 @@ trait RawlsBillingProjectComponent {
     }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
-      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.ownerPolicyEmail.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message)
+      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.ownerPolicyGroup.groupEmail.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message)
     }
 
-    private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord, groups: Map[ProjectRoles.ProjectRole, RawlsGroup]): RawlsBillingProject = {
-      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), RawlsGroupEmail(projectRecord.ownerPolicyEmail), projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message)
+    private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord, ownerPolicyGroup: RawlsGroup): RawlsBillingProject = {
+      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), ownerPolicyGroup, projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message)
     }
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {

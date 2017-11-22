@@ -845,8 +845,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
                 case None =>
                   for {
                     resource <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo))
-                    group <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, "owner", userInfo))
-                    project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, group.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")), "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
+                    groupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, "owner", userInfo)).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
+                    project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, RawlsGroup(RawlsGroupName("owner"), groupEmail, Set.empty, Set.empty), "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
                   } yield project
 
                 case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))

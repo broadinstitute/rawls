@@ -7,6 +7,7 @@ import java.util.concurrent.Executors
 import javax.naming._
 import javax.naming.directory._
 
+import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
@@ -14,7 +15,7 @@ import slick.dbio.DBIO
 import spray.http.StatusCodes
 
 import scala.annotation.tailrec
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 /**
@@ -41,6 +42,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     val uid = "uid"
     val groupUpdatedTimestamp = "groupUpdatedTimestamp"
     val groupSynchronizedTimestamp = "groupSynchronizedTimestamp"
+    val policy = "policy"
   }
 
   def initLdap(): ReadWriteAction[Unit] = {
@@ -304,6 +306,15 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }
     }
 
+    def loadPolicyAsRawlsGroup(resourceTypeName: SamResourceTypeName, resourceName: String, policyName: String): ReadWriteAction[Option[RawlsGroup]] = withContext { ctx =>
+      Try {
+        val attributes = ctx.getAttributes(policyDn(resourceTypeName, resourceName, policyName))
+        Option(unmarshalPolicyAsRawlsGroup(attributes))
+      }.recover {
+        case e: NameNotFoundException => None
+      }.get
+    }
+
     def updateSynchronizedDate(rawlsGroupRef: RawlsGroupRef): ReadWriteAction[Unit] = withContext { ctx =>
       ctx.modifyAttributes(groupDn(rawlsGroupRef.groupName), DirContext.REPLACE_ATTRIBUTE, new BasicAttributes(Attr.groupSynchronizedTimestamp, dateFormat.format(new Date()), true))
     }
@@ -373,6 +384,17 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     val groups = members.collect { case Some(Left(group)) => RawlsGroupRef(group) }
     val group = RawlsGroup(RawlsGroupName(cn), RawlsGroupEmail(email), users, groups)
     group
+  }
+
+  private def unmarshalPolicyAsRawlsGroup(attributes: Attributes): RawlsGroup = {
+    val policyName = RawlsGroupName(attributes.get(Attr.policy).get().toString)
+    val email = RawlsGroupEmail(attributes.get(Attr.email).get().toString)
+    val members = getAttributes[String](attributes, Attr.member).getOrElse(Set.empty).toSet.map(dnToSubject)
+
+    val subGroups = members.flatMap(_.collect { case Left(g) => RawlsGroupRef(g) })
+    val users = members.flatMap(_.collect { case Right(u) => RawlsUserRef(u) })
+
+    RawlsGroup(policyName, email, users, subGroups)
   }
 
   object rawlsUserQuery {
