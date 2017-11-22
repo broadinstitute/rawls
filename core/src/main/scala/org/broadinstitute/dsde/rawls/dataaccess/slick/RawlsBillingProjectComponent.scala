@@ -3,10 +3,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
-import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
 
-case class RawlsBillingProjectRecord(projectName: String, ownerPolicyEmail: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String])
+case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String])
 case class RawlsBillingProjectGroupRecord(projectName: String, groupName: String, role: String)
 case class RawlsBillingProjectOperationRecord(projectName: String, operationName: String, operationId: String, done: Boolean, errorMessage: Option[String], api: String)
 
@@ -18,13 +17,12 @@ trait RawlsBillingProjectComponent {
 
   class RawlsBillingProjectTable(tag: Tag) extends Table[RawlsBillingProjectRecord](tag, "BILLING_PROJECT") {
     def projectName = column[String]("NAME", O.PrimaryKey, O.Length(254))
-    def ownerPolicyEmail = column[String]("OWNER_POLICY_EMAIL", O.Length(128))
     def cromwellAuthBucketUrl = column[String]("CROMWELL_BUCKET_URL", O.Length(128))
     def creationStatus = column[String]("CREATION_STATUS", O.Length(20))
     def billingAccount = column[Option[String]]("BILLING_ACCOUNT", O.Length(100))
     def message = column[Option[String]]("MESSAGE")
 
-    def * = (projectName, ownerPolicyEmail, cromwellAuthBucketUrl, creationStatus, billingAccount, message) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
+    def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount, message) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
 
   class RawlsBillingProjectOperationTable(tag: Tag) extends Table[RawlsBillingProjectOperationRecord](tag, "BILLING_PROJECT_OPERATION") {
@@ -46,7 +44,6 @@ trait RawlsBillingProjectComponent {
 
   object rawlsBillingProjectQuery extends TableQuery(new RawlsBillingProjectTable(_)) {
 
-    //already updated
     def create(billingProject: RawlsBillingProject): ReadWriteAction[RawlsBillingProject] = {
       validateUserDefinedString(billingProject.projectName.value)
       uniqueResult(findBillingProjectByName(billingProject.projectName).result) flatMap {
@@ -55,19 +52,16 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    //no changes necessary
     def updateBillingProjects(projects: Traversable[RawlsBillingProject]): WriteAction[Seq[Int]] = {
       DBIO.sequence(projects.map(project => rawlsBillingProjectQuery.filter(_.projectName === project.projectName.value).update(marshalBillingProject(project))).toSeq)
     }
 
-    //requires changes
     def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadWriteAction[Seq[RawlsBillingProject]] = {
       filter(_.creationStatus === status.toString).result.flatMap { projectRecords =>
         DBIO.sequence(projectRecords.map { projectRec => load(RawlsBillingProjectName(projectRec.projectName)).map(_.get) }) //todo (get)
       }
     }
 
-    //updated
     def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
       uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).flatMap {
         case None => DBIO.successful(None)
@@ -78,7 +72,6 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    //already updated
     def delete(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] = {
       rawlsBillingProjectQuery.filter(_.projectName === billingProjectName.value).delete map { count => count > 0 }
     }
@@ -93,23 +86,6 @@ trait RawlsBillingProjectComponent {
       }.toMap)
     }
 
-//    /**
-//     * Checks that user has at least one of roles for the project specified by projectName. Will recurse through sub groups.
-//     * @param projectName
-//     * @param user
-//     * @param roles
-//     * @return
-//     */
-//    def hasOneOfProjectRole(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]): ReadWriteAction[Boolean] = {
-//      val projectUsersAction = findBillingProjectGroupsForRoles(projectName, roles).result.flatMap { groups =>
-//        DBIO.sequence(groups.map { group =>
-//          rawlsGroupQuery.isGroupMember(RawlsGroupRef(RawlsGroupName(group.groupName)), user)
-//        })
-//      }
-//
-//      projectUsersAction.map { isMembers => isMembers.contains(true) }
-//    }
-
     def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] = {
       (rawlsBillingProjectOperationQuery ++= operations).map(_ => ())
     }
@@ -123,7 +99,7 @@ trait RawlsBillingProjectComponent {
     }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
-      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.ownerPolicyGroup.groupEmail.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message)
+      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message)
     }
 
     private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord, ownerPolicyGroup: RawlsGroup): RawlsBillingProject = {
