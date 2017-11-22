@@ -31,6 +31,8 @@ object SamResourceActions {
 
   val createWorkspace = SamResourceAction("create_workspace")
   val launchBatchCompute = SamResourceAction("launch_batch_compute")
+  val alterPolicies = SamResourceAction("alter_policies")
+  val readPolicies = SamResourceAction("read_policies")
 }
 
 object SamResourceTypeNames {

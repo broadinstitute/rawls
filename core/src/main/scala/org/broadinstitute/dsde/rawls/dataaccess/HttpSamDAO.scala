@@ -53,7 +53,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
       result.map { response =>
         response.status match {
           case s if s.isSuccess => ()
-          case f => throw new RawlsException(s"createResource to SAM failed with code $f")
+          case f => throw new RawlsException(s"createResource call to Sam failed with code $f")
         }
       }
     }
@@ -69,7 +69,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
       result.map { response =>
         response.status match {
           case s if s.isSuccess => ()
-          case f => throw new RawlsException(s"deleteResource to SAM failed with code $f")
+          case f => throw new RawlsException(s"deleteResource call to Sam failed with code $f")
         }
       }
     }
@@ -96,7 +96,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
       result.map { response =>
         response.status match {
           case s if s.isSuccess => ()
-          case f => throw new RawlsException(s"overwritePolicy to SAM failed with code $f")
+          case f => throw new RawlsException(s"overwritePolicy call to Sam failed with code $f")
         }
       }
     }
