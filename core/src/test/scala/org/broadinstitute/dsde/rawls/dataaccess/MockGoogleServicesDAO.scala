@@ -110,7 +110,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     val accessGroups: Map[WorkspaceAccessLevel, RawlsGroup] = groupAccessLevelsAscending.map { accessLevel =>
       accessLevel -> (accessLevel match {
         case WorkspaceAccessLevels.Owner => workspaceAccessGroup(workspaceId, accessLevel, Set(RawlsUser(userInfo)))
-        case WorkspaceAccessLevels.ProjectOwner => project.groups(ProjectRoles.Owner)
+        case WorkspaceAccessLevels.ProjectOwner => project.ownerPolicyGroup
         case _ => workspaceAccessGroup(workspaceId, accessLevel, Set.empty)
       })
     }.toMap
@@ -295,8 +295,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Success(()))
   }
 
-  override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = Future.successful {
-    project.groups.values.foreach(group => createGoogleGroup(group))
+  override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = Future.successful {
+    createGoogleGroup(project.ownerPolicyGroup)
     Try(projectTemplate.services.map { service =>
       RawlsBillingProjectOperationRecord(project.projectName.value, service, UUID.randomUUID().toString, false, None, "services")
     })

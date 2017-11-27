@@ -144,7 +144,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val intersectionGroupsByLevel = if(authDomain.isEmpty) None else {
       Option(usersByLevel.map { case (level, users) =>
         level -> makeRawlsGroup(s"${project.projectName.value}-${name}-IG-${level.toString}", users, groupsByLevel(level))
-      } + (ProjectOwner -> makeRawlsGroup(s"${project.projectName.value}-${name}-IG-${ProjectOwner.toString}", project.groups(Owner).users, Set.empty)))
+      } + (ProjectOwner -> makeRawlsGroup(s"${project.projectName.value}-${name}-IG-${ProjectOwner.toString}", project.ownerPolicyGroup.users, Set.empty)))
     }
 
 
@@ -152,7 +152,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       level -> makeRawlsGroup(s"${project.projectName.value}-${name}-${level.toString}", users, groupsByLevel(level))
     }
 
-    val accessGroupsByLevel = newAccessGroupsByLevel + (ProjectOwner -> project.groups(Owner))
+    val accessGroupsByLevel = newAccessGroupsByLevel + (ProjectOwner -> project.ownerPolicyGroup)
 
     (Workspace(project.projectName.value, name, authDomain, workspaceId, bucketName, createdDate, createdDate, createdBy, attributes,
       accessGroupsByLevel.map { case (level, group) => level -> RawlsGroup.toRef(group) },
@@ -510,10 +510,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Some(WorkflowFailureModes.ContinueWhilePossible))
 
     def createWorkspaceGoogleGroups(gcsDAO: GoogleServicesDAO): Unit = {
-      val groups = billingProject.groups.values ++
-        testProject1.groups.values ++
-        testProject2.groups.values ++
-        testProject3.groups.values ++
+      val groups = Seq(billingProject.ownerPolicyGroup) ++
+        Seq(testProject1.ownerPolicyGroup) ++
+        Seq(testProject1.ownerPolicyGroup) ++
+        Seq(testProject1.ownerPolicyGroup) ++
         workspaceGroups ++
         workspaceWithRealmGroups ++
         workspaceWithMultiGroupADGroups ++
@@ -561,13 +561,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         rawlsGroupQuery.save(nestedProjectGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.membersGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.adminsGroup),
-        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+//        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsBillingProjectQuery.create(billingProject),
-        DBIO.sequence(testProject1.groups.values.map(rawlsGroupQuery.save).toSeq),
+//        DBIO.sequence(testProject1.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsBillingProjectQuery.create(testProject1),
-        DBIO.sequence(testProject2.groups.values.map(rawlsGroupQuery.save).toSeq),
+//        DBIO.sequence(testProject2.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsBillingProjectQuery.create(testProject2),
-        DBIO.sequence(testProject3.groups.values.map(rawlsGroupQuery.save).toSeq),
+//        DBIO.sequence(testProject3.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsBillingProjectQuery.create(testProject3),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         rawlsGroupQuery.save(realm.membersGroup),
@@ -738,7 +738,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+//        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),
@@ -884,7 +884,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     override def save() = {
       DBIO.seq(
         rawlsUserQuery.createUser(userOwner),
-        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+//        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsUserQuery.createUser(userWriter),
         rawlsUserQuery.createUser(userReader),
         rawlsGroupQuery.save(ownerGroup),
