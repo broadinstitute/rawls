@@ -34,6 +34,20 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
   private def pipeline[A: Unmarshaller](userInfo: UserInfo) =
     addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[A]
 
+  private def doSuccessOrFailureRequest(request: HttpRequest, userInfo: UserInfo) = {
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive
+    val result: Future[HttpResponse] = pipeline(request)
+
+    retry(when500) { () =>
+      result.map { response =>
+        response.status match {
+          case s if s.isSuccess => ()
+          case f => throw new RawlsException(s"Sam call to ${request.uri} failed with code $f")
+        }
+      }
+    }
+  }
+
   override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = {
     val url = samServiceURL + "/register/user"
     retry(when500) { () =>
@@ -46,33 +60,15 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
   override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId"
     val httpRequest = Post(url)
-    val pipeline = addAuthHeader(userInfo) ~> sendReceive
-    val result: Future[HttpResponse] = pipeline(httpRequest)
 
-    retry(when500) { () =>
-      result.map { response =>
-        response.status match {
-          case s if s.isSuccess => ()
-          case f => throw new RawlsException(s"createResource call to Sam failed with code $f")
-        }
-      }
-    }
+    doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId"
     val httpRequest = Delete(url)
-    val pipeline = addAuthHeader(userInfo) ~> sendReceive
-    val result: Future[HttpResponse] = pipeline(httpRequest)
 
-    retry(when500) { () =>
-      result.map { response =>
-        response.status match {
-          case s if s.isSuccess => ()
-          case f => throw new RawlsException(s"deleteResource call to Sam failed with code $f")
-        }
-      }
-    }
+    doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
@@ -89,37 +85,22 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
   override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/$policyName"
     val httpRequest = Put(url, policy)
-    val pipeline = addAuthHeader(userInfo) ~> sendReceive
-    val result: Future[HttpResponse] = pipeline(httpRequest)
 
-    retry(when500) { () =>
-      result.map { response =>
-        response.status match {
-          case s if s.isSuccess => ()
-          case f => throw new RawlsException(s"overwritePolicy call to Sam failed with code $f")
-        }
-      }
-    }
+    doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    getResourcePolicies(resourceTypeName, resourceId, userInfo).flatMap { resourcePolicies =>
-      val targetPolicy = resourcePolicies.find(_.policyName.equalsIgnoreCase(policyName)).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"policy $policyName not found")))
-      val updatedMembers = targetPolicy.policy.memberEmails :+ memberEmail
-      val updatedPolicy = targetPolicy.policy.copy(memberEmails = updatedMembers)
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/$policyName/memberEmails/$memberEmail"
+    val httpRequest = Put(url)
 
-      overwritePolicy(resourceTypeName, resourceId, policyName, updatedPolicy, userInfo)
-    }
+    doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    getResourcePolicies(resourceTypeName, resourceId, userInfo).flatMap { resourcePolicies =>
-      val targetPolicy = resourcePolicies.find(_.policyName.equalsIgnoreCase(policyName)).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"policy $policyName not found")))
-      val updatedMembers = targetPolicy.policy.memberEmails.filterNot(_.equalsIgnoreCase(memberEmail))
-      val updatedPolicy = targetPolicy.policy.copy(memberEmails = updatedMembers)
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/$policyName/memberEmails/$memberEmail"
+    val httpRequest = Delete(url)
 
-      overwritePolicy(resourceTypeName, resourceId, policyName, updatedPolicy, userInfo)
-    }
+    doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, userInfo: UserInfo): Future[Map[RawlsGroupEmail, Seq[SyncReportItem]]] = {
