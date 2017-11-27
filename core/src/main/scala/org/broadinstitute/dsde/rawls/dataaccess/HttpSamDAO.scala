@@ -90,14 +90,14 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
   }
 
   override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/${policyName.toLowerCase}/memberEmails/$memberEmail"
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/${policyName.toLowerCase}/memberEmails/$memberEmail"
     val httpRequest = Put(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/${policyName.toLowerCase}/memberEmails/$memberEmail"
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/${policyName.toLowerCase}/memberEmails/$memberEmail"
     val httpRequest = Delete(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
