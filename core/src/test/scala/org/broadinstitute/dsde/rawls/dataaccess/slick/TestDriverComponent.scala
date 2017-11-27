@@ -107,7 +107,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workflows, SubmissionStatuses.Submitted, useCallCache, workflowFailureMode)
   }
 
-  def generateBillingGroups(projectName: RawlsBillingProjectName, users: Map[ProjectRoles.ProjectRole, Set[RawlsUserRef]], subGroups: Map[ProjectRoles.ProjectRole, Set[RawlsGroupRef]]): Map[ProjectRoles.ProjectRole, RawlsGroup] = {
+  def generateBillingGroups(projectName: RawlsBillingProjectName, users: Map[ProjectRoles.ProjectRole, Set[RawlsUserRef]], subGroups: Map[ProjectRoles.ProjectRole, Set[RawlsGroupRef]]): RawlsGroup = {
     val gcsDAO = new MockGoogleServicesDAO("foo")
     ProjectRoles.all.map { role =>
       val usersToAdd = users.getOrElse(role, Set.empty)
@@ -115,7 +115,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       val groupName = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
       val groupEmail = RawlsGroupEmail(gcsDAO.toGoogleGroupName(groupName))
       role -> RawlsGroup(groupName, groupEmail, usersToAdd, groupsToAdd)
-    }.toMap
+    }
   }
 
   def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)

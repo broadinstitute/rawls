@@ -416,7 +416,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
         assert {
           val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+          loadedProject.ownerPolicyGroup.users.contains(testData.userWriter) && !loadedProject.ownerPolicyGroup.users.contains(testData.userWriter)
         }
       }
   }
@@ -445,7 +445,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
         assert {
           val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          loadedProject.groups(ProjectRoles.User).subGroups.contains(testData.dbGapAuthorizedUsersGroup.membersGroup) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+          loadedProject.ownerPolicyGroup.subGroups.contains(testData.dbGapAuthorizedUsersGroup.membersGroup) && !loadedProject.ownerPolicyGroup.users.contains(testData.userWriter)
         }
       }
 
@@ -485,7 +485,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
         assert {
           val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+          loadedProject.ownerPolicyGroup.users.contains(testData.userWriter) && !loadedProject.ownerPolicyGroup.users.contains(testData.userWriter)
         }
       }
 
@@ -497,7 +497,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
         assert {
           val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+          !loadedProject.ownerPolicyGroup.users.contains(testData.userWriter) && !loadedProject.ownerPolicyGroup.users.contains(testData.userWriter)
         }
       }
   }
@@ -526,7 +526,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
         assert {
           val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userOwner) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userOwner)
+          !loadedProject.ownerPolicyGroup.users.contains(testData.userOwner) && !loadedProject.ownerPolicyGroup.users.contains(testData.userOwner)
         }
       }
 
@@ -538,7 +538,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
         assert {
           val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+          !loadedProject.ownerPolicyGroup.users.contains(testData.userWriter) && !loadedProject.ownerPolicyGroup.users.contains(testData.userWriter)
         }
       }
   }
