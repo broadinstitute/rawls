@@ -163,7 +163,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         rawlsUserQuery.createUser(userOwner),
         rawlsUserQuery.createUser(userWriter),
         rawlsUserQuery.createUser(userReader),
-        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+//        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
