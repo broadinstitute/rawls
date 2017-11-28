@@ -2254,7 +2254,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     def expectedAccessGroups(workspaceId: String) = Map(
-      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.groups(ProjectRoles.Owner)),
+      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.ownerPolicyGroup),
       WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-OWNER")),
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-READER"))
@@ -2292,7 +2292,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     def expectedAccessGroups(workspaceId: String) = Map(
-      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.groups(ProjectRoles.Owner)),
+      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.ownerPolicyGroup),
       WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-OWNER")),
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-READER"))

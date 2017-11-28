@@ -16,6 +16,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
+import org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.Ready
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
@@ -96,7 +97,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   it should "do all of the things" in {
 
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
-    val project = RawlsBillingProject(RawlsBillingProjectName(testProject), projectOwnerGoogleGroup, "", Ready, None, None)
+    val project = model.RawlsBillingProject(RawlsBillingProjectName(testProject), projectOwnerGoogleGroup, "", Ready, None, None)
 
     val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Set.empty, None), Duration.Inf)
 
@@ -165,7 +166,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   it should "do all of the things with a realm" in {
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
-    val project = RawlsBillingProject(RawlsBillingProjectName(testProject), projectOwnerGoogleGroup, "", Ready, None, None)
+    val project = model.RawlsBillingProject(RawlsBillingProjectName(testProject), projectOwnerGoogleGroup, "", Ready, None, None)
 
     val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Set(ManagedGroupRef(testRealm.groupName)), Option(Set(RawlsUserRef(testCreator.userSubjectId)))), Duration.Inf)
 
@@ -285,7 +286,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     assert(Await.result(gcsDAO.diagnosticBucketRead(userInfo.copy(userSubjectId = testUser.userSubjectId), googleWorkspaceInfo.bucketName), Duration.Inf).get.statusCode.get == StatusCodes.Unauthorized)
     Await.result(gcsDAO.deleteProxyGroup(user), Duration.Inf)
     Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo), Duration.Inf)
-    Await.result(Future.traverse(project.groups.values) { group => gcsDAO.deleteGoogleGroup(group) }, Duration.Inf)
+    Await.result(gcsDAO.deleteGoogleGroup(project.ownerPolicyGroup), Duration.Inf)
   }
 
   it should "crud tokens" in {
@@ -388,7 +389,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
       assert(doneCreateOp.errorMessage.isEmpty, createOp.errorMessage)
 
-      val servicesOps = Await.result(gcsDAO.beginProjectSetup(project, projectTemplate, Map.empty), Duration.Inf).get
+      val servicesOps = Await.result(gcsDAO.beginProjectSetup(project, projectTemplate), Duration.Inf).get
 
       val doneServicesOps: Seq[RawlsBillingProjectOperationRecord] = Await.result(retryUntilSuccessOrTimeout(always)(10 seconds, 6 minutes) { () =>
         Future.traverse(servicesOps) { serviceOp =>

@@ -40,15 +40,9 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   def createProject(project: RawlsBillingProject, owner: RawlsUser = testData.userOwner): Unit = {
     import driver.api._
-    val projectWithOwner = project.copy(groups = project.groups.map {
-      case (ProjectRoles.Owner, group) => ProjectRoles.Owner -> group.copy(users = Set(owner))
-      case x => x
-    })
+    val projectWithOwner = project.copy(ownerPolicyGroup = project.ownerPolicyGroup.copy(users = Set(owner)))
 
-    runAndWait(DBIO.seq(
-      DBIO.sequence(projectWithOwner.groups.values.map(rawlsGroupQuery.save).toSeq),
-      rawlsBillingProjectQuery.create(projectWithOwner)
-    ))
+    runAndWait(rawlsBillingProjectQuery.create(projectWithOwner))
   }
 
   "BillingApiService" should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>

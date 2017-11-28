@@ -406,7 +406,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
+    Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -435,7 +435,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
+    Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.dbGapAuthorizedUsersGroup.membersGroup.groupEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -475,7 +475,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
+    Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -516,7 +516,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
+    Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
     Delete(s"/admin/billing/${project1.projectName.value}/owner/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>

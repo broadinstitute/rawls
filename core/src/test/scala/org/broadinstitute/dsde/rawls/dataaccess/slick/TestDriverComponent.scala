@@ -5,7 +5,7 @@ import java.util.UUID
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import nl.grons.metrics.scala.{Counter, DefaultInstrumented, MetricName}
-import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.{TestExecutionContext, model}
 import slick.backend.DatabaseConfig
 import slick.driver.JdbcDriver
 import slick.driver.MySQLDriver.api._
@@ -107,7 +107,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workflows, SubmissionStatuses.Submitted, useCallCache, workflowFailureMode)
   }
 
-  def generateBillingGroups(projectName: RawlsBillingProjectName, users: Map[ProjectRoles.ProjectRole, Set[RawlsUserRef]], subGroups: Map[ProjectRoles.ProjectRole, Set[RawlsGroupRef]]): RawlsGroup = {
+  def generateBillingGroups(projectName: RawlsBillingProjectName, users: Map[ProjectRoles.ProjectRole, Set[RawlsUserRef]], subGroups: Map[ProjectRoles.ProjectRole, Set[RawlsGroupRef]]): Map[ProjectRoles.ProjectRole, RawlsGroup] = {
     val gcsDAO = new MockGoogleServicesDAO("foo")
     ProjectRoles.all.map { role =>
       val usersToAdd = users.getOrElse(role, Set.empty)
@@ -115,7 +115,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       val groupName = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
       val groupEmail = RawlsGroupEmail(gcsDAO.toGoogleGroupName(groupName))
       role -> RawlsGroup(groupName, groupEmail, usersToAdd, groupsToAdd)
-    }
+    }.toMap
   }
 
   def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
@@ -968,6 +968,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     // only be set when a workflow is submitted. Therefore, we have this test-only raw sql to update those
     // workflows to an appropriate EXEC_SERVICE_KEY.
     sql"update WORKFLOW set EXEC_SERVICE_KEY = ${execKey} where EXEC_SERVICE_KEY is null and EXTERNAL_ID is not null;".as[Int]
+  }
+
+  // this is a hack to convert old code that used a map for groups into the new code that just has the owner group
+  object RawlsBillingProject {
+    def apply(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String]) = {
+      model.RawlsBillingProject(projectName, groups(ProjectRoles.Owner), cromwellAuthBucketUrl, status, billingAccount, message)
+    }
   }
 
 }
