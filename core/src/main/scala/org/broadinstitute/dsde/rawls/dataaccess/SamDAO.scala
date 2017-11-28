@@ -41,6 +41,15 @@ object SamResourceTypeNames {
   val billingProject = SamResourceTypeName("billing-project")
 }
 
+trait SamResourceRoles
+
+object SamProjectRoles extends SamResourceRoles {
+  val workspaceCreator = "workspace-creator"
+  val batchComputeUser = "batch-compute-user"
+  val notebookUser = "notebook-user"
+  val owner = "owner"
+}
+
 case class SamPolicy(memberEmails: Seq[String], actions: Seq[String], roles: Seq[String])
 case class SamPolicyWithName(policyName: String, policy: SamPolicy)
 case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: String)
