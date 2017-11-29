@@ -5,7 +5,7 @@ import java.util.UUID
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import nl.grons.metrics.scala.{Counter, DefaultInstrumented, MetricName}
-import org.broadinstitute.dsde.rawls.{TestExecutionContext, model}
+import org.broadinstitute.dsde.rawls.{SamDataSaver, TestExecutionContext, model}
 import slick.backend.DatabaseConfig
 import slick.driver.JdbcDriver
 import slick.driver.MySQLDriver.api._
@@ -48,7 +48,14 @@ object DbResource {
   dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
 
   // create or replace ldap schema
+  import scala.concurrent.ExecutionContext.Implicits.global
+  Await.result(new SamDataSaver().removePolicySchema().recover {
+    case t: Throwable => t.printStackTrace()
+  }, Duration.Inf)
   Await.result(dataSource.database.run(dataSource.dataAccess.initLdap()), Duration.Inf)
+  Await.result(new SamDataSaver().createPolicySchema().recover {
+    case t: Throwable => t.printStackTrace()
+  }, Duration.Inf)
 }
 
 /**
@@ -67,6 +74,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   override val driver: JdbcDriver = DbResource.dataConfig.driver
   override val batchSize: Int = DbResource.dataConfig.config.getInt("batchSize")
   val slickDataSource = DbResource.dataSource
+
+  val samDataSaver = new SamDataSaver
 
   val userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))
 
@@ -112,7 +121,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     ProjectRoles.all.map { role =>
       val usersToAdd = users.getOrElse(role, Set.empty)
       val groupsToAdd = subGroups.getOrElse(role, Set.empty)
-      val groupName = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
+      val groupName = RawlsGroupName(s"${role.toString}@${projectName.value}@${SamResourceTypeNames.billingProject.value}")
       val groupEmail = RawlsGroupEmail(gcsDAO.toGoogleGroupName(groupName))
       role -> RawlsGroup(groupName, groupEmail, usersToAdd, groupsToAdd)
     }.toMap
@@ -561,13 +570,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         rawlsGroupQuery.save(nestedProjectGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.membersGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.adminsGroup),
-//        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.from(samDataSaver.savePolicyGroup(billingProject.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
-//        DBIO.sequence(testProject1.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.from(samDataSaver.savePolicyGroup(testProject1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, testProject1.projectName.value)),
         rawlsBillingProjectQuery.create(testProject1),
-//        DBIO.sequence(testProject2.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.from(samDataSaver.savePolicyGroup(testProject2.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, testProject2.projectName.value)),
         rawlsBillingProjectQuery.create(testProject2),
-//        DBIO.sequence(testProject3.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.from(samDataSaver.savePolicyGroup(testProject3.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, testProject3.projectName.value)),
         rawlsBillingProjectQuery.create(testProject3),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         rawlsGroupQuery.save(realm.membersGroup),
@@ -738,7 +747,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-//        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.from(samDataSaver.savePolicyGroup(billingProject.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),
@@ -884,7 +893,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     override def save() = {
       DBIO.seq(
         rawlsUserQuery.createUser(userOwner),
-//        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.from(samDataSaver.savePolicyGroup(billingProject.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsUserQuery.createUser(userWriter),
         rawlsUserQuery.createUser(userReader),
         rawlsGroupQuery.save(ownerGroup),
@@ -954,7 +963,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       case t: Throwable => t.printStackTrace; throw t
     } finally {
       runAndWait(DBIO.seq(slickDataSource.dataAccess.truncateAll), 2 minutes)
-      runAndWait(slickDataSource.dataAccess.emptyLdap, 2 minutes)
+      Await.result(slickDataSource.dataAccess.clearLdap(), 2 minutes)
     }
   }
 

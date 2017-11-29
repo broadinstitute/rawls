@@ -66,7 +66,7 @@ trait RawlsBillingProjectComponent {
       uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).flatMap {
         case None => DBIO.successful(None)
         case Some(projectRec) =>
-          rawlsGroupQuery.loadPolicyAsRawlsGroup(SamResourceTypeNames.billingProject, projectName.value, ProjectRoles.Owner.toString).map { x =>
+          rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, ProjectRoles.Owner.toString)))).map { x =>
             Option(unmarshalBillingProject(projectRec, x.get)) //todo: get
           }
       }

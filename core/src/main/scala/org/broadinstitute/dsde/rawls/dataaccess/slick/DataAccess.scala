@@ -1,9 +1,15 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import javax.naming.NameNotFoundException
+import javax.naming.directory.DirContext
+
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionParser
 import org.broadinstitute.dsde.rawls.model.{RawlsGroupName, RawlsGroupRef}
 import slick.driver.JdbcProfile
+
+import scala.concurrent.Future
+import scala.util.Try
 
 trait DataAccess
   extends PendingBucketDeletionComponent
@@ -67,16 +73,20 @@ trait DataAccess
     sql"select version()".as[String]
   }
 
-  def emptyLdap(): ReadWriteAction[Unit] = {
-    // user load all users to read in all users,
-    // delete each user
-    // load all groups, delete each one
-    for {
-      users <- rawlsUserQuery.loadAllUsers
-      groups <- rawlsGroupQuery.loadAllGroups
-      _ <- DBIO.sequence(users.map(user => rawlsUserQuery.deleteUser(user.userSubjectId)))
-      _ <- DBIO.sequence(groups.map(group => rawlsGroupQuery.delete(group)))
-    } yield { }
+  def clearLdap(): Future[Unit] = withContext(directoryConfig.directoryUrl, directoryConfig.user, directoryConfig.password) { ctx =>
+//    clear(ctx, resourcesOu)
+    clear(ctx, groupsOu)
+    clear(ctx, peopleOu)
   }
 
+  private def clear(ctx: DirContext, dn: String): Unit = Try {
+    import scala.collection.JavaConverters._
+    ctx.list(dn).asScala.foreach { nameClassPair =>
+      val fullName = if (nameClassPair.isRelative) s"${nameClassPair.getName},$dn" else nameClassPair.getName
+      clear(ctx, fullName)
+      ctx.unbind(fullName)
+    }
+  } recover {
+    case _: NameNotFoundException =>
+  }
 }

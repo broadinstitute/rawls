@@ -637,7 +637,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),
-//        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.from(samDataSaver.savePolicyGroup(billingProject.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
         workspaceQuery.save(workspace),
         entityQuery.save(SlickWorkspaceContext(workspace), lotsOfSamples :+ sampleSet)
