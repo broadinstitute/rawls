@@ -48,18 +48,12 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   "BillingApiService" should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
 
-    createProject(project)
-
     Put(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-//        assert {
-//          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-//          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
-//        }
       }
 
     Put(s"/billing/${project.projectName.value}/owner/${testData.userWriter.userEmail.value}") ~>
@@ -68,17 +62,11 @@ class BillingApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-//        assert {
-//          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-//          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
-//        }
       }
   }
 
   it should "return 403 when adding a user to a non-owned billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-
-    createProject(project, testData.userWriter)
+    val project = billingProjectFromName("no_access")
 
     withStatsD {
       Put(s"/billing/${project.projectName.value}/user/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
@@ -86,10 +74,6 @@ class BillingApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.Forbidden) {
             status
           }
-//          assert {
-//            val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-//            !loadedProject.groups(ProjectRoles.User).users.contains(testData.userReader) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userReader)
-//          }
         }
 
       Put(s"/billing/${project.projectName.value}/owner/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
@@ -97,10 +81,6 @@ class BillingApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.Forbidden) {
             status
           }
-//          assert {
-//            val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-//            !loadedProject.groups(ProjectRoles.User).users.contains(testData.userReader) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userReader)
-//          }
         }
     } { capturedMetrics =>
       val expected = expectedHttpRequestMetrics("put", s"billing.redacted.redacted.redacted", StatusCodes.Forbidden.intValue, 2)
@@ -109,9 +89,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-
-    createProject(project)
+    val project = billingProjectFromName("no_access")
 
     Put(s"/billing/${project.projectName.value}/nobody") ~>
       sealRoute(services.billingRoutes) ~>
@@ -123,7 +101,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when adding a user to a nonexistent project" in withTestDataApiServices { services =>
-    Put(s"/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
+    Put(s"/billing/no_access/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -134,7 +112,6 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when removing a user from a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
-    createProject(project)
 
     withStatsD {
       Put(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
@@ -142,9 +119,6 @@ class BillingApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-//          assert {
-//            runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userWriter)
-//          }
         }
 
       Delete(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
@@ -152,9 +126,6 @@ class BillingApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-//          assert {
-//            !runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userWriter)
-//          }
         }
     } { capturedMetrics =>
       val expected = expectedHttpRequestMetrics("put", s"billing.redacted.redacted.redacted", StatusCodes.OK.intValue, 1) ++
@@ -164,8 +135,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when removing a user from a non-owned billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-    createProject(project, testData.userWriter)
+    val project = billingProjectFromName("no_access")
 
     Delete(s"/billing/${project.projectName.value}/owner/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -173,15 +143,11 @@ class BillingApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Forbidden) {
           status
         }
-//        assert {
-//          runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
-//        }
       }
   }
 
   it should "return 404 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-    createProject(project)
+    val project = billingProjectFromName("test_good")
 
     Delete(s"/billing/${project.projectName.value}/user/nobody") ~>
       sealRoute(services.billingRoutes) ~>
@@ -215,7 +181,6 @@ class BillingApiServiceSpec extends ApiServiceSpec {
         runAndWait(rawlsBillingProjectQuery.load(projectName)) match {
           case None => fail("project does not exist in db")
           case Some(project) =>
-//            assert(project.groups(ProjectRoles.User).users.isEmpty && project.groups(ProjectRoles.Owner).users.size == 1 && project.groups(ProjectRoles.Owner).users.head.userSubjectId.value == "123456789876543212345")
             assertResult("gs://" + services.gcsDAO.getCromwellAuthBucketName(projectName)) {
               project.cromwellAuthBucketUrl
             }
@@ -263,9 +228,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when listing billing project members as owner" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-
-    createProject(project)
+    val project = billingProjectFromName("test_good")
 
     Get(s"/billing/${project.projectName.value}/members") ~>
       sealRoute(services.billingRoutes) ~>
@@ -280,9 +243,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when listing billing project members as non-owner" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-
-    createProject(project, testData.userWriter)
+    val project = billingProjectFromName("no_access")
 
     Get(s"/billing/${project.projectName.value}/members") ~>
       sealRoute(services.billingRoutes) ~>

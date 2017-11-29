@@ -42,7 +42,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
       result.map { response =>
         response.status match {
           case s if s.isSuccess => ()
-          case f => throw new RawlsException(s"Sam call to ${request.uri} failed with code $f")
+          case f => throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.uri.path} failed"))
         }
       }
     }
@@ -79,6 +79,7 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
 
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/action/${action.value}"
+
     retry(when500) { () => pipeline[Boolean](userInfo) apply Get(url) }
   }
 
