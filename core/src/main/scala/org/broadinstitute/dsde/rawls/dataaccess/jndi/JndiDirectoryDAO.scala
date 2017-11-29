@@ -192,7 +192,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = withContext { ctx =>
-      groupRefs.flatMap(ref => loadInternal(ref, ctx)).toSeq
+      groupRefs.toSeq.flatMap(ref => loadInternal(ref, ctx))
     }
 
     /** talk to doge before calling this function - loads groups and subgroups and subgroups ... */
