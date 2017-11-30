@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
 import spray.testkit.ScalatestRouteTest
 
@@ -30,7 +30,7 @@ import scala.concurrent.duration.{Duration, FiniteDuration, _}
 import scala.concurrent.{Await, ExecutionContext}
 
 
-class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
+class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll {
   import driver.api._
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
@@ -53,17 +53,28 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     Map.empty
   )
 
+  val mockServer = RemoteServicesMockServer()
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    mockServer.startServer()
+  }
+
+  override def afterAll(): Unit = {
+    mockServer.stopServer
+    super.afterAll()
+  }
+
   case class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
     private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
     lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo1)).underlyingActor
     lazy val userService: UserService = TestActorRef(UserService.props(userServiceConstructor, userInfo1)).underlyingActor
-    val mockServer = RemoteServicesMockServer()
 
 
     def actorRefFactory = system
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-    val samDAO = new HttpSamDAO("example.com")
+    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl)
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
     val gpsDAO = new MockGooglePubSubDAO
 
