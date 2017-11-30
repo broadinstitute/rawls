@@ -2216,7 +2216,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 403 creating workspace in billing project that does not exist" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
-      namespace = "foobar",
+      namespace = "missing_project",
       name = "newWorkspace",
       Map.empty
     )
@@ -2232,7 +2232,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
-      namespace = "project",
+      namespace = "no_access",
       name = "newWorkspace",
       Map.empty
     )
