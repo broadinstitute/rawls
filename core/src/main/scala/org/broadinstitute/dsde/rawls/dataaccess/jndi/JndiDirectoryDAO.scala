@@ -293,9 +293,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def loadGroupByEmail(groupEmail: RawlsGroupEmail): ReadWriteAction[Option[RawlsGroup]] = withContext { ctx =>
-      val matchingAttrs = new BasicAttributes(Attr.email, groupEmail.value, true)
-      matchingAttrs.put("objectclass", "workbenchGroup")
-      val group = ctx.search(directoryConfig.baseDn, matchingAttrs).extractResultsAndClose
+      val group = ctx.search(directoryConfig.baseDn, s"(&(${Attr.email}=${groupEmail.value})(objectclass=workbenchGroup))", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)).extractResultsAndClose
       group match {
         case Seq() => None
         case Seq(result) => Option(unmarshallGroup(result.getAttributes))
