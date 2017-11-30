@@ -19,7 +19,7 @@ before_install:
   - sh docker/run-opendj.sh start
   
 script:
-  - SBT_OPTS=-Xmx3g sbt clean coverage "test-only *.WorkspaceApiServiceSpec" -Denv.type=test -Dmysql.host=localhost -Dmysql.port=3307 -Ddirectory.url=ldap://localhost:3389 -Ddirectory.password=testtesttest it:compile
+  - SBT_OPTS=-Xmx3g sbt clean coverage test -Denv.type=test -Dmysql.host=localhost -Dmysql.port=3307 -Ddirectory.url=ldap://localhost:3389 -Ddirectory.password=testtesttest it:compile
 
 after_success:
   - SBT_OPTS=-Xmx3g sbt coveralls
