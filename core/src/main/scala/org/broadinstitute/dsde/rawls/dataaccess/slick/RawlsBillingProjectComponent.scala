@@ -57,18 +57,23 @@ trait RawlsBillingProjectComponent {
     }
 
     def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadWriteAction[Seq[RawlsBillingProject]] = {
-      filter(_.creationStatus === status.toString).result.flatMap { projectRecords =>
-        DBIO.sequence(projectRecords.map { projectRec => load(RawlsBillingProjectName(projectRec.projectName)).map(_.get) }) //todo (get)
+      for {
+        projectRecords <- filter(_.creationStatus === status.toString).result
+        projects <- DBIO.sequence(projectRecords.map { projectRec => load(RawlsBillingProjectName(projectRec.projectName)) })
+      } yield {
+        projects.flatten
       }
     }
 
     def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
-      uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).flatMap {
-        case None => DBIO.successful(None)
-        case Some(projectRec) =>
-          rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, ProjectRoles.Owner.toString)))).map { x =>
-            Option(unmarshalBillingProject(projectRec, x.get)) //todo: get
-          }
+      for {
+        maybeProjectRec <- uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName))
+        maybeOwnerGroup <-rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, ProjectRoles.Owner.toString))))
+      } yield {
+        (maybeProjectRec, maybeOwnerGroup) match {
+          case (Some(projectRec), Some(ownerGroup)) => Option(unmarshalBillingProject(projectRec, ownerGroup))
+          case _ => None
+        }
       }
     }
 

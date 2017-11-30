@@ -300,15 +300,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     gcsDAO.listBillingAccounts(userInfo) map(RequestComplete(_))
 
   def listBillingProjects(): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)).flatMap { resourceIdsWithPolicyNames =>
-        dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))).map { projectDetails =>
-          resourceIdsWithPolicyNames.map { idWithPolicyName =>
-            RawlsBillingProjectMembership(RawlsBillingProjectName(idWithPolicyName.resourceId), ProjectRoles.withName(idWithPolicyName.accessPolicyName), projectDetails(idWithPolicyName.resourceId)._1, projectDetails(idWithPolicyName.resourceId)._2)
-          }
+    val membershipsFuture = for {
+      resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
+      projectDetailsByName <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))) }
+    } yield {
+      resourceIdsWithPolicyNames.flatMap { idWithPolicyName =>
+        projectDetailsByName.get(idWithPolicyName.resourceId).map { case (projectStatus, message) =>
+          RawlsBillingProjectMembership(RawlsBillingProjectName(idWithPolicyName.resourceId), ProjectRoles.withName(idWithPolicyName.accessPolicyName), projectStatus, message)
         }
-      }.map(RequestComplete(_))
+      }
     }
+
+    membershipsFuture.map(RequestComplete(_))
   }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {

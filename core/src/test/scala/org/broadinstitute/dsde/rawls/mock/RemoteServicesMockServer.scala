@@ -732,6 +732,19 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
+        .withPath("/api/resource/billing-project")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """[{"resourceId":"myNamespace","accessPolicyName":"owner"}, {"resourceId":"arbitrary","accessPolicyName":"user"}, {"resourceId":"project1","accessPolicyName":"owner"}]""".stripMargin
+        )
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
         .withPath("/api/resource/.*")
     ).respond(
       response()
