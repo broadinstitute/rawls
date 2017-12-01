@@ -40,13 +40,20 @@ class SamDataSaver(implicit executionContext: ExecutionContext) extends JndiSupp
     val policy = "policy"
   }
 
-  def savePolicyGroup(policyGroup: RawlsGroup, resourceType: String, resourceId: String): Future[RawlsGroup] = withContext { ctx =>
+  def savePolicyGroup(policyGroup: RawlsGroup, resourceType: String, resourceId: String, trial: Int = 1): Future[RawlsGroup] = withContext { ctx =>
     createOrgUnit(resourcesOu, ctx)
     createResourceType(resourceType, ctx)
     createResource(resourceType, resourceId, ctx)
     save(policyGroup, resourceType, resourceId, ctx)
-
     policyGroup
+  }.recoverWith {
+    case e: NameNotFoundException =>
+      if (trial > 3) {
+        throw e
+      } else {
+        Thread.sleep(10)
+        savePolicyGroup(policyGroup, resourceType, resourceId, trial + 1)
+      }
   }
 
   protected def resourceTypeDn(resourceTypeName: String) = s"${Attr.resourceType}=${resourceTypeName},$resourcesOu"
@@ -76,15 +83,7 @@ class SamDataSaver(implicit executionContext: ExecutionContext) extends JndiSupp
       }
     }
 
-    try {
-      ctx.bind(groupDn(group.groupName), groupContext)
-
-    } catch {
-      case e: NameNotFoundException =>
-        Thread.sleep(10)
-        ctx.bind(groupDn(group.groupName), groupContext)
-
-    }
+    ctx.bind(groupDn(group.groupName), groupContext)
   }
 
   private def addMemberAttributes(users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef], myAttrs: BasicAttributes)(emptyValueFn: BasicAttributes => Unit): Any = {

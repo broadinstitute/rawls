@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, RawlsBillingProjectRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
+import org.scalatest.path
 import spray.http.{HttpMethods, StatusCodes, Uri}
 import spray.json.DefaultJsonProtocol._
 import spray.routing.Route
@@ -146,13 +147,13 @@ class BillingApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 404 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
+  it should "return 400 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("test_good")
 
     Delete(s"/billing/${project.projectName.value}/user/nobody") ~>
       sealRoute(services.billingRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound) {
+        assertResult(StatusCodes.BadRequest) {
           status
         }
       }
@@ -178,12 +179,16 @@ class BillingApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        runAndWait(rawlsBillingProjectQuery.load(projectName)) match {
-          case None => fail("project does not exist in db")
-          case Some(project) =>
+        import driver.api._
+        val query: ReadAction[Seq[RawlsBillingProjectRecord]] = rawlsBillingProjectQuery.filter(_.projectName === projectName.value).result
+        val projects: Seq[RawlsBillingProjectRecord] = runAndWait(query)
+        projects match {
+          case Seq() => fail("project does not exist in db")
+          case Seq(project) =>
             assertResult("gs://" + services.gcsDAO.getCromwellAuthBucketName(projectName)) {
               project.cromwellAuthBucketUrl
             }
+          case _ => fail("too many projects")
         }
       }
   }

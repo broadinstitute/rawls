@@ -639,19 +639,19 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("DELETE")
-        .withPath("/api/resource/.*/.*/policies/.*/memberEmails/.*")
+        .withPath("/api/resource/.*/.*/policies/.*/memberEmails/nobody")
     ).respond(
       response()
-        .withStatusCode(StatusCodes.OK.intValue)
+        .withStatusCode(StatusCodes.BadRequest.intValue)
     )
 
     mockServer.when(
       request()
         .withMethod("DELETE")
-        .withPath("/api/resource/.*/.*/policies/.*/memberEmails/nobody")
+        .withPath("/api/resource/.*/.*/policies/.*/memberEmails/.*")
     ).respond(
       response()
-        .withStatusCode(StatusCodes.NotFound.intValue)
+        .withStatusCode(StatusCodes.OK.intValue)
     )
 
     mockServer.when(
