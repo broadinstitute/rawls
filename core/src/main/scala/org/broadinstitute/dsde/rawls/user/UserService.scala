@@ -345,7 +345,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
-    samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, projectAccessUpdate.role.toString, projectAccessUpdate.email, userInfo).map(_ => RequestComplete(StatusCodes.OK))
+    val policies = Seq(projectAccessUpdate.role.toString, "workspace-creator", "can-compute-user")
+    policies.map { policy =>
+      samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo)
+    }.map(_ => RequestComplete(StatusCodes.OK))
   }
 
   def removeUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
