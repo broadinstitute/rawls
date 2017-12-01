@@ -87,7 +87,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       slickDataSource,
       gcsDAO.getBucketServiceAccountCredential,
       workbenchMetricBaseName = "test"
-    ).withDispatcher("submission-monitor-dispatcher"), "test-ws-submission-supervisor")
+    ).withDispatcher("submission-monitor-dispatcher"))
 
     val directoryDAO = new MockUserDirectoryDAO
 
@@ -754,6 +754,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "delete a workspace with succeeded submission" in withTestDataServices { services =>
+    println(runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission))).toSet)
+
     //check that the workspace to be deleted exists
     assertWorkspaceResult(Option(testData.workspaceSuccessfulSubmission)) {
       runAndWait(workspaceQuery.findByName(testData.wsName4))

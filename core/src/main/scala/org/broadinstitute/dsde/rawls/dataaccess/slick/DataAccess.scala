@@ -74,7 +74,7 @@ trait DataAccess
   }
 
   def clearLdap(): Future[Unit] = withContext(directoryConfig.directoryUrl, directoryConfig.user, directoryConfig.password) { ctx =>
-//    clear(ctx, resourcesOu)
+    clear(ctx, resourcesOu)
     clear(ctx, groupsOu)
     clear(ctx, peopleOu)
   }

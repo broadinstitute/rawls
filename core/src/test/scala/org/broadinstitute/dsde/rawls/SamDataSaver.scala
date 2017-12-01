@@ -57,35 +57,33 @@ class SamDataSaver(implicit executionContext: ExecutionContext) extends JndiSupp
       throw new RawlsException("this is only for saving policies")
     }
 
-    try {
-      val groupContext = new BaseDirContext {
-        override def getAttributes(name: String): Attributes = {
-          val myAttrs = new BasicAttributes(true) // Case ignore
+    val groupContext = new BaseDirContext {
+      override def getAttributes(name: String): Attributes = {
+        val myAttrs = new BasicAttributes(true) // Case ignore
 
-          val oc = new BasicAttribute("objectclass")
-          Seq("top", ObjectClass.policy).foreach(oc.add)
-          myAttrs.put(oc)
+        val oc = new BasicAttribute("objectclass")
+        Seq("top", ObjectClass.policy).foreach(oc.add)
+        myAttrs.put(oc)
 
-          myAttrs.put(new BasicAttribute(Attr.cn, group.groupName.value))
-          myAttrs.put(new BasicAttribute(Attr.email, group.groupEmail.value))
-          myAttrs.put(new BasicAttribute(Attr.resourceId, resourceId))
-          myAttrs.put(new BasicAttribute(Attr.resourceType, resourceType))
+        myAttrs.put(new BasicAttribute(Attr.cn, group.groupName.value))
+        myAttrs.put(new BasicAttribute(Attr.email, group.groupEmail.value))
+        myAttrs.put(new BasicAttribute(Attr.resourceId, resourceId))
+        myAttrs.put(new BasicAttribute(Attr.resourceType, resourceType))
 
-          addMemberAttributes(group.users, group.subGroups, myAttrs) { _ => () } // do nothing when no members present
+        addMemberAttributes(group.users, group.subGroups, myAttrs) { _ => () } // do nothing when no members present
 
-          myAttrs
-        }
+        myAttrs
       }
+    }
 
+    try {
       ctx.bind(groupDn(group.groupName), groupContext)
 
     } catch {
-      case e: NameAlreadyBoundException =>
-//        val myAttrs = new BasicAttributes(true) // Case ignore
-//
-//        addMemberAttributes(group.users, group.subGroups, myAttrs) { _.put(new BasicAttribute(Attr.uniqueMember)) } // add attribute with no value when no member present
-//        ctx.modifyAttributes(groupDn(group.groupName), DirContext.REPLACE_ATTRIBUTE, myAttrs)
       case e: NameNotFoundException =>
+        Thread.sleep(10)
+        ctx.bind(groupDn(group.groupName), groupContext)
+
     }
   }
 
