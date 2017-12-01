@@ -847,8 +847,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
                 case None =>
                   for {
                     resource <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo))
-                    workspaceCreatorPolicy <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, ProjectRoles.User.toString.toLowerCase, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo))
-                    canComputeUserPolicy <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, ProjectRoles.User.toString.toLowerCase, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
+                    workspaceCreatorPolicy <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo))
+                    canComputeUserPolicy <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
                     groupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamProjectRoles.owner, userInfo)).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
                     project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, RawlsGroup(RawlsGroupName(SamProjectRoles.owner), groupEmail, Set.empty, Set.empty), "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
                   } yield project
