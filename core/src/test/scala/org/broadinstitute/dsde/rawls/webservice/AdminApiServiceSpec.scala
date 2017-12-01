@@ -154,212 +154,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
   
-  it should "return 200 when deleting a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-    assert {
-      getBillingProject(services.dataSource, project).isEmpty
-    }
-
-    Post("/billing", CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
-          status
-        }
-
-        assert {
-          getBillingProject(services.dataSource, project).nonEmpty
-        }
-      }
-
-    Delete(s"/admin/billing/${project.projectName.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-      }
-  }
-
-  it should "return 404 when deleting a nonexistent billing project" in withTestDataApiServices { services =>
-    Delete(s"/admin/billing/missing_project") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-  }
-
-  it should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
-    Put(s"/admin/billing/${testData.billingProject.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        assert {
-          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(testData.billingProject.projectName)).get
-          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
-        }
-      }
-
-    Put(s"/admin/billing/${testData.billingProject.projectName.value}/owner/${testData.userWriter.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        assert {
-          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(testData.billingProject.projectName)).get
-          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
-        }
-      }
-  }
-
-  it should "return 404 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
-    val projectName = RawlsBillingProjectName("new_project")
-    val createRequest = CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)
-
-    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
-
-    Post(s"/billing", httpJson(createRequest)) ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-
-    Put(s"/admin/billing/${projectName.value}/user/nobody") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-  }
-
-  it should "return 404 when adding a user to a nonexistent project" in withTestDataApiServices { services =>
-    Put(s"/admin/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-  }
-
-  it should "return 200 when removing a user from a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-    createBillingProject(project)
-    Put(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assert {
-          runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
-        }
-      }
-
-    Delete(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        assert {
-          !runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
-        }
-      }
-  }
-
-  it should "return 404 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
-    val projectName = RawlsBillingProjectName("new_project")
-    val createRequest = CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)
-
-    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
-
-    withStatsD {
-      Post(s"/billing", httpJson(createRequest)) ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
-          }
-        }
-
-      Delete(s"/admin/billing/${projectName.value}/user/nobody") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.NotFound) {
-            status
-          }
-        }
-    } { capturedMetrics =>
-      val expected = expectedHttpRequestMetrics("post", "billing", StatusCodes.Created.intValue, 1) ++
-        expectedHttpRequestMetrics("delete", "admin.billing.redacted.user.redacted", StatusCodes.NotFound.intValue, 1)
-      assertSubsetOf(expected, capturedMetrics)
-    }
-  }
-
-  it should "return 404 when removing a user from a nonexistent billing project" in withTestDataApiServices { services =>
-    Delete(s"/admin/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-  }
-
-  it should "return 200 when listing a user's billing projects" in withTestDataApiServices { services =>
-    val testUser = RawlsUser(RawlsUserSubjectId("test_subject_id"), RawlsUserEmail("test_user_email"))
-    val project1 = billingProjectFromName("project1")
-
-    runAndWait(rawlsUserQuery.createUser(testUser))
-
-    withStatsD {
-      Get(s"/admin/billing/list/${testUser.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(Set.empty) {
-            responseAs[Seq[RawlsBillingProjectName]].toSet
-          }
-        }
-
-      createBillingProject(project1)
-
-      Put(s"/admin/billing/${project1.projectName.value}/user/${testUser.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-        }
-
-      Get(s"/admin/billing/list/${testUser.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User, CreationStatuses.Ready))) {
-            responseAs[Seq[RawlsBillingProjectMembership]].toSet
-          }
-        }
-    } { capturedMetrics =>
-      val expected = expectedHttpRequestMetrics("get", s"admin.billing.list.${testUser.userEmail.value}", StatusCodes.OK.intValue, 2) ++
-        expectedHttpRequestMetrics("put", s"admin.billing.redacted.user.redacted", StatusCodes.OK.intValue, 1)
-      assertSubsetOf(expected, capturedMetrics)
-    }
-  }
-
-  def createBillingProject(project: RawlsBillingProject): Unit = {
-    import driver.api._
-    runAndWait(DBIO.seq(
-      DBIO.sequence(project.groups.values.map(rawlsGroupQuery.save).toSeq),
-      rawlsBillingProjectQuery.create(project)
-    ))
-  }
-
   it should "return 201 when creating a new group" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("test_group"))
 
@@ -698,24 +492,24 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
 
         val expected = Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
-            "WORKSPACE_ACCESS_GROUP: PROJECT_myNamespace-Owner" -> "FOUND",
+            "WORKSPACE_ACCESS_GROUP: Owner@myNamespace@billing-project" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace-myWorkspace-OWNER" -> "FOUND",
             "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
             "WORKSPACE_USER_ACCESS_LEVEL" -> "PROJECT_OWNER",
-            "GOOGLE_ACCESS_GROUP: GROUP_PROJECT_myNamespace-Owner@dev.firecloud.org" -> "FOUND",
+            "GOOGLE_ACCESS_GROUP: GROUP_Owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace-myWorkspace-OWNER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace-myWorkspace-WRITER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace-myWorkspace-READER@example.com" -> "FOUND",
             "GOOGLE_BUCKET: aBucket" -> "FOUND",
-            "GOOGLE_USER_ACCESS_LEVEL: GROUP_PROJECT_myNamespace-Owner@dev.firecloud.org" -> "FOUND",
+            "GOOGLE_USER_ACCESS_LEVEL: GROUP_Owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
             "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace-myWorkspace-WRITER" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace-myWorkspace-READER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace-myWorkspace-READER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace-myWorkspace-WRITER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace-myWorkspace-OWNER" -> "FOUND",
-            "WORKSPACE_INTERSECTION_GROUP: PROJECT_myNamespace-Owner" -> "FOUND",
-            "GOOGLE_INTERSECTION_GROUP: GROUP_PROJECT_myNamespace-Owner@dev.firecloud.org" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: Owner@myNamespace@billing-project" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: GROUP_Owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace-myWorkspace-OWNER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace-myWorkspace-WRITER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace-myWorkspace-READER@example.com" -> "FOUND"
