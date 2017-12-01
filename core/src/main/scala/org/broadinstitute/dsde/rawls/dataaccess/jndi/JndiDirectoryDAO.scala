@@ -162,7 +162,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def delete(groupRef: RawlsGroupRef) = withContext { ctx =>
-      if (isPolicyGroupName(groupRef.groupName)) throw new RawlsException("can delete policies via rawls")
+      if (isPolicyGroupName(groupRef.groupName)) throw new RawlsException("can not delete policies via rawls")
 
       val groupPresent = Try{
         ctx.getAttributes(groupDn(groupRef.groupName))
