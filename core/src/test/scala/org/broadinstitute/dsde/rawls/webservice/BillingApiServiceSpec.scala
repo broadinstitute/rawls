@@ -153,7 +153,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
     Delete(s"/billing/${project.projectName.value}/user/nobody") ~>
       sealRoute(services.billingRoutes) ~>
       check {
-        assertResult(StatusCodes.BadRequest) {
+        assertResult(StatusCodes.NotFound) {
           status
         }
       }

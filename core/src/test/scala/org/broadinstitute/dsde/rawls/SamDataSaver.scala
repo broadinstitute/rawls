@@ -41,17 +41,21 @@ class SamDataSaver(implicit executionContext: ExecutionContext) extends JndiSupp
   }
 
   def savePolicyGroup(policyGroup: RawlsGroup, resourceType: String, resourceId: String, trial: Int = 1): Future[RawlsGroup] = withContext { ctx =>
+    // The sleeps are ugly but this is only test code that will be deleted after sam phase 4 anyway
     createOrgUnit(resourcesOu, ctx)
+    Thread.sleep(10)
     createResourceType(resourceType, ctx)
+    Thread.sleep(10)
     createResource(resourceType, resourceId, ctx)
+    Thread.sleep(10)
     save(policyGroup, resourceType, resourceId, ctx)
     policyGroup
   }.recoverWith {
     case e: NameNotFoundException =>
-      if (trial > 3) {
+      if (trial > 5) {
         throw e
       } else {
-        Thread.sleep(10)
+        Thread.sleep(50)
         savePolicyGroup(policyGroup, resourceType, resourceId, trial + 1)
       }
   }

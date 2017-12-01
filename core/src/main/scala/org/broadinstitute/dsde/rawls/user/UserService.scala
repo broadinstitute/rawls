@@ -349,7 +349,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def removeUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
-    samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, projectAccessUpdate.role.toString, projectAccessUpdate.email, userInfo).map(_ => RequestComplete(StatusCodes.OK))
+    samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, projectAccessUpdate.role.toString, projectAccessUpdate.email, userInfo).recover {
+      case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) => throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))
+    }.map(_ => RequestComplete(StatusCodes.OK))
   }
 
   def listGroupMembers(groupRef: RawlsGroupRef): Future[PerRequestMessage] = {
