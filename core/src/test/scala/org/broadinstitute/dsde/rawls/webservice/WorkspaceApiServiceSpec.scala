@@ -163,7 +163,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         rawlsUserQuery.createUser(userOwner),
         rawlsUserQuery.createUser(userWriter),
         rawlsUserQuery.createUser(userReader),
-        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.from(samDataSaver.savePolicyGroup(billingProject.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
@@ -1637,7 +1637,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
       }
@@ -2216,7 +2216,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 403 creating workspace in billing project that does not exist" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
-      namespace = "foobar",
+      namespace = "missing_project",
       name = "newWorkspace",
       Map.empty
     )
@@ -2232,7 +2232,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
-      namespace = "project",
+      namespace = "no_access",
       name = "newWorkspace",
       Map.empty
     )
@@ -2254,7 +2254,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     def expectedAccessGroups(workspaceId: String) = Map(
-      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.groups(ProjectRoles.Owner)),
+      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.ownerPolicyGroup),
       WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-OWNER")),
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-READER"))
@@ -2292,7 +2292,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     def expectedAccessGroups(workspaceId: String) = Map(
-      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.groups(ProjectRoles.Owner)),
+      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.ownerPolicyGroup),
       WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-OWNER")),
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-READER"))

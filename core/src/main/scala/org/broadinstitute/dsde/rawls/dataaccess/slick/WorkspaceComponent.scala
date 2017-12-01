@@ -789,7 +789,6 @@ trait WorkspaceComponent {
       val userQuery = for {
         access <- workspaceAccessQuery.filter(query => (query.workspaceId === workspaceId && query.isAuthDomainAcl ===false)).result
         groups <- DBIO.sequence(access.map {result => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(result.groupName))).map(_ -> result)})
-        users <- rawlsUserQuery.load(groups.flatMap(_._1.get.users))
       } yield {
         groups.flatMap { case (group, access) =>
           val userAndAccess = group.get.users.map(user =>
@@ -801,7 +800,6 @@ trait WorkspaceComponent {
       val subGroupQuery = for {
         access <- workspaceAccessQuery.filter(query => (query.workspaceId === workspaceId && query.isAuthDomainAcl ===false)).result
         groups <- DBIO.sequence(access.map {result => rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(result.groupName))).map(_ -> result)})
-        subGroups <- rawlsGroupQuery.load(groups.flatMap(_._1.get.subGroups))
       } yield {
         groups.flatMap { case (group, access) =>
           val groupAndAccess = group.get.subGroups.map(group =>

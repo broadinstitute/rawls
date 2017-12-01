@@ -7,6 +7,7 @@ import java.util.concurrent.Executors
 import javax.naming._
 import javax.naming.directory._
 
+import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
@@ -14,7 +15,7 @@ import slick.dbio.DBIO
 import spray.http.StatusCodes
 
 import scala.annotation.tailrec
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 /**
@@ -41,6 +42,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     val uid = "uid"
     val groupUpdatedTimestamp = "groupUpdatedTimestamp"
     val groupSynchronizedTimestamp = "groupSynchronizedTimestamp"
+    val policy = "policy"
   }
 
   def initLdap(): ReadWriteAction[Unit] = {
@@ -101,12 +103,16 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def loadAllGroups(): ReadWriteAction[Seq[RawlsGroup]] = withContext { ctx =>
-      ctx.search(groupsOu, new BasicAttributes("objectclass", "workbenchGroup", true)).extractResultsAndClose.map { result =>
+      ctx.search(directoryConfig.baseDn, new BasicAttributes("objectclass", "workbenchGroup", true)).extractResultsAndClose.map { result =>
         unmarshallGroup(result.getAttributes)
       }
     }
 
     def save(group: RawlsGroup): ReadWriteAction[RawlsGroup] = withContext { ctx =>
+      if (isPolicyGroupName(group.groupName)) {
+        throw new RawlsException("can save policies via rawls")
+      }
+
       @tailrec
       def verifyUsersAndSubGroupsExist(deadline: Long): Unit = {
         val userChecks = group.users.map { userRef => Try { ctx.getAttributes(userDn(userRef.userSubjectId)) }}
@@ -156,6 +162,8 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def delete(groupRef: RawlsGroupRef) = withContext { ctx =>
+      if (isPolicyGroupName(groupRef.groupName)) throw new RawlsException("can not delete policies via rawls")
+
       val groupPresent = Try{
         ctx.getAttributes(groupDn(groupRef.groupName))
       }
@@ -180,23 +188,12 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def load(groupRef: RawlsGroupRef): ReadWriteAction[Option[RawlsGroup]] = withContext { ctx =>
-      Try {
-        val attributes = ctx.getAttributes(groupDn(groupRef.groupName))
-
-        Option(unmarshallGroup(attributes))
-
-      }.recover {
-        case e: NameNotFoundException => None
-
-      }.get
+      loadInternal(groupRef, ctx)
     }
 
-    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = batchedLoad(groupRefs.toSeq) { batch => { ctx =>
-      val filters = batch.toSet[RawlsGroupRef].map { ref => s"(${Attr.cn}=${ref.groupName.value})" }
-      ctx.search(groupsOu, s"(|${filters.mkString})", new SearchControls()).extractResultsAndClose.map { result =>
-        unmarshallGroup(result.getAttributes)
-      }
-    } }
+    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = withContext { ctx =>
+      groupRefs.toSeq.flatMap(ref => loadInternal(ref, ctx))
+    }
 
     /** talk to doge before calling this function - loads groups and subgroups and subgroups ... */
     def loadGroupsRecursive(groups: Set[RawlsGroupRef], accumulated: Set[RawlsGroup] = Set.empty): ReadWriteAction[Set[RawlsGroup]] = {
@@ -296,7 +293,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def loadGroupByEmail(groupEmail: RawlsGroupEmail): ReadWriteAction[Option[RawlsGroup]] = withContext { ctx =>
-      val group = ctx.search(groupsOu, new BasicAttributes(Attr.email, groupEmail.value, true)).extractResultsAndClose
+      val group = ctx.search(directoryConfig.baseDn, s"(&(${Attr.email}=${groupEmail.value})(objectclass=workbenchGroup))", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)).extractResultsAndClose
       group match {
         case Seq() => None
         case Seq(result) => Option(unmarshallGroup(result.getAttributes))
@@ -363,6 +360,18 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
   }
 
 
+  private def loadInternal(groupRef: RawlsGroupRef, ctx: InitialDirContext) = {
+    Try {
+      val attributes = ctx.getAttributes(groupDn(groupRef.groupName))
+
+      Option(unmarshallGroup(attributes))
+
+    }.recover {
+      case e: NameNotFoundException => None
+
+    }.get
+  }
+
   private def unmarshallGroup(attributes: Attributes) = {
     val cn = getAttribute[String](attributes, Attr.cn).getOrElse(throw new RawlsException(s"${Attr.cn} attribute missing"))
     val email = getAttribute[String](attributes, Attr.email).getOrElse(throw new RawlsException(s"${Attr.email} attribute missing"))
@@ -371,7 +380,19 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     val members = memberDns.map(dnToSubject)
     val users = members.collect { case Some(Right(user)) => RawlsUserRef(user) }
     val groups = members.collect { case Some(Left(group)) => RawlsGroupRef(group) }
-    val group = RawlsGroup(RawlsGroupName(cn), RawlsGroupEmail(email), users, groups)
+
+    val groupName = if (attributes.get("objectclass").getAll.extractResultsAndClose.contains("policy")) {
+      val policy = getAttribute[String](attributes, "policy").getOrElse(throw new RawlsException(s"policy attribute missing"))
+      val resId = getAttribute[String](attributes, "resourceId").getOrElse(throw new RawlsException(s"resourceId attribute missing"))
+      val resType = getAttribute[String](attributes, "resourceType").getOrElse(throw new RawlsException(s"resourceType attribute missing"))
+
+      policyGroupName(resType, resId, policy)
+    } else {
+      cn
+    }
+
+    val group = RawlsGroup(RawlsGroupName(groupName), RawlsGroupEmail(email), users, groups)
+
     group
   }
 

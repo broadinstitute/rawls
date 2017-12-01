@@ -11,7 +11,7 @@ import scala.concurrent.Future
 
 trait StandardUserInfoDirectives extends UserInfoDirectives {
 
-  val httpSamDAO: SamDAO
+  val samDAO: SamDAO
 
 
   val serviceAccountDomain = "\\S+@\\S+\\.iam\\.gserviceaccount\\.com".r
@@ -39,7 +39,7 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
 
   private def getWorkbenchUserEmailId(userInfo:UserInfo):Future[Option[UserStatus]] = {
     if (isServiceAccount(userInfo.userEmail.value)) {
-      httpSamDAO.getUserStatus(userInfo)
+      samDAO.getUserStatus(userInfo)
     }
     else {
       Future.successful(None)

@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.dataaccess.{MockSamDAO, _}
+import org.broadinstitute.dsde.rawls.dataaccess.{_}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -13,10 +13,10 @@ import spray.http._
 import scala.concurrent.ExecutionContext
 
 class PetSASpec extends ApiServiceSpec {
-  case class TestApiService(dataSource: SlickDataSource, user: RawlsUser, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO, httpSamDAO: SamDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with StandardUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, user: RawlsUser, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with StandardUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource, user: RawlsUser = RawlsUser(userInfo))(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO, new MockSamDAO)
+    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
     try {
       testCode(apiService)
     } finally {
@@ -38,7 +38,7 @@ class PetSASpec extends ApiServiceSpec {
 
 /// Create workspace to test switch -- this workspace is accessible by a User with petSA and a regular SA
   val petSA = UserInfo(RawlsUserEmail("pet-123456789876543212345@abc.iam.gserviceaccount.com"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876"))
-  val notpetSA = UserInfo(RawlsUserEmail("SA-but-not-pet@abc.iam.gserviceaccount.com"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("SA-but-not-pet"))
+  val notpetSA = UserInfo(RawlsUserEmail("SA-but-not-pet@abc.iam.gserviceaccount.com"), OAuth2BearerToken("SA-but-not-pet-token"), 123, RawlsUserSubjectId("SA-but-not-pet"))
   "WorkspaceApi" should "return 201 for post to workspaces with Pet SA" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -132,7 +132,7 @@ class PetSASpec extends ApiServiceSpec {
         rawlsUserQuery.createUser(userWriter),
         rawlsUserQuery.createUser(userReader),
         rawlsUserQuery.createUser(userSAProjectOwner),
-        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.from(samDataSaver.savePolicyGroup(billingProject.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         workspaceQuery.save(workspace)
