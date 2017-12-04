@@ -217,11 +217,11 @@ paths:
         '204':
           description: Successfully Created Billing Project in Rawls and Google
         '400':
-          description: firecloud billing user must be an admin of the billing account
+          description: firecloud billing user must be a user of the billing account
           schema:
             $ref: '#/definitions/ErrorReport'
         '403':
-          description: You must be an admin of the google billing account
+          description: You must be a user of the google billing account
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
