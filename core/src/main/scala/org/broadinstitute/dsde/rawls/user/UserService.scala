@@ -911,8 +911,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           } yield {
             RequestComplete(StatusCodes.Created)
           }
-        case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"You must be a billing administrator of ${billingAccountName.value} to create a project with it.")))
-        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"${gcsDAO.billingEmail} must have the permission \"Billing Account User\" on ${billingAccountName.value} to create a project with it.")))
+        val messageSuffix = s""" must have the permission "Billing Account User" on ${billingAccountName.value} to create a project with it."""
+        case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, "You"+messageSuffix)))
+        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, gcsDAO.billingEmail+messageSuffix)))
       }
     }
   }
