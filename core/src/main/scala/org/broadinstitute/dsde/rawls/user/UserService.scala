@@ -72,6 +72,7 @@ object UserService {
   case object AdminDeleteAllRefreshTokens extends UserServiceMessage
 
   case object ListBillingProjects extends UserServiceMessage
+  case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case object ListBillingAccounts extends UserServiceMessage
@@ -112,6 +113,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
     case ListBillingProjects => listBillingProjects pipeTo sender
+    case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
 
     case AddUserToBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
     case RemoveUserFromBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
@@ -333,10 +335,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-    // delete actual project in google-y way, then remove from Rawls DB and Sam
-    gcsDAO.deleteProject(projectName) flatMap {
-      _ => unregisterBillingProject(projectName)
-    }
+    // delete actual project in google
+    gcsDAO.deleteProject(projectName).map(_ => RequestComplete(StatusCodes.OK))
   }
 
   def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {

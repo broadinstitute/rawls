@@ -29,6 +29,13 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
   val statisticsServiceConstructor: UserInfo => StatisticsService
 
   val adminRoutes = requireUserInfo() { userInfo =>
+    path("admin" / "billing" / Segment) { (projectId) =>
+      delete {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminDeleteBillingProject(RawlsBillingProjectName(projectId)))
+      }
+    } ~
     path("admin" / "submissions") {
       get {
         requestContext => perRequest(requestContext,
