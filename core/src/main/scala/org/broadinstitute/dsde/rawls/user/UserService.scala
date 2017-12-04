@@ -307,13 +307,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
       projectDetailsByName <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))) }
     } yield {
-      resourceIdsWithPolicyNames.flatMap { idWithPolicyName =>
-        projectDetailsByName.get(idWithPolicyName.resourceId).map { case (projectStatus, message) =>
-          RawlsBillingProjectMembership(RawlsBillingProjectName(idWithPolicyName.resourceId), ProjectRoles.withName(idWithPolicyName.accessPolicyName), projectStatus, message)
+      val groupedResources = resourceIdsWithPolicyNames.groupBy(_.resourceId).map(x => x._1 -> x._2.map(_.accessPolicyName))
+      val resourceIdsWithRoleName = groupedResources.flatMap { case (resourceId, policyNames) =>
+          if (policyNames.contains("owner")) { Option((resourceId, ProjectRoles.Owner))}
+          else if (policyNames.contains("workspace-creator") && policyNames.contains("can-compute-user")) { Option((resourceId, ProjectRoles.User))}
+          else None
+      }
+      resourceIdsWithRoleName.flatMap { case (resourceId, role) =>
+        projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
+          RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
         }
       }
     }
-
     membershipsFuture.map(RequestComplete(_))
   }
 
