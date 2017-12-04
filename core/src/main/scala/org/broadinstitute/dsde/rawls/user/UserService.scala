@@ -307,9 +307,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
       projectDetailsByName <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))) }
     } yield {
-      resourceIdsWithPolicyNames.flatMap { idWithPolicyName =>
-        projectDetailsByName.get(idWithPolicyName.resourceId).map { case (projectStatus, message) =>
-          RawlsBillingProjectMembership(RawlsBillingProjectName(idWithPolicyName.resourceId), ProjectRoles.withName(idWithPolicyName.accessPolicyName), projectStatus, message)
+      resourceIdsWithPolicyNames.collect {
+        case SamResourceIdWithPolicyName(resourceId, "owner") => (resourceId, ProjectRoles.Owner)
+        case SamResourceIdWithPolicyName(resourceId, "workspace-creator") => (resourceId, ProjectRoles.User)
+      }.flatMap { case (resourceId, role) =>
+        projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
+          RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
         }
       }
     }
@@ -320,9 +323,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo).map { policies =>
       for {
-        policyWithName <- policies
-        email <- policyWithName.policy.memberEmails
-      } yield RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(policyWithName.policyName))
+        (role, policy) <- policies.collect {
+          case SamPolicyWithName("owner", policy) => (ProjectRoles.Owner, policy)
+          case SamPolicyWithName("workspace-creator", policy) => (ProjectRoles.User, policy)
+        }
+        email <- policy.memberEmails
+      } yield RawlsBillingProjectMember(RawlsUserEmail(email), role)
     }.map(RequestComplete(_))
   }
 

@@ -54,6 +54,7 @@ object ProjectRoles {
   def withName(name: String): ProjectRole = name.toLowerCase match {
     case "owner" => Owner
     case "user" => User
+//    case "workspace-creator" => User
     case _ => throw new RawlsException(s"invalid ProjectRole [${name}]")
   }
 
