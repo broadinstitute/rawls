@@ -225,7 +225,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   class DefaultTestData() extends TestData {
     // setup workspace objects
     val userProjectOwner = RawlsUser(UserInfo(RawlsUserEmail("project-owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543210101")))
-    val userSAProjectOwner = RawlsUser(UserInfo(RawlsUserEmail("project-owner-access-sa"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543210202")))
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))

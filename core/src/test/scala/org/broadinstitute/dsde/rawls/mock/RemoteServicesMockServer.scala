@@ -759,15 +759,15 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       request()
         .withMethod("GET")
         .withPath("/register/user")
-        .withHeader(new Header("Authorization", "Bearer SA-but-not-pet-token"))
+        .withHeader(new Header("Authorization", "Bearer Bearer SA-but-not-pet-token"))
     ).respond(
       response()
         .withHeaders(jsonHeader)
         .withBody(
           """{
             |  "userInfo": {
-            |    "userSubjectId": "SA-but-not-pet",
-            |    "userEmail": "SA-but-not-pet@abc.iam.gserviceaccount.com"
+            |    "userSubjectId": "123456789876543210202",
+            |    "userEmail": "project-owner-access-sa@abc.iam.gserviceaccount.com"
             |  },
             |  "enabled": {
             |    "ldap": true,
