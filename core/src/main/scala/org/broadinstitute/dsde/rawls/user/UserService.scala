@@ -884,7 +884,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def startBillingProjectCreation(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName): Future[PerRequestMessage] = {
-    val createForbiddenErrorMessage(who: String, billingAccountName: RawlsBillingAccountName) => {
+    def createForbiddenErrorMessage(who: String, billingAccountName: RawlsBillingAccountName) = {
       s"""${who} must have the permission "Billing Account User" on ${billingAccountName.value} to create a project with it."""
     }
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
@@ -914,7 +914,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           } yield {
             RequestComplete(StatusCodes.Created)
           }
-        val messageSuffix = s""" must have the permission "Billing Account User" on ${billingAccountName.value} to create a project with it."""
         case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, createForbiddenErrorMessage("You", billingAccountName))))
         case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
       }
