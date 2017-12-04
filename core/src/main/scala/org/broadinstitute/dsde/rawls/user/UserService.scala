@@ -307,7 +307,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
       projectDetailsByName <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))) }
     } yield {
-      resourceIdsWithPolicyNames.flatMap { idWithPolicyName =>
+      resourceIdsWithPolicyNames.filter{policy => (policy.accessPolicyName == "owner" || policy.accessPolicyName == "workspace-creator")}.flatMap { idWithPolicyName =>
         projectDetailsByName.get(idWithPolicyName.resourceId).map { case (projectStatus, message) =>
           RawlsBillingProjectMembership(RawlsBillingProjectName(idWithPolicyName.resourceId), ProjectRoles.withName(idWithPolicyName.accessPolicyName), projectStatus, message)
         }
@@ -320,7 +320,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo).map { policies =>
       for {
-        policyWithName <- policies
+        policyWithName <- policies.filter{policy => (policy.policyName == "owner" || policy.policyName == "workspace-creator")}
         email <- policyWithName.policy.memberEmails
       } yield RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(policyWithName.policyName))
     }.map(RequestComplete(_))
