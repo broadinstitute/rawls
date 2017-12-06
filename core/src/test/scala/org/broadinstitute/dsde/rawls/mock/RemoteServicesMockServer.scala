@@ -737,7 +737,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       response()
         .withHeaders(jsonHeader)
         .withBody(
-          """[{"resourceId":"myNamespace","accessPolicyName":"owner"}, {"resourceId":"arbitrary","accessPolicyName":"user"}, {"resourceId":"project1","accessPolicyName":"owner"}]""".stripMargin
+          """[{"resourceId":"myNamespace","accessPolicyName":"owner"}, {"resourceId":"arbitrary","accessPolicyName":"workspace-creator"}, {"resourceId":"project1","accessPolicyName":"owner"}]""".stripMargin
         )
         .withStatusCode(StatusCodes.OK.intValue)
     )

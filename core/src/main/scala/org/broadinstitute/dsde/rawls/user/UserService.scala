@@ -354,10 +354,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
-    val policies = if (projectAccessUpdate.role.toString == ownerPolicyName) {
-      Seq(ownerPolicyName)
-    } else {
-      Seq(workspaceCreatorPolicyName, canComputeUserPolicyName)
+    val policies = projectAccessUpdate.role match {
+      case ProjectRoles.Owner => Seq(ownerPolicyName)
+      case ProjectRoles.User => Seq(workspaceCreatorPolicyName, canComputeUserPolicyName)
     }
     Future.traverse(policies) {policy =>
       samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo)
@@ -365,7 +364,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def removeUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
-    val policy = if (projectAccessUpdate.role.toString == ownerPolicyName) {ownerPolicyName} else {workspaceCreatorPolicyName}
+    val policy = projectAccessUpdate.role match {
+      case ProjectRoles.Owner => ownerPolicyName
+      case ProjectRoles.User => workspaceCreatorPolicyName
+    }
     samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo).recover {
       case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) => throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))
     }.map(_ => RequestComplete(StatusCodes.OK))
