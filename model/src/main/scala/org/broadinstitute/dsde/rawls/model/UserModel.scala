@@ -43,7 +43,16 @@ case class ManagedGroupWithMembers(membersGroup: RawlsGroupShort, adminsGroup: R
 sealed trait UserAuthType { val value: String }
 case class RawlsUserEmail(value: String) extends UserAuthType
 case class RawlsUserSubjectId(value: String) extends UserAuthType
-case class RawlsGroupName(value: String) extends UserAuthType
+case class RawlsGroupName(value: String) extends UserAuthType {
+  // ignore case on equals and hashcode
+  override def hashCode(): Int = value.toLowerCase.hashCode
+  override def equals(other: scala.Any): Boolean = {
+    other match {
+      case RawlsGroupName(otherValue) => value.equalsIgnoreCase(otherValue)
+      case _ => false
+    }
+  }
+}
 case class RawlsGroupEmail(value: String) extends UserAuthType
 case class RawlsBillingAccountName(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType

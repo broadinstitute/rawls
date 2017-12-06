@@ -68,7 +68,7 @@ trait RawlsBillingProjectComponent {
     def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
       for {
         maybeProjectRec <- uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName))
-        maybeOwnerGroup <-rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, ProjectRoles.Owner.toString.toLowerCase))))
+        maybeOwnerGroup <-rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, ProjectRoles.Owner.toString))))
       } yield {
         (maybeProjectRec, maybeOwnerGroup) match {
           case (Some(projectRec), Some(ownerGroup)) => Option(unmarshalBillingProject(projectRec, ownerGroup))
