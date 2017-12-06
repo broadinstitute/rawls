@@ -25,7 +25,7 @@ trait DirectorySubjectNameSupport {
   val resourcesOu = s"ou=resources,${directoryConfig.baseDn}"
 
   val policyGroupNamePattern = "([^@]+)@([^@]+)@([^@]+)".r
-  def policyGroupName(resourceType: String, resourceId: String, policyName: String) = s"$policyName@$resourceId@$resourceType"
+  def policyGroupName(resourceType: String, resourceId: String, policyName: String) = s"${policyName.toLowerCase}@$resourceId@$resourceType"
   def isPolicyGroupName(groupName: RawlsGroupName) = groupName.value.contains("@")
 
   protected def groupDn(groupName: RawlsGroupName) = {
