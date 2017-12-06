@@ -46,7 +46,7 @@ case class ProjectAccessUpdate(email: String, role: ProjectRole)
 
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
-    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def toString = getClass.getSimpleName.stripSuffix("$").toLowerCase
 
     override def withName(name: String): ProjectRole = ProjectRoles.withName(name)
   }
