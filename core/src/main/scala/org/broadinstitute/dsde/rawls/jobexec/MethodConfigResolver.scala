@@ -7,9 +7,10 @@ import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
 import wdl4s.parser.WdlParser.SyntaxError
-import wdl4s.wdl.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow, WorkflowInput}
-import wdl4s.wdl.types.{WdlArrayType, WdlOptionalType}
-import wdl4s.wdl.WdlNamespace.httpResolver
+import wom.callable.Callable.InputDefinition
+import wom.types.{WomType, WomArrayType, WomOptionalType}
+import wdl.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow}
+import wdl.WdlNamespace.httpResolver
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -45,9 +46,9 @@ object MethodConfigResolver {
     SubmissionValidationValue(attr, None, inputName)
   }
 
-  private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: WorkflowInput): SubmissionValidationValue = wfInput.wdlType match {
-    case arrayType: WdlArrayType => getArrayResult(wfInput.fqn, mcSequence)
-    case WdlOptionalType(_:WdlArrayType) => getArrayResult(wfInput.fqn, mcSequence) //send optional-arrays down the same codepath as arrays
+  private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: InputDefinition): SubmissionValidationValue = wfInput.wdlType match {
+    case arrayType: WomArrayType => getArrayResult(wfInput.fqn, mcSequence)
+    case WomOptionalType(_:WomArrayType) => getArrayResult(wfInput.fqn, mcSequence) //send optional-arrays down the same codepath as arrays
     case _ => getSingleResult(wfInput.fqn, mcSequence, wfInput.optional)
   }
 
@@ -59,7 +60,7 @@ object MethodConfigResolver {
     parsed map( _.workflow )
   }
 
-  case class MethodInput(workflowInput: WorkflowInput, expression: String)
+  case class MethodInput(workflowInput: InputDefinition, expression: String)
 
   def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[Seq[MethodInput]] = parseWDL(wdl) map { workflow =>
     def isAttributeEmpty(fqn: FullyQualifiedName): Boolean = {
@@ -132,14 +133,14 @@ object MethodConfigResolver {
 
   def toMethodConfiguration(wdl: String, methodRepoMethod: MethodRepoMethod): Try[MethodConfiguration] = parseWDL(wdl) map { workflow =>
     val nothing = AttributeString("")
-    val inputs = for ((fqn: FullyQualifiedName, wfInput: WorkflowInput) <- workflow.inputs) yield fqn.toString -> nothing
+    val inputs = for ((fqn: FullyQualifiedName, wfInput: InputDefinition) <- workflow.inputs) yield fqn.toString -> nothing
     val outputs = workflow.outputs map (o => o.locallyQualifiedName(workflow) -> nothing)
     MethodConfiguration("namespace", "name", "rootEntityType", Map(), inputs.toMap, outputs.toMap, methodRepoMethod)
   }
 
   def getMethodInputsOutputs(wdl: String): Try[MethodInputsOutputs] = parseWDL(wdl) map { workflow =>
     MethodInputsOutputs(
-      (workflow.inputs map { case (fqn: FullyQualifiedName, wfInput: WorkflowInput) => model.MethodInput(fqn, wfInput.wdlType.toWdlString, wfInput.optional) }).toSeq,
-      workflow.outputs.map(o => MethodOutput(o.locallyQualifiedName(workflow), o.wdlType.toWdlString)))
+      (workflow.inputs map { case (fqn: FullyQualifiedName, wfInput: InputDefinition) => model.MethodInput(fqn, wfInput.womType.toDisplayString, wfInput.optional) }).toSeq,
+      workflow.outputs.map(o => MethodOutput(o.locallyQualifiedName(workflow), o.womType.toDisplayString)))
   }
 }
