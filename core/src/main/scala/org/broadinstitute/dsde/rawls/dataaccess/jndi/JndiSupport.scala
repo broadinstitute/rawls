@@ -26,7 +26,10 @@ trait JndiSupport extends LazyLogging {
     // enable connection pooling
     env.put("com.sun.jndi.ldap.connect.pool", "true")
 
-    new InitialDirContext(env)
+    Try { new InitialDirContext(env) }.recover {
+      // we see AuthenticationException in tests, retry helps
+      case ae: AuthenticationException => new InitialDirContext(env)
+    }.get
   }
 
   protected def withContext[T](url: String, user: String, password: String)(op: InitialDirContext => T)(implicit executionContext: ExecutionContext): Future[T] = Future {

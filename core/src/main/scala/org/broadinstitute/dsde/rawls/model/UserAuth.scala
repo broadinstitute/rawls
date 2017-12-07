@@ -40,7 +40,7 @@ object ManagedGroup {
 case class ManagedGroup(membersGroup: RawlsGroup, adminsGroup: RawlsGroup) extends Managed
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String])
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, ownerPolicyGroup: RawlsGroup, cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String])
 
 case class ProjectAccessUpdate(email: String, role: ProjectRole)
 

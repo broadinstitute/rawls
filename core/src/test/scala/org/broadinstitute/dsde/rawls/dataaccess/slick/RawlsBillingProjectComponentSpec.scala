@@ -25,29 +25,4 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(rawlsBillingProjectQuery.load(project.projectName))
     }
   }
-
-  it should "list projects for users" in withDefaultTestDatabase {
-    assert {
-      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(testData.testProject2Name, testData.userWriter, Set(ProjectRoles.User)))
-    }
-    assert {
-      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(testData.testProject2Name, testData.userWriter, Set(ProjectRoles.User, ProjectRoles.Owner)))
-    }
-    assert {
-      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(testData.testProject2Name, testData.userProjectOwner, Set(ProjectRoles.User, ProjectRoles.Owner)))
-    }
-    assert {
-      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(testData.testProject2Name, testData.userProjectOwner, Set(ProjectRoles.Owner)))
-    }
-    assert {
-      !runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(testData.testProject2Name, testData.userWriter, Set(ProjectRoles.Owner)))
-    }
-    assert {
-      !runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(testData.testProject2Name, testData.userReader, Set(ProjectRoles.User, ProjectRoles.Owner)))
-    }
-
-    assertResult(Some(testData.testProject3)) {
-      runAndWait(rawlsBillingProjectQuery.load(testData.testProject3Name))
-    }
-  }
 }

@@ -130,7 +130,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
         check {
-          assertResult(StatusCodes.OK) {
+          assertResult(StatusCodes.OK, response.entity.asString) {
             status
           }
 
@@ -162,10 +162,14 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
         }
+
+      // need to manually create the owner group because the test sam dao does not actually talk to ldap
+      Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
         check {
-          assertResult(StatusCodes.OK) {
+          assertResult(StatusCodes.OK, response.entity.asString) {
             status
           }
           assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
@@ -260,6 +264,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
         }
+
+      // need to manually create the owner group because the test sam dao does not actually talk to ldap
+      Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
         check {
@@ -329,6 +337,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
         }
+
+      // need to manually create the owner group because the test sam dao does not actually talk to ldap
+      Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
         check {
@@ -416,17 +428,13 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
+    Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) {
           status
-        }
-        assert {
-          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
         }
       }
   }
@@ -445,7 +453,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
+    // need to manually create the owner group because the test sam dao does not actually talk to ldap
+    Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+
+    Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.dbGapAuthorizedUsersGroup.membersGroup.groupEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -453,21 +464,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
-        assert {
-          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          loadedProject.groups(ProjectRoles.User).subGroups.contains(testData.dbGapAuthorizedUsersGroup.membersGroup) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
-        }
-      }
-
-    Get(s"/billing/${project1.projectName.value}/members") ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMemberFormat
-        val response = responseAs[Seq[RawlsBillingProjectMember]].toSet
-        assert(response.contains(RawlsBillingProjectMember(RawlsUserEmail(testData.dbGapAuthorizedUsersGroup.membersGroup.groupEmail.value), ProjectRoles.User)))
       }
   }
 
@@ -485,17 +481,16 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
+    // need to manually create the owner group because the test sam dao does not actually talk to ldap
+    Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+
+    Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
-        }
-        assert {
-          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
         }
       }
 
@@ -505,50 +500,15 @@ class UserApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        assert {
-          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
-        }
       }
   }
 
   it should "return 403 when a non-owner tries to alter project permissions" in withTestDataApiServices { services =>
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
-    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
-
-    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
-
-    Post(s"/billing", httpJson(createRequest)) ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-
-    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
-
-    Delete(s"/admin/billing/${project1.projectName.value}/owner/${testData.userOwner.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
-          status
-        }
-        assert {
-          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userOwner) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userOwner)
-        }
-      }
-
-    Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
+    Put(s"/billing/no_access/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden, response.entity.asString) {
           status
-        }
-        assert {
-          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
-          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
         }
       }
   }

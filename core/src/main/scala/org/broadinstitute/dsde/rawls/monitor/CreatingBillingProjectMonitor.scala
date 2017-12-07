@@ -48,16 +48,15 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
   def checkCreatingProjects()(implicit executionContext: ExecutionContext): Future[CheckDone] = {
     for {
-      (creatingProjects, groupEmailsByRef, operations) <- datasource.inTransaction { dataAccess =>
+      (creatingProjects, operations) <- datasource.inTransaction { dataAccess =>
         for {
           projects <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Creating)
-          groupEmailsByRef <- dataAccess.rawlsGroupQuery.loadEmails(projects.map(p => p.groups.values.map(g => g.subGroups)).flatten.flatten)
           operations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projects.map(_.projectName))
         } yield {
-          (projects, groupEmailsByRef, operations)
+          (projects, operations)
         }
       }
-      updatedProjectCount <- setupProjects(creatingProjects, groupEmailsByRef, operations)
+      updatedProjectCount <- setupProjects(creatingProjects, operations)
     } yield {
       CheckDone(creatingProjects.size - updatedProjectCount)
     }
@@ -65,7 +64,6 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
   }
 
   def setupProjects(projects: Seq[RawlsBillingProject],
-                    groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail],
                     operations: Seq[RawlsBillingProjectOperationRecord])(implicit executionContext: ExecutionContext): Future[Int] = {
 
     for {
@@ -97,7 +95,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
           case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, None, _)) =>
             // create project operation finished successfully
-            gcsDAO.beginProjectSetup(project, projectTemplate, groupEmailsByRef).flatMap {
+            gcsDAO.beginProjectSetup(project, projectTemplate).flatMap {
               case util.Failure(t) =>
                 logger.info(s"Failure creating project $project", t)
                 Future.successful(project.copy(status = CreationStatuses.Error, message = Option(t.getMessage)))

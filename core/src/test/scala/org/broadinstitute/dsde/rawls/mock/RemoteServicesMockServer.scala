@@ -608,6 +608,222 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withStatusCode(StatusCodes.OK.intValue)
         .withBody("""{"cromwell":"25"}""")
     )
+
+    mockServer.when(
+      request()
+        .withMethod("POST")
+        .withPath("/api/resource/.*/.*")
+      ).respond(
+        response()
+          .withStatusCode(StatusCodes.Created.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("PUT")
+        .withPath("/api/resource/.*/.*/policies/.*")
+    ).respond(
+      response()
+        .withStatusCode(StatusCodes.Created.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("PUT")
+        .withPath("/api/resource/.*/.*/policies/.*/memberEmails/.*")
+    ).respond(
+      response()
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("DELETE")
+        .withPath("/api/resource/.*/.*/policies/.*/memberEmails/nobody")
+    ).respond(
+      response()
+        .withStatusCode(StatusCodes.BadRequest.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("DELETE")
+        .withPath("/api/resource/.*/.*/policies/.*/memberEmails/.*")
+    ).respond(
+      response()
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("POST")
+        .withPath("/api/google/resource/.*/.*/.*/sync")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """{"GROUP_PROJECT_mb-test-foo-bar-Owner@dev.test.firecloud.org":[{"operation":"added","email":"PROXY_112497091878448096085@dev.test.firecloud.org"},{"operation":"removed","email":"proxy_112497091878448096085@dev.test.firecloud.org"}]}""".stripMargin
+        )
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/api/resource/billing-project/no_access/action/.*")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """false""".stripMargin)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/api/resource/billing-project/missing_project/action/.*")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """false""".stripMargin)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/api/resource/.*/.*/action/.*")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """true""".stripMargin)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/api/resource/.*/.*/policies")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """[
+            |  {
+            |    "policyName": "owner",
+            |    "policy": {
+            |      "memberEmails": [
+            |        "owner-access"
+            |      ],
+            |      "actions": [],
+            |      "roles": [
+            |        "owner"
+            |      ]
+            |    }
+            |  }
+            |]""".stripMargin
+        )
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/api/resource/billing-project")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """[{"resourceId":"myNamespace","accessPolicyName":"owner"}, {"resourceId":"arbitrary","accessPolicyName":"workspace-creator"}, {"resourceId":"project1","accessPolicyName":"owner"}]""".stripMargin
+        )
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/api/resource/.*")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """[{"resourceId":"test_good","accessPolicyName":"owner"}]""".stripMargin
+        )
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/register/user")
+        .withHeader(new Header("Authorization", "Bearer Bearer SA-but-not-pet-token"))
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """{
+            |  "userInfo": {
+            |    "userSubjectId": "123456789876543210202",
+            |    "userEmail": "project-owner-access-sa@abc.iam.gserviceaccount.com"
+            |  },
+            |  "enabled": {
+            |    "ldap": true,
+            |    "allUsersGroup": true,
+            |    "google": true
+            |  }
+            |}""".stripMargin
+        )
+        .withStatusCode(StatusCodes.Created.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/register/user")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """{
+            |  "userInfo": {
+            |    "userSubjectId": "123456789876543210101",
+            |    "userEmail": "project-owner-access"
+            |  },
+            |  "enabled": {
+            |    "ldap": true,
+            |    "allUsersGroup": true,
+            |    "google": true
+            |  }
+            |}""".stripMargin
+        )
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("POST")
+        .withPath("/register/user")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """{
+            |  "userInfo": {
+            |    "userSubjectId": "123456789876543210101",
+            |    "userEmail": "project-owner-access"
+            |  },
+            |  "enabled": {
+            |    "ldap": true,
+            |    "allUsersGroup": true,
+            |    "google": true
+            |  }
+            |}""".stripMargin
+        )
+        .withStatusCode(StatusCodes.Created.intValue)
+    )
   }
 
   def stopServer = mockServer.stop()
