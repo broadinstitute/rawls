@@ -192,8 +192,24 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
     }
 
     def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = withContext { ctx =>
+      val (policies, workbenchGroups) = groupRefs.toSeq.partition(ref => ref.groupName.value.matches(policyGroupNamePattern.regex))
+
+      for {
+        loadedPolicies <- loadSequentially(policies)
+        loadedWorkbenchGroups <- batchLoadWorkbenchGroups(workbenchGroups)
+      } yield loadedPolicies ++ loadedWorkbenchGroups
+    }.flatMap(res => res)
+
+    def loadSequentially(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = withContext { ctx =>
       groupRefs.toSeq.flatMap(ref => loadInternal(ref, ctx))
     }
+
+    private def batchLoadWorkbenchGroups(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = batchedLoad(groupRefs.toSeq) { batch => { ctx =>
+      val filters = batch.toSet[RawlsGroupRef].map { ref => s"(${Attr.cn}=${ref.groupName.value})" }
+      ctx.search(groupsOu, s"(|${filters.mkString})", new SearchControls()).extractResultsAndClose.map { result =>
+        unmarshallGroup(result.getAttributes)
+      }
+    } }
 
     /** talk to doge before calling this function - loads groups and subgroups and subgroups ... */
     def loadGroupsRecursive(groups: Set[RawlsGroupRef], accumulated: Set[RawlsGroup] = Set.empty): ReadWriteAction[Set[RawlsGroup]] = {
