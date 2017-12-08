@@ -428,6 +428,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
+    Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
     Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>

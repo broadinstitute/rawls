@@ -362,7 +362,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo)}
     for {
       (project, addUsers, addSubGroups) <- loadMembersAndProject(projectName, projectAccessUpdate)
-      _ <- updateGroupMembership(project.ownerPolicyGroup, addUsers = addUsers, addSubGroups = addSubGroups)
+      _ <- updateGroupMembershipPolicy(project.ownerPolicyGroup, addUsers = addUsers, addSubGroups = addSubGroups)
     } yield {
       RequestComplete(StatusCodes.OK)
     }
@@ -377,7 +377,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) => throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))}
     for {
       (project, removeUsers, removeSubGroups) <- loadMembersAndProject(projectName, projectAccessUpdate)
-        _ <- updateGroupMembership(project.ownerPolicyGroup, removeUsers = removeUsers, removeSubGroups = removeSubGroups)
+        _ <- updateGroupMembershipPolicy(project.ownerPolicyGroup, removeUsers = removeUsers, removeSubGroups = removeSubGroups)
     } yield {
       RequestComplete(StatusCodes.OK)
     }
@@ -451,6 +451,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def updateGroupMembership(groupRef: RawlsGroupRef, addUsers: Set[RawlsUserRef] = Set.empty, removeUsers: Set[RawlsUserRef] = Set.empty, addSubGroups: Set[RawlsGroupRef] = Set.empty, removeSubGroups: Set[RawlsGroupRef] = Set.empty): Future[RawlsGroup] = {
     updateGroupMembershipInternal(groupRef) { group =>
+      group.copy(
+        users = group.users ++ addUsers -- removeUsers,
+        subGroups = group.subGroups ++ addSubGroups -- removeSubGroups
+      )
+    }
+  }
+
+  def updateGroupMembershipPolicy(groupRef: RawlsGroupRef, addUsers: Set[RawlsUserRef] = Set.empty, removeUsers: Set[RawlsUserRef] = Set.empty, addSubGroups: Set[RawlsGroupRef] = Set.empty, removeSubGroups: Set[RawlsGroupRef] = Set.empty): Future[RawlsGroup] = {
+    updateGroupMembershipInternalPolicy(groupRef) { group =>
       group.copy(
         users = group.users ++ addUsers -- removeUsers,
         subGroups = group.subGroups ++ addSubGroups -- removeSubGroups
@@ -687,6 +696,26 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       }, TransactionIsolation.ReadCommitted)
 
       messages = (intersectionGroups.toSeq :+ RawlsGroup.toRef(savedGroup)).map(_.toJson.compactPrint)
+
+      _ <- gpsDAO.publishMessages(gpsGroupSyncTopic, messages)
+    } yield savedGroup
+  }
+
+  private def updateGroupMembershipInternalPolicy(groupRef: RawlsGroupRef)(update: RawlsGroup => RawlsGroup): Future[RawlsGroup] = {
+    for {
+      (savedGroup, intersectionGroups) <- dataSource.inTransaction ({ dataAccess =>
+        for {
+          groupOption <- dataAccess.rawlsGroupQuery.load(groupRef)
+          group = groupOption.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"group ${groupRef.groupName.value} not found")))
+          updatedGroup = update(group)
+
+          // update intersection groups associated with groupRef
+          groupsToIntersects <- dataAccess.workspaceQuery.findAssociatedGroupsToIntersect(updatedGroup)
+          intersectionGroups <- updateIntersectionGroupMembers(groupsToIntersects.toSet, dataAccess)
+        } yield (updatedGroup, intersectionGroups)
+      }, TransactionIsolation.ReadCommitted)
+
+      messages = intersectionGroups.toSeq.map(_.toJson.compactPrint)
 
       _ <- gpsDAO.publishMessages(gpsGroupSyncTopic, messages)
     } yield savedGroup
