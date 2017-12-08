@@ -191,9 +191,16 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       loadInternal(groupRef, ctx)
     }
 
-    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = withContext { ctx =>
-      groupRefs.toSeq.flatMap(ref => loadInternal(ref, ctx))
-    }
+    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = batchedLoad(groupRefs.toSeq) { batch => { ctx =>
+      val filters = batch.toSet[RawlsGroupRef].map(_.groupName.value).collect {
+        case policyGroupNamePattern(policyName, resourceId, resourceType) => s"(&(policy=$policyName)(resourceId=$resourceId)(resourceType=$resourceType))"
+        case groupName => s"(${Attr.cn}=$groupName)"
+      }
+
+      ctx.search(directoryConfig.baseDn, s"(|${filters.mkString})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)).extractResultsAndClose.map { result =>
+        unmarshallGroup(result.getAttributes)
+      }
+    } }
 
     /** talk to doge before calling this function - loads groups and subgroups and subgroups ... */
     def loadGroupsRecursive(groups: Set[RawlsGroupRef], accumulated: Set[RawlsGroup] = Set.empty): ReadWriteAction[Set[RawlsGroup]] = {
