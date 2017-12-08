@@ -110,7 +110,7 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
 
     def save(group: RawlsGroup): ReadWriteAction[RawlsGroup] = withContext { ctx =>
       if (isPolicyGroupName(group.groupName)) {
-        throw new RawlsException("can save policies via rawls")
+        throw new RawlsException("can not save policies via rawls")
       }
 
       @tailrec
