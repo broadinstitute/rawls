@@ -57,4 +57,5 @@
     <include file="changesets/20170926_drop_user_group_tables.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20171016_update_all_attributes_column.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20171120_update_NDMS_toNMDS.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20171208_point_project_owners_to_policies.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
