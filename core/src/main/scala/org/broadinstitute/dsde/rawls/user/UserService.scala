@@ -362,7 +362,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo)}
     for {
       (project, addUsers, addSubGroups) <- loadMembersAndProject(projectName, projectAccessUpdate)
-      _ <- updateGroupMembershipPolicy(project.ownerPolicyGroup, addUsers = addUsers, addSubGroups = addSubGroups)
+      _ <- updateGroupMembership(project.ownerPolicyGroup, addUsers = addUsers, addSubGroups = addSubGroups)
     } yield {
       RequestComplete(StatusCodes.OK)
     }
@@ -377,7 +377,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) => throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))}
     for {
       (project, removeUsers, removeSubGroups) <- loadMembersAndProject(projectName, projectAccessUpdate)
-        _ <- updateGroupMembershipPolicy(project.ownerPolicyGroup, removeUsers = removeUsers, removeSubGroups = removeSubGroups)
+        _ <- updateGroupMembership(project.ownerPolicyGroup, removeUsers = removeUsers, removeSubGroups = removeSubGroups)
     } yield {
       RequestComplete(StatusCodes.OK)
     }
