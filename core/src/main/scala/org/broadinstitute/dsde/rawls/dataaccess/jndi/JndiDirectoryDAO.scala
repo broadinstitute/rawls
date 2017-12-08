@@ -191,13 +191,28 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       loadInternal(groupRef, ctx)
     }
 
-    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = batchedLoad(groupRefs.toSeq) { batch => { ctx =>
+    def load(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = withContext { ctx =>
+      val (policies, workbenchGroups) = groupRefs.toSeq.partition(ref => ref.groupName.value.matches(policyGroupNamePattern.regex))
+
+      for {
+        loadedPolicies <- batchLoadPolicies(policies)
+        loadedWorkbenchGroups <- batchLoadWorkbenchGroups(workbenchGroups)
+      } yield loadedPolicies ++ loadedWorkbenchGroups
+    }.flatMap(res => res)
+
+    private def batchLoadPolicies(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = batchedLoad(groupRefs.toSeq) { batch => { ctx =>
       val filters = batch.toSet[RawlsGroupRef].map(_.groupName.value).collect {
         case policyGroupNamePattern(policyName, resourceId, resourceType) => s"(&(policy=$policyName)(resourceId=$resourceId)(resourceType=$resourceType))"
-        case groupName => s"(${Attr.cn}=$groupName)"
       }
 
-      ctx.search(directoryConfig.baseDn, s"(|${filters.mkString})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)).extractResultsAndClose.map { result =>
+      ctx.search(resourcesOu, s"(|${filters.mkString})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)).extractResultsAndClose.map { result =>
+        unmarshallGroup(result.getAttributes)
+      }
+    } }
+
+    private def batchLoadWorkbenchGroups(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = batchedLoad(groupRefs.toSeq) { batch => { ctx =>
+      val filters = batch.toSet[RawlsGroupRef].map { ref => s"(${Attr.cn}=${ref.groupName.value})" }
+      ctx.search(groupsOu, s"(|${filters.mkString})", new SearchControls()).extractResultsAndClose.map { result =>
         unmarshallGroup(result.getAttributes)
       }
     } }
