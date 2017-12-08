@@ -205,14 +205,14 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
         case policyGroupNamePattern(policyName, resourceId, resourceType) => s"(&(policy=$policyName)(resourceId=$resourceId)(resourceType=$resourceType))"
       }
 
-      ctx.search(resourcesOu, s"(|${filters.mkString})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)).extractResultsAndClose.map { result =>
+      ctx.search(directoryConfig.baseDn, s"(|${filters.mkString})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)).extractResultsAndClose.map { result =>
         unmarshallGroup(result.getAttributes)
       }
     } }
 
     private def batchLoadWorkbenchGroups(groupRefs: TraversableOnce[RawlsGroupRef]): ReadWriteAction[Seq[RawlsGroup]] = batchedLoad(groupRefs.toSeq) { batch => { ctx =>
       val filters = batch.toSet[RawlsGroupRef].map { ref => s"(${Attr.cn}=${ref.groupName.value})" }
-      ctx.search(groupsOu, s"(|${filters.mkString})", new SearchControls()).extractResultsAndClose.map { result =>
+      ctx.search(directoryConfig.baseDn, s"(|${filters.mkString})", new SearchControls(SearchControls.SUBTREE_SCOPE, 0, 0, null, false, false)).extractResultsAndClose.map { result =>
         unmarshallGroup(result.getAttributes)
       }
     } }
