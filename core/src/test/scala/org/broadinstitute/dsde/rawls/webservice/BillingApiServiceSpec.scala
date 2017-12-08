@@ -48,7 +48,20 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   "BillingApiService" should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
-    Await.result(samDataSaver.savePolicyGroup(project.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+    Await.result(samDataSaver.savePolicyGroup(project.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
+
+    val createRequest = CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)
+
+    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+    Post(s"/billing", httpJson(createRequest)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
     Put(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
@@ -113,8 +126,20 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when removing a user from a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
-    Await.result(samDataSaver.savePolicyGroup(project.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+    Await.result(samDataSaver.savePolicyGroup(project.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
     withStatsD {
+      val createRequest = CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)
+
+      import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+      Post(s"/billing", httpJson(createRequest)) ~>
+        sealRoute(services.billingRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+
       Put(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.OK) {
