@@ -70,7 +70,7 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
 
   "when500orGoogleError" should "return true for 500 or Google errors" in {
     when500orGoogleError(buildGoogleJsonResponseException(403, None, None, Some("usageLimits"))) shouldBe true
-    when500orGoogleError(buildGoogleJsonResponseException(429, None, None, Some("usageLimits"))) shouldBe true
+    when500orGoogleError(buildGoogleJsonResponseException(429, None, None, None)) shouldBe true
     when500orGoogleError(buildGoogleJsonResponseException(400, None, Some("invalid"), None)) shouldBe true
     when500orGoogleError(buildGoogleJsonResponseException(404)) shouldBe true
 
@@ -89,7 +89,6 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
     when500orGoogleError(buildGoogleJsonResponseException(400, None, Some("boom"), None)) shouldBe false
     when500orGoogleError(buildGoogleJsonResponseException(401)) shouldBe false
     when500orGoogleError(buildGoogleJsonResponseException(403, None, None, Some("boom"))) shouldBe false
-    when500orGoogleError(buildGoogleJsonResponseException(429, None, None, Some("boom"))) shouldBe false
 
     when500orGoogleError(buildHttpResponseException(400)) shouldBe false
     when500orGoogleError(buildHttpResponseException(401)) shouldBe false
