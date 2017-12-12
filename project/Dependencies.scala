@@ -66,7 +66,8 @@ object Dependencies {
 
   val cromwellWdl: ModuleID = ("org.broadinstitute" %% "cromwell-wdl" % cromwellVersion
     exclude("org.typelevel", "cats_2.11")
-    exclude("io.spray", "spray-json_2.11"))
+    exclude("io.spray", "spray-json_2.11")
+    exclude("com.typesafe.akka", "akka-actor_2.11"))
 
   val metricsDependencies = Seq(
     metricsScala,
