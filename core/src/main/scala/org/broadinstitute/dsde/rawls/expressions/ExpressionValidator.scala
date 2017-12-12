@@ -29,7 +29,7 @@ object ExpressionValidator {
 
   // validate a MC, skipping optional empty inputs, and return failure when any inputs/outputs are invalid
   def validateExpressionsForSubmission(methodConfiguration: MethodConfiguration, methodInputsToParse: Seq[MethodConfigResolver.MethodInput], emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput], parser: SlickExpressionParser): Try[ValidatedMethodConfiguration] = {
-    val inputsToParse = methodInputsToParse map { mi => (mi.workflowInput.fqn, AttributeString(mi.expression)) }
+    val inputsToParse = methodInputsToParse map { mi => (mi.workflowInput.localName.value, AttributeString(mi.expression)) }
 
     val validated = validateAndParse(methodConfiguration, inputsToParse.toMap, parser)
 
@@ -42,7 +42,7 @@ object ExpressionValidator {
       }
 
       // a MethodInput which is both optional and empty is already valid
-      val emptyOptionalInputs = emptyOptionalMethodInputs map { _.workflowInput.fqn }
+      val emptyOptionalInputs = emptyOptionalMethodInputs map { _.workflowInput.localName.value }
       validated.copy(validInputs = validated.validInputs ++ emptyOptionalInputs)
     }
   }

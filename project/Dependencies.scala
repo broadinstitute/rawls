@@ -9,7 +9,7 @@ object Dependencies {
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
-  val cromwellVersion = "30-70eb8ee"
+  val cromwellVersion = "31-6cc3934-SNAP"
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
@@ -64,7 +64,7 @@ object Dependencies {
   val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.7.22" % "test"
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
 
-  val wdl4s: ModuleID = ("org.broadinstitute" %% "cromwell-wdl" % cromwellVersion
+  val cromwellWdl: ModuleID = ("org.broadinstitute" %% "cromwell-wdl" % cromwellVersion
     exclude("org.typelevel", "cats_2.11")
     exclude("io.spray", "spray-json_2.11"))
 
@@ -133,7 +133,7 @@ object Dependencies {
     sprayClient,
     swaggerUI,
     commonsJEXL,
-    wdl4s,
+    cromwellWdl,
     cats,
     mysqlConnector,
     liquibaseCore,

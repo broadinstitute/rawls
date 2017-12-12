@@ -46,10 +46,10 @@ object MethodConfigResolver {
     SubmissionValidationValue(attr, None, inputName)
   }
 
-  private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: InputDefinition): SubmissionValidationValue = wfInput.wdlType match {
-    case arrayType: WomArrayType => getArrayResult(wfInput.fqn, mcSequence)
-    case WomOptionalType(_:WomArrayType) => getArrayResult(wfInput.fqn, mcSequence) //send optional-arrays down the same codepath as arrays
-    case _ => getSingleResult(wfInput.fqn, mcSequence, wfInput.optional)
+  private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: InputDefinition): SubmissionValidationValue = wfInput.womType match {
+    case arrayType: WomArrayType => getArrayResult(wfInput.localName.value, mcSequence)
+    case WomOptionalType(_:WomArrayType) => getArrayResult(wfInput.localName.value, mcSequence) //send optional-arrays down the same codepath as arrays
+    case _ => getSingleResult(wfInput.localName.value, mcSequence, wfInput.optional)
   }
 
   def parseWDL(wdl: String): Try[WdlWorkflow] = {
@@ -100,12 +100,12 @@ object MethodConfigResolver {
             val validationValuesByEntity: Seq[(String, SubmissionValidationValue)] = tryAttribsByEntity match {
               case Failure(regret) =>
                 //The DBIOAction failed - this input expression was not evaluated. Make an error for each entity.
-                entities.map(e => (e.name, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.fqn)))
+                entities.map(e => (e.name, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.localName.value)))
               case Success(attributeMap) =>
                 //The expression was evaluated, but that doesn't mean we got results...
                 attributeMap.map {
                   case (key, Success(attrSeq)) => key -> unpackResult(attrSeq.toSeq, input.workflowInput)
-                  case (key, Failure(regret)) => key -> SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.fqn)
+                  case (key, Failure(regret)) => key -> SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.localName.value)
                 }.toSeq
             }
             validationValuesByEntity

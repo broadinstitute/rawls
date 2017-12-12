@@ -10,8 +10,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import java.util.UUID
 
 import spray.json.JsArray
-import wdl.WorkflowInput
-import wdl.types.{WdlArrayType, WdlIntegerType, WdlOptionalType}
+import wom.callable.Callable.{InputDefinition, OptionalInputDefinition, InputDefinitionWithDefault, RequiredInputDefinition}
+import wom.types.{WomArrayType, WomIntegerType, WomOptionalType}
 
 import scala.concurrent.ExecutionContext
 
@@ -299,8 +299,8 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       val littleWorkflow = MethodConfigResolver.parseWDL(littleWdl).get
 
       val expectedLittleInputs = Map(
-        intArgName -> WorkflowInput(intArgName, WdlIntegerType),
-        intOptName -> WorkflowInput(intOptName, WdlOptionalType(WdlIntegerType)))
+        intArgName -> RequiredInputDefinition(intArgName, WomIntegerType),
+        intOptName -> OptionalInputDefinition(intOptName, WomOptionalType(WomIntegerType)))
 
       assertResult(expectedLittleInputs) {
         littleWorkflow.inputs
@@ -311,7 +311,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
       val arrayWorkflow = MethodConfigResolver.parseWDL(arrayWdl).get
 
-      val expectedArrayInputs = Map(intArrayName -> WorkflowInput(intArrayName, WdlArrayType(WdlIntegerType)))
+      val expectedArrayInputs = Map(intArrayName -> RequiredInputDefinition(intArrayName, WomArrayType(WomIntegerType)))
 
       assertResult(expectedArrayInputs) {
         arrayWorkflow.inputs
