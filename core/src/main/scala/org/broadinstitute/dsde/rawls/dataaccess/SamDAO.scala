@@ -4,6 +4,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAc
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
 import org.broadinstitute.dsde.rawls.model.{ErrorReportSource, ErrorReportable, JsonSupport, RawlsGroupEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus}
 import spray.json.DefaultJsonProtocol._
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 
 import scala.concurrent.Future
 
@@ -14,6 +15,7 @@ trait SamDAO extends ErrorReportable {
   val errorReportSource = ErrorReportSource("sam")
   def registerUser(userInfo: UserInfo): Future[Option[UserStatus]]
   def getUserStatus(userInfo: UserInfo): Future[Option[UserStatus]]
+  def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail]
   def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
   def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
   def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean]
@@ -35,6 +37,7 @@ object SamResourceActions {
   val launchBatchCompute = SamResourceAction("launch_batch_compute")
   val alterPolicies = SamResourceAction("alter_policies")
   val readPolicies = SamResourceAction("read_policies")
+  val alterGoogleRole = SamResourceAction("alter_google_role")
 }
 
 object SamResourceTypeNames {

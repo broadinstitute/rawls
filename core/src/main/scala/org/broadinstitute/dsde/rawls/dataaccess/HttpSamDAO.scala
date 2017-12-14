@@ -11,6 +11,8 @@ import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsGroupEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus, WorkspaceJsonSupport}
 import org.broadinstitute.dsde.rawls.util.Retry
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.WorkbenchEmailFormat
 import spray.client.pipelining.{sendReceive, _}
 import spray.http._
 import spray.httpx.SprayJsonSupport._
@@ -57,13 +59,19 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     }
   }
 
-
   override def getUserStatus(userInfo: UserInfo): Future[Option[UserStatus]] = {
     val url = samServiceURL + "/register/user"
     retry(when500) { () =>
       pipeline[Option[UserStatus]](userInfo) apply Get(url) recover {
         case notOK: UnsuccessfulResponseException if StatusCodes.NotFound == notOK.response.status => None
       }
+    }
+  }
+
+  override def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail] = {
+    val url = samServiceURL + s"/api/google/user/proxyGroup/$targetUserEmail"
+    retry(when500) { () =>
+      pipeline[WorkbenchEmail](userInfo) apply Get(url)
     }
   }
 

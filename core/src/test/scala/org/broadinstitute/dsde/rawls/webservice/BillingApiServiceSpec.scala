@@ -115,7 +115,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when adding a user to a nonexistent project" in withTestDataApiServices { services =>
-    Put(s"/billing/no_access/user/${testData.userOwner.userEmail.value}") ~>
+    Put(s"/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {

@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.user
 
-import java.sql.SQLException
-import java.util.UUID
-
 import _root_.slick.jdbc.TransactionIsolation
 import akka.actor.{Actor, Props}
 import akka.pattern._
@@ -27,6 +24,7 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -44,18 +42,14 @@ object UserService {
     Props(userServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, gpsDAO, gpsGroupSyncTopic, notificationDAO, samDAO)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, gpsDAO, gpsGroupSyncTopic, notificationDAO, samDAO, projectOwnerGrantableRoles)
 
   sealed trait UserServiceMessage
   case class SetRefreshToken(token: UserRefreshToken) extends UserServiceMessage
   case object GetRefreshTokenDate extends UserServiceMessage
 
   case object CreateUser extends UserServiceMessage
-  case class AdminGetUserStatus(userRef: RawlsUserRef) extends UserServiceMessage
-  case object UserGetUserStatus extends UserServiceMessage
-
-  case class AdminDeleteUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
 
@@ -76,6 +70,8 @@ object UserService {
   case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
+  case class GrantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) extends UserServiceMessage
+  case class RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) extends UserServiceMessage
   case object ListBillingAccounts extends UserServiceMessage
 
   case class CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) extends UserServiceMessage
@@ -99,7 +95,7 @@ object UserService {
   case class AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths with LazyLogging with DirectorySubjectNameSupport {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths with LazyLogging with DirectorySubjectNameSupport {
 
   import dataSource.dataAccess.driver.api._
   import spray.json.DefaultJsonProtocol._
@@ -109,7 +105,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender
 
     case CreateUser => createUser() pipeTo sender
-    case AdminDeleteUser(userRef) => asFCAdmin { deleteUser(userRef) } pipeTo sender
     case ListGroupsForUser(userEmail) => listGroupsForUser(userEmail) pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
@@ -118,6 +113,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     case AddUserToBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
     case RemoveUserFromBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
+    case GrantGoogleRoleToUser(projectName, targetUserEmail, role) => requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { grantGoogleRoleToUser(projectName, targetUserEmail, role) } pipeTo sender
+    case RemoveGoogleRoleFromUser(projectName, targetUserEmail, role) => requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) } pipeTo sender
     case ListBillingAccounts => listBillingAccounts() pipeTo sender
 
     case AdminCreateGroup(groupRef) => asFCAdmin { createGroup(groupRef) } pipeTo sender
@@ -237,35 +234,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def deleteUserFromDB(userRef: RawlsUserRef): Future[Unit] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsUserQuery.deleteUser(userRef.userSubjectId)
-    }
-  }
-
-  def deleteUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
-
-    // 1. load user from DB
-    // 2. in Futures, can be parallel: remove user from aux DB tables, User Directory, and Proxy Group, revoke & delete refresh token
-    // 3. only remove user from DB if/when all of #2 succeed, because failures mean we need to keep the DB user around for subsequent attempts
-
-    val userF = loadUser(userRef)
-
-    val dbTablesRemoval = dataSource.inTransaction { dataAccess =>
-      for {
-        _ <- verifyNoSubmissions(userRef, dataAccess)
-        _ <- dataAccess.rawlsGroupQuery.removeUserFromAllGroups(userRef)
-      } yield ()
-    }
-
-    val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup) recover { case e: HttpResponseException if e.getStatusCode == 404 => Unit }
-
-    for {
-      _ <- Future.sequence(Seq(dbTablesRemoval, proxyGroupDeletion, deleteRefreshTokenInternal(userRef)))
-      _ <- deleteUserFromDB(userRef)
-    } yield RequestComplete(StatusCodes.NoContent)
-  }
-
   def isAdmin(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     toFutureTry(tryIsFCAdmin(userEmail)) map {
       case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
@@ -379,6 +347,33 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     for {
       (project, removeUsers, removeSubGroups) <- loadMembersAndProject(projectName, projectAccessUpdate)
         _ <- updateGroupMembership(project.ownerPolicyGroup, removeUsers = removeUsers, removeSubGroups = removeSubGroups)
+    } yield {
+      RequestComplete(StatusCodes.OK)
+    }
+  }
+
+  private def googleRoleWhitelistCheck(role: String): Future[Unit] = {
+    if (projectOwnerGrantableRoles.contains(role))
+      Future.successful(())
+    else
+      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"Cannot alter Google role $role: not in list [${projectOwnerGrantableRoles mkString ", "}]")))
+  }
+
+  def grantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String): Future[PerRequestMessage] = {
+    for {
+      _ <- googleRoleWhitelistCheck(role)
+      proxyGroupEmail <- samDAO.getProxyGroup(userInfo, targetUserEmail)
+      _ <- gcsDAO.addRoleToGroup(projectName, proxyGroupEmail, role)
+    } yield {
+      RequestComplete(StatusCodes.OK)
+    }
+  }
+
+  def removeGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String): Future[PerRequestMessage] = {
+    for {
+      _ <- googleRoleWhitelistCheck(role)
+      proxyGroupEmail <- samDAO.getProxyGroup(userInfo, targetUserEmail)
+      _ <- gcsDAO.removeRoleFromGroup(projectName, proxyGroupEmail, role)
     } yield {
       RequestComplete(StatusCodes.OK)
     }

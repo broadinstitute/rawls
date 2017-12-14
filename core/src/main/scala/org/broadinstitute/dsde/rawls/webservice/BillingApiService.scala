@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import spray.routing.Directive.pimpApply
 import spray.routing._
 
@@ -22,28 +23,46 @@ trait BillingApiService extends HttpService with PerRequestCreator with UserInfo
   val userServiceConstructor: UserInfo => UserService
 
   val billingRoutes = requireUserInfo() { userInfo =>
-    path("billing" / Segment / "members") { projectId =>
-      get {
-        requestContext =>
-          perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.GetBillingProjectMembers(RawlsBillingProjectName(projectId)))
-      }
-    } ~
-      path("billing" / Segment / Segment / Segment) { (projectId, role, userEmail) =>
-        put {
+    pathPrefix("billing" / Segment) { projectId =>
+      path("members") {
+        get {
           requestContext =>
             perRequest(requestContext,
               UserService.props(userServiceConstructor, userInfo),
-              UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(role))))
-        } ~
-          delete {
+              UserService.GetBillingProjectMembers(RawlsBillingProjectName(projectId)))
+        }
+      } ~
+        // these routes are for setting/unsetting Google cloud roles
+        path("googleRole" / Segment / Segment) { (googleRole, userEmail) =>
+          put {
             requestContext =>
               perRequest(requestContext,
                 UserService.props(userServiceConstructor, userInfo),
-                UserService.RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(role))))
-          }
-      } ~
+                UserService.GrantGoogleRoleToUser(RawlsBillingProjectName(projectId), WorkbenchEmail(userEmail), googleRole))
+          } ~
+            delete {
+              requestContext =>
+                perRequest(requestContext,
+                  UserService.props(userServiceConstructor, userInfo),
+                  UserService.RemoveGoogleRoleFromUser(RawlsBillingProjectName(projectId), WorkbenchEmail(userEmail), googleRole))
+            }
+        } ~
+        // these routes are for adding/removing users from projects
+        path(Segment / Segment) { (workbenchRole, userEmail) =>
+          put {
+            requestContext =>
+              perRequest(requestContext,
+                UserService.props(userServiceConstructor, userInfo),
+                UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))))
+          } ~
+            delete {
+              requestContext =>
+                perRequest(requestContext,
+                  UserService.props(userServiceConstructor, userInfo),
+                  UserService.RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))))
+            }
+        }
+    } ~
       path("billing") {
         post {
           entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
