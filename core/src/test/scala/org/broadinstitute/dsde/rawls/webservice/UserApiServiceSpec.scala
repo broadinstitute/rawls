@@ -440,6 +440,16 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 403 when trying to add a user to a billing project that the caller does not own (but has access to)" in withTestDataApiServices { services =>
+    Put(s"/billing/not_an_owner/user/${testData.userWriter.userEmail.value}") ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+          status
+        }
+      }
+  }
+
   it should "return 200 when adding a group to a billing project that the caller owns" in withTestDataApiServices { services =>
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
     val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)

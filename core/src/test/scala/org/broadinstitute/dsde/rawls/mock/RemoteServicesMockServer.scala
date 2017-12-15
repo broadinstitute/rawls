@@ -670,6 +670,30 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
+        .withPath("/api/resource/billing-project/not_an_owner/action/create_workspace")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """true""".stripMargin)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/api/resource/billing-project/not_an_owner/action/alter_policies")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """false""".stripMargin)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
         .withPath("/api/resource/billing-project/no_access/action/.*")
     ).respond(
       response()
