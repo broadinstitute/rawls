@@ -156,7 +156,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def requireProjectAction(projectName: RawlsBillingProjectName, action: SamResourceActions.SamResourceAction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamResourceActions.createWorkspace, userInfo).flatMap {
+    samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, userInfo).flatMap {
       case true => op
       case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a project owner.")))
     }
