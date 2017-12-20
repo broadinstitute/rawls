@@ -579,10 +579,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-    def getUsersUpdatedResponse(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel], invitesUpdated: Seq[WorkspaceACLUpdate], emailsNotFound: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate]): WorkspaceACLUpdateResponseList = {
+    def getUsersUpdatedResponse(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel], invitesUpdated: Seq[WorkspaceACLUpdate], emailsNotFound: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], refsToUpdateByEmail: Map[String, Either[RawlsUserRef, RawlsGroupRef]]): WorkspaceACLUpdateResponseList = {
+      val emailsByRef = refsToUpdateByEmail.map { case (k, v) => v -> k }
       val usersUpdated = actualChangesToMake.map {
-        case (Left(userRef), accessLevel) => WorkspaceACLUpdateResponse(userRef.userSubjectId.value, accessLevel)
-        case (Right(groupRef), accessLevel) => WorkspaceACLUpdateResponse(groupRef.groupName.value, accessLevel)
+        case (eitherRef, accessLevel) => WorkspaceACLUpdateResponse(emailsByRef(eitherRef), accessLevel)
       }.toSeq
 
       val usersNotFound = emailsNotFound.filterNot(aclUpdate => invitesUpdated.map(_.email).contains(aclUpdate.email)).filterNot(aclUpdate => existingInvites.map(_.email).contains(aclUpdate.email))
@@ -624,8 +624,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
-    for {
-      (overwriteGroupMessages, emailsNotFound, actualChangesToMake, actualShareChangesToMake, actualComputeChangesToMake) <- overwriteGroupMessagesFuture
+    val resultsFuture = for {
+      (overwriteGroupMessages, emailsNotFound, actualChangesToMake, actualShareChangesToMake, actualComputeChangesToMake, refsToUpdateByEmail) <- overwriteGroupMessagesFuture
       overwriteGroupResults <- Future.traverse(overwriteGroupMessages) { message => (userServiceRef ? message).asInstanceOf[Future[PerRequestMessage]] }
       existingInvites <- getExistingWorkspaceInvites(workspaceName)
       _ <- updateWorkspaceSharePermissions(actualShareChangesToMake)
@@ -657,7 +657,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       overwriteGroupResults.map {
         case RequestComplete(StatusCodes.NoContent) =>
-          RequestComplete(StatusCodes.OK, getUsersUpdatedResponse(actualChangesToMake, (deletedInvites ++ savedInvites), (emailsNotFound diff savedInvites), existingInvites))
+          RequestComplete(StatusCodes.OK, getUsersUpdatedResponse(actualChangesToMake, (deletedInvites ++ savedInvites), (emailsNotFound diff savedInvites), existingInvites, refsToUpdateByEmail))
         case otherwise => otherwise
       }.reduce { (prior, next) =>
         // this reduce will propagate the first non-NoContent (i.e. error) response
@@ -667,6 +667,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
+
+    for {
+      results <- resultsFuture
+      _ <- results match {
+        case RequestComplete((StatusCodes.OK, WorkspaceACLUpdateResponseList(usersUpdated, _, _, _))) =>
+          Future.traverse(usersUpdated) {
+            case WorkspaceACLUpdateResponse(email, WorkspaceAccessLevels.Write) =>
+              samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, email, userInfo)
+            case _ => Future.successful(())
+          }
+        case x => Future.failed(throw new RawlsException(s"unexpected message returned: $x"))
+      }
+    } yield results
   }
 
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
@@ -738,7 +751,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @param workspaceContext
    * @return tuple: messages to send to UserService to overwrite acl groups, email that were not found in the process
    */
-  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]])] = {
+  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]], Map[String, Either[RawlsUserRef,RawlsGroupRef]])] = {
     for {
       refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(aclUpdates.map(_.email))
       existingRefsAndLevels <- dataAccess.workspaceQuery.findWorkspaceUsersAndAccessLevel(workspaceContext.workspaceId)
@@ -855,7 +868,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
 
       // voila
-      (overwriteGroupMessages, emailsNotFound, actualChangesToMakeByMember, actualShareChangesToMakeByMember, actualComputeChangesToMakeByMember)
+      (overwriteGroupMessages, emailsNotFound, actualChangesToMakeByMember, actualShareChangesToMakeByMember, actualComputeChangesToMakeByMember, refsToUpdateByEmail)
     }
   }
 

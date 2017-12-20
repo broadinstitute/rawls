@@ -11,7 +11,7 @@ case class WorkspaceACL(acl: Map[String, AccessEntry])
 
 case class WorkspaceACLUpdate(email: String, accessLevel: WorkspaceAccessLevel, canShare: Option[Boolean] = None, canCompute: Option[Boolean] = None)
 
-case class WorkspaceACLUpdateResponse(subjectId: String, accessLevel: WorkspaceAccessLevel)
+case class WorkspaceACLUpdateResponse(email: String, accessLevel: WorkspaceAccessLevel)
 
 case class WorkspaceACLUpdateResponseList(usersUpdated: Seq[WorkspaceACLUpdateResponse], invitesSent: Seq[WorkspaceACLUpdate], invitesUpdated: Seq[WorkspaceACLUpdate], usersNotFound: Seq[WorkspaceACLUpdate])
 
