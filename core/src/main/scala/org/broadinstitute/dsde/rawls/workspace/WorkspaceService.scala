@@ -582,7 +582,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     def getUsersUpdatedResponse(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel], invitesUpdated: Seq[WorkspaceACLUpdate], emailsNotFound: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], refsToUpdateByEmail: Map[String, Either[RawlsUserRef, RawlsGroupRef]]): WorkspaceACLUpdateResponseList = {
       val emailsByRef = refsToUpdateByEmail.map { case (k, v) => v -> k }
       val usersUpdated = actualChangesToMake.map {
-        case (eitherRef, accessLevel) => WorkspaceACLUpdateResponse(emailsByRef(eitherRef), accessLevel)
+        case (eitherRef@Left(RawlsUserRef(subjectId)), accessLevel) => WorkspaceACLUpdateResponse(subjectId.value, emailsByRef(eitherRef), accessLevel)
+        case (eitherRef@Right(RawlsGroupRef(groupName)), accessLevel) => WorkspaceACLUpdateResponse(groupName.value, emailsByRef(eitherRef), accessLevel)
       }.toSeq
 
       val usersNotFound = emailsNotFound.filterNot(aclUpdate => invitesUpdated.map(_.email).contains(aclUpdate.email)).filterNot(aclUpdate => existingInvites.map(_.email).contains(aclUpdate.email))
@@ -673,7 +674,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- results match {
         case RequestComplete((StatusCodes.OK, WorkspaceACLUpdateResponseList(usersUpdated, _, _, _))) =>
           Future.traverse(usersUpdated) {
-            case WorkspaceACLUpdateResponse(email, WorkspaceAccessLevels.Write) =>
+            case WorkspaceACLUpdateResponse(_, email, WorkspaceAccessLevels.Write) =>
               samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, email, userInfo)
             case _ => Future.successful(())
           }
