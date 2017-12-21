@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{Read, Write}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor}
 import org.broadinstitute.dsde.rawls.openam.{MockUserInfoDirectives, MockUserInfoDirectivesWithUser}
@@ -21,13 +22,14 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
 import spray.testkit.ScalatestRouteTest
 
 import scala.concurrent.duration.{Duration, FiniteDuration, _}
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 
 class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll {
@@ -1046,5 +1048,18 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   }
 
+  for ((accessLevel, callCount) <- Seq((Write, 1), (Read, 0))) {
+    it should s"share billing compute $callCount times when workspace $accessLevel access granted" in withTestDataServices { services =>
+      import spray.httpx.SprayJsonSupport._
+      import WorkspaceACLJsonSupport._
+      val email = s"${UUID.randomUUID}@bar.com"
+      val results = RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse("foo", email, accessLevel)), Seq.empty, Seq.empty, Seq.empty))
+      assertResult(results) {
+        Await.result(services.workspaceService.maybeShareProjectComputePolicy(Future.successful(results), testData.workspace.toWorkspaceName), Duration.Inf)
+      }
 
+      import org.mockserver.model.HttpRequest.request
+      mockServer.mockServer.verify(request().withMethod("PUT").withPath(s"/api/resource/${SamResourceTypeNames.billingProject.value}/${testData.workspace.namespace}/policies/${UserService.canComputeUserPolicyName}/memberEmails/$email"), VerificationTimes.exactly(callCount))
+    }
+  }
 }

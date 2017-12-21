@@ -32,7 +32,7 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
-import spray.http.{StatusCodes, Uri}
+import spray.http.{StatusCode, StatusCodes, Uri}
 import spray.httpx.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -669,16 +669,22 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
+    maybeShareProjectComputePolicy(resultsFuture, workspaceName)
+  }
+
+  // called from test harness
+  private[workspace] def maybeShareProjectComputePolicy(resultsFuture: Future[PerRequestMessage], workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     for {
       results <- resultsFuture
       _ <- results match {
-        case RequestComplete((StatusCodes.OK, WorkspaceACLUpdateResponseList(usersUpdated, _, _, _))) =>
+        case RequestComplete((status: StatusCode, WorkspaceACLUpdateResponseList(usersUpdated, _, _, _))) if status.isSuccess =>
           Future.traverse(usersUpdated) {
             case WorkspaceACLUpdateResponse(_, email, WorkspaceAccessLevels.Write) =>
               samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, email, userInfo)
             case _ => Future.successful(())
           }
-        case x => Future.failed(throw new RawlsException(s"unexpected message returned: $x"))
+        case RequestComplete((status: StatusCode, _)) if status.isSuccess => Future.failed(throw new RawlsException(s"unexpected message returned: $results"))
+        case _ => Future.successful(())
       }
     } yield results
   }
