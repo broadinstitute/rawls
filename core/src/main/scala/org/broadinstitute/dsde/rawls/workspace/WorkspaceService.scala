@@ -2075,12 +2075,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def requireComputePermission[T](workspace: Workspace, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    getMaximumAccessLevel(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { userLevel =>
-      if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock
-      else dataAccess.workspaceQuery.getUserComputePermissions(userInfo.userSubjectId, SlickWorkspaceContext(workspace)) flatMap { canCompute =>
-        if (canCompute) codeBlock
-        else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
-        else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+    DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamResourceActions.launchBatchCompute, userInfo)) flatMap { projectCanCompute =>
+      if (!projectCanCompute) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+      else {
+        getMaximumAccessLevel(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { userLevel =>
+          if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock
+          else dataAccess.workspaceQuery.getUserComputePermissions(userInfo.userSubjectId, SlickWorkspaceContext(workspace)) flatMap { canCompute =>
+            if (canCompute) codeBlock
+            else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+            else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+          }
+        }
       }
     }
   }
