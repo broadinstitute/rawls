@@ -966,7 +966,7 @@ class HttpGoogleServicesDAO(
       })
 
       // add new policies to the project
-      _ <- addPolicyBindings(projectName, projectTemplate.policies.mapValues(_.toList) + ("roles/viewer" -> List(s"group:${project.ownerPolicyGroup.groupEmail.value}")))
+      _ <- addPolicyBindings(projectName, projectTemplate.policies.mapValues(_.toList) ++ Map("roles/viewer" -> List(s"group:${project.ownerPolicyGroup.groupEmail.value}"), "roles/billing.projectManager" -> List(s"group:${project.ownerPolicyGroup.groupEmail.value}")))
 
       // enable appropriate google apis
       operations <- Future.sequence(projectTemplate.services.map { service => retryWhen500orGoogleError(() => {
