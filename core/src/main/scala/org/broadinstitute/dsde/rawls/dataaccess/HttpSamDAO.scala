@@ -93,6 +93,13 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     retry(when500) { () => pipeline[Boolean](userInfo) apply Get(url) }
   }
 
+  override def getPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, userInfo: UserInfo): Future[SamPolicy] = {
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/${policyName.toLowerCase}"
+    val httpRequest = Get(url)
+
+    retry(when500) { () => pipeline[SamPolicy](userInfo) apply httpRequest }
+  }
+
   override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/${policyName.toLowerCase}"
     val httpRequest = Put(url, policy)

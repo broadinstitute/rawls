@@ -2547,6 +2547,38 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "403 creating submission without billing project compute permission" in withTestDataApiServices { services =>
+    // launch_batch_compute is false for testData.testProject3 in RemoteServicesMockServer
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.testProject3.projectName.value,
+      name = "newWorkspace",
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+      }
+
+    val z1 = Entity("z1", "Sample", Map.empty)
+
+    Post(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}/entities", httpJson(z1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+      }
+
+    val mcName = MethodConfigurationName("no_input", "dsde", newWorkspace.toWorkspaceName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+
+    createSubmission(newWorkspace.toWorkspaceName, methodConf, z1, None, services, StatusCodes.Forbidden)
+  }
+
   private def createSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
                                          submissionEntity: Entity, submissionExpression: Option[String],
                                          services: TestApiService, exectedStatus: StatusCode): Unit = {

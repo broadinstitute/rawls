@@ -11,7 +11,7 @@ case class WorkspaceACL(acl: Map[String, AccessEntry])
 
 case class WorkspaceACLUpdate(email: String, accessLevel: WorkspaceAccessLevel, canShare: Option[Boolean] = None, canCompute: Option[Boolean] = None)
 
-case class WorkspaceACLUpdateResponse(subjectId: String, accessLevel: WorkspaceAccessLevel)
+case class WorkspaceACLUpdateResponse(subjectId: String, email: String, accessLevel: WorkspaceAccessLevel)
 
 case class WorkspaceACLUpdateResponseList(usersUpdated: Seq[WorkspaceACLUpdateResponse], invitesSent: Seq[WorkspaceACLUpdate], invitesUpdated: Seq[WorkspaceACLUpdate], usersNotFound: Seq[WorkspaceACLUpdate])
 
@@ -90,7 +90,7 @@ class WorkspaceACLJsonSupport extends JsonSupport {
 
   implicit val WorkspaceACLUpdateFormat = jsonFormat4(WorkspaceACLUpdate)
 
-  implicit val WorkspaceACLUpdateResponseFormat = jsonFormat2(WorkspaceACLUpdateResponse)
+  implicit val WorkspaceACLUpdateResponseFormat = jsonFormat3(WorkspaceACLUpdateResponse)
 
   implicit val WorkspaceACLUpdateResponseListFormat = jsonFormat4(WorkspaceACLUpdateResponseList)
 

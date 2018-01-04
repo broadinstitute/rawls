@@ -32,7 +32,7 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
-import spray.http.{StatusCodes, Uri}
+import spray.http.{StatusCode, StatusCodes, Uri}
 import spray.httpx.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -579,10 +579,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-    def getUsersUpdatedResponse(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel], invitesUpdated: Seq[WorkspaceACLUpdate], emailsNotFound: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate]): WorkspaceACLUpdateResponseList = {
+    def getUsersUpdatedResponse(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel], invitesUpdated: Seq[WorkspaceACLUpdate], emailsNotFound: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], refsToUpdateByEmail: Map[String, Either[RawlsUserRef, RawlsGroupRef]]): WorkspaceACLUpdateResponseList = {
+      val emailsByRef = refsToUpdateByEmail.map { case (k, v) => v -> k }
       val usersUpdated = actualChangesToMake.map {
-        case (Left(userRef), accessLevel) => WorkspaceACLUpdateResponse(userRef.userSubjectId.value, accessLevel)
-        case (Right(groupRef), accessLevel) => WorkspaceACLUpdateResponse(groupRef.groupName.value, accessLevel)
+        case (eitherRef@Left(RawlsUserRef(subjectId)), accessLevel) => WorkspaceACLUpdateResponse(subjectId.value, emailsByRef(eitherRef), accessLevel)
+        case (eitherRef@Right(RawlsGroupRef(groupName)), accessLevel) => WorkspaceACLUpdateResponse(groupName.value, emailsByRef(eitherRef), accessLevel)
       }.toSeq
 
       val usersNotFound = emailsNotFound.filterNot(aclUpdate => invitesUpdated.map(_.email).contains(aclUpdate.email)).filterNot(aclUpdate => existingInvites.map(_.email).contains(aclUpdate.email))
@@ -624,8 +625,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
-    for {
-      (overwriteGroupMessages, emailsNotFound, actualChangesToMake, actualShareChangesToMake, actualComputeChangesToMake) <- overwriteGroupMessagesFuture
+    val resultsFuture = for {
+      (overwriteGroupMessages, emailsNotFound, actualChangesToMake, actualShareChangesToMake, actualComputeChangesToMake, refsToUpdateByEmail) <- overwriteGroupMessagesFuture
       overwriteGroupResults <- Future.traverse(overwriteGroupMessages) { message => (userServiceRef ? message).asInstanceOf[Future[PerRequestMessage]] }
       existingInvites <- getExistingWorkspaceInvites(workspaceName)
       _ <- updateWorkspaceSharePermissions(actualShareChangesToMake)
@@ -657,7 +658,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       overwriteGroupResults.map {
         case RequestComplete(StatusCodes.NoContent) =>
-          RequestComplete(StatusCodes.OK, getUsersUpdatedResponse(actualChangesToMake, (deletedInvites ++ savedInvites), (emailsNotFound diff savedInvites), existingInvites))
+          RequestComplete(StatusCodes.OK, getUsersUpdatedResponse(actualChangesToMake, (deletedInvites ++ savedInvites), (emailsNotFound diff savedInvites), existingInvites, refsToUpdateByEmail))
         case otherwise => otherwise
       }.reduce { (prior, next) =>
         // this reduce will propagate the first non-NoContent (i.e. error) response
@@ -667,6 +668,25 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
+
+    maybeShareProjectComputePolicy(resultsFuture, workspaceName)
+  }
+
+  // called from test harness
+  private[workspace] def maybeShareProjectComputePolicy(resultsFuture: Future[PerRequestMessage], workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    for {
+      results <- resultsFuture
+      _ <- results match {
+        case RequestComplete((status: StatusCode, WorkspaceACLUpdateResponseList(usersUpdated, _, _, _))) if status.isSuccess =>
+          Future.traverse(usersUpdated) {
+            case WorkspaceACLUpdateResponse(_, email, WorkspaceAccessLevels.Write) =>
+              samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, email, userInfo)
+            case _ => Future.successful(())
+          }
+        case RequestComplete((status: StatusCode, _)) if status.isSuccess => Future.failed(throw new RawlsException(s"unexpected message returned: $results"))
+        case _ => Future.successful(())
+      }
+    } yield results
   }
 
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
@@ -738,7 +758,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @param workspaceContext
    * @return tuple: messages to send to UserService to overwrite acl groups, email that were not found in the process
    */
-  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]])] = {
+  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]], Map[String, Either[RawlsUserRef,RawlsGroupRef]])] = {
     for {
       refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(aclUpdates.map(_.email))
       existingRefsAndLevels <- dataAccess.workspaceQuery.findWorkspaceUsersAndAccessLevel(workspaceContext.workspaceId)
@@ -855,7 +875,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
 
       // voila
-      (overwriteGroupMessages, emailsNotFound, actualChangesToMakeByMember, actualShareChangesToMakeByMember, actualComputeChangesToMakeByMember)
+      (overwriteGroupMessages, emailsNotFound, actualChangesToMakeByMember, actualShareChangesToMakeByMember, actualComputeChangesToMakeByMember, refsToUpdateByEmail)
     }
   }
 
@@ -2055,12 +2075,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def requireComputePermission[T](workspace: Workspace, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    getMaximumAccessLevel(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { userLevel =>
-      if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock
-      else dataAccess.workspaceQuery.getUserComputePermissions(userInfo.userSubjectId, SlickWorkspaceContext(workspace)) flatMap { canCompute =>
-        if (canCompute) codeBlock
-        else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
-        else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+    DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamResourceActions.launchBatchCompute, userInfo)) flatMap { projectCanCompute =>
+      if (!projectCanCompute) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+      else {
+        getMaximumAccessLevel(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { userLevel =>
+          if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock
+          else dataAccess.workspaceQuery.getUserComputePermissions(userInfo.userSubjectId, SlickWorkspaceContext(workspace)) flatMap { canCompute =>
+            if (canCompute) codeBlock
+            else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+            else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+          }
+        }
       }
     }
   }
