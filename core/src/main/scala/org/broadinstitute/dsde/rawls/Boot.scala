@@ -150,11 +150,12 @@ object Boot extends App with LazyLogging {
     val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
     val projectEditors = gcsConfig.getStringList("projectTemplate.editors")
     val projectServices = gcsConfig.getStringList("projectTemplate.services")
+    val projectOwnerGrantableRoles = gcsConfig.getStringList("projectTemplate.ownerGrantableRoles")
     val projectTemplate = ProjectTemplate(Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices)
 
     val notificationDAO = new PubSubNotificationDAO(pubSubDAO, gcsConfig.getString("notifications.topicName"))
 
-    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO, samDAO)
+    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO, samDAO, projectOwnerGrantableRoles)
 
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)

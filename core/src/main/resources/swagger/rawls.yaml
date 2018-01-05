@@ -119,7 +119,7 @@ paths:
             - openid
             - email
             - profile
-  '/api/billing/{projectId}/{role}/{email}':
+  '/api/billing/{projectId}/{workbenchRole}/{email}':
     put:
       responses:
         '200':
@@ -145,7 +145,7 @@ paths:
           type: string
         - in: path
           description: role of user for project
-          name: role
+          name: workbenchRole
           required: true
           type: string
           enum: ["user", "owner"]
@@ -188,7 +188,7 @@ paths:
           type: string
         - in: path
           description: role of user for project
-          name: role
+          name: workbenchRole
           required: true
           type: string
           enum: ["user", "owner"]
@@ -201,6 +201,92 @@ paths:
         - billing
       summary: remove user or group from billing project the caller owns
       operationId: removeUserFromBillingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+
+  '/api/billing/{projectId}/googleRole/{role}/{email}':
+    put:
+      responses:
+        '200':
+          description: Successfully Granted Google Role to User
+        '403':
+          description: You must be a project owner granting a role on the whitelist
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: User not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: grant a google role to a user and their pet in the billing project the caller owns
+      parameters:
+        - in: path
+          description: Project ID
+          name: projectId
+          required: true
+          type: string
+        - in: path
+          description: google role of user for project
+          name: role
+          required: true
+          type: string
+        - in: path
+          description: email of user
+          name: email
+          required: true
+          type: string
+      tags:
+        - billing
+      summary: grant a google role to a user and their pet in the billing project the caller owns
+      operationId: grantGoogleRoleToUser
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+    delete:
+      responses:
+        '200':
+          description: Successfully Removed Google Role from User
+        '403':
+          description: You must be a project owner removing a role on the whitelist
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: User not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: remove a google role from a user and their pet in the billing project the caller owns
+      parameters:
+        - in: path
+          description: Project ID
+          name: projectId
+          required: true
+          type: string
+        - in: path
+          description: google role of user for project
+          name: role
+          required: true
+          type: string
+        - in: path
+          description: email of user
+          name: email
+          required: true
+          type: string
+      tags:
+        - billing
+      summary: remove a google role from a user and their pet in the billing project the caller owns
+      operationId: removeGoogleRoleFromUser
       security:
         - authorization:
             - openid

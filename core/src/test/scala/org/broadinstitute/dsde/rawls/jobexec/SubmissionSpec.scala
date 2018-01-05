@@ -192,7 +192,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         gpsDAO,
         "test-topic-name",
         notificationDAO,
-        samDAO
+        samDAO,
+        Seq("bigquery.jobUser")
       )_
 
       val genomicsServiceConstructor = GenomicsService.constructor(

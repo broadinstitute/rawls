@@ -68,6 +68,9 @@ object Dependencies {
     exclude("org.typelevel", "cats_2.11")
     exclude("io.spray", "spray-json_2.11"))
 
+  val workbenchModelV  = "0.8-d6801ce"
+  val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
+
   val metricsDependencies = Seq(
     metricsScala,
     metricsStatsd,
@@ -139,6 +142,7 @@ object Dependencies {
     sprayTestkit,
     mockserverNetty,
     mockito,
-    googleRpc
+    googleRpc,
+    workbenchModel
   )
 }

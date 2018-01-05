@@ -118,7 +118,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       gpsDAO,
       googleGroupSyncTopic,
       notificationDAO,
-      samDAO
+      samDAO,
+      Seq("bigquery.jobUser")
     )_
 
     val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, googleGroupSyncTopic, "test-sub-name", 1, userServiceConstructor))

@@ -40,6 +40,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroup}
 import org.joda.time
 import spray.client.pipelining._
 import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
@@ -888,12 +889,69 @@ class HttpGoogleServicesDAO(
     s"${Option(message).getOrElse("")} - code ${code}"
   }
 
+  private def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit] = {
+    val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
+    implicit val service = GoogleInstrumentedService.CloudResourceManager
+
+    for {
+      bindings <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)).getBindings
+      })
+
+      _ <- retryWhen500orGoogleError(() => {
+        val existingPolicies: Map[String, List[String]] = bindings.map { policy => policy.getRole -> policy.getMembers.toList }.toMap
+
+        // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
+        import cats.implicits._
+        val newPolicies = existingPolicies |+| policiesToAdd
+
+        val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
+          new Binding().setRole(role).setMembers(members.distinct)
+        }.toSeq
+
+        val policyRequest = new SetIamPolicyRequest().setPolicy(new Policy().setBindings(updatedBindings))
+        executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
+      })
+    } yield ()
+  }
+
+  private def removePolicyBindings(projectName: RawlsBillingProjectName, policiesToRemove: Map[String, Seq[String]]): Future[Unit] = {
+    val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
+    implicit val service = GoogleInstrumentedService.CloudResourceManager
+
+    for {
+      bindings <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)).getBindings
+      })
+
+      _ <- retryWhen500orGoogleError(() => {
+        val existingPolicies: Map[String, Seq[String]] = bindings.map { policy => policy.getRole -> policy.getMembers.toSeq }.toMap
+
+        // this may result in keys with empty-seq values.  That's ok, we will ignore those later
+        val updatedKeysWithRemovedPolicies: Map[String, Seq[String]] = policiesToRemove.keys.map { k =>
+          val existingForKey = existingPolicies(k)
+          val updatedForKey = existingForKey.toSet diff policiesToRemove(k).toSet
+          k -> updatedForKey.toSeq
+        }.toMap
+
+        // Use standard Map ++ instead of semigroup because we want to replace the original values
+        val newPolicies = existingPolicies ++ updatedKeysWithRemovedPolicies
+
+        val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
+          new Binding().setRole(role).setMembers(members.distinct)
+        }.toSeq
+
+        val policyRequest = new SetIamPolicyRequest().setPolicy(new Policy().setBindings(updatedBindings))
+        executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
+      })
+    } yield ()
+  }
+
   override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = {
     implicit val instrumentedService = GoogleInstrumentedService.Billing
     val projectName = project.projectName
     val credential = getBillingServiceAccountCredential
 
-    val cloudResManager = getCloudResourceManager(credential)
     val billingManager = getCloudBillingManager(credential)
     val serviceManager = getServicesManager(credential)
 
@@ -907,17 +965,8 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(billingManager.projects().updateBillingInfo(projectResourceName, new ProjectBillingInfo().setBillingEnabled(true).setBillingAccountName(billingAccount)))
       })
 
-      // get current permissions
-      bindings <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)).getBindings
-      })
-
-      // add any missing permissions
-      policy <- retryWhen500orGoogleError(() => {
-        val updatedTemplate = projectTemplate.copy(policies = projectTemplate.policies + ("roles/viewer" -> Seq(s"group:${project.ownerPolicyGroup.groupEmail.value}")))
-        val updatedPolicy = new Policy().setBindings(updateBindings(bindings, updatedTemplate).toSeq)
-        executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, new SetIamPolicyRequest().setPolicy(updatedPolicy)))
-      })
+      // add new policies to the project
+      _ <- addPolicyBindings(projectName, projectTemplate.policies.mapValues(_.toList) + ("roles/viewer" -> List(s"group:${project.ownerPolicyGroup.groupEmail.value}")))
 
       // enable appropriate google apis
       operations <- Future.sequence(projectTemplate.services.map { service => retryWhen500orGoogleError(() => {
@@ -929,6 +978,14 @@ class HttpGoogleServicesDAO(
     } yield {
       operations
     })
+  }
+
+  override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = {
+    addPolicyBindings(projectName, Map(s"roles/$role" -> List(s"group:${groupEmail.value}")))
+  }
+
+  override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = {
+    removePolicyBindings(projectName, Map(s"roles/$role" -> Seq(s"group:${groupEmail.value}")))
   }
 
   override def completeProjectSetup(project: RawlsBillingProject): Future[Try[Unit]] = {
@@ -1005,19 +1062,6 @@ class HttpGoogleServicesDAO(
   def getCloudResourceManager(credential: Credential): CloudResourceManager = {
     new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
-
-  private def updateBindings(bindings: Seq[Binding], template: ProjectTemplate) = {
-    val templateMembersWithRole = template.policies.toSeq
-    val existingMembersWithRole = bindings.map { policy => policy.getRole -> policy.getMembers.toSeq }
-    val updatedPolicies = (templateMembersWithRole ++ existingMembersWithRole).
-      groupBy { case (role, _) => role }.
-      map { case (role, membersWithRole) => role -> membersWithRole.map { case (_, members) => members }.flatten }
-
-    updatedPolicies.map { case (role, members) =>
-      new Binding().setRole(role).setMembers(members)
-    }
-  }
-
 
   def getStorage(credential: Credential) = {
     new Storage.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
