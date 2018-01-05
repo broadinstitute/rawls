@@ -4,7 +4,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAc
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
 import org.broadinstitute.dsde.rawls.model.{ErrorReportSource, ErrorReportable, JsonSupport, RawlsGroupEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus}
 import spray.json.DefaultJsonProtocol._
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.Future
 
