@@ -224,7 +224,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: grant a google role for a user in the billing project the caller owns
+      description: grant a google role to a user and their pet in the billing project the caller owns
       parameters:
         - in: path
           description: Project ID
@@ -243,7 +243,7 @@ paths:
           type: string
       tags:
         - billing
-      summary: grant a google role for a user in the billing project the caller owns
+      summary: grant a google role to a user and their pet in the billing project the caller owns
       operationId: grantGoogleRoleToUser
       security:
         - authorization:
@@ -266,7 +266,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: remove a google role for a user in the billing project the caller owns
+      description: remove a google role from a user and their pet in the billing project the caller owns
       parameters:
         - in: path
           description: Project ID
@@ -285,7 +285,7 @@ paths:
           type: string
       tags:
         - billing
-      summary: remove a google role for a user in a billing project the caller owns
+      summary: remove a google role from a user and their pet in the billing project the caller owns
       operationId: removeGoogleRoleFromUser
       security:
         - authorization:
