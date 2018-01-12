@@ -113,7 +113,8 @@ class PetSASpec extends ApiServiceSpec {
     val userSAProjectOwnerUserInfo = UserInfo(RawlsUserEmail("project-owner-access-sa@abc.iam.gserviceaccount.com"), OAuth2BearerToken("SA-but-not-pet-token"), 123, RawlsUserSubjectId("123456789876543210202"))
     val userSAProjectOwner = RawlsUser(userSAProjectOwnerUserInfo)
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), generateBillingGroups(RawlsBillingProjectName("ns"), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set.empty), Map.empty), "testBucketUrl", CreationStatuses.Ready, None, None)
+    val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName("ns"), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set.empty), Map.empty)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), "testBucketUrl", CreationStatuses.Ready, None, None)
 
     val workspaceName = WorkspaceName(billingProject.projectName.value, "testworkspace")
 
@@ -123,7 +124,7 @@ class PetSASpec extends ApiServiceSpec {
       WorkspaceAccessLevels.Write -> Set(userWriter),
       WorkspaceAccessLevels.Read -> Set(userReader)
     ))_
-    val (workspace, workspaceGroups) = makeWorkspace1(billingProject, workspaceName.name, Set.empty, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
+    val (workspace, workspaceGroups) = makeWorkspace1(billingProject, billingProjectGroups(ProjectRoles.Owner).head, workspaceName.name, Set.empty, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
 
     override def save() = {
       DBIO.seq(
@@ -132,7 +133,7 @@ class PetSASpec extends ApiServiceSpec {
         rawlsUserQuery.createUser(userWriter),
         rawlsUserQuery.createUser(userReader),
         rawlsUserQuery.createUser(userSAProjectOwner),
-        DBIO.from(samDataSaver.savePolicyGroup(billingProject.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
+        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         workspaceQuery.save(workspace)

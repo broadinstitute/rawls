@@ -327,11 +327,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case ProjectRoles.Owner => Seq(ownerPolicyName)
       case ProjectRoles.User => Seq(workspaceCreatorPolicyName, canComputeUserPolicyName)
     }
-    Future.traverse(policies) { policy =>
-      samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo)}
     for {
+      _ <- Future.traverse(policies) { policy =>
+        samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo)}
+
       (project, addUsers, addSubGroups) <- loadMembersAndProject(projectName, projectAccessUpdate)
-      _ <- updateGroupMembership(project.ownerPolicyGroup, addUsers = addUsers, addSubGroups = addSubGroups)
+
+      _ <- Future.traverse(policies) { policy =>
+        updateGroupMembership(RawlsGroupRef(RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, project.projectName.value, policy))), addUsers = addUsers, addSubGroups = addSubGroups)
+      }
     } yield {
       RequestComplete(StatusCodes.OK)
     }
@@ -342,11 +346,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case ProjectRoles.Owner => ownerPolicyName
       case ProjectRoles.User => workspaceCreatorPolicyName
     }
-    samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo).recover {
-      case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) => throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))}
     for {
+      _ <- samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo).recover {
+        case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) => throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))}
+
       (project, removeUsers, removeSubGroups) <- loadMembersAndProject(projectName, projectAccessUpdate)
-        _ <- updateGroupMembership(project.ownerPolicyGroup, removeUsers = removeUsers, removeSubGroups = removeSubGroups)
+
+      _ <- updateGroupMembership(RawlsGroupRef(RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, project.projectName.value, policy))), removeUsers = removeUsers, removeSubGroups = removeSubGroups)
     } yield {
       RequestComplete(StatusCodes.OK)
     }
@@ -694,6 +700,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   private def updateGroupMembershipInternalPolicy(groupRef: RawlsGroupRef)(update: RawlsGroup => RawlsGroup): Future[RawlsGroup] = {
+    // note that this does not actually update the policy, sam does that. this just figures our intersections
+    // updates the intersection groups and publishes messages for those updates
     for {
       (savedGroup, intersectionGroups) <- dataSource.inTransaction ({ dataAccess =>
         for {
@@ -903,11 +911,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
               dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
                 case None =>
                   for {
-                    resource <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo))
-                    workspaceCreatorPolicy <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo))
-                    canComputeUserPolicy <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
-                    groupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamProjectRoles.owner, userInfo)).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
-                    project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, RawlsGroup(RawlsGroupName(SamProjectRoles.owner), groupEmail, Set.empty, Set.empty), "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
+                    _ <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo))
+                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo))
+                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
+                    project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
                   } yield project
 
                 case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))

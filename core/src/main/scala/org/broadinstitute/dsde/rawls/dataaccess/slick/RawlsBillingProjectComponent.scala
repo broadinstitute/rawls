@@ -66,15 +66,7 @@ trait RawlsBillingProjectComponent {
     }
 
     def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
-      for {
-        maybeProjectRec <- uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName))
-        maybeOwnerGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, ProjectRoles.Owner.toString))))
-      } yield {
-        (maybeProjectRec, maybeOwnerGroup) match {
-          case (Some(projectRec), Some(ownerGroup)) => Option(unmarshalBillingProject(projectRec, ownerGroup))
-          case _ => None
-        }
-      }
+      uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).map(_.map(unmarshalBillingProject))
     }
 
     def delete(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] = {
@@ -107,8 +99,8 @@ trait RawlsBillingProjectComponent {
       RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message)
     }
 
-    private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord, ownerPolicyGroup: RawlsGroup): RawlsBillingProject = {
-      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), ownerPolicyGroup, projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message)
+    private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject = {
+      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message)
     }
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {

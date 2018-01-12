@@ -1995,8 +1995,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             authDomainProjectOwnerIntersection <- DBIOUtils.maybeDbAction(workspaceRequest.authorizationDomain.flatMap(ad => if (ad.isEmpty) None else Option(ad))) { authDomain =>
               dataAccess.rawlsGroupQuery.intersectGroupMembership(authDomain.map(_.toMembersGroupRef) ++ Set(RawlsGroupRef(RawlsGroupName(dataAccess.policyGroupName(SamResourceTypeNames.billingProject.value, project.get.projectName.value, ProjectRoles.Owner.toString)))))
             }
-
-            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain.getOrElse(Set.empty), authDomainProjectOwnerIntersection))
+            projectOwnerGroupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email"))))
+            projectOwnerGroupOE <- dataAccess.rawlsGroupQuery.loadFromEmail(projectOwnerGroupEmail.value)
+            projectOwnerGroup = projectOwnerGroupOE.collect { case Right(g) => g } getOrElse(throw new RawlsException(s"could not find project owner group for email $projectOwnerGroupEmail"))
+            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, projectOwnerGroup, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain.getOrElse(Set.empty), authDomainProjectOwnerIntersection))
 
             savedWorkspace <- saveNewWorkspace(workspaceId, googleWorkspaceInfo, workspaceRequest, dataAccess)
             response <- op(SlickWorkspaceContext(savedWorkspace))
@@ -2013,16 +2015,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamResourceActions.createWorkspace, userInfo)) flatMap {
       case true =>
         dataAccess.rawlsBillingProjectQuery.load(projectName).flatMap {
-          case Some(RawlsBillingProject(_, _, _, CreationStatuses.Ready, _, _)) =>
+          case Some(RawlsBillingProject(_, _, CreationStatuses.Ready, _, _)) =>
             dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUser(userInfo)) flatMap { authDomainAccesses =>
               if(workspaceRequest.authorizationDomain.getOrElse(Set.empty).subsetOf(authDomainAccesses.filter(_.role == ManagedRoles.Member).map(_.managedGroupRef))) op
               else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"In order to use a group in an Authorization Domain, you must be a member of that group.")))
             }
 
-          case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, _, CreationStatuses.Creating, _, _)) =>
+          case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Creating, _, _)) =>
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"${name} is still being created")))
 
-          case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, _, CreationStatuses.Error, _, messageOp)) =>
+          case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Error, _, messageOp)) =>
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Error creating ${name}: ${messageOp.getOrElse("no message")}")))
 
           case None =>
