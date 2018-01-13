@@ -16,7 +16,7 @@ import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
-import com.google.api.services.compute.model.UsageExportLocation
+import com.google.api.services.compute.model.{ServiceAccount, UsageExportLocation}
 import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.genomics.model.Operation
 import com.google.api.services.genomics.{Genomics, GenomicsScopes}
@@ -75,7 +75,8 @@ class HttpGoogleServicesDAO(
   val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
 
   // modify these if we need more granular access in the future
-  val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE, PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
+  val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
+  val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val genomicsScopes = Seq(GenomicsScopes.GENOMICS) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")

@@ -71,7 +71,8 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
       "jes_gcs_root",
       "google_project",
       "account_name",
-      "refresh_token",
+      "account@foo.com",
+      """{\"json\": 1}""",
       "auth_bucket",
       "final_workflow_log_dir",
       None,
@@ -85,7 +86,8 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
         |  "jes_gcs_root": "jes_gcs_root",
         |  "google_project": "google_project",
         |  "account_name": "account_name",
-        |  "refresh_token": "refresh_token",
+        |  "google_compute_service_account": "account@foo.com",
+        |  "user_service_account_json": "{\"json\": 1}"
         |  "auth_bucket": "auth_bucket",
         |  "final_workflow_log_dir": "final_workflow_log_dir",
         |  "read_from_cache": true,
@@ -106,7 +108,8 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
         |  "jes_gcs_root": "jes_gcs_root",
         |  "google_project": "google_project",
         |  "account_name": "account_name",
-        |  "refresh_token": "refresh_token",
+        |  "google_compute_service_account": "account@foo.com",
+        |  "user_service_account_json": "{\"json\": 1}"
         |  "auth_bucket": "auth_bucket",
         |  "final_workflow_log_dir": "final_workflow_log_dir",
         |  "read_from_cache": true

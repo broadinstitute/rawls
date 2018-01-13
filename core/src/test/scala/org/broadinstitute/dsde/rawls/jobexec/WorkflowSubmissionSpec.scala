@@ -32,8 +32,9 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   import driver.api._
 
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
-  val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
   val mockServer = RemoteServicesMockServer()
+  val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
+  val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, mockGoogleServicesDAO.getPreparedMockGoogleCredential())
 
   class TestWorkflowSubmission(
     val dataSource: SlickDataSource,
@@ -50,6 +51,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val googleServicesDAO = mockGoogleServicesDAO
     val executionServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName = workbenchMetricBaseName), dataSource)
     val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName)
+    val samDAO = mockSamDAO
   }
 
   class TestWorkflowSubmissionWithMockExecSvc(
@@ -205,18 +207,21 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       }
 
       val token = Await.result(workflowSubmission.googleServicesDAO.getToken(testData.submission1.submitter), Duration.Inf).get
+      val petJson = Await.result(workflowSubmission.samDAO.getPetServiceAccountKeyForUser(testData.workspace.namespace, testData.userOwner.userEmail), Duration.Inf)
       assertResult(
         Some(
           ExecutionServiceWorkflowOptions(
             s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}",
             testData.wsName.namespace,
             testData.userOwner.userEmail.value,
-            token,
+            "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com",
+            """{\"client_email\": \"pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com\"}""",
             testData.billingProject.cromwellAuthBucketUrl,
             s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
             Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
             false
           ))) {
+        println(mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions)
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }
     }
@@ -297,6 +302,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         slickDataSource,
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
+        mockSamDAO,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
         3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
       )
@@ -327,6 +333,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         slickDataSource,
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
+        mockSamDAO,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
         batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
       )

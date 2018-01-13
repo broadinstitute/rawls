@@ -26,6 +26,7 @@ object WorkflowSubmissionActor {
   def props(dataSource: SlickDataSource,
             methodRepoDAO: MethodRepoDAO,
             googleServicesDAO: GoogleServicesDAO,
+            samDAO: SamDAO,
             executionServiceCluster: ExecutionServiceCluster,
             batchSize: Int,
             credential: Credential,
@@ -35,7 +36,7 @@ object WorkflowSubmissionActor {
             maxActiveWorkflowsPerUser: Int,
             runtimeOptions: Option[JsValue],
             workbenchMetricBaseName: String): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, workbenchMetricBaseName))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, workbenchMetricBaseName))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -51,6 +52,7 @@ object WorkflowSubmissionActor {
 class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val methodRepoDAO: MethodRepoDAO,
                               val googleServicesDAO: GoogleServicesDAO,
+                              val samDAO: SamDAO,
                               val executionServiceCluster: ExecutionServiceCluster,
                               val batchSize: Int,
                               val credential: Credential,
@@ -95,6 +97,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val dataSource: SlickDataSource
   val methodRepoDAO: MethodRepoDAO
   val googleServicesDAO: GoogleServicesDAO
+  val samDAO: SamDAO
   val executionServiceCluster: ExecutionServiceCluster
   val batchSize: Int
   val credential: Credential
@@ -155,12 +158,22 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
   }
 
-  def buildWorkflowOpts(workspace: WorkspaceRecord, submissionId: UUID, user: RawlsUser, token: String, billingProject: RawlsBillingProject, useCallCache: Boolean, workflowFailureMode: Option[WorkflowFailureMode]) = {
+  def buildWorkflowOpts(workspace: WorkspaceRecord, submissionId: UUID, user: RawlsUser, petSAJson: String, billingProject: RawlsBillingProject, useCallCache: Boolean, workflowFailureMode: Option[WorkflowFailureMode]) = {
+    val petSAEmail = petSAJson.parseJson.asJsObject.getFields("client_email").headOption match {
+      case Some(JsString(value)) => value
+      case Some(x) => throw new RawlsException(s"unexpected json value for client_email [$x] in service account key")
+      case None => throw new RawlsException(s"client_email missing for service account key json")
+    }
+
+    // a bit strange but it escapes all the json
+    val escapedJson = petSAJson.toJson.toString().stripPrefix(""""""").stripSuffix(""""""")
+
     ExecutionServiceWorkflowOptions(
       s"gs://${workspace.bucketName}/${submissionId}",
       workspace.namespace,
       user.userEmail.value,
-      token,
+      petSAEmail,
+      escapedJson,
       billingProject.cromwellAuthBucketUrl,
       s"gs://${workspace.bucketName}/${submissionId}/workflow.logs",
       runtimeOptions,
@@ -221,13 +234,15 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
         //The person who submitted the submission, and their token
         submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
+        petSAJson <- DBIO.from(samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, submitter.userEmail))
         userCredentials <- DBIO.from(googleServicesDAO.getUserCredentials(submitter)).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for $submitter")))
 
         //The wdl
         methodConfig <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId).map(_.get)
+
         wdl <- getWdl(methodConfig, userCredentials)
       } yield {
-        val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, submitter, userCredentials.getRefreshToken, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
+        val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, submitter, petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
 
         val wfInputsBatch = workflowBatch map { wf =>
           val methodProps = wf.inputResolutions map {

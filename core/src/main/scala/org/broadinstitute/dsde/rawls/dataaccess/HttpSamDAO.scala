@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
+import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
@@ -9,9 +10,10 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.dataaccess.SamModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsGroupEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus, WorkspaceJsonSupport}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsGroupEmail, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus, WorkspaceJsonSupport}
 import org.broadinstitute.dsde.rawls.util.Retry
 import spray.client.pipelining.{sendReceive, _}
+import spray.http.HttpHeaders.Authorization
 import spray.http._
 import spray.httpx.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
@@ -26,7 +28,7 @@ import scala.concurrent.Future
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) extends SamDAO with DsdeHttpDAO with Retry with LazyLogging {
+class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(implicit val system: ActorSystem) extends SamDAO with DsdeHttpDAO with Retry with LazyLogging {
   import system.dispatcher
 
   private val samServiceURL = baseSamServiceURL
@@ -129,7 +131,23 @@ class HttpSamDAO(baseSamServiceURL: String)(implicit val system: ActorSystem) ex
     retry(when500) { () => pipeline[Set[SamPolicyWithName]](userInfo) apply Get(url) }
   }
 
-  private def when500( throwable: Throwable ): Boolean = {
+  override def getPetServiceAccountKeyForUser(googleProject: String, userEmail: RawlsUserEmail): Future[String] = {
+    val url = samServiceURL + s"/api/google/petServiceAccount/$googleProject/${userEmail.value}"
+    retry(when500) { () => {
+      // note getServiceAccountAccessToken is called within the retry to be sure token is up-to-date
+      val pipeline = addHeader(Authorization(OAuth2BearerToken(getServiceAccountAccessToken))) ~> sendReceive ~> unmarshal[String]
+      pipeline(Get(url))
+    } }
+  }
+
+  private def getServiceAccountAccessToken = {
+    if (serviceAccountCreds.getExpiresInSeconds < 60) {
+      serviceAccountCreds.refreshToken()
+    }
+    serviceAccountCreds.getAccessToken
+  }
+
+  private def when500(throwable: Throwable ): Boolean = {
     throwable match {
       case ure: spray.client.UnsuccessfulResponseException => ure.responseStatus.intValue / 100 == 5
       case ure: spray.httpx.UnsuccessfulResponseException => ure.response.status.intValue / 100 == 5

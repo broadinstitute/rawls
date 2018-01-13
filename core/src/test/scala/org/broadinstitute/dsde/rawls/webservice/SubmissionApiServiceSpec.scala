@@ -75,6 +75,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       slickDataSource,
       services.methodRepoDAO,
       services.gcsDAO,
+      services.samDAO,
       MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName), slickDataSource),
       10,
       services.gcsDAO.getPreparedMockGoogleCredential(),

@@ -74,8 +74,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     def actorRefFactory = system
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl)
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
+    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
     val gpsDAO = new MockGooglePubSubDAO
 
     val notificationTopic = "test-notification-topic"

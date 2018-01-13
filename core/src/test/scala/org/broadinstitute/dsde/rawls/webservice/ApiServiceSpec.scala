@@ -135,7 +135,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName)
 
-    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl)
+    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
 
     val healthMonitor = system.actorOf(HealthMonitor.props(
       dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO,
