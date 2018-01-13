@@ -165,15 +165,12 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       case None => throw new RawlsException(s"client_email missing for service account key json")
     }
 
-    // a bit strange but it escapes all the json
-    val escapedJson = petSAJson.toJson.toString().stripPrefix(""""""").stripSuffix(""""""")
-
     ExecutionServiceWorkflowOptions(
       s"gs://${workspace.bucketName}/${submissionId}",
       workspace.namespace,
       user.userEmail.value,
       petSAEmail,
-      escapedJson,
+      petSAJson,
       billingProject.cromwellAuthBucketUrl,
       s"gs://${workspace.bucketName}/${submissionId}/workflow.logs",
       runtimeOptions,
