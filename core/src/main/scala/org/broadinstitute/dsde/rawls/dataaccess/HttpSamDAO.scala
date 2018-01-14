@@ -141,7 +141,8 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   private def getServiceAccountAccessToken = {
-    if (serviceAccountCreds.getExpiresInSeconds < 60) {
+    val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
+    if (expiresInSeconds < 60*5) {
       serviceAccountCreds.refreshToken()
     }
     serviceAccountCreds.getAccessToken
