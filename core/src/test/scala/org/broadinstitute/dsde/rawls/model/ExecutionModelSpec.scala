@@ -84,7 +84,6 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
         |  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
         |  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com"
         |}""".stripMargin,
-      "auth_bucket",
       "final_workflow_log_dir",
       None,
       true,

@@ -171,7 +171,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       user.userEmail.value,
       petSAEmail,
       petSAJson,
-      billingProject.cromwellAuthBucketUrl,
       s"gs://${workspace.bucketName}/${submissionId}/workflow.logs",
       runtimeOptions,
       useCallCache,
