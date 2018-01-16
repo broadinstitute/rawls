@@ -1087,7 +1087,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
           ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
-            evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity => tryValuesByEntity match {
+            evaluator.evalFinalAttribute(workspaceContext, expression).asTry map {
               //parsing failure
               case Failure(regret) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
               case Success(valuesByEntity) =>
@@ -1097,12 +1097,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 } else {
                   assert(valuesByEntity.head._1 == entityName)
                   valuesByEntity.head match {
-                    case (_, Success(result)) => RequestComplete(StatusCodes.OK, result.toSeq)
+                    case (_, Success(result)) => RequestComplete(StatusCodes.OK, result)
                     case (_, Failure(regret)) =>
                       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}", ErrorReport(regret)))
                   }
                 }
-              }
             }
           }
         }

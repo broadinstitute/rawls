@@ -19,7 +19,7 @@ import scala.util.{Random, Success => TrySuccess}
 /**
  * Created by abaumann on 5/21/15.
  */
-class ExpressionParserTest extends FunSuite with TestDriverComponent {
+class ExpressionEvaluatorSpec extends FunSuite with TestDriverComponent {
   import driver.api._
 
   def withTestWorkspace[T](testCode: (SlickWorkspaceContext) => T): T = {
@@ -78,27 +78,27 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
   test("single attribute expression") {
     withTestWorkspace { workspaceContext =>
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("normal"))))) {
+      assertResult(Map("sample1" -> TrySuccess(AttributeString("normal")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.type"))
       }
 
-      assertResult(Map("sample8" -> TrySuccess(Seq(AttributeString("1029384756"))))) {
+      assertResult(Map("sample8" -> TrySuccess(AttributeString("1029384756")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample8", "this.foo_id"))
       }
 
-      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString("normal"), AttributeString("tumor"), AttributeString("tumor"))))) {
+      assertResult(Map("sset1" -> TrySuccess(AttributeValueList(Seq(AttributeString("normal"), AttributeString("tumor"), AttributeString("tumor")))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "this.samples.type"))
       }
 
-      assertResult(Map("sset_empty" -> TrySuccess(Seq()))) {
-        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset_empty", "this.samples"))
+      assertResult(Map("sset_empty" -> TrySuccess(AttributeValueEmptyList))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset_empty", "this.empty_list"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("a"), AttributeString("b"))))) {
+      assertResult(Map("sample1" -> TrySuccess(AttributeValueList(Seq(AttributeString("a"), AttributeString("b")))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.thingies"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq()))) {
+      assertResult(Map("sample1" -> TrySuccess(AttributeNull))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.nonexistent"))
       }
 
@@ -120,11 +120,11 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       val libraryAttribute = Map(AttributeName("library", "book") -> AttributeString("arbitrary"))
       runAndWait(entityQuery.save(workspaceContext, Entity("sampleWithLibraryNamespaceAttribute", "Sample", libraryAttribute)))
 
-      assertResult(Map("sampleWithLibraryNamespaceAttribute" -> TrySuccess(Seq(AttributeString("arbitrary"))))) {
+      assertResult(Map("sampleWithLibraryNamespaceAttribute" -> TrySuccess(AttributeString("arbitrary")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sampleWithLibraryNamespaceAttribute", "this.library:book"))
       }
 
-      assertResult(Map("sampleWithLibraryNamespaceAttribute" -> TrySuccess(Seq()))) {
+      assertResult(Map("sampleWithLibraryNamespaceAttribute" -> TrySuccess(AttributeNull))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sampleWithLibraryNamespaceAttribute", "this.library:checked_out_book"))
       }
 
@@ -134,7 +134,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
         runAndWait(entityQuery.save(workspaceContext, ent.copy(attributes = libraryAttribute)))
       }
 
-      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3))))) {
+      assertResult(Map("sset1" -> TrySuccess(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "this.samples.library:chapter"))
       }
 
@@ -145,14 +145,14 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       })
 
       (1 to 3).foreach { num =>
-        assertResult(TrySuccess(Seq(AttributeNumber(num)))) {
+        assertResult(TrySuccess(AttributeNumber(num))) {
           resultsByType(s"sample$num")
         }
       }
 
       // reserved attribute "name" works the same as it does in the default namespace
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("sample1"))))) {
+      assertResult(Map("sample1" -> TrySuccess(AttributeString("sample1")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.library:name"))
       }
     }
@@ -170,14 +170,14 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
     withTestWorkspace { workspaceContext =>
       val allTheTypes = Map(
-        "sample1" -> TrySuccess(Seq(AttributeString("normal"))),
-        "sample2" -> TrySuccess(Seq(AttributeString("tumor"))),
-        "sample3" -> TrySuccess(Seq(AttributeString("tumor"))),
-        "sample4" -> TrySuccess(Seq(AttributeString("tumor"))),
-        "sample5" -> TrySuccess(Seq(AttributeString("tumor"))),
-        "sample6" -> TrySuccess(Seq(AttributeString("tumor"))),
-        "sample7" -> TrySuccess(Seq(AttributeString("tumor"))),
-        "sample8" -> TrySuccess(Seq(AttributeString("tumor"))))
+        "sample1" -> TrySuccess(AttributeString("normal")),
+        "sample2" -> TrySuccess(AttributeString("tumor")),
+        "sample3" -> TrySuccess(AttributeString("tumor")),
+        "sample4" -> TrySuccess(AttributeString("tumor")),
+        "sample5" -> TrySuccess(AttributeString("tumor")),
+        "sample6" -> TrySuccess(AttributeString("tumor")),
+        "sample7" -> TrySuccess(AttributeString("tumor")),
+        "sample8" -> TrySuccess(AttributeString("tumor")))
 
       assertResult(allTheTypes) { runAndWait(
         entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
@@ -188,14 +188,14 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       }
 
       val allTheTumorTypes = Map(
-        "sample1" -> TrySuccess(Seq()),
-        "sample2" -> TrySuccess(Seq(AttributeString("LUSC"))),
-        "sample3" -> TrySuccess(Seq(AttributeString("LUSC"))),
-        "sample4" -> TrySuccess(Seq()),
-        "sample5" -> TrySuccess(Seq()),
-        "sample6" -> TrySuccess(Seq()),
-        "sample7" -> TrySuccess(Seq()),
-        "sample8" -> TrySuccess(Seq()))
+        "sample1" -> TrySuccess(AttributeNull),
+        "sample2" -> TrySuccess(AttributeString("LUSC")),
+        "sample3" -> TrySuccess(AttributeString("LUSC")),
+        "sample4" -> TrySuccess(AttributeNull),
+        "sample5" -> TrySuccess(AttributeNull),
+        "sample6" -> TrySuccess(AttributeNull),
+        "sample7" -> TrySuccess(AttributeNull),
+        "sample8" -> TrySuccess(AttributeNull))
 
       assertResult(allTheTumorTypes) { runAndWait(
         entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
@@ -223,7 +223,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       assert(entityResults.nonEmpty, "entity expression returns empty")
 
       assertResult(nameResults) { attrResults }
-      assertResult(nameResults) { Map( "2" -> TrySuccess(entityResults.map(e => AttributeString(e.name)))) }
+      assertResult(nameResults) { Map( "2" -> TrySuccess(AttributeValueList(entityResults.map(e => AttributeString(e.name)).toSeq))) }
 
       val wsNameResults = runAndWait(evalFinalAttribute(workspaceContext, "a", "2", "workspace.as.bs.cs.name"))
       val wsAttrResults = runAndWait(evalFinalAttribute(workspaceContext, "a", "2", "workspace.as.bs.cs.attr"))
@@ -234,52 +234,54 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       assert(wsEntityResults.nonEmpty, "entity expression returns empty")
 
       assertResult(wsNameResults) { wsAttrResults }
-      assertResult(wsNameResults) { Map( "2" -> TrySuccess( wsEntityResults.map(e => AttributeString(e.name)))) }
+      assertResult(wsNameResults) { Map( "2" -> TrySuccess( AttributeValueList(wsEntityResults.map(e => AttributeString(e.name)).toSeq))) }
     }
 
-    def createEntities(entityType: String, entitiesNameAndAttributes: IndexedSeq[(String, AttributeMap)], wsc: SlickWorkspaceContext): IndexedSeq[AttributeEntityReference] = {
-      val saveActions = for ((nameAndAttributes, index) <- entitiesNameAndAttributes.zipWithIndex) yield {
-        entityQuery.save(wsc, Entity(nameAndAttributes._1, entityType, nameAndAttributes._2))
-      }
 
-      // save in random order
-      runAndWait(DBIO.sequence(Random.shuffle(saveActions)))
+  }
 
-      entitiesNameAndAttributes.map { case (name, _) => AttributeEntityReference(entityType, name)}
+  def createEntities(entityType: String, entitiesNameAndAttributes: IndexedSeq[(String, AttributeMap)], wsc: SlickWorkspaceContext): IndexedSeq[AttributeEntityReference] = {
+    val saveActions = for ((nameAndAttributes, index) <- entitiesNameAndAttributes.zipWithIndex) yield {
+      entityQuery.save(wsc, Entity(nameAndAttributes._1, entityType, nameAndAttributes._2))
     }
 
-    def createEntityStructure(wsc: SlickWorkspaceContext) = {
-      val aAttributes = for (a <- 0 until 5) yield {
-        val bAttributes = for (b <- 0 until 5) yield {
-          val cAttributes = for (c <- (0 until 20)) yield {
+    // save in random order
+    runAndWait(DBIO.sequence(Random.shuffle(saveActions)))
 
-            (s"${a}_${b}_${c}", Map(AttributeName.withDefaultNS("attr") -> AttributeString(s"${a}_${b}_${c}")))
-          }
+    entitiesNameAndAttributes.map { case (name, _) => AttributeEntityReference(entityType, name)}
+  }
 
-          (s"${a}_${b}", Map(AttributeName.withDefaultNS("cs") -> AttributeEntityReferenceList(createEntities("c", cAttributes, wsc))))
+  def createEntityStructure(wsc: SlickWorkspaceContext) = {
+    val aAttributes = for (a <- 0 until 5) yield {
+      val bAttributes = for (b <- 0 until 5) yield {
+        val cAttributes = for (c <- (0 until 20)) yield {
+
+          (s"${a}_${b}_${c}", Map(AttributeName.withDefaultNS("attr") -> AttributeString(s"${a}_${b}_${c}")))
         }
 
-        (s"$a", Map(AttributeName.withDefaultNS("bs") -> AttributeEntityReferenceList(createEntities("b", bAttributes, wsc))))
+        (s"${a}_${b}", Map(AttributeName.withDefaultNS("cs") -> AttributeEntityReferenceList(createEntities("c", cAttributes, wsc))))
       }
 
-      val as = createEntities("a", aAttributes, wsc)
-
-      runAndWait(workspaceQuery.save(wsc.workspace.copy(attributes = wsc.workspace.attributes + (AttributeName.withDefaultNS("as") -> AttributeEntityReferenceList(as)))))
+      (s"$a", Map(AttributeName.withDefaultNS("bs") -> AttributeEntityReferenceList(createEntities("b", bAttributes, wsc))))
     }
+
+    val as = createEntities("a", aAttributes, wsc)
+
+    runAndWait(workspaceQuery.save(wsc.workspace.copy(attributes = wsc.workspace.attributes + (AttributeName.withDefaultNS("as") -> AttributeEntityReferenceList(as)))))
   }
 
   test("string literals") {
     withTestWorkspace { workspaceContext =>
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("str")))), "(simple string failed)") {
+      assertResult(Map("sample1" -> TrySuccess(AttributeString("str"))), "(simple string failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """"str""""))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString(" str")))), "(string with space failed)") {
+      assertResult(Map("sample1" -> TrySuccess(AttributeString(" str"))), "(string with space failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """" str""""))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("\"str")))), "(string with escaped quote in it failed)") {
+      assertResult(Map("sample1" -> TrySuccess(AttributeString("\"str"))), "(string with escaped quote in it failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """"\"str""""))
       }
 
@@ -295,7 +297,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """that."foo""""))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("42")))), "(quoted numeral should have parsed as string)") {
+      assertResult(Map("sample1" -> TrySuccess(AttributeString("42"))), "(quoted numeral should have parsed as string)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """"42""""))
       }
 
@@ -311,11 +313,11 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   test("numeric literals") {
     withTestWorkspace { workspaceContext =>
 
-      assertResult(Map("sample1" ->TrySuccess(Seq(AttributeNumber(42)))), "(integer failed)") {
+      assertResult(Map("sample1" ->TrySuccess(AttributeNumber(42))), "(integer failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """42"""))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeNumber(-4.2)))), "(decimal failed)") {
+      assertResult(Map("sample1" -> TrySuccess(AttributeNumber(-4.2))), "(decimal failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """-4.2"""))
       }
     }
@@ -324,7 +326,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   test("null literal") {
     withTestWorkspace { workspaceContext =>
 
-      assertResult(Map("sample1" ->TrySuccess(Seq())), "(null failed)") {
+      assertResult(Map("sample1" ->TrySuccess(AttributeNull)), "(null failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """null"""))
       }
     }
@@ -333,15 +335,15 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   test("array literals") {
     withTestWorkspace { workspaceContext =>
 
-      assertResult(Map("sample1" ->TrySuccess(Seq())), "(empty array failed)") {
+      assertResult(Map("sample1" ->TrySuccess(AttributeValueEmptyList)), "(empty array failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "[]"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeNumber(1), AttributeNumber(2)))), "(numeric array failed)") {
+      assertResult(Map("sample1" -> TrySuccess(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2))))), "(numeric array failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "[1,2]"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeNumber(1), AttributeBoolean(true), AttributeString("three"), AttributeNull))), "(heterogeneous value typed array failed)") {
+      assertResult(Map("sample1" -> TrySuccess(AttributeValueList(Seq(AttributeNumber(1), AttributeBoolean(true), AttributeString("three"), AttributeNull)))), "(heterogeneous value typed array failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """[1,true,"three", null]"""))
       }
     }
@@ -350,22 +352,22 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   test("raw json literals") {
     withTestWorkspace { workspaceContext =>
       // - json for entity references should be parsed as RawJson
-      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("{\"entityType\":\"sample\",\"entityName\":\"sample2\"}"))))) {
+      assertResult(Map("sset1" -> TrySuccess(AttributeValueRawJson("{\"entityType\":\"sample\",\"entityName\":\"sample2\"}")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """{"entityType":"sample","entityName":"sample2"}"""))
       }
       // - json for lists of entity references should be parsed as RawJson
-      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("[{\"entityType\":\"sample\",\"entityName\":\"sample2\"}]"))))) {
+      assertResult(Map("sset1" -> TrySuccess(AttributeValueRawJson("[{\"entityType\":\"sample\",\"entityName\":\"sample2\"}]")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """[{"entityType":"sample","entityName":"sample2"}]"""))
       }
       // - json for lists of numbers and entity references (i.e. a mix of attribute val and ref) should be parsed as RawJson
-      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("[{\"entityType\":\"sample\",\"entityName\":\"sample2\"},9]"))))) {
+      assertResult(Map("sset1" -> TrySuccess(AttributeValueRawJson("[{\"entityType\":\"sample\",\"entityName\":\"sample2\"},9]")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """[{"entityType":"sample","entityName":"sample2"},9]"""))
       }
       // - json for objects of any kind should be parsed as RawJson
-      assertResult(Map("sset1" -> TrySuccess(Vector(AttributeNumber(9), AttributeNumber(0))))) {
+      assertResult(Map("sset1" -> TrySuccess(AttributeValueList(Seq(AttributeNumber(9), AttributeNumber(0)))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "[9,0]"))
       }
-      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("{\"foo\":\"bar\"}"))))) {
+      assertResult(Map("sset1" -> TrySuccess(AttributeValueRawJson("{\"foo\":\"bar\"}")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "{\"foo\":\"bar\"}"))
       }
     }
@@ -374,27 +376,27 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   test("reserved attribute expression") {
     withTestWorkspace { workspaceContext =>
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("sample1"))))) {
+      assertResult(Map("sample1" -> TrySuccess(AttributeString("sample1")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.name"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("sample1"))))) {
+      assertResult(Map("sample1" -> TrySuccess(AttributeString("sample1")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.sample_id"))
       }
 
-      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString("Sample"), AttributeString("Sample"), AttributeString("Sample"))))) {
+      assertResult(Map("sset1" -> TrySuccess(AttributeValueList(Seq(AttributeString("Sample"), AttributeString("Sample"), AttributeString("Sample")))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "this.samples.entityType"))
       }
 
-      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString(workspaceContext.workspace.name))))) {
+      assertResult(Map("sset1" -> TrySuccess(AttributeString(workspaceContext.workspace.name)))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "workspace.name"))
       }
 
-      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString(workspaceContext.workspace.name))))) {
+      assertResult(Map("sset1" -> TrySuccess(AttributeString(workspaceContext.workspace.name)))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "workspace.workspace_id"))
       }
 
-      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString("workspace"))))) {
+      assertResult(Map("sset1" -> TrySuccess(AttributeString("workspace")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "workspace.entityType"))
       }
     }
@@ -403,30 +405,30 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   test("workspace attribute expression") {
     withTestWorkspace { workspaceContext =>
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get(AttributeName.withDefaultNS("string")).get)))) {
+      assertResult(Map("sample1" -> TrySuccess(testData.wsAttrs.get(AttributeName.withDefaultNS("string")).get))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.string"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get(AttributeName.withDefaultNS("number")).get)))) {
+      assertResult(Map("sample1" -> TrySuccess(testData.wsAttrs.get(AttributeName.withDefaultNS("number")).get))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.number"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(testData.sample1.attributes.get(AttributeName.withDefaultNS("type")).get)))) {
+      assertResult(Map("sample1" -> TrySuccess(testData.sample1.attributes.get(AttributeName.withDefaultNS("type")).get))) {
         val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> testData.sample1.toReference)
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.sample1ref.type"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq()))) {
-        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.empty"))
+      assertResult(Map("sample1" -> TrySuccess(AttributeValueEmptyList))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.emptyList"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("another string"), AttributeString("true"))))) {
+      assertResult(Map("sample1" -> TrySuccess(AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.values"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq()))) {
+      assertResult(Map("sample1" -> TrySuccess(AttributeNull))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.this_attribute_is_not_present"))
       }
 
@@ -463,25 +465,25 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       val libraryAttributes = Map(
         AttributeName("library", "author") -> AttributeString("L. Ron Hubbard"),
-        AttributeName("library", "nothing") -> AttributeValueEmptyList,
+        AttributeName("library", "emptyList") -> AttributeValueEmptyList,
         AttributeName("library", "series") -> AttributeValueList(series)
       )
 
       runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = testData.workspace.attributes ++ libraryAttributes)))
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("L. Ron Hubbard"))))) {
+      assertResult(Map("sample1" -> TrySuccess(AttributeString("L. Ron Hubbard")))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.library:author"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq()))) {
-        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.library:nothing"))
+      assertResult(Map("sample1" -> TrySuccess(AttributeValueEmptyList))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.library:emptyList"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(series))) {
+      assertResult(Map("sample1" -> TrySuccess(AttributeValueList(series)))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.library:series"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq()))) {
+      assertResult(Map("sample1" -> TrySuccess(AttributeNull))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.library:not_here"))
       }
     }

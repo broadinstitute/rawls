@@ -116,10 +116,10 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   import spray.json._
   val sampleGood = Entity("sampleGood", "Sample",
     Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(1),
-        AttributeName.withDefaultNS("rawJsonDoubleArray") -> AttributeValueRawJson( "[[0,1,2],[3,4,5]]".parseJson)))
+      AttributeName.withDefaultNS("rawJsonDoubleArray") -> AttributeValueRawJson( "[[0,1,2],[3,4,5]]".parseJson)))
   val sampleGood2 = Entity("sampleGood2", "Sample",
     Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(2),
-        AttributeName.withDefaultNS("rawJsonDoubleArray") -> AttributeValueRawJson( "[[3,4,5],[6,7,8]]".parseJson)))
+      AttributeName.withDefaultNS("rawJsonDoubleArray") -> AttributeValueRawJson( "[[3,4,5],[6,7,8]]".parseJson)))
   val sampleMissingValue = Entity("sampleMissingValue", "Sample", Map.empty)
 
   val sampleSet = Entity("daSampleSet", "SampleSet",
@@ -161,7 +161,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     Map.empty, Map(intArrayName -> AttributeString("this.nonexistent")), Map.empty, dummyMethod)
 
   val configRawJsonDoubleArray = MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
-      Map.empty, Map(doubleIntArrayName -> AttributeString("this.rawJsonDoubleArray")), Map.empty, dummyMethod)
+    Map.empty, Map(doubleIntArrayName -> AttributeString("this.rawJsonDoubleArray")), Map.empty, dummyMethod)
 
   val configRawJsonTripleArray = MethodConfiguration("config_namespace", "configSample", "Sample",
     Map.empty, Map(tripleIntArrayName -> AttributeString("this.samples.rawJsonDoubleArray")), Map.empty, dummyMethod)
@@ -278,22 +278,18 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       wdlInputs shouldBe """{"w1.aaint_array":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}"""
     }
 
-     /* IGNORED - Failure case.
-        This is the failure case described in MethodConfigResolver.getArrayResult.
-    "unpack AttributeValueRawJson into single-element lists-of WDL-arrays" in withConfigData {
-      val context = SlickWorkspaceContext(workspace)
+   "unpack AttributeValueRawJson into single-element lists-of WDL-arrays" in withConfigData {
+     //This test makes sure you're handling RawJson in arrays correctly.
+     val context = SlickWorkspaceContext(workspace)
 
-      val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configRawJsonTripleArray, sampleSet3, tripleArrayWdl, this))
-      val methodProps = resolvedInputs(sampleSet3.name).map { svv: SubmissionValidationValue =>
-        svv.inputName -> svv.value.get
-      }
-      val wdlInputs: String = MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+     val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configRawJsonTripleArray, sampleSet3, tripleArrayWdl, this))
+     val methodProps = resolvedInputs(sampleSet3.name).map { svv: SubmissionValidationValue =>
+       svv.inputName -> svv.value.get
+     }
+     val wdlInputs: String = MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
 
-      wdlInputs shouldBe """{"w1.aaint_array":[[[0,1,2],[3,4,5]]]}"""
-      //actually returns: {"w1.aaint_array":[[0,1,2],[3,4,5]]}
-      //(note the scalatest output adds an extra set of square brackets to everything for no reason i can discern)
-    }
-    */
+     wdlInputs shouldBe """{"w1.aaint_array":[[[0,1,2],[3,4,5]]]}"""
+   }
 
     "parse WDL" in withConfigData {
       val littleWorkflow = MethodConfigResolver.parseWDL(littleWdl).get
