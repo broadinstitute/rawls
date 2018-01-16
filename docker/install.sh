@@ -5,8 +5,6 @@ set -e
 RAWLS_DIR=$1
 cd $RAWLS_DIR
 
-SKIP_TESTS=$2
-
 if [ -e "jenkins_env.sh" ]; then
 	source "jenkins_env.sh"
 fi
