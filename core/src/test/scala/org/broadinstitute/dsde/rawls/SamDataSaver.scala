@@ -40,6 +40,10 @@ class SamDataSaver(implicit executionContext: ExecutionContext) extends JndiSupp
     val policy = "policy"
   }
 
+  def savePolicyGroups(policyGroups: Traversable[RawlsGroup], resourceType: String, resourceId: String, trial: Int = 1): Future[Traversable[RawlsGroup]] = {
+    Future.traverse(policyGroups) { savePolicyGroup(_, resourceType, resourceId) }
+  }
+
   def savePolicyGroup(policyGroup: RawlsGroup, resourceType: String, resourceId: String, trial: Int = 1): Future[RawlsGroup] = withContext { ctx =>
     // The sleeps are ugly but this is only test code that will be deleted after sam phase 4 anyway
     createOrgUnit(resourcesOu, ctx)

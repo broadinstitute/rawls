@@ -85,7 +85,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val userWriter = RawlsUser(UserInfo(testData.userWriter.userEmail, OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
     val userReader = RawlsUser(UserInfo(testData.userReader.userEmail, OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), generateBillingGroups(RawlsBillingProjectName("ns"), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set.empty), Map.empty), "testBucketUrl", CreationStatuses.Ready, None, None)
+    val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName("ns"), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set.empty), Map.empty)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), "testBucketUrl", CreationStatuses.Ready, None, None)
 
     val workspaceName = WorkspaceName(billingProject.projectName.value, "testworkspace")
 
@@ -101,7 +102,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       WorkspaceAccessLevels.Write -> Set(userWriter),
       WorkspaceAccessLevels.Read -> Set(userReader)
     ))_
-    val (workspace, workspaceGroups) = makeWorkspace1(billingProject, workspaceName.name, Set.empty, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
+    val (workspace, workspaceGroups) = makeWorkspace1(billingProject, billingProjectGroups(ProjectRoles.Owner).head, workspaceName.name, Set.empty, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
 
     val makeWorkspace2 = makeWorkspaceWithUsers(Map(
       WorkspaceAccessLevels.Owner -> Set.empty,
@@ -109,7 +110,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       WorkspaceAccessLevels.Read -> Set.empty
     ))_
     val workspace2Id = UUID.randomUUID().toString
-    val (workspace2, workspace2Groups) = makeWorkspace2(billingProject, workspace2Name.name, Set.empty, workspace2Id, "bucket2", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("b") -> AttributeString("y")), false)
+    val (workspace2, workspace2Groups) = makeWorkspace2(billingProject, billingProjectGroups(ProjectRoles.Owner).head, workspace2Name.name, Set.empty, workspace2Id, "bucket2", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("b") -> AttributeString("y")), false)
 
     val makeWorkspace3 = makeWorkspaceWithUsers(Map(
       WorkspaceAccessLevels.Owner -> Set.empty,
@@ -117,7 +118,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       WorkspaceAccessLevels.Read -> Set.empty
     ))_
     val workspace3Id = UUID.randomUUID().toString
-    val (workspace3, workspace3Groups) = makeWorkspace3(billingProject, workspace3Name.name, Set(defaultRealmGroup), workspace3Id, "bucket3", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("c") -> AttributeString("z")), false)
+    val (workspace3, workspace3Groups) = makeWorkspace3(billingProject, billingProjectGroups(ProjectRoles.Owner).head, workspace3Name.name, Set(defaultRealmGroup), workspace3Id, "bucket3", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("c") -> AttributeString("z")), false)
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
@@ -163,7 +164,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         rawlsUserQuery.createUser(userOwner),
         rawlsUserQuery.createUser(userWriter),
         rawlsUserQuery.createUser(userReader),
-        DBIO.from(samDataSaver.savePolicyGroup(billingProject.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
+        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
@@ -2254,7 +2255,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     def expectedAccessGroups(workspaceId: String) = Map(
-      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.ownerPolicyGroup),
+      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProjectGroups(ProjectRoles.Owner).head),
       WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-OWNER")),
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-READER"))
@@ -2292,7 +2293,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     def expectedAccessGroups(workspaceId: String) = Map(
-      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.ownerPolicyGroup),
+      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProjectGroups(ProjectRoles.Owner).head),
       WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-OWNER")),
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-READER"))

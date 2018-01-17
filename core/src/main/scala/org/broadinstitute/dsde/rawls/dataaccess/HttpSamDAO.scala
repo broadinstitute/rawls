@@ -36,6 +36,9 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   private def pipeline[A: Unmarshaller](userInfo: UserInfo) =
     addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[A]
 
+  private def asRawlsSAPipeline[A: Unmarshaller] =
+    addHeader(Authorization(OAuth2BearerToken(getServiceAccountAccessToken))) ~> sendReceive ~> unmarshal[A]
+
   private def doSuccessOrFailureRequest(request: HttpRequest, userInfo: UserInfo) = {
     val pipeline = addAuthHeader(userInfo) ~> sendReceive
     val result: Future[HttpResponse] = pipeline(request)
@@ -116,9 +119,9 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
-  override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, userInfo: UserInfo): Future[Map[RawlsGroupEmail, Seq[SyncReportItem]]] = {
+  override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String): Future[Map[RawlsGroupEmail, Seq[SyncReportItem]]] = {
     val url = samServiceURL + s"/api/google/resource/${resourceTypeName.value}/$resourceId/${policyName.toLowerCase}/sync"
-    retry(when500) { () => pipeline[Map[RawlsGroupEmail, Seq[SyncReportItem]]](userInfo) apply Post(url) }
+    retry(when500) { () => asRawlsSAPipeline[Map[RawlsGroupEmail, Seq[SyncReportItem]]] apply Post(url) }
   }
 
   override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
@@ -133,11 +136,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
   override def getPetServiceAccountKeyForUser(googleProject: String, userEmail: RawlsUserEmail): Future[String] = {
     val url = samServiceURL + s"/api/google/petServiceAccount/$googleProject/${userEmail.value}"
-    retry(when500) { () => {
-      // note getServiceAccountAccessToken is called within the retry to be sure token is up-to-date
-      val pipeline = addHeader(Authorization(OAuth2BearerToken(getServiceAccountAccessToken))) ~> sendReceive ~> unmarshal[String]
-      pipeline(Get(url))
-    } }
+    retry(when500) { () => asRawlsSAPipeline[String] apply Get(url) }
   }
 
   private def getServiceAccountAccessToken = {

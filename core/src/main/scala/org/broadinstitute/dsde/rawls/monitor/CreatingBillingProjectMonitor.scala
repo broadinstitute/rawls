@@ -4,10 +4,12 @@ import akka.actor.Status.Failure
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, ProjectTemplate, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.{CheckDone, CheckNow}
+import org.broadinstitute.dsde.rawls.user.UserService
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -17,8 +19,8 @@ import scala.util.Success
  * Created by dvoet on 8/22/16.
  */
 object CreatingBillingProjectMonitor {
-  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, projectTemplate: ProjectTemplate)(implicit executionContext: ExecutionContext): Props = {
-    Props(new CreatingBillingProjectMonitorActor(datasource, gcsDAO, projectTemplate))
+  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate)(implicit executionContext: ExecutionContext): Props = {
+    Props(new CreatingBillingProjectMonitorActor(datasource, gcsDAO, samDAO, projectTemplate))
   }
 
   sealed trait CreatingBillingProjectMonitorMessage
@@ -26,7 +28,7 @@ object CreatingBillingProjectMonitor {
   case class CheckDone(creatingCount: Int) extends CreatingBillingProjectMonitorMessage
 }
 
-class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val projectTemplate: ProjectTemplate)(implicit executionContext: ExecutionContext) extends Actor with CreatingBillingProjectMonitor with LazyLogging {
+class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, val projectTemplate: ProjectTemplate)(implicit executionContext: ExecutionContext) extends Actor with CreatingBillingProjectMonitor with LazyLogging {
   self ! CheckNow
 
   override def receive = {
@@ -45,6 +47,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
   val datasource: SlickDataSource
   val gcsDAO: GoogleServicesDAO
   val projectTemplate: ProjectTemplate
+  val samDAO: SamDAO
 
   def checkCreatingProjects()(implicit executionContext: ExecutionContext): Future[CheckDone] = {
     for {
@@ -95,13 +98,24 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
           case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, None, _)) =>
             // create project operation finished successfully
-            gcsDAO.beginProjectSetup(project, projectTemplate).flatMap {
-              case util.Failure(t) =>
-                logger.info(s"Failure creating project $project", t)
-                Future.successful(project.copy(status = CreationStatuses.Error, message = Option(t.getMessage)))
-              case Success(operationRecords) => datasource.inTransaction { dataAccess =>
-                dataAccess.rawlsBillingProjectQuery.insertOperations(operationRecords).map(_ => project)
+            for {
+              ownerGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
+              computeUserGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, UserService.canComputeUserPolicyName).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
+
+              updatedTemplate = projectTemplate.copy(policies = projectTemplate.policies ++ Map(
+                "roles/viewer" -> Seq(s"group:${ownerGroupEmail.value}"),
+                "roles/genomics.pipelinesRunner" -> Seq(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")))
+
+              updatedProject <- gcsDAO.beginProjectSetup(project, updatedTemplate).flatMap {
+                case util.Failure(t) =>
+                  logger.info(s"Failure creating project $project", t)
+                  Future.successful(project.copy(status = CreationStatuses.Error, message = Option(t.getMessage)))
+                case Success(operationRecords) => datasource.inTransaction { dataAccess =>
+                  dataAccess.rawlsBillingProjectQuery.insertOperations(operationRecords).map(_ => project)
+                }
               }
+            } yield {
+              updatedProject
             }
 
           case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, Some(error), _)) =>
