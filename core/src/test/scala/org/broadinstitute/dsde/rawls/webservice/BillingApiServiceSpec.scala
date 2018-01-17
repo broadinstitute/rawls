@@ -41,7 +41,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   def createProject(project: RawlsBillingProject, owner: RawlsUser = testData.userOwner): Unit = {
     import driver.api._
-    val projectWithOwner = project.copy(ownerPolicyGroup = project.ownerPolicyGroup.copy(users = Set(owner)))
+    val projectWithOwner = project.copy()
 
     runAndWait(rawlsBillingProjectQuery.create(projectWithOwner))
   }

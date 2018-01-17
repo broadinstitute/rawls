@@ -982,7 +982,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   // this is a hack to convert old code that used a map for groups into the new code that just has the owner group
   object RawlsBillingProject {
     def apply(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String]) = {
-      model.RawlsBillingProject(projectName, groups(ProjectRoles.Owner), cromwellAuthBucketUrl, status, billingAccount, message)
+      model.RawlsBillingProject(projectName, cromwellAuthBucketUrl, status, billingAccount, message)
     }
   }
 

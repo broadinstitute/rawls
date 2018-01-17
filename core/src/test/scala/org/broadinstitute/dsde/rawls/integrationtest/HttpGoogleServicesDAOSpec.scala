@@ -97,7 +97,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   it should "do all of the things" in {
 
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
-    val project = model.RawlsBillingProject(RawlsBillingProjectName(testProject), projectOwnerGoogleGroup, "", Ready, None, None)
+    val project = model.RawlsBillingProject(RawlsBillingProjectName(testProject), "", Ready, None, None)
 
     val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Set.empty, None), Duration.Inf)
 
@@ -166,7 +166,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   it should "do all of the things with a realm" in {
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
-    val project = model.RawlsBillingProject(RawlsBillingProjectName(testProject), projectOwnerGoogleGroup, "", Ready, None, None)
+    val project = model.RawlsBillingProject(RawlsBillingProjectName(testProject), "", Ready, None, None)
 
     val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Set(ManagedGroupRef(testRealm.groupName)), Option(Set(RawlsUserRef(testCreator.userSubjectId)))), Duration.Inf)
 
