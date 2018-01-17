@@ -5,8 +5,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.model.{AttributeString, MethodConfiguration, MethodRepoMethod}
 import org.scalatest.FlatSpec
-import wdl4s.wdl.WorkflowInput
-import wdl4s.wdl.types.WdlStringType
+import wom.callable.Callable.{InputDefinition, OptionalInputDefinition, InputDefinitionWithDefault, RequiredInputDefinition}
+import wom.types.WomStringType
 
 class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with ExpressionFixture with RawlsTestUtils  {
 
@@ -14,7 +14,7 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
     expressions.map { expr => expr.toString -> AttributeString(expr) }.toMap
 
   def toMethodInput(tuple: (String, AttributeString)): MethodInput = tuple match {
-    case (name, expr) => MethodInput(WorkflowInput(name, WdlStringType), expr.value)
+    case (name, expr) => MethodInput(RequiredInputDefinition(name, WomStringType), expr.value)
   }
 
   def toMethodInputs(methodConfiguration: MethodConfiguration) : Seq[MethodInput] = {

@@ -9,7 +9,7 @@ object Dependencies {
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
-  val wdl4sV = "0.15-814d203"
+  val cromwellVersion = "30-4de204a"
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
@@ -46,7 +46,7 @@ object Dependencies {
   val metricsScala: ModuleID =       "nl.grons"              %% "metrics-scala"    % "3.5.6"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
-  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.1.0"
+  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.7.1"
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.10"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.4"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
@@ -64,9 +64,10 @@ object Dependencies {
   val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.7.22" % "test"
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
 
-  val wdl4s: ModuleID = ("org.broadinstitute" %% "wdl4s" % wdl4sV
+  val cromwellWdl: ModuleID = ("org.broadinstitute" %% "cromwell-wdl" % cromwellVersion
     exclude("org.typelevel", "cats_2.11")
-    exclude("io.spray", "spray-json_2.11"))
+    exclude("io.spray", "spray-json_2.11")
+    exclude("com.typesafe.akka", "akka-actor_2.11"))
 
   val workbenchModelV  = "0.8-d6801ce"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
@@ -133,7 +134,7 @@ object Dependencies {
     sprayClient,
     swaggerUI,
     commonsJEXL,
-    wdl4s,
+    cromwellWdl,
     cats,
     mysqlConnector,
     liquibaseCore,

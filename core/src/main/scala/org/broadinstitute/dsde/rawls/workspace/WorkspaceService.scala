@@ -2225,7 +2225,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                       .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values) })
                       .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
                       case (succeeded, failed) =>
-                        val methodConfigInputs = inputsToProcess.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
+                        val methodConfigInputs = inputsToProcess.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.localName.value, methodInput.expression) }
                         val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
                         op(dataAccess, workspaceContext, wdl, header, succeeded.toSeq, failed.toSeq, workflowFailureMode)
                     }
