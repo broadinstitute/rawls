@@ -10,6 +10,8 @@ object Dependencies {
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
   val cromwellVersion = "30-4de204a"
+  //UPDATE THIS WITH FINAL HASH
+  val serviceTestV = "0.1.1-alpha-sam-00c1bc7-SNAP"
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
@@ -71,6 +73,7 @@ object Dependencies {
 
   val workbenchModelV  = "0.8-d6801ce"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
+  val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests"
 
   val metricsDependencies = Seq(
     metricsScala,
@@ -144,6 +147,7 @@ object Dependencies {
     mockserverNetty,
     mockito,
     googleRpc,
-    workbenchModel
+    workbenchModel,
+    workbenchServiceTest
   )
 }
