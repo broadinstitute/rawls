@@ -401,6 +401,9 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
       assert(doneCreateOp.errorMessage.isEmpty, createOp.errorMessage)
 
+      val auditLoggingEnabled = Await.result(gcsDAO.isAuditLoggingEnabled(projectName), Duration.Inf)
+      assert(auditLoggingEnabled.getOrElse(false))
+
       val servicesOps = Await.result(gcsDAO.beginProjectSetup(project, projectTemplate), Duration.Inf).get
 
       val doneServicesOps: Seq[RawlsBillingProjectOperationRecord] = Await.result(retryUntilSuccessOrTimeout(always)(10 seconds, 6 minutes) { () =>
