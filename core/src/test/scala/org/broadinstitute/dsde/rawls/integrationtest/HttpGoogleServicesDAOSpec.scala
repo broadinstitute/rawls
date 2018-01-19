@@ -106,6 +106,9 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     // if this does not throw an exception, then the bucket exists
     val bucketResource = Await.result(retry(when500)(() => Future { storage.buckets.get(googleWorkspaceInfo.bucketName).execute() }), Duration.Inf)
 
+    val auditLoggingEnabled = Await.result(gcsDAO.isAuditLoggingEnabled(RawlsBillingProjectName(testProject)), Duration.Inf)
+    assert(auditLoggingEnabled.getOrElse(false))
+
     // check that intersection groups are not present without a realm
     googleWorkspaceInfo.intersectionGroupsByLevel shouldBe None
 
@@ -174,6 +177,9 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
     // if this does not throw an exception, then the bucket exists
     val bucketResource = Await.result(retry(when500)(() => Future { storage.buckets.get(googleWorkspaceInfo.bucketName).execute() }), Duration.Inf)
+
+    val auditLoggingEnabled = Await.result(gcsDAO.isAuditLoggingEnabled(RawlsBillingProjectName(testProject)), Duration.Inf)
+    assert(auditLoggingEnabled.getOrElse(false))
 
     val readerAG = googleWorkspaceInfo.accessGroupsByLevel(WorkspaceAccessLevels.Read)
     val writerAG = googleWorkspaceInfo.accessGroupsByLevel(WorkspaceAccessLevels.Write)
@@ -256,6 +262,9 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Set(ManagedGroupRef(testRealm.groupName)), None), Duration.Inf)
     }
 
+    val auditLoggingEnabled = Await.result(gcsDAO.isAuditLoggingEnabled(RawlsBillingProjectName(testProject)), Duration.Inf)
+    assert(auditLoggingEnabled.getOrElse(false))
+
     val groups: Seq[RawlsGroup] = groupAccessLevelsAscending flatMap { accessLevel =>
       val accessGroupName = RawlsGroupName(gcsDAO.workspaceAccessGroupName(testWorkspaceId, accessLevel))
       val accessGroup = RawlsGroup(accessGroupName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(accessGroupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
@@ -277,6 +286,9 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val random = scala.util.Random
     val testUser = testCreator.copy(userSubjectId = RawlsUserSubjectId(random.nextLong().toString))
     val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testUser, project, testWorkspaceId, testWorkspace, Set.empty, None), Duration.Inf)
+
+    val auditLoggingEnabled = Await.result(gcsDAO.isAuditLoggingEnabled(RawlsBillingProjectName(testProject)), Duration.Inf)
+    assert(auditLoggingEnabled.getOrElse(false))
 
     val user = RawlsUser(UserInfo(RawlsUserEmail("foo@bar.com"), null, 0, testUser.userSubjectId))
 

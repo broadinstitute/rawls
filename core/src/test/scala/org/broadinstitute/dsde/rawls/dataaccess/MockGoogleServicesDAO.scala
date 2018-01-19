@@ -309,6 +309,9 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(())
 
+  override def isAuditLoggingEnabled(projectName: RawlsBillingProjectName): Future[Option[Boolean]] = Future.successful(Some(false))
+  override def enableAuditLogging(projectName: RawlsBillingProjectName): Future[Option[Boolean]] = Future.successful(Some(false))
+
   override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = Future.successful(())
 
   override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = Future.successful(())
