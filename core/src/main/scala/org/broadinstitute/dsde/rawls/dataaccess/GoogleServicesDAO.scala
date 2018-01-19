@@ -224,6 +224,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
 
+  def isAuditLoggingEnabled(projectName: RawlsBillingProjectName): Future[Option[Boolean]]
+  def enableAuditLogging(projectName: RawlsBillingProjectName): Future[Option[Boolean]]
+
   def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit]
   def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit]
 }

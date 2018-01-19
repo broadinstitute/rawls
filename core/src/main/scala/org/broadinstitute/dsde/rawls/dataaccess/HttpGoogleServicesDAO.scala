@@ -89,6 +89,12 @@ class HttpGoogleServicesDAO(
 
   val serviceAccountClientId: String = clientSecrets.getDetails.get("client_email").toString
 
+  // the audit log config we want to apply to projects. This is a constant; we should reuse it.
+  private final val AUDIT_TRAIL_ENABLED = List(new AuditConfig().setService("allServices").setAuditLogConfigs(
+    List("ADMIN_READ", "DATA_READ", "DATA_WRITE") map { log => new AuditLogConfig().setLogType(log) }
+  ))
+
+
   initTokenBucket()
 
   protected def initTokenBucket(): Unit = {
@@ -234,7 +240,6 @@ class HttpGoogleServicesDAO(
         }
       }
     }
-
     // setupWorkspace main logic
 
     val accessGroupInserts = insertGroups(accessGroupRefsByLevel)
@@ -254,6 +259,7 @@ class HttpGoogleServicesDAO(
       }
       bucketName <- insertBucket(accessGroups, intersectionGroups)
       nothing <- insertInitialStorageLog(bucketName)
+      auditResult <- enableAuditLogging(project.projectName)
     } yield GoogleWorkspaceInfo(bucketName, accessGroups, intersectionGroups)
 
     bucketInsertion recoverWith {
@@ -894,12 +900,12 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
     for {
-      bindings <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)).getBindings
+      existingPolicy <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
       })
 
       _ <- retryWhen500orGoogleError(() => {
-        val existingPolicies: Map[String, List[String]] = bindings.map { policy => policy.getRole -> policy.getMembers.toList }.toMap
+        val existingPolicies: Map[String, List[String]] = existingPolicy.getBindings.map { policy => policy.getRole -> policy.getMembers.toList }.toMap
 
         // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
         import cats.implicits._
@@ -909,7 +915,11 @@ class HttpGoogleServicesDAO(
           new Binding().setRole(role).setMembers(members.distinct)
         }.toSeq
 
-        val policyRequest = new SetIamPolicyRequest().setPolicy(new Policy().setBindings(updatedBindings))
+        /* Modify the current policy instead of creating a new one, to allow Google to check the etag value for
+           concurrent modifications. The "bindings,etag" updateMask - which is the default - ensures we are
+           only updating bindings in this call, and that we don't update auditConfigs.
+           */
+        val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings)).setUpdateMask("bindings,etag")
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
       })
     } yield ()
@@ -920,12 +930,12 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
     for {
-      bindings <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)).getBindings
+      existingPolicy <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
       })
 
       _ <- retryWhen500orGoogleError(() => {
-        val existingPolicies: Map[String, Seq[String]] = bindings.map { policy => policy.getRole -> policy.getMembers.toSeq }.toMap
+        val existingPolicies: Map[String, Seq[String]] = existingPolicy.getBindings.map { policy => policy.getRole -> policy.getMembers.toSeq }.toMap
 
         // this may result in keys with empty-seq values.  That's ok, we will ignore those later
         val updatedKeysWithRemovedPolicies: Map[String, Seq[String]] = policiesToRemove.keys.map { k =>
@@ -941,7 +951,11 @@ class HttpGoogleServicesDAO(
           new Binding().setRole(role).setMembers(members.distinct)
         }.toSeq
 
-        val policyRequest = new SetIamPolicyRequest().setPolicy(new Policy().setBindings(updatedBindings))
+        /* Modify the current policy instead of creating a new one, to allow Google to check the etag value for
+           concurrent modifications. The "bindings,etag" updateMask - which is the default - ensures we are
+           only updating bindings in this call, and that we don't update auditConfigs.
+           */
+        val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings)).setUpdateMask("bindings,etag")
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
       })
     } yield ()
@@ -965,6 +979,9 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(billingManager.projects().updateBillingInfo(projectResourceName, new ProjectBillingInfo().setBillingEnabled(true).setBillingAccountName(billingAccount)))
       })
 
+      // add audit logging to the project
+      _ <- enableAuditLogging(projectName)
+
       // add new policies to the project
       _ <- addPolicyBindings(projectName, projectTemplate.policies.mapValues(_.toList) ++ Map("roles/viewer" -> List(s"group:${project.ownerPolicyGroup.groupEmail.value}"), "roles/billing.projectManager" -> List(s"group:${project.ownerPolicyGroup.groupEmail.value}")))
 
@@ -978,6 +995,89 @@ class HttpGoogleServicesDAO(
     } yield {
       operations
     })
+  }
+
+  /**
+    * gets the iam policy for a project from Google
+    * @param projectName project for which to get policy
+    * @return None if we don't have permission to read the policy; Some(policy) if successfully read.
+    *         throws an exception if we get anything other than 200 or 403 from Google.
+    */
+  private def getGoogleIamPolicy(projectName: RawlsBillingProjectName): Future[Option[Policy]] = {
+    val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
+    implicit val service:GoogleInstrumentedService = GoogleInstrumentedService.CloudResourceManager
+
+    retryWithRecoverWhen500orGoogleError(() => {
+      Option(executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)))
+    }) {
+      case t: HttpResponseException if t.getStatusCode == 403 => None
+    }
+  }
+
+  /**
+    * Given a Google iam policy, does that policy have audit logging enabled in the way we want it?
+    * @param policy policy to check
+    * @return true if audit logging is correctly enabled
+    */
+  private def isAuditLoggingEnabled(policy: Policy): Boolean = {
+    val auditConfig = policy.getAuditConfigs
+    // compare the pre-existing audit config to our desired state. The simple == comparison works in practice;
+    // if it stops working we may need fancier logic to compare the elements of the underlying list,
+    // such as sorting them.
+    import collection.JavaConverters._
+    auditConfig != null && auditConfig.asScala.toList == AUDIT_TRAIL_ENABLED
+  }
+
+  /**
+    * Given a project, does that project have audit logging enabled in the way we want it?
+    * @param projectName the project to check
+    * @return
+    *         Some(true) => audit logging is properly enabled for this project
+    *         Some(false) => audit logging is not enabled for this project
+    *         None => do not have permission to read audit logging for this project
+    */
+  override def isAuditLoggingEnabled(projectName: RawlsBillingProjectName): Future[Option[Boolean]] = {
+    for {
+      policyOption <- getGoogleIamPolicy(projectName)
+    } yield {
+      policyOption.map { policy => isAuditLoggingEnabled(policy) }
+    }
+  }
+
+  /**
+    * Enable audit logging for a given project. If audit logging is already enabled on that project,
+    * will not write anything to the project's policy.
+    * @param projectName the project on which to enable audit logging.
+    * @return
+    *         Some(true) => audit logging was properly enabled for this project, or was already enabled
+    *         Some(false) => do not have permission to enable audit logging for this project
+    *         None => do not have permission to read the policy for this project
+    */
+  override def enableAuditLogging(projectName: RawlsBillingProjectName): Future[Option[Boolean]] = {
+    getGoogleIamPolicy(projectName) flatMap {
+      case None =>
+        logger.warn(s"cannot read iam policy for project '${projectName.value}'; can neither confirm nor enable audit logs.")
+        Future.successful(None)
+      case Some(policy) =>
+        if (isAuditLoggingEnabled(policy)) {
+          logger.debug(s"audit logs already enabled for project '${projectName.value}'; not changing.")
+          Future.successful(Some(true))
+        } else {
+          logger.info(s"audit logs not enabled for project '${projectName.value}'; enabling now.")
+          val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
+          implicit val service: GoogleInstrumentedService = GoogleInstrumentedService.CloudResourceManager
+          val desiredPolicy = policy.setAuditConfigs(AUDIT_TRAIL_ENABLED)
+          val policyRequest = new SetIamPolicyRequest().setPolicy(desiredPolicy).setUpdateMask("auditConfigs,etag")
+          retryWithRecoverWhen500orGoogleError[Option[Boolean]](() => {
+            executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
+            Some(true)
+          }) {
+            case t: HttpResponseException if t.getStatusCode == 403 =>
+              logger.warn(s"cannot write iam policy for project '${projectName.value}'; cannot enable audit logging.")
+              Some(false)
+          }
+        }
+    }
   }
 
   override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = {
