@@ -979,6 +979,9 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(billingManager.projects().updateBillingInfo(projectResourceName, new ProjectBillingInfo().setBillingEnabled(true).setBillingAccountName(billingAccount)))
       })
 
+      // add audit logging to the project
+      _ <- enableAuditLogging(projectName)
+
       // add new policies to the project
       _ <- addPolicyBindings(projectName, projectTemplate.policies.mapValues(_.toList) ++ Map("roles/viewer" -> List(s"group:${project.ownerPolicyGroup.groupEmail.value}"), "roles/billing.projectManager" -> List(s"group:${project.ownerPolicyGroup.groupEmail.value}")))
 
