@@ -141,13 +141,15 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
     }
 
+  private val project1Groups = generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty)
+
   it should "create a billing project" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // first add the project and user to the DB
 
       val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
       runAndWait(rawlsUserQuery.createUser(billingUser))
 
@@ -164,7 +166,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
 
       // need to manually create the owner group because the test sam dao does not actually talk to ldap
-      Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+      Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
 
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
@@ -186,6 +188,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         override val datasource: SlickDataSource = services.dataSource
         override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty, Seq("foo", "bar", "baz"))
         override val gcsDAO = new MockGoogleServicesDAO("foo")
+        override val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
       }
 
       assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
@@ -249,7 +252,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       // first add the project and user to the DB
 
       val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
       runAndWait(rawlsUserQuery.createUser(billingUser))
 
@@ -266,7 +269,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
 
       // need to manually create the owner group because the test sam dao does not actually talk to ldap
-      Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+      Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
 
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
@@ -290,6 +293,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
           override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = failureMode(rawlsBillingProjectOperation)
         }
+        override val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
       }
 
       assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
@@ -322,7 +326,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       // first add the project and user to the DB
 
       val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
       runAndWait(rawlsUserQuery.createUser(billingUser))
 
@@ -339,7 +343,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
 
       // need to manually create the owner group because the test sam dao does not actually talk to ldap
-      Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+      Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
 
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
@@ -369,6 +373,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
             }
           }
         }
+        override val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
       }
 
       assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
@@ -415,7 +420,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when adding a user to a billing project that the caller owns" in withTestDataApiServices { services =>
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
     val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
@@ -428,7 +433,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+    Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
     Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
@@ -451,7 +456,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when adding a group to a billing project that the caller owns" in withTestDataApiServices { services =>
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
     val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
@@ -465,7 +470,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
 
     // need to manually create the owner group because the test sam dao does not actually talk to ldap
-    Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+    Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
 
     Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
@@ -479,7 +484,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when removing a user from a billing project that the caller owns" in withTestDataApiServices { services =>
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None, None)
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
     val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
@@ -493,7 +498,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
 
     // need to manually create the owner group because the test sam dao does not actually talk to ldap
-    Await.result(samDataSaver.savePolicyGroup(project1.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
+    Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
 
     Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
