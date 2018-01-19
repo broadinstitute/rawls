@@ -139,8 +139,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def getGoogleProject(billingProjectName: RawlsBillingProjectName): Future[Project] = Future.successful(new Project())
 
-  override def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long): Future[String] = Future.successful("mockBucket")
-
   override def deleteBucket(bucketName: String) = Future.successful(true)
 
   override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(Some(new Bucket))
@@ -293,7 +291,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] =
     Future.successful(RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, "opid", false, None, "create"))
 
-  override def completeProjectSetup(project: RawlsBillingProject): Future[Try[Unit]] = {
+  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[RawlsGroupEmail]): Future[Try[Unit]] = {
     Future.successful(Success(()))
   }
 

@@ -124,11 +124,18 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
           case operations: Seq[RawlsBillingProjectOperationRecord] if operations.forall(rec => rec.done && rec.errorMessage.isEmpty) =>
             // all operations completed successfully
-            gcsDAO.completeProjectSetup(project) map {
-              case util.Failure(t) =>
-                logger.info(s"Failure completing project for $project", t)
-                project.copy(message = Option(t.getMessage))
-              case Success(_) => project.copy(status = CreationStatuses.Ready)
+            for {
+              ownerGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
+              computeUserGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, UserService.canComputeUserPolicyName).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
+
+              updatedProject <- gcsDAO.completeProjectSetup(project, Set(ownerGroupEmail, computeUserGroupEmail)) map {
+                case util.Failure(t) =>
+                  logger.info(s"Failure completing project for $project", t)
+                  project.copy(message = Option(t.getMessage))
+                case Success(_) => project.copy(status = CreationStatuses.Ready)
+              }
+            } yield {
+              updatedProject
             }
 
           case operations: Seq[RawlsBillingProjectOperationRecord] if operations.forall(rec => rec.done) =>

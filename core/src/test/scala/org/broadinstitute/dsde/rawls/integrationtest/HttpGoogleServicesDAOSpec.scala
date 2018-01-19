@@ -403,7 +403,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
       assert(doneServicesOps.forall(_.errorMessage.isEmpty), doneServicesOps.collect { case op@RawlsBillingProjectOperationRecord(_, _, _, _, Some(_), _) => op })
 
-      Await.result(gcsDAO.completeProjectSetup(project), Duration.Inf).get
+      Await.result(gcsDAO.completeProjectSetup(project, Set.empty), Duration.Inf).get
 
       val bucket = Await.result(gcsDAO.getBucket(gcsDAO.getStorageLogsBucketName(projectName)), Duration.Inf).get
       bucket.getLifecycle.getRule.length should be (1)

@@ -25,8 +25,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   // returns bucket and group information
   def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, projectOwnerGroup: RawlsGroup, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo]
 
-  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long): Future[String]
-
   def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project]
 
   /** Deletes a bucket from Google Cloud Storage. If the bucket is not empty, all objects in the bucket will be marked
@@ -218,7 +216,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
    * @param project
    * @return
    */
-  def completeProjectSetup(project: RawlsBillingProject): Future[Try[Unit]]
+  def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[RawlsGroupEmail]): Future[Try[Unit]]
 
   def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]

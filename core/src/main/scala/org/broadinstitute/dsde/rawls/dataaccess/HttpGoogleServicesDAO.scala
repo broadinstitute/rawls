@@ -277,13 +277,21 @@ class HttpGoogleServicesDAO(
     s"I_$workspaceId-${accessLevel.toString}"
   }
 
-  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long): Future[String] = {
+  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[RawlsGroupEmail]): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
     val bucketName = getCromwellAuthBucketName(billingProject)
     retryWithRecoverWhen500orGoogleError(
       () => {
-        val bucketAcls = List(new BucketAccessControl().setEntity("project-editors-" + projectNumber).setRole("OWNER"), new BucketAccessControl().setEntity("project-owners-" + projectNumber).setRole("OWNER"))
-        val defaultObjectAcls = List(new ObjectAccessControl().setEntity("project-editors-" + projectNumber).setRole("OWNER"), new ObjectAccessControl().setEntity("project-owners-" + projectNumber).setRole("OWNER"))
+        val bucketAcls = List(
+          newBucketAccessControl("project-editors-" + projectNumber, "OWNER"),
+          newBucketAccessControl("project-owners-" + projectNumber, "OWNER")) ++
+          authBucketReaders.map(email => newBucketAccessControl(makeGroupEntityString(email.value), "READER")).toList
+
+        val defaultObjectAcls = List(
+          newObjectAccessControl("project-editors-" + projectNumber, "OWNER"),
+          newObjectAccessControl("project-owners-" + projectNumber, "OWNER")) ++
+          authBucketReaders.map(email => newObjectAccessControl(makeGroupEntityString(email.value), "READER")).toList
+
         val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
         val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(billingProject.value, bucket)
         executeGoogleRequest(inserter)
@@ -931,7 +939,7 @@ class HttpGoogleServicesDAO(
     })
   }
 
-  override def completeProjectSetup(project: RawlsBillingProject): Future[Try[Unit]] = {
+  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[RawlsGroupEmail]): Future[Try[Unit]] = {
     implicit val service = GoogleInstrumentedService.Billing
     val projectName = project.projectName
     val credential = getBillingServiceAccountCredential
@@ -952,7 +960,7 @@ class HttpGoogleServicesDAO(
 
       googleProject <- getGoogleProject(projectName)
 
-      cromwellAuthBucket <- createCromwellAuthBucket(projectName, googleProject.getProjectNumber)
+      cromwellAuthBucket <- createCromwellAuthBucket(projectName, googleProject.getProjectNumber, authBucketReaders)
 
       _ <- retryWhen500orGoogleError(() => {
         val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
