@@ -359,11 +359,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case ProjectRoles.Owner => Seq(ownerPolicyName)
       case ProjectRoles.User => Seq(workspaceCreatorPolicyName, canComputeUserPolicyName)
     }
-    Future.traverse(policies) { policy =>
-      samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo)}
     for {
+      _ <- Future.traverse(policies) { policy =>
+        samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo)}
+
       (project, addUsers, addSubGroups) <- loadMembersAndProject(projectName, projectAccessUpdate)
-      _ <- updateGroupMembership(project.ownerPolicyGroup, addUsers = addUsers, addSubGroups = addSubGroups)
+
+      _ <- Future.traverse(policies) { policy =>
+        updateGroupMembership(RawlsGroupRef(RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, project.projectName.value, policy))), addUsers = addUsers, addSubGroups = addSubGroups)
+      }
     } yield {
       RequestComplete(StatusCodes.OK)
     }
@@ -374,11 +378,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case ProjectRoles.Owner => ownerPolicyName
       case ProjectRoles.User => workspaceCreatorPolicyName
     }
-    samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo).recover {
-      case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) => throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))}
     for {
+      _ <- samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, userInfo).recover {
+        case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) => throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))}
+
       (project, removeUsers, removeSubGroups) <- loadMembersAndProject(projectName, projectAccessUpdate)
-        _ <- updateGroupMembership(project.ownerPolicyGroup, removeUsers = removeUsers, removeSubGroups = removeSubGroups)
+
+      _ <- updateGroupMembership(RawlsGroupRef(RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, project.projectName.value, policy))), removeUsers = removeUsers, removeSubGroups = removeSubGroups)
     } yield {
       RequestComplete(StatusCodes.OK)
     }
@@ -699,6 +705,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   private def updateGroupMembershipInternalPolicy(groupRef: RawlsGroupRef)(update: RawlsGroup => RawlsGroup): Future[RawlsGroup] = {
+    // note that this does not actually update the policy, sam does that. this just figures our intersections
+    // updates the intersection groups and publishes messages for those updates
     for {
       (savedGroup, intersectionGroups) <- dataSource.inTransaction ({ dataAccess =>
         for {

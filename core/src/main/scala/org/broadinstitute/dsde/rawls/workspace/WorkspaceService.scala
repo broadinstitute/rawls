@@ -1995,16 +1995,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamResourceActions.createWorkspace, userInfo)) flatMap {
       case true =>
         dataAccess.rawlsBillingProjectQuery.load(projectName).flatMap {
-          case Some(RawlsBillingProject(_, _, _, CreationStatuses.Ready, _, _)) =>
+          case Some(RawlsBillingProject(_, _, CreationStatuses.Ready, _, _)) =>
             dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUser(userInfo)) flatMap { authDomainAccesses =>
               if(workspaceRequest.authorizationDomain.getOrElse(Set.empty).subsetOf(authDomainAccesses.filter(_.role == ManagedRoles.Member).map(_.managedGroupRef))) op
               else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"In order to use a group in an Authorization Domain, you must be a member of that group.")))
             }
 
-          case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, _, CreationStatuses.Creating, _, _)) =>
+          case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Creating, _, _)) =>
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"${name} is still being created")))
 
-          case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, _, CreationStatuses.Error, _, messageOp)) =>
+          case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Error, _, messageOp)) =>
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Error creating ${name}: ${messageOp.getOrElse("no message")}")))
 
           case None =>

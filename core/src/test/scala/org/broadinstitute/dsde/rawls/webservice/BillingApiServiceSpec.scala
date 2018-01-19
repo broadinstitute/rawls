@@ -47,8 +47,8 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   "BillingApiService" should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-    Await.result(samDataSaver.savePolicyGroup(project.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
+    val (project, projectGroups) = billingProjectFromName("new_project")
+    Await.result(samDataSaver.savePolicyGroups(projectGroups.values.flatten, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
 
     val createRequest = CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)
 
@@ -80,7 +80,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when adding a user to a non-owned billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("no_access")
+    val (project, projectGroups) = billingProjectFromName("no_access")
 
     withStatsD {
       Put(s"/billing/${project.projectName.value}/user/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
@@ -103,7 +103,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("no_access")
+    val (project, projectGroups) = billingProjectFromName("no_access")
 
     Put(s"/billing/${project.projectName.value}/nobody") ~>
       sealRoute(services.billingRoutes) ~>
@@ -125,8 +125,9 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when removing a user from a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-    Await.result(samDataSaver.savePolicyGroup(project.ownerPolicyGroup, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
+    val (project, projectGroups) = billingProjectFromName("new_project")
+    Await.result(samDataSaver.savePolicyGroups(projectGroups.values.flatten, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
+
     withStatsD {
       val createRequest = CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)
 
@@ -161,7 +162,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when removing a user from a non-owned billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("no_access")
+    val (project, projectGroups) = billingProjectFromName("no_access")
 
     Delete(s"/billing/${project.projectName.value}/owner/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -173,7 +174,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 400 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("test_good")
+    val (project, projectGroups) = billingProjectFromName("test_good")
 
     Delete(s"/billing/${project.projectName.value}/user/nobody") ~>
       sealRoute(services.billingRoutes) ~>
@@ -258,7 +259,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when listing billing project members as owner" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("test_good")
+    val (project, projectGroups) = billingProjectFromName("test_good")
 
     Get(s"/billing/${project.projectName.value}/members") ~>
       sealRoute(services.billingRoutes) ~>
@@ -273,7 +274,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when listing billing project members as non-owner" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("no_access")
+    val (project, projectGroups) = billingProjectFromName("no_access")
 
     Get(s"/billing/${project.projectName.value}/members") ~>
       sealRoute(services.billingRoutes) ~>
