@@ -224,6 +224,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit]
   def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit]
+
+  def getAccessTokenUsingJson(saKey: String) : Future[String]
 }
 
 case class GoogleWorkspaceInfo(bucketName: String, accessGroupsByLevel: Map[WorkspaceAccessLevel, RawlsGroup], intersectionGroupsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroup]])

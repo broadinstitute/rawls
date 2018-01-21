@@ -138,6 +138,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(googleWorkspaceInfo)
   }
 
+  override def getAccessTokenUsingJson(saKey: String): Future[String] = Future.successful("token")
+
   override def getGoogleProject(billingProjectName: RawlsBillingProjectName): Future[Project] = Future.successful(new Project())
 
   override def deleteBucket(bucketName: String) = Future.successful(true)

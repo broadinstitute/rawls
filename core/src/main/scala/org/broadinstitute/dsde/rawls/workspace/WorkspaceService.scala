@@ -32,7 +32,7 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
-import spray.http.{StatusCode, StatusCodes, Uri}
+import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes, Uri}
 import spray.httpx.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -1640,6 +1640,26 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def checkBucketReadAccess(workspaceName: WorkspaceName) = {
+    for {
+      workspace <- dataSource.inTransaction { dataAccess =>
+        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+          DBIO.successful(workspaceContext.workspace)
+        }
+      }
+
+      petKey <- samDAO.getPetServiceAccountKeyForUser(workspace.namespace, userInfo.userEmail)
+
+      accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
+
+      resultsForPet <- gcsDAO.diagnosticBucketRead(UserInfo(userInfo.userEmail, OAuth2BearerToken(accessToken), 60, userInfo.userSubjectId), workspace.bucketName)
+      resultsForUser <- gcsDAO.diagnosticBucketRead(userInfo, workspace.bucketName)
+    } yield {
+      (resultsForUser, resultsForPet) match {
+        case (None, None) => RequestComplete(StatusCodes.OK)
+        case (Some(report), _) => RequestComplete(report) // report actual user does not have access first
+        case (_, Some(report)) => RequestComplete(report)
+      }
+    }
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         DBIO.from(gcsDAO.diagnosticBucketRead(userInfo, workspaceContext.workspace.bucketName)).map {

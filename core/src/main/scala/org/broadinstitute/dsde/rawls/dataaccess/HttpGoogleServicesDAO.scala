@@ -28,6 +28,7 @@ import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Cond
 import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
+import com.google.auth.oauth2.ServiceAccountCredentials
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -1157,6 +1158,12 @@ class HttpGoogleServicesDAO(
       .setJsonFactory(jsonFactory)
       .setClientSecrets(tokenClientSecrets)
       .build().setFromTokenResponse(new TokenResponse().setRefreshToken(refreshToken))
+  }
+
+  def getAccessTokenUsingJson(saKey: String) : Future[String] = Future {
+    val keyStream = new ByteArrayInputStream(saKey.getBytes)
+    val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(workbenchLoginScopes)
+    credential.refreshAccessToken.getTokenValue
   }
 
   def getServiceAccountRawlsUser(): Future[RawlsUser] = {

@@ -43,6 +43,7 @@ object Dependencies {
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev17-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
   val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.5.0"
+  val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
   val metricsScala: ModuleID =       "nl.grons"              %% "metrics-scala"    % "3.5.6"
@@ -98,6 +99,7 @@ object Dependencies {
     googleAdminDirectory,
     googlePlus,
     googleOAuth2,
+    googleOAuth2too,
     googlePubSub,
     googleServicemanagement,
     googleGuava
