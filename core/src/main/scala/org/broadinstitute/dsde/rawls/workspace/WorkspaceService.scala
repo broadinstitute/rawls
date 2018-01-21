@@ -1660,14 +1660,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case (_, Some(report)) => RequestComplete(report)
       }
     }
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        DBIO.from(gcsDAO.diagnosticBucketRead(userInfo, workspaceContext.workspace.bucketName)).map {
-          case Some(report) => RequestComplete(report)
-          case None => RequestComplete(StatusCodes.OK)
-        }
-      }
-    }
   }
 
   def listAllActiveSubmissions() = {
