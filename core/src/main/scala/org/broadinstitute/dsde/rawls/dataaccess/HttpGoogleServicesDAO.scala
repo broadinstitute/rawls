@@ -1162,7 +1162,7 @@ class HttpGoogleServicesDAO(
 
   def getAccessTokenUsingJson(saKey: String) : Future[String] = Future {
     val keyStream = new ByteArrayInputStream(saKey.getBytes)
-    val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(workbenchLoginScopes)
+    val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(storageScopes)
     credential.refreshAccessToken.getTokenValue
   }
 
