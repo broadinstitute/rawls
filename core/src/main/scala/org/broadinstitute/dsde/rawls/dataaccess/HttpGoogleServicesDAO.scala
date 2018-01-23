@@ -46,8 +46,6 @@ import org.joda.time
 import spray.client.pipelining._
 import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
 import spray.json._
-import com.google.api.services.iam.v1.Iam
-import com.google.api.services.iam.v1.model.{CreateServiceAccountRequest, ServiceAccount}
 
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
@@ -971,9 +969,6 @@ class HttpGoogleServicesDAO(
 
     // all of these things should be idempotent
     toFutureTry(for {
-      // create sa in project to initialize some stuff
-      _ <- createServiceAccount(project.projectName.value, "first-sa", "first-sa")
-
       // set the billing account
       billing <- retryWhen500orGoogleError(() => {
         val billingAccount = project.billingAccount.getOrElse(throw new RawlsException(s"billing account undefined for project ${project.projectName.value}")).value
@@ -994,18 +989,6 @@ class HttpGoogleServicesDAO(
       operations
     })
   }
-
-  private def createServiceAccount(serviceAccountProject: String, serviceAccountName: String, displayName: String) = {
-    implicit val service = GoogleInstrumentedService.Iam
-
-    val request = new CreateServiceAccountRequest().setAccountId(serviceAccountName)
-      .setServiceAccount(new com.google.api.services.iam.v1.model.ServiceAccount().setDisplayName(displayName))
-    val inserter = getIam(getBillingServiceAccountCredential).projects().serviceAccounts().create(s"projects/$serviceAccountProject", request)
-    retryWhen500orGoogleError { () =>
-      executeGoogleRequest(inserter)
-    }
-  }
-
 
   override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = {
     addPolicyBindings(projectName, Map(s"roles/$role" -> List(s"group:${groupEmail.value}")))
@@ -1088,10 +1071,6 @@ class HttpGoogleServicesDAO(
 
   def getCloudResourceManager(credential: Credential): CloudResourceManager = {
     new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
-  }
-
-  def getIam(credential: Credential): Iam = {
-    new Iam.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
 
   def getStorage(credential: Credential) = {
