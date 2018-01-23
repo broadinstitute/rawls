@@ -592,7 +592,9 @@ class HttpGoogleServicesDAO(
         t.getStatusCode match {
           case StatusCodes.Conflict.intValue => () // it is ok of the email is already there
           case StatusCodes.PreconditionFailed.intValue => {
-            logger.error(s"Precondition failed adding user \"$emailToAdd\" to group \"$groupEmail\"")
+            val msg = s"Precondition failed adding user \"$emailToAdd\" to group \"$groupEmail\""
+            logger.error(msg)
+            throw new RawlsException(msg)
             ()
           }
         }
