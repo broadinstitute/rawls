@@ -594,8 +594,9 @@ class HttpGoogleServicesDAO(
           case StatusCodes.PreconditionFailed => {
             val msg = s"Precondition failed adding user $emailToAdd to group $groupEmail. Is the user a member of too many groups?"
             logger.error(msg)
-            throw new RawlsException(msg)
+            throw new RawlsException(msg, t)
           }
+          case _ => throw t
         }
       }
     }
