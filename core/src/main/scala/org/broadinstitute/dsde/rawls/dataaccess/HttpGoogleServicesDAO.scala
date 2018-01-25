@@ -909,6 +909,7 @@ class HttpGoogleServicesDAO(
           new Binding().setRole(role).setMembers(members.distinct)
         }.toSeq
 
+        // when setting IAM policies, always reuse the existing policy so the etag is preserved.
         val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings))
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
       })
@@ -941,6 +942,7 @@ class HttpGoogleServicesDAO(
           new Binding().setRole(role).setMembers(members.distinct)
         }.toSeq
 
+        // when setting IAM policies, always reuse the existing policy so the etag is preserved.
         val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings))
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
       })
