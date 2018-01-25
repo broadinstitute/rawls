@@ -588,7 +588,17 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.Groups
     val inserter = getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
     retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(inserter) }) {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => () // it is ok of the email is already there
+      case t: HttpResponseException => {
+        StatusCode.int2StatusCode(t.getStatusCode) match {
+          case StatusCodes.Conflict => () // it is ok if the email is already there
+          case StatusCodes.PreconditionFailed => {
+            val msg = s"Precondition failed adding user $emailToAdd to group $groupEmail. Is the user a member of too many groups?"
+            logger.error(msg)
+            throw new RawlsException(msg, t)
+          }
+          case _ => throw t
+        }
+      }
     }
   }
 
