@@ -45,14 +45,24 @@ function artifactory_push()
 function docker_cmd()
 {
     if [ $DOCKER_CMD = "build" ] || [ $DOCKER_CMD = "push" ]; then
-        echo "building docker image..."
-        GIT_SHA=$(git rev-parse ${GIT_BRANCH})
-        echo GIT_SHA=$GIT_SHA > env.properties  # for jenkins jobs
-        docker build -t $REPO:${GIT_SHA:0:12} .
+        echo "building $PROJECT docker image..."
+        if [ "$ENV" != "dev" ] && [ "$ENV" != "alpha" ] && [ "$ENV" != "staging" ] && [ "$ENV" != "perf" ]; then
+            DOCKER_TAG=${BRANCH}
+        else
+            GIT_SHA=$(git rev-parse ${BRANCH})
+            DOCKER_TAG=${GIT_SHA:0:12}
+        fi
+        echo "building $PROJECT-tests docker image..."
+        docker build -t $REPO:${DOCKER_TAG} .
+        cd automation
+        docker build -f Dockerfile-tests -t $TESTS_REPO:${DOCKER_TAG} .
+        cd ..
 
         if [ $DOCKER_CMD = "push" ]; then
-            echo "pushing docker image..."
-            docker push $REPO:${GIT_SHA:0:12}
+            echo "pushing $PROJECT docker image..."
+            docker push $REPO:${DOCKER_TAG}
+            echo "pushing $PROJECT-tests docker image..."
+            docker push $TESTS_REPO:${DOCKER_TAG}
         fi
     else
         echo "Not a valid docker option!  Choose either build or push (which includes build)"
@@ -61,12 +71,14 @@ function docker_cmd()
 
 # parse command line options
 DOCKER_CMD=
-GIT_BRANCH=${GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}  # default to current branch
-REPO=${REPO:-broadinstitute/$PROJECT}  # default to rawls docker repo
+BRANCH=${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}  # default to current branch
+REPO=${REPO:-broadinstitute/$PROJECT}
+TESTS_REPO=$REPO-tests
+ENV=${ENV:-""}  # if env is not set, push an image with branch name
+
 while [ "$1" != "" ]; do
     case $1 in
         jar) make_jar ;;
-        publish) artifactory_push ;;
         -d | --docker) shift
                        echo $1
                        DOCKER_CMD=$1
