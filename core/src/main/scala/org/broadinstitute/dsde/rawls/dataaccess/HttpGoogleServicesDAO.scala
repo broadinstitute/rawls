@@ -904,12 +904,12 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
     for {
-      bindings <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)).getBindings
+      existingPolicy <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
       })
 
       _ <- retryWhen500orGoogleError(() => {
-        val existingPolicies: Map[String, List[String]] = bindings.map { policy => policy.getRole -> policy.getMembers.toList }.toMap
+        val existingPolicies: Map[String, List[String]] = existingPolicy.getBindings.map { policy => policy.getRole -> policy.getMembers.toList }.toMap
 
         // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
         import cats.implicits._
@@ -919,7 +919,8 @@ class HttpGoogleServicesDAO(
           new Binding().setRole(role).setMembers(members.distinct)
         }.toSeq
 
-        val policyRequest = new SetIamPolicyRequest().setPolicy(new Policy().setBindings(updatedBindings))
+        // when setting IAM policies, always reuse the existing policy so the etag is preserved.
+        val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings))
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
       })
     } yield ()
@@ -930,12 +931,12 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
     for {
-      bindings <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)).getBindings
+      existingPolicy <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
       })
 
       _ <- retryWhen500orGoogleError(() => {
-        val existingPolicies: Map[String, Seq[String]] = bindings.map { policy => policy.getRole -> policy.getMembers.toSeq }.toMap
+        val existingPolicies: Map[String, Seq[String]] = existingPolicy.getBindings.map { policy => policy.getRole -> policy.getMembers.toSeq }.toMap
 
         // this may result in keys with empty-seq values.  That's ok, we will ignore those later
         val updatedKeysWithRemovedPolicies: Map[String, Seq[String]] = policiesToRemove.keys.map { k =>
@@ -951,7 +952,8 @@ class HttpGoogleServicesDAO(
           new Binding().setRole(role).setMembers(members.distinct)
         }.toSeq
 
-        val policyRequest = new SetIamPolicyRequest().setPolicy(new Policy().setBindings(updatedBindings))
+        // when setting IAM policies, always reuse the existing policy so the etag is preserved.
+        val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings))
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
       })
     } yield ()
