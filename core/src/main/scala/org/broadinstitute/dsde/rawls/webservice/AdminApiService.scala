@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import spray.http.StatusCodes.BadRequest
+
 /**
  * Created by tsharpe on 9/25/15.
  */
@@ -34,6 +36,21 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.AdminDeleteBillingProject(RawlsBillingProjectName(projectId)))
+      }
+    } ~
+    path("admin" / "project") {
+      post {
+        parameter("owner" ? "") { owner =>
+          parameter("project") { project =>
+            parameter("operation") { op => requestContext =>
+                op.toLowerCase match {
+                  case "own" => requestContext.complete(BadRequest, ErrorReport(s"operation = own"))
+                  case "disown" => requestContext.complete(BadRequest, ErrorReport(s"operation = disown"))
+                  case _ => requestContext.complete(BadRequest, ErrorReport(s"invalid operation '$op'"))
+                }
+            }
+          }
+        }
       }
     } ~
     path("admin" / "submissions") {
