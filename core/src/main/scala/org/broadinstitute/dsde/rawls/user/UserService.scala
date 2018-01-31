@@ -68,7 +68,7 @@ object UserService {
 
   case object ListBillingProjects extends UserServiceMessage
   case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
-  case class AdminRegisterBillingProject(projectName: RawlsBillingProjectName, owner: RawlsUserEmail) extends UserServiceMessage
+  case class AdminRegisterBillingProject(projectName: RawlsBillingProjectName, owner: RawlsUserEmail, bucket: String) extends UserServiceMessage
   case class AdminUnregisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
@@ -112,7 +112,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     case ListBillingProjects => listBillingProjects pipeTo sender
     case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
-    case AdminRegisterBillingProject(projectName, owner) => asFCAdmin { registerBillingProject(projectName, owner) } pipeTo sender
+    case AdminRegisterBillingProject(projectName, owner, bucket) => asFCAdmin { registerBillingProject(projectName, owner, bucket) } pipeTo sender
     case AdminUnregisterBillingProject(projectName) => asFCAdmin { unregisterBillingProject(projectName) } pipeTo sender
 
     case AddUserToBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
@@ -312,9 +312,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     gcsDAO.deleteProject(projectName).map(_ => RequestComplete(StatusCodes.OK))
   }
 
-  def registerBillingProject(projectName: RawlsBillingProjectName, owner: RawlsUserEmail): Future[PerRequestMessage] = {
-    val cromwellAuthBucketName = s"cromwell-auth-${projectName.value}"
-
+  def registerBillingProject(projectName: RawlsBillingProjectName,
+                             owner: RawlsUserEmail,
+                             bucket: String): Future[PerRequestMessage] = {
     for {
       _ <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
@@ -332,9 +332,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
                     groupEmail,
                     Set.empty,
                     Set.empty),
-                  cromwellAuthBucketName,
+                  bucket,
                   CreationStatuses.Ready,
-                  None, // TODO: Do we need to enter the billing account name?
+                  None,
                   None))
             } yield project
 

@@ -596,48 +596,59 @@ paths:
              - openid
              - email
              - profile
-  /api/admin/project:
-      post:
-        tags:
-          - admin
-        operationId: recordProjectOwnership
-        summary: Create/delete a/the record of project ownership
-        parameters:
-          - name: operation
-            description: |
-              'register' assigns owner to a project created outside Rawls.
-
-              'unregister' removes a project record.
-            required: true
-            in: query
-            type: string
-            enum:
-              - register
-              - unregister
-          - name: project
-            description: billing project ID
-            required: true
-            in: query
-            type: string
-          - name: owner
-            description: owner of the billing project; only used for registration
-            required: false
-            in: query
-            type: string
-        responses:
-          204:
-            description: Successful Request
-          400:
-            description: Bad Request.
-          403:
-            description: You must be an admin to call this endpoint.
-          500:
-            description: Internal Server Error
-        security:
-          - authorization:
-            - openid
-            - email
-            - profile
+  '/api/admin/project/registration':
+    post:
+      tags:
+        - admin
+      operationId: recordProjectOwnership
+      summary: create a record of project ownership
+      parameters:
+        - name: project
+          description: billing project ID
+          required: true
+          in: query
+          type: string
+        - name: bucket
+          description: Cromwell auth bucket
+          required: true
+          in: query
+          type: string
+      responses:
+        204:
+          description: Successful Request
+        403:
+          description: You must be an admin to call this endpoint.
+        500:
+          description: Internal Server Error
+      security:
+        - authorization:
+          - openid
+          - email
+          - profile
+  '/api/admin/project/unregistration':
+    post:
+      tags:
+        - admin
+      operationId: removeProjectOwnershipRecord
+      summary: remove the record of project ownership
+      parameters:
+        - name: project
+          description: billing project ID
+          required: true
+          in: query
+          type: string
+      responses:
+        204:
+          description: Successful Request
+        403:
+          description: You must be an admin to call this endpoint.
+        500:
+          description: Internal Server Error
+      security:
+        - authorization:
+          - openid
+          - email
+          - profile
   '/api/admin/submissions':
     get:
       responses:
