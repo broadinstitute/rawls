@@ -5,9 +5,11 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
+import com.netaporter.uri.Uri.parse
 import spray.http.StatusCode
 import spray.json._
 import UserModelJsonSupport.ManagedGroupRefFormat
+import com.netaporter.uri.{PathPart, Uri}
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
@@ -191,7 +193,21 @@ case class MethodRepoMethod(
                    methodNamespace: String,
                    methodName: String,
                    methodVersion: Int
-                   )
+                   ) {
+  def asAgoraMethodUrl: String = asMethodUrlForRepo("agora")
+
+  def asMethodUrlForRepo(repository: String) = s"$repository://$methodNamespace/$methodName/$methodVersion"
+}
+
+object MethodRepoMethod {
+  def apply(uri: String): MethodRepoMethod = {
+    val parsedUri: Uri = parse(uri)
+
+    val pathParts: Seq[PathPart] = parsedUri.pathParts
+
+    MethodRepoMethod(parsedUri.host.get, pathParts(0).part, pathParts(1).part.toInt) // TODO: needs proper error handling
+  }
+}
 
 case class MethodInput(name: String, inputType: String, optional: Boolean)
 case class MethodOutput(name: String, outputType: String)
@@ -418,7 +434,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityCopyResponseFormat = jsonFormat3(EntityCopyResponse)
 
-  implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod)
+  implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod.apply)
 
   implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
 
