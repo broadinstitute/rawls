@@ -312,7 +312,52 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     gcsDAO.deleteProject(projectName).map(_ => RequestComplete(StatusCodes.OK))
   }
 
-  def ownBillingProject(projectName: RawlsBillingProjectName, owner: RawlsUserEmail): Future[PerRequestMessage] = ???
+  def ownBillingProject(projectName: RawlsBillingProjectName, owner: RawlsUserEmail): Future[PerRequestMessage] = {
+    val cromwellAuthBucketName = s"cromwell-auth-${projectName.value}"
+
+    for {
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
+          case None =>
+            for {
+              resource <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo))
+              workspaceCreatorPolicy <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo))
+              canComputeUserPolicy <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
+              groupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamProjectRoles.owner, userInfo)).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
+              project <- dataAccess.rawlsBillingProjectQuery.create(
+                RawlsBillingProject(
+                  projectName,
+                  RawlsGroup(
+                    RawlsGroupName(SamProjectRoles.owner),
+                    groupEmail,
+                    Set.empty,
+                    Set.empty),
+                  cromwellAuthBucketName,
+                  CreationStatuses.Ready,
+                  None, // TODO: Do we need to enter the billing account name?
+                  None))
+            } yield project
+
+          case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))
+        }
+      }
+
+      // TODO: What to insert for operationId and api?
+      insertProjectRecord = RawlsBillingProjectOperationRecord(
+        projectName = projectName.value,
+        operationName = gcsDAO.CREATE_PROJECT_OPERATION,
+        operationId = "",
+        done = true,
+        errorMessage = None,
+        api = ""
+      )
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(insertProjectRecord))
+      }
+    } yield {
+      RequestComplete(StatusCodes.Created)
+    }
+  }
 
   def disownBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = ???
 
