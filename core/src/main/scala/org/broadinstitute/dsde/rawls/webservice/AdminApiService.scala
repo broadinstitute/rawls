@@ -44,8 +44,12 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           parameter("project") { project =>
             parameter("operation") { op => requestContext =>
                 op.toLowerCase match {
-                  case "own" => requestContext.complete(BadRequest, ErrorReport(s"operation = own"))
-                  case "disown" => requestContext.complete(BadRequest, ErrorReport(s"operation = disown"))
+                  case "own" => perRequest(requestContext,
+                    UserService.props(userServiceConstructor, userInfo),
+                    UserService.AdminOwnBillingProject(RawlsBillingProjectName(project), RawlsUserEmail(owner)))
+                  case "disown" => perRequest(requestContext,
+                    UserService.props(userServiceConstructor, userInfo),
+                    UserService.AdminDisownBillingProject(RawlsBillingProjectName(project)))
                   case _ => requestContext.complete(BadRequest, ErrorReport(s"invalid operation '$op'"))
                 }
             }

@@ -68,6 +68,8 @@ object UserService {
 
   case object ListBillingProjects extends UserServiceMessage
   case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
+  case class AdminOwnBillingProject(projectName: RawlsBillingProjectName, owner: RawlsUserEmail) extends UserServiceMessage
+  case class AdminDisownBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class GrantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) extends UserServiceMessage
@@ -110,6 +112,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     case ListBillingProjects => listBillingProjects pipeTo sender
     case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
+    case AdminOwnBillingProject(projectName, owner) => asFCAdmin { ownBillingProject(projectName, owner) } pipeTo sender
+    case AdminDisownBillingProject(projectName) => asFCAdmin { disownBillingProject(projectName) } pipeTo sender
 
     case AddUserToBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
     case RemoveUserFromBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
@@ -307,6 +311,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     // delete actual project in google
     gcsDAO.deleteProject(projectName).map(_ => RequestComplete(StatusCodes.OK))
   }
+
+  def ownBillingProject(projectName: RawlsBillingProjectName, owner: RawlsUserEmail): Future[PerRequestMessage] = ???
+
+  def disownBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = ???
 
   def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     val isDeleted = dataSource.inTransaction { dataAccess =>
@@ -907,7 +915,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
                     workspaceCreatorPolicy <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo))
                     canComputeUserPolicy <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
                     groupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamProjectRoles.owner, userInfo)).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
-                    project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, RawlsGroup(RawlsGroupName(SamProjectRoles.owner), groupEmail, Set.empty, Set.empty), "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
+                    project <- dataAccess.rawlsBillingProjectQuery.create(
+                      RawlsBillingProject(
+                        projectName,
+                        RawlsGroup(
+                          RawlsGroupName(SamProjectRoles.owner),
+                          groupEmail,
+                          Set.empty,
+                          Set.empty),
+                        "gs://" + gcsDAO.getCromwellAuthBucketName(projectName),
+                        CreationStatuses.Creating,
+                        Option(billingAccountName),
+                        None))
                   } yield project
 
                 case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))
