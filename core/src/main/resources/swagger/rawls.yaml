@@ -605,23 +605,22 @@ paths:
         parameters:
           - name: operation
             description: |
-              'own' assigns owner to the project.
+              'register' assigns owner to a project created outside Rawls.
 
-              'disown' removes the project record.
+              'unregister' removes a project record.
             required: true
             in: query
             type: string
             enum:
-              - own
-              - disown
-            default: own
+              - register
+              - unregister
           - name: project
             description: billing project ID
             required: true
             in: query
             type: string
           - name: owner
-            description: owner of the billing project; only used for disown operation
+            description: owner of the billing project; only used for registration
             required: false
             in: query
             type: string

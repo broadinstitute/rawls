@@ -40,16 +40,17 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
     } ~
     path("admin" / "project") {
       post {
+        // TODO: Remove the owner parameter since userInfo.RawlsUserEmail.value == owner?
         parameter("owner" ? "") { owner =>
           parameter("project") { project =>
             parameter("operation") { op => requestContext =>
                 op.toLowerCase match {
-                  case "own" => perRequest(requestContext,
+                  case "register" => perRequest(requestContext,
                     UserService.props(userServiceConstructor, userInfo),
-                    UserService.AdminOwnBillingProject(RawlsBillingProjectName(project), RawlsUserEmail(owner)))
-                  case "disown" => perRequest(requestContext,
+                    UserService.AdminRegisterBillingProject(RawlsBillingProjectName(project), RawlsUserEmail(owner)))
+                  case "unregister" => perRequest(requestContext,
                     UserService.props(userServiceConstructor, userInfo),
-                    UserService.AdminDisownBillingProject(RawlsBillingProjectName(project)))
+                    UserService.AdminUnregisterBillingProject(RawlsBillingProjectName(project)))
                   case _ => requestContext.complete(BadRequest, ErrorReport(s"invalid operation '$op'"))
                 }
             }
