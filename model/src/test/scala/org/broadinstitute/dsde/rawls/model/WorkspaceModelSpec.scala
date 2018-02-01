@@ -57,10 +57,11 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
         }
       }
 
-      val badUri1 = ""
-      val badUri2 = "agoraphobia"
-      val badUri3 = "agora://"
-      val badUri4 = "agora://test-namespace/test-name"
+      val badUri1 = null
+      val badUri2 = ""
+      val badUri3 = "agoraphobia"
+      val badUri4 = "agora://"
+      val badUri5 = "agora://test-namespace/test-name"
 
       "catches bad URIs" in {
         intercept[RawlsException] {
@@ -74,6 +75,9 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
         }
         intercept[RawlsException] {
           MethodRepoMethod.apply(badUri4)
+        }
+        intercept[RawlsException] {
+          MethodRepoMethod.apply(badUri5)
         }
       }
     }
