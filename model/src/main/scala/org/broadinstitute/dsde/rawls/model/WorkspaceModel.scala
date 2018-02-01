@@ -9,7 +9,6 @@ import com.netaporter.uri.Uri.parse
 import spray.http.StatusCode
 import spray.json._
 import UserModelJsonSupport.ManagedGroupRefFormat
-import com.netaporter.uri.{PathPart, Uri}
 
 import scala.util.Try
 
@@ -201,9 +200,12 @@ case class MethodRepoMethod(
 
   // Next phase: this method goes away
   def asMethodUrlForRepo(repository: String): String = {
-    (repository      != null && repository.nonEmpty,
-     methodNamespace != null && methodNamespace.nonEmpty,
-     methodName      != null && methodName.nonEmpty,
+
+    def existsAndNonEmpty(subject: String) = subject != null && subject.nonEmpty
+
+    (existsAndNonEmpty(repository),
+     existsAndNonEmpty(methodNamespace),
+     existsAndNonEmpty(methodName),
      methodVersion > 0) match {
       case (true, true, true, true) => s"$repository://$methodNamespace/$methodName/$methodVersion"
       case _ => throw new RawlsException(
@@ -217,11 +219,11 @@ object MethodRepoMethod {
   def apply(uri: String): MethodRepoMethod = {
 
     (for {
-      parsedUri: Uri <- Try(parse(uri)).toOption
-      namespace: String <- parsedUri.host
-      parts: Seq[PathPart] <- Option(parsedUri.pathParts)
-      name: String <- Option(parts.head.part)
-      version: Int <- Try(parts.last.part.toInt).toOption
+      parsedUri <- Try(parse(uri)).toOption
+      namespace <- parsedUri.host
+      parts     <- Option(parsedUri.pathParts)
+      name      <- Option(parts.head.part)
+      version   <- Try(parts.last.part.toInt).toOption
     } yield {
       MethodRepoMethod(namespace, name, version)
     }).getOrElse(throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'"))

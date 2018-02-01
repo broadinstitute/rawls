@@ -126,8 +126,8 @@ object Dependencies {
     scalaLogging,
     httpClient,
     googleApiClient,
-    scalatest,
-    scalaUri
+    scalaUri,
+    scalatest
   )
 
   val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ metricsDependencies ++ Seq(
