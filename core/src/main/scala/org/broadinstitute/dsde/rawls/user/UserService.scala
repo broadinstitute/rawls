@@ -315,30 +315,25 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def registerBillingProject(projectName: RawlsBillingProjectName,
                              owner: RawlsUserEmail,
                              bucket: String): Future[PerRequestMessage] = {
-    val registrationAttempt =
-      for {
-        _ <- samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
-        _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo)
-        _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo)
-        project <- dataSource.inTransaction { dataAccess =>
-          dataAccess.rawlsBillingProjectQuery.create(
-            RawlsBillingProject(
-              projectName,
-              RawlsGroup(
-                RawlsGroupName(SamProjectRoles.owner),
-                RawlsGroupEmail("will be removed after rebasing"),
-                Set.empty,
-                Set.empty),
-              bucket,
-              CreationStatuses.Ready,
-              None,
-              None))
-        }
-      } yield project
-
-    registrationAttempt recoverWith {
-      case t: Throwable => Future.successful(RequestComplete(ErrorReport(StatusCodes.InternalServerError, t.getMessage)))
-    } map { _ => RequestComplete(StatusCodes.Created) }
+    for {
+      _ <- samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo)
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.create(
+          RawlsBillingProject(
+            projectName,
+            RawlsGroup(
+              RawlsGroupName(SamProjectRoles.owner),
+              RawlsGroupEmail("will be removed after rebasing"),
+              Set.empty,
+              Set.empty),
+            bucket,
+            CreationStatuses.Ready,
+            None,
+            None))
+      }
+    } yield RequestComplete(StatusCodes.Created)
   }
 
   def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
