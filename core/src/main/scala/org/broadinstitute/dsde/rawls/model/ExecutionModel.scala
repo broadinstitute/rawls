@@ -68,7 +68,8 @@ case class ExecutionServiceWorkflowOptions(
   jes_gcs_root: String,
   google_project: String,
   account_name: String,
-  refresh_token: String,
+  google_compute_service_account: String,
+  user_service_account_json: String,
   auth_bucket: String,
   final_workflow_log_dir: String,
   default_runtime_attributes: Option[JsValue],
@@ -283,7 +284,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat9(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat10(ExecutionServiceWorkflowOptions)
 
   implicit val TaskOutputFormat = jsonFormat2(TaskOutput)
 

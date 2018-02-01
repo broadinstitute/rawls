@@ -170,8 +170,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     withDataOp { dataSource =>
       val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
 
-      val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
+      val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
       val gpsDAO = new MockGooglePubSubDAO
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         execServiceCluster,
