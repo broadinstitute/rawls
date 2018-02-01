@@ -322,22 +322,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo)
       _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.create(project) }
-    } yield RequestComplete(StatusCodes.Created)
+    } yield {
+      RequestComplete(StatusCodes.Created)
+    }
   }
 
   // NB: Not deleting project from Sam as that operation is not supported
   def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-    val isDeleted = dataSource.inTransaction { dataAccess =>
-      withBillingProject(projectName, dataAccess) { project =>
-        dataAccess.rawlsBillingProjectQuery.delete(project.projectName)
-      }
+    for {
+      _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) }
+    } yield {
+      RequestComplete(StatusCodes.NoContent)
     }
-
-    //make sure we actually deleted it in the rawls database before destroying the permissions in Sam
-    isDeleted.flatMap {
-      case true => samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
-      case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
-    }.map(_ => RequestComplete(StatusCodes.OK))
   }
 
   def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
