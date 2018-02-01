@@ -215,20 +215,16 @@ case class MethodRepoMethod(
 
 object MethodRepoMethod {
   def apply(uri: String): MethodRepoMethod = {
-    Try(parse(uri)).toOption match {
-      case Some(parsedUri: Uri) =>
-        val pathParts: Seq[PathPart] = parsedUri.pathParts
 
-        (parsedUri.host, pathParts.headOption, pathParts.lastOption) match {
-          case (Some(namespace: String), Some(name: PathPart), Some(version: PathPart)) =>
-            Try(version.part.toInt).toOption match {
-              case Some(version: Int) => MethodRepoMethod(namespace, name.part, version)
-              case _ => throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'")
-            }
-          case _ => throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'")
-        }
-      case _ => throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'")
-    }
+    (for {
+      parsedUri: Uri <- Try(parse(uri)).toOption
+      namespace: String <- parsedUri.host
+      parts: Seq[PathPart] <- Option(parsedUri.pathParts)
+      name: String <- Option(parts.head.part)
+      version: Int <- Try(parts.last.part.toInt).toOption
+    } yield {
+      MethodRepoMethod(namespace, name, version)
+    }).getOrElse(throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'"))
   }
 }
 
