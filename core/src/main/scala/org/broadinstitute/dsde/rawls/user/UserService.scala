@@ -315,24 +315,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def registerBillingProject(projectName: RawlsBillingProjectName,
                              owner: RawlsUserEmail,
                              bucket: String): Future[PerRequestMessage] = {
+    val project = RawlsBillingProject(projectName, bucket, CreationStatuses.Ready, None, None)
+
     for {
       _ <- samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo)
-      _ <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.create(
-          RawlsBillingProject(
-            projectName,
-            RawlsGroup(
-              RawlsGroupName(SamProjectRoles.owner),
-              RawlsGroupEmail("will be removed after rebasing"),
-              Set.empty,
-              Set.empty),
-            bucket,
-            CreationStatuses.Ready,
-            None,
-            None))
-      }
+      _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.create(project) }
     } yield RequestComplete(StatusCodes.Created)
   }
 
