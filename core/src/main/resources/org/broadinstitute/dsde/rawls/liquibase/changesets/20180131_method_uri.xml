@@ -3,13 +3,15 @@
 
     <changeSet id="add_method_uri_column" author="anichols">
         <sql stripComments="true">
-            ALTER TABLE `METHOD_CONFIG` ADD `METHOD_URI` TEXT AFTER `METHOD_VERSION` CHARACTER SET utf8 COLLATE utf8_general_ci;
+            ALTER TABLE METHOD_CONFIG
+                ADD COLUMN METHOD_URI TEXT NULL DEFAULT NULL CHARACTER SET utf8 COLLATE utf8_general_ci AFTER METHOD_VERSION;
         </sql>
     </changeSet>
 
     <changeSet id="migrate_data" author="anichols">
         <sql stripComments="true">
-            UPDATE METHOD_CONFIG SET METHOD_URI = CONCAT('agora://', METHOD_NAMESPACE, '/', METHOD_NAME, '/', METHOD_VERSION);
+            UPDATE METHOD_CONFIG
+                SET METHOD_URI = CONCAT('agora://', METHOD_NAMESPACE, '/', METHOD_NAME, '/', METHOD_VERSION);
         </sql>
     </changeSet>
 
