@@ -11,6 +11,8 @@ import spray.json._
 import UserModelJsonSupport.ManagedGroupRefFormat
 import com.netaporter.uri.{PathPart, Uri}
 
+import scala.util.Try
+
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
   val entityIdAttributeSuffix = "_id"
@@ -189,6 +191,7 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
+// In the next phase (GAWB-3100), this class's members will be swapped out for a singular methodUri
 case class MethodRepoMethod(
                    methodNamespace: String,
                    methodName: String,
@@ -196,16 +199,36 @@ case class MethodRepoMethod(
                    ) {
   def asAgoraMethodUrl: String = asMethodUrlForRepo("agora")
 
-  def asMethodUrlForRepo(repository: String) = s"$repository://$methodNamespace/$methodName/$methodVersion"
+  // Next phase: this method goes away
+  def asMethodUrlForRepo(repository: String): String = {
+    (repository      != null && repository.nonEmpty,
+     methodNamespace != null && methodNamespace.nonEmpty,
+     methodName      != null && methodName.nonEmpty,
+     methodVersion > 0) match {
+      case (true, true, true, true) => s"$repository://$methodNamespace/$methodName/$methodVersion"
+      case _ => throw new RawlsException(
+        s"Could not generate a method URI from MethodRepoMethod with repo \'$repository\', namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
+      )
+    }
+  }
 }
 
 object MethodRepoMethod {
   def apply(uri: String): MethodRepoMethod = {
-    val parsedUri: Uri = parse(uri)
+    Try(parse(uri)).toOption match {
+      case Some(parsedUri: Uri) =>
+        val pathParts: Seq[PathPart] = parsedUri.pathParts
 
-    val pathParts: Seq[PathPart] = parsedUri.pathParts
-
-    MethodRepoMethod(parsedUri.host.get, pathParts(0).part, pathParts(1).part.toInt) // TODO: needs proper error handling
+        (parsedUri.host, pathParts.headOption, pathParts.lastOption) match {
+          case (Some(namespace: String), Some(name: PathPart), Some(version: PathPart)) =>
+            Try(version.part.toInt).toOption match {
+              case Some(version: Int) => MethodRepoMethod(namespace, name.part, version)
+              case _ => throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'")
+            }
+          case _ => throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'")
+        }
+      case _ => throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'")
+    }
   }
 }
 

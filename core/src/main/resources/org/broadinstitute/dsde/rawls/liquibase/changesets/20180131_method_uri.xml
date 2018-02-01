@@ -17,13 +17,13 @@
 
     <changeSet id="drop_old_columns" author="anichols">
         <sql stripComments="true">
-            ALTER TABLE `METHOD_CONFIG` DROP `METHOD_NAMESPACE`;
+            ALTER TABLE METHOD_CONFIG DROP METHOD_NAMESPACE;
         </sql>
         <sql stripComments="true">
-            ALTER TABLE `METHOD_CONFIG` DROP `METHOD_NAME`;
+            ALTER TABLE METHOD_CONFIG DROP METHOD_NAME;
         </sql>
         <sql stripComments="true">
-            ALTER TABLE `METHOD_CONFIG` DROP `METHOD_VERSION`;
+            ALTER TABLE METHOD_CONFIG DROP METHOD_VERSION;
         </sql>
     </changeSet>
 
