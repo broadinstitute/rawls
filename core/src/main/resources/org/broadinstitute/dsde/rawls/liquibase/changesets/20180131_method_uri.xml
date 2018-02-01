@@ -3,7 +3,7 @@
 
     <changeSet id="add_method_uri_column" author="anichols">
         <sql stripComments="true">
-            ALTER TABLE `METHOD_CONFIG` ADD `METHOD_URI` TEXT NULL DEFAULT NULL AFTER `METHOD_VERSION` CHARACTER SET utf8 COLLATE utf8_general_ci;
+            ALTER TABLE `METHOD_CONFIG` ADD `METHOD_URI` TEXT AFTER `METHOD_VERSION` CHARACTER SET utf8 COLLATE utf8_general_ci;
         </sql>
     </changeSet>
 
