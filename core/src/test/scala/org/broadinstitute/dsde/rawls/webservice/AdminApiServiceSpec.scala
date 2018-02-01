@@ -205,6 +205,18 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
 
+  it should "return 201 when registering a billing project" in withTestDataApiServices { services =>
+    val project = "some-project"
+    val bucket = "some-bucket"
+
+    Post(s"/admin/project/registration?project=$project&bucket=$bucket") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) { status }
+      }
+  }
+
+
   it should "return 200 when adding a library curator" in withTestDataApiServices { services =>
     val testUser = "foo@bar.com"
     Put(s"/admin/user/role/curator/${testUser}") ~>

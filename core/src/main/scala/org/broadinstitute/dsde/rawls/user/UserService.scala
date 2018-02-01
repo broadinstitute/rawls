@@ -325,6 +325,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield RequestComplete(StatusCodes.Created)
   }
 
+  // NB: Not deleting project from Sam as that operation is not supported
   def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     val isDeleted = dataSource.inTransaction { dataAccess =>
       withBillingProject(projectName, dataAccess) { project =>

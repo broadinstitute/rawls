@@ -614,10 +614,12 @@ paths:
           in: query
           type: string
       responses:
-        204:
-          description: Successful Request
+        201:
+          description: Successful project record creation
         403:
           description: You must be an admin to call this endpoint.
+        404:
+          description: Missing required parameter
         500:
           description: Internal Server Error
       security:
@@ -642,6 +644,8 @@ paths:
           description: Successful Request
         403:
           description: You must be an admin to call this endpoint.
+        404:
+          description: Missing required parameter
         500:
           description: Internal Server Error
       security:
