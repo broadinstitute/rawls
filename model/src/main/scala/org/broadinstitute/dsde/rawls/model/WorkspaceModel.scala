@@ -223,9 +223,10 @@ object MethodRepoMethod {
       namespace <- parsedUri.host
       parts     <- Option(parsedUri.pathParts)
       name      <- Option(parts.head.part)
-      version   <- Try(parts.last.part.toInt).toOption
+      version   <- Try(parts(1).part.toInt).toOption
+      result    <- if (parts.size == 2) Some(MethodRepoMethod(namespace, name, version)) else None
     } yield {
-      MethodRepoMethod(namespace, name, version)
+      result
     }).getOrElse(throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'"))
   }
 }
