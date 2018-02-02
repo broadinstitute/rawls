@@ -909,33 +909,6 @@ class HttpGoogleServicesDAO(
     s"${Option(message).getOrElse("")} - code ${code}"
   }
 
-  private def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit] = {
-    val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
-    implicit val service = GoogleInstrumentedService.CloudResourceManager
-
-    for {
-      existingPolicy <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
-      })
-
-      _ <- retryWhen500orGoogleError(() => {
-        val existingPolicies: Map[String, List[String]] = existingPolicy.getBindings.map { policy => policy.getRole -> policy.getMembers.toList }.toMap
-
-        // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
-        import cats.implicits._
-        val newPolicies = existingPolicies |+| policiesToAdd
-
-        val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
-          new Binding().setRole(role).setMembers(members.distinct)
-        }.toSeq
-
-        // when setting IAM policies, always reuse the existing policy so the etag is preserved.
-        val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings))
-        executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
-      })
-    } yield ()
-  }
-
   private def removePolicyBindings(projectName: RawlsBillingProjectName, policiesToRemove: Map[String, Seq[String]]): Future[Unit] = {
     val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
     implicit val service = GoogleInstrumentedService.CloudResourceManager
@@ -957,6 +930,33 @@ class HttpGoogleServicesDAO(
 
         // Use standard Map ++ instead of semigroup because we want to replace the original values
         val newPolicies = existingPolicies ++ updatedKeysWithRemovedPolicies
+
+        val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
+          new Binding().setRole(role).setMembers(members.distinct)
+        }.toSeq
+
+        // when setting IAM policies, always reuse the existing policy so the etag is preserved.
+        val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings))
+        executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
+      })
+    } yield ()
+  }
+
+  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit] = {
+    val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
+    implicit val service = GoogleInstrumentedService.CloudResourceManager
+
+    for {
+      existingPolicy <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
+      })
+
+      _ <- retryWhen500orGoogleError(() => {
+        val existingPolicies: Map[String, List[String]] = existingPolicy.getBindings.map { policy => policy.getRole -> policy.getMembers.toList }.toMap
+
+        // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
+        import cats.implicits._
+        val newPolicies = existingPolicies |+| policiesToAdd
 
         val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
           new Binding().setRole(role).setMembers(members.distinct)

@@ -204,6 +204,11 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord]
 
   /**
+    * Adds the IAM policies to the project's existing policies
+    */
+  def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit]
+
+  /**
    * Second step of project creation. See createProject for more details.
    *
    * @param project
