@@ -5,18 +5,17 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{CreateRawlsBillingProjectFullRequestFormat, RawlsBillingProjectMembershipFormat, RawlsGroupMemberListFormat, RawlsUserInfoListFormat, SyncReportFormat}
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{RawlsGroupMemberListFormat, SyncReportFormat}
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserListFormat, UserStatusFormat}
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsBillingProjectNameFormat, RawlsGroupRefFormat}
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, ErrorReportFormat, WorkspaceFormat, WorkspaceListResponseFormat, WorkspaceStatusFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceFormat, WorkspaceListResponseFormat, WorkspaceStatusFormat}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
-import spray.routing.Route
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
@@ -95,6 +94,45 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       val expected = expectedHttpRequestMetrics("get", "admin.submissions", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
+  }
+
+  val project = "some-project"
+  val bucket = "some-bucket"
+
+  it should "return 201 when registering a billing project for the 1st time, and 500 for the 2nd" in withTestDataApiServices { services =>
+    Post(s"/admin/project/registration?project=$project&bucket=$bucket") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"/admin/project/registration?project=$project&bucket=$bucket") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.InternalServerError) {
+          status
+        }
+      }
+  }
+
+  it should "reject requests with invalid parameters" in withTestDataApiServices { services =>
+    Post(s"/admin/project/registration?proj=$project&bucket=$bucket") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+
+    Post(s"/admin/project/registration?project=$project&buck=$bucket") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
   }
 
   it should "return 200 when listing active submissions on deleted entities" in withConstantTestDataApiServices { services =>
@@ -201,18 +239,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
-      }
-  }
-
-
-  it should "return 201 when registering a billing project" in withTestDataApiServices { services =>
-    val project = "some-project"
-    val bucket = "some-bucket"
-
-    Post(s"/admin/project/registration?project=$project&bucket=$bucket") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
       }
   }
 
