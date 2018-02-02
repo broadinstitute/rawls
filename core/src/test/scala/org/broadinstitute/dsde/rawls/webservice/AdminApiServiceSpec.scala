@@ -205,7 +205,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
 
-  it should "return success when registering and unregistering a billing project" in withTestDataApiServices { services =>
+  it should "return 201 when registering a billing project" in withTestDataApiServices { services =>
     val project = "some-project"
     val bucket = "some-bucket"
 
@@ -213,12 +213,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) { status }
-      }
-
-    Post(s"/admin/project/unregistration?project=$project") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
       }
   }
 

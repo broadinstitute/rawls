@@ -627,32 +627,6 @@ paths:
           - openid
           - email
           - profile
-  '/api/admin/project/unregistration':
-    post:
-      tags:
-        - admin
-      operationId: removeProjectOwnershipRecord
-      summary: remove the record of project ownership
-      parameters:
-        - name: project
-          description: billing project ID
-          required: true
-          in: query
-          type: string
-      responses:
-        204:
-          description: Successful Request
-        403:
-          description: You must be an admin to call this endpoint.
-        404:
-          description: Missing required parameter
-        500:
-          description: Internal Server Error
-      security:
-        - authorization:
-          - openid
-          - email
-          - profile
   '/api/admin/submissions':
     get:
       responses:
