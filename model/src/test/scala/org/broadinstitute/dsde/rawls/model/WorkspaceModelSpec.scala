@@ -6,28 +6,49 @@ import org.scalatest.{FreeSpec, Matchers}
 class WorkspaceModelSpec extends FreeSpec with Matchers {
 
   "MethodRepoMethod" - {
+
+    val goodMethod = MethodRepoMethod("test-namespace", "test-name", 555)
+    val badMethod1 = MethodRepoMethod("a", "", 1)
+    val badMethod2 = MethodRepoMethod(null, "b", 1)
+    val badMethod3 = MethodRepoMethod("a", "b", 0)
+
+    "Validation works as one would expect" - {
+      "for a good method" in {
+        assertResult(goodMethod.validate) {
+          Some(goodMethod)
+        }
+      }
+
+      "for bad methods" in {
+        assertResult(badMethod1.validate) {
+          None
+        }
+        assertResult(badMethod2.validate) {
+          None
+        }
+        assertResult(badMethod3.validate) {
+          None
+        }
+      }
+    }
+
     "Can convert to a method repo URI" - {
       "For valid methods" - {
-        val method = MethodRepoMethod("test-namespace", "test-name", 555)
 
         "for Agora" in {
           assertResult("agora://test-namespace/test-name/555") {
-            method.asAgoraMethodUrl
+            goodMethod.asAgoraMethodUrl
           }
         }
 
         "for some other method repo" in {
           assertResult("marks-methods-mart://test-namespace/test-name/555") {
-            method.asMethodUrlForRepo("marks-methods-mart")
+            goodMethod.asMethodUrlForRepo("marks-methods-mart")
           }
         }
       }
 
       "for nasty bad methodses" in {
-        val goodMethod = MethodRepoMethod("test-namespace", "test-name", 555)
-        val badMethod1 = MethodRepoMethod("a", "", 1)
-        val badMethod2 = MethodRepoMethod(null, "b", 1)
-        val badMethod3 = MethodRepoMethod("a", "b", 0)
 
         intercept[RawlsException] {
           badMethod1.asAgoraMethodUrl

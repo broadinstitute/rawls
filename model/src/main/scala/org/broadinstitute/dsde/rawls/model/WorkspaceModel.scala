@@ -198,21 +198,28 @@ case class MethodRepoMethod(
                    ) {
   def asAgoraMethodUrl: String = asMethodUrlForRepo("agora")
 
+  private def existsAndNonEmpty(subject: String) = subject != null && subject.nonEmpty
+
   // Next phase: this method goes away
   def asMethodUrlForRepo(repository: String): String = {
 
-    def existsAndNonEmpty(subject: String) = subject != null && subject.nonEmpty
-
-    (existsAndNonEmpty(repository),
-     existsAndNonEmpty(methodNamespace),
-     existsAndNonEmpty(methodName),
-     methodVersion > 0) match {
-      case (true, true, true, true) => s"$repository://$methodNamespace/$methodName/$methodVersion"
+    (existsAndNonEmpty(repository), this.validate) match {
+      case (true, Some(_)) => s"$repository://$methodNamespace/$methodName/$methodVersion"
       case _ => throw new RawlsException(
         s"Could not generate a method URI from MethodRepoMethod with repo \'$repository\', namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
       )
     }
   }
+
+  def validate: Option[MethodRepoMethod] = {
+    (existsAndNonEmpty(methodNamespace),
+     existsAndNonEmpty(methodName),
+     methodVersion > 0) match {
+      case (true, true, true) => Some(this)
+      case _ => None
+    }
+  }
+
 }
 
 object MethodRepoMethod {
@@ -224,7 +231,7 @@ object MethodRepoMethod {
       parts     <- Option(parsedUri.pathParts)
       name      <- Option(parts.head.part)
       version   <- Try(parts(1).part.toInt).toOption
-      result    <- if (parts.size == 2) Some(MethodRepoMethod(namespace, name, version)) else None
+      result    <- if (parts.size == 2) MethodRepoMethod(namespace, name, version).validate else None
     } yield {
       result
     }).getOrElse(throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'"))
