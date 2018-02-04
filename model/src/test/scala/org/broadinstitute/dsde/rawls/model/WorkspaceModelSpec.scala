@@ -83,6 +83,7 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
       val badUri6 = "agora://test-namespace/1"
       val badUri7 = "agora://test-namespace/test-name/bad/path"
       val badUri8 = "marks-methods-mart://test-namespace/test-name/555"
+      val badUri9 = "marks-methods-mart://test-namespace/test-name/0" // proves that validation works in apply()
 
       "catches bad URIs" in {
         intercept[RawlsException] {
@@ -108,6 +109,9 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
         }
         intercept[RawlsException] {
           MethodRepoMethod.apply(badUri8)
+        }
+        intercept[RawlsException] {
+          MethodRepoMethod.apply(badUri9)
         }
       }
     }
