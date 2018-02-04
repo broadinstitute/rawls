@@ -196,15 +196,13 @@ case class MethodRepoMethod(
                    methodName: String,
                    methodVersion: Int
                    ) {
-  def asAgoraMethodUrl: String = asMethodUrlForRepo("agora")
-
-  private def existsAndNonEmpty(subject: String) = subject != null && subject.nonEmpty
+  def asAgoraMethodUrl: String = asMethodUrlForRepo(MethodRepos.Agora.toString)
 
   // Next phase: this method goes away
   def asMethodUrlForRepo(repository: String): String = {
 
-    (existsAndNonEmpty(repository), this.validate) match {
-      case (true, Some(_)) => s"$repository://$methodNamespace/$methodName/$methodVersion"
+    (existsAndNonEmpty(repository), MethodRepos.withName(repository), this.validate) match {
+      case (true, Some(_), Some(_)) => s"$repository://$methodNamespace/$methodName/$methodVersion"
       case _ => throw new RawlsException(
         s"Could not generate a method URI from MethodRepoMethod with repo \'$repository\', namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
       )
@@ -220,6 +218,8 @@ case class MethodRepoMethod(
     }
   }
 
+  private def existsAndNonEmpty(subject: String) = subject != null && subject.nonEmpty
+
 }
 
 object MethodRepoMethod {
@@ -227,6 +227,8 @@ object MethodRepoMethod {
 
     (for {
       parsedUri <- Try(parse(uri)).toOption
+      repo      <- parsedUri.scheme
+      _         <- MethodRepos.withName(repo)
       namespace <- parsedUri.host
       parts     <- Option(parsedUri.pathParts)
       name      <- Option(parts.head.part)
@@ -236,6 +238,21 @@ object MethodRepoMethod {
       result
     }).getOrElse(throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'"))
   }
+}
+
+object MethodRepos {
+  sealed trait MethodRepository {
+    override def toString = getClass.getSimpleName.stripSuffix("$").toLowerCase
+  }
+
+  def withName(name: String): Option[MethodRepository] = name match {
+    case "agora" => Some(Agora)
+    case _ => None
+  }
+
+  case object Agora extends MethodRepository
+
+  val all: Set[MethodRepository] = Set(Agora)
 }
 
 case class MethodInput(name: String, inputType: String, optional: Boolean)

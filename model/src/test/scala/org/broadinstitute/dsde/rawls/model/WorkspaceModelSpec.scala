@@ -40,12 +40,6 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
             goodMethod.asAgoraMethodUrl
           }
         }
-
-        "for some other method repo" in {
-          assertResult("marks-methods-mart://test-namespace/test-name/555") {
-            goodMethod.asMethodUrlForRepo("marks-methods-mart")
-          }
-        }
       }
 
       "for nasty bad methodses" in {
@@ -64,6 +58,9 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
         }
         intercept[RawlsException] {
           goodMethod.asMethodUrlForRepo(null)
+        }
+        intercept[RawlsException] {
+          goodMethod.asMethodUrlForRepo("marks-methods-mart")
         }
       }
 
@@ -85,6 +82,7 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
       val badUri5 = "agora://test-namespace/test-name"
       val badUri6 = "agora://test-namespace/1"
       val badUri7 = "agora://test-namespace/test-name/bad/path"
+      val badUri8 = "marks-methods-mart://test-namespace/test-name/555"
 
       "catches bad URIs" in {
         intercept[RawlsException] {
@@ -107,6 +105,9 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
         }
         intercept[RawlsException] {
           MethodRepoMethod.apply(badUri7)
+        }
+        intercept[RawlsException] {
+          MethodRepoMethod.apply(badUri8)
         }
       }
     }
