@@ -5,16 +5,31 @@ import org.scalatest.{FreeSpec, Matchers}
 
 class WorkspaceModelSpec extends FreeSpec with Matchers {
 
+  val trickyBit        = "/+:?&~!@#$^*()"
+  val trickyBitEncoded = java.net.URLEncoder.encode(trickyBit, "UTF-8")
+
+  val nameNeedsEncoding = s"${trickyBit}test${trickyBit}name$trickyBit"
+  val nameEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}name$trickyBitEncoded"
+
+  val namespaceNeedsEncoding = s"${trickyBit}test${trickyBit}namespace$trickyBit"
+  val namespaceEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}namespace$trickyBitEncoded"
+
   "MethodRepoMethod" - {
 
     val goodMethod = MethodRepoMethod("test-namespace", "test-name", 555)
+    val goodMethodWithCharsToEncode =
+      MethodRepoMethod(namespaceNeedsEncoding, nameNeedsEncoding, 555)
     val badMethod1 = MethodRepoMethod("a", "", 1)
     val badMethod2 = MethodRepoMethod("a", "b", 0)
 
     "Validation works as one would expect" - {
-      "for a good method" in {
+      "for good methods" in {
         assertResult(goodMethod.validate) {
           Some(goodMethod)
+        }
+
+        assertResult(goodMethodWithCharsToEncode.validate) {
+          Some(goodMethodWithCharsToEncode)
         }
       }
 
@@ -34,6 +49,10 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
         "for Agora" in {
           assertResult("agora://test-namespace/test-name/555") {
             goodMethod.asAgoraMethodUrl
+          }
+
+          assertResult(s"agora://$namespaceEncoded/$nameEncoded/555") {
+            goodMethodWithCharsToEncode.asAgoraMethodUrl
           }
         }
       }
@@ -58,10 +77,15 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
 
     "Can be created from a method URI" - {
       val methodUri = "agora://test-namespace/test-name/555"
+      val methodUriWithEncodedChars = s"agora://$namespaceEncoded/$nameEncoded/555"
 
-      "from a good URI" in {
+      "from good URIs" in {
         assertResult(MethodRepoMethod("test-namespace", "test-name", 555)) {
           MethodRepoMethod.apply(methodUri)
+        }
+
+        assertResult(MethodRepoMethod(namespaceNeedsEncoding, nameNeedsEncoding, 555)) {
+          MethodRepoMethod.apply(methodUriWithEncodedChars)
         }
       }
 

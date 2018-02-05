@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
+import java.net.{URLDecoder, URLEncoder}
+
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
@@ -202,7 +204,7 @@ case class MethodRepoMethod(
   def asMethodUrlForRepo(repository: String): String = {
 
     if (repository.nonEmpty && MethodRepos.withName(repository).isDefined && this.validate.isDefined)
-      s"$repository://$methodNamespace/$methodName/$methodVersion"
+      s"$repository://${URLEncoder.encode(methodNamespace, "UTF-8")}/${URLEncoder.encode(methodName, "UTF-8")}/$methodVersion"
     else
       throw new RawlsException(
         s"Could not generate a method URI from MethodRepoMethod with repo \'$repository\', namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
@@ -225,11 +227,11 @@ object MethodRepoMethod {
       parsedUri <- Try(parse(uri)).toOption
       repo      <- parsedUri.scheme
       _         <- MethodRepos.withName(repo)
-      namespace <- parsedUri.host
+      namespace <- parsedUri.host // parser does not URL-decode host
       parts     <- Option(parsedUri.pathParts)
-      name      <- Option(parts.head.part)
+      name      <- Option(parts.head.part) // parser does URL-decode path parts
       version   <- Try(parts(1).part.toInt).toOption
-      result    <- if (parts.size == 2) MethodRepoMethod(namespace, name, version).validate else None
+      result    <- if (parts.size == 2) MethodRepoMethod(URLDecoder.decode(namespace, "UTF-8"), name, version).validate else None
     } yield {
       result
     }).getOrElse(throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'"))
