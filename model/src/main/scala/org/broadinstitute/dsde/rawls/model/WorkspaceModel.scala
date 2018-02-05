@@ -201,7 +201,7 @@ case class MethodRepoMethod(
   // Next phase: this method goes away
   def asMethodUrlForRepo(repository: String): String = {
 
-    if (existsAndNonEmpty(repository) && MethodRepos.withName(repository).isDefined && this.validate.isDefined)
+    if (repository.nonEmpty && MethodRepos.withName(repository).isDefined && this.validate.isDefined)
       s"$repository://$methodNamespace/$methodName/$methodVersion"
     else
       throw new RawlsException(
@@ -210,13 +210,11 @@ case class MethodRepoMethod(
   }
 
   def validate: Option[MethodRepoMethod] = {
-    if (existsAndNonEmpty(methodNamespace) && existsAndNonEmpty(methodName) && methodVersion > 0)
+    if (methodNamespace.nonEmpty && methodName.nonEmpty && methodVersion > 0)
       Some(this)
     else
       None
   }
-
-  private def existsAndNonEmpty(subject: String) = subject != null && subject.nonEmpty
 
 }
 
