@@ -302,6 +302,32 @@ class HttpGoogleServicesDAO(
       }) { case t: HttpResponseException if t.getStatusCode == 409 => bucketName }
   }
 
+  def grantReadAccess(billingProject: RawlsBillingProjectName,
+                      bucketName: String,
+                      authBucketReaders: Set[RawlsGroupEmail]): Future[String] = {
+    implicit val service = GoogleInstrumentedService.Storage
+
+    def insertNewAcls() = for {
+      readerEmail <- authBucketReaders
+
+      bucketAcls = newBucketAccessControl(makeGroupEntityString(readerEmail.value), "READER")
+      defaultObjectAcls = newObjectAccessControl(makeGroupEntityString(readerEmail.value), "READER")
+
+      inserters = List(
+        getStorage(getBucketServiceAccountCredential).bucketAccessControls.insert(bucketName, bucketAcls),
+        getStorage(getBucketServiceAccountCredential).defaultObjectAccessControls.insert(bucketName, defaultObjectAcls))
+
+      inserter <- inserters
+      _ <- executeGoogleRequest(inserter)
+    } yield ()
+
+    retryWithRecoverWhen500orGoogleError(
+      () => { insertNewAcls(); bucketName }
+    ) {
+      case t: HttpResponseException if t.getStatusCode == 409 => bucketName
+    }
+  }
+
   def createStorageLogsBucket(billingProject: RawlsBillingProjectName): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
     val bucketName = getStorageLogsBucketName(billingProject)

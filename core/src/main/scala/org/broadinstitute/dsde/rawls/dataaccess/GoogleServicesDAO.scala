@@ -209,6 +209,17 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit]
 
   /**
+    *
+    * @param billingProject
+    * @param bucketName
+    * @param readers emails of users to be granted read access
+    * @return bucket name
+    */
+  def grantReadAccess(billingProject: RawlsBillingProjectName,
+                      bucketName: String,
+                      readers: Set[RawlsGroupEmail]): Future[String]
+
+  /**
    * Second step of project creation. See createProject for more details.
    *
    * @param project

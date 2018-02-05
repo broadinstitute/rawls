@@ -300,6 +300,10 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit] = Future(())
 
+  override def grantReadAccess(billingProject: RawlsBillingProjectName,
+                               bucketName: String,
+                               readers: Set[RawlsGroupEmail]): Future[String] = Future(bucketName)
+
   override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = Future.successful {
     Try(projectTemplate.services.map { service =>
       RawlsBillingProjectOperationRecord(project.projectName.value, service, UUID.randomUUID().toString, false, None, "services")

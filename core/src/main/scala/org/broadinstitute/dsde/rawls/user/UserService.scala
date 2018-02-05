@@ -330,6 +330,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         "roles/genomics.pipelinesRunner" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"))
 
       _ <- gcsDAO.addPolicyBindings(projectName, policiesToAdd)
+      _ <- gcsDAO.grantReadAccess(projectName, bucket, Set(ownerGroupEmail, computeUserGroupEmail))
     } yield {
       RequestComplete(StatusCodes.Created)
     }
