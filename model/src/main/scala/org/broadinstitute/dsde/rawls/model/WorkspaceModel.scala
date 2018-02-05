@@ -9,6 +9,7 @@ import com.netaporter.uri.Uri.parse
 import spray.http.StatusCode
 import spray.json._
 import UserModelJsonSupport.ManagedGroupRefFormat
+import org.broadinstitute.dsde.rawls.model.MethodRepos.{Agora, Dockstore, MethodRepository}
 
 import scala.util.Try
 
@@ -190,54 +191,97 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
-// In the next phase (GAWB-3100), this class's members will be swapped out for a singular methodUri
-case class MethodRepoMethod(
-                   methodNamespace: String,
-                   methodName: String,
-                   methodVersion: Int
-                   ) {
-  def asAgoraMethodUrl: String = asMethodUrlForRepo(MethodRepos.Agora.toString)
+sealed trait MethodRepoMethod {
 
-  // Next phase: this method goes away
-  def asMethodUrlForRepo(repository: String): String = {
+  protected def apply(uri: String): MethodRepoMethod
 
-    (existsAndNonEmpty(repository), MethodRepos.withName(repository), this.validate) match {
-      case (true, Some(_), Some(_)) => s"$repository://$methodNamespace/$methodName/$methodVersion"
-      case _ => throw new RawlsException(
-        s"Could not generate a method URI from MethodRepoMethod with repo \'$repository\', namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
-      )
+  def toUri: String
+
+  protected def existsAndNonEmpty(subject: String): Boolean = subject != null && subject.nonEmpty
+
+  def repo: MethodRepository
+}
+
+object MethodRepoMethod {
+
+  def fromUri(uri: String): MethodRepoMethod = {
+    (for {
+      parsedUri <- Try(parse(uri)).toOption
+      repoName  <- parsedUri.scheme
+      repo      <- MethodRepos.withName(repoName)
+    } yield {
+      repo
+    }) match {
+      case Some(MethodRepos.Agora) => AgoraMethod.apply(uri)
+      case Some(MethodRepos.Dockstore) => DockstoreMethod.apply(uri)
+      case _ =>
     }
   }
 
+}
+
+case class AgoraMethod(methodNamespace: String, methodName: String, methodVersion: Int) extends MethodRepoMethod {
+
   def validate: Option[MethodRepoMethod] = {
     (existsAndNonEmpty(methodNamespace),
-     existsAndNonEmpty(methodName),
-     methodVersion > 0) match {
+      existsAndNonEmpty(methodName),
+      methodVersion > 0) match {
       case (true, true, true) => Some(this)
       case _ => None
     }
   }
 
-  private def existsAndNonEmpty(subject: String) = subject != null && subject.nonEmpty
+  override def repo: MethodRepository = Agora
 
+  override def toUri: String = s"${this.repo.toString}://$methodNamespace/$methodName/$methodVersion"
 }
 
-object MethodRepoMethod {
-  def apply(uri: String): MethodRepoMethod = {
+object AgoraMethod {
 
+  def apply(uri: String): MethodRepoMethod = {
     (for {
       parsedUri <- Try(parse(uri)).toOption
-      repo      <- parsedUri.scheme
-      _         <- MethodRepos.withName(repo)
       namespace <- parsedUri.host
       parts     <- Option(parsedUri.pathParts)
       name      <- Option(parts.head.part)
       version   <- Try(parts(1).part.toInt).toOption
-      result    <- if (parts.size == 2) MethodRepoMethod(namespace, name, version).validate else None
+      result    <- if (parts.size == 2) AgoraMethod(namespace, name, version).validate else None
     } yield {
       result
-    }).getOrElse(throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'"))
+    }).getOrElse(throw new RawlsException(s"Could not create an AgoraMethod from URI \'$uri\'"))
   }
+
+}
+
+case class DockstoreMethod(methodPath: String, methodVersion: Int) extends MethodRepoMethod {
+
+  def validate: Option[MethodRepoMethod] = {
+    (existsAndNonEmpty(methodPath),
+      methodVersion > 0) match {
+      case (true, true) => Some(this)
+      case _ => None
+    }
+  }
+
+  override def repo: MethodRepository = Dockstore
+
+  override def toUri: String = s"${this.repo.toString}://$methodPath/$methodVersion"
+}
+
+object DockstoreMethod {
+
+  def apply(uri: String): MethodRepoMethod = {
+    (for {
+      parsedUri <- Try(parse(uri)).toOption
+      path      <- parsedUri.host
+      parts     <- Option(parsedUri.pathParts)
+      version   <- Try(parts.head.part.toInt).toOption
+      result    <- if (parts.size == 1) DockstoreMethod(path, version).validate else None
+    } yield {
+      result
+    }).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$uri\'"))
+  }
+
 }
 
 object MethodRepos {
@@ -247,12 +291,14 @@ object MethodRepos {
 
   def withName(name: String): Option[MethodRepository] = name match {
     case "agora" => Some(Agora)
+    case "dockstore" => Some(Dockstore)
     case _ => None
   }
 
   case object Agora extends MethodRepository
+  case object Dockstore extends MethodRepository
 
-  val all: Set[MethodRepository] = Set(Agora)
+  val all: Set[MethodRepository] = Set(Agora, Dockstore)
 }
 
 case class MethodInput(name: String, inputType: String, optional: Boolean)
@@ -480,7 +526,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityCopyResponseFormat = jsonFormat3(EntityCopyResponse)
 
-  implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod.apply)
+  implicit val DockstoreMethodFormat = jsonFormat2(DockstoreMethod.apply)
+
+  implicit val AgoraMethodFormat = jsonFormat3(AgoraMethod.apply)
 
   implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
 
