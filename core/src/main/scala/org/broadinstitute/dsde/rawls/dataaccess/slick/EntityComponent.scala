@@ -687,7 +687,8 @@ trait EntityComponent {
     // Utility methods
 
     private def createAllAttributesString(entity: Entity): Option[String] = {
-      Option(s"${entity.name} ${entity.attributes.values.filterNot(_.isInstanceOf[AttributeList[_]]).map(AttributeStringifier(_)).mkString(" ")}".toLowerCase)
+      val trimToSize = 65534 //the length of the all_attribute_values column, which is TEXT, -1 becaue i'm nervous
+      Option(s"${entity.name} ${entity.attributes.values.filterNot(_.isInstanceOf[AttributeList[_]]).map(AttributeStringifier(_)).mkString(" ")}".toLowerCase.take(trimToSize))
     }
 
     private def populateAllAttributeValues(entityRecsFromDb: Seq[EntityRecord], entitiesToSave: Traversable[Entity]): Seq[EntityRecord] = {
