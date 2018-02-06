@@ -6,7 +6,7 @@ import org.scalatest.{FreeSpec, Matchers}
 class WorkspaceModelSpec extends FreeSpec with Matchers {
 
   val trickyBit        = "/+:?&~!@#$^*()[]{}∞€\\"
-  val trickyBitEncoded = java.net.URLEncoder.encode(trickyBit, "UTF-8")
+  val trickyBitEncoded = java.net.URLEncoder.encode(trickyBit, java.nio.charset.StandardCharsets.UTF_8.name)
 
   val nameNeedsEncoding = s"${trickyBit}test${trickyBit}name$trickyBit"
   val nameEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}name$trickyBitEncoded"
