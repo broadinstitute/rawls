@@ -4,7 +4,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, Sam}
 import org.broadinstitute.dsde.workbench.service.Sam.user.UserStatusDetails
-import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthToken}
+import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Config, Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google.googleIamDAO
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures
@@ -59,7 +59,7 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
         petAccountEmail.value should not be userAStatus.userInfo.userEmail
         findPetInGoogle(projectName, userAStatus.userInfo).map(_.email) shouldBe Some(petAccountEmail)
 
-        val petAuthToken = ServiceAccountAuthToken(GoogleProject(projectName), petAccountEmail)
+        val petAuthToken = ServiceAccountAuthTokenFromJson(Sam.user.petServiceAccountKey(projectName)(studentAToken))
 
         //TODO: Deserialize the json instead of checking for substring
         val petWorkspace = Rawls.workspaces.list()(petAuthToken)
@@ -73,7 +73,6 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
         val userBWorkspace = Rawls.workspaces.list()(studentBToken)
         userBWorkspace should include(workspaceNameB)
 
-        petAuthToken.removePrivateKey()
         Sam.removePet(projectName, userAStatus.userInfo)
         findPetInGoogle(projectName, userAStatus.userInfo) shouldBe None
       }(ownerAuthToken)
