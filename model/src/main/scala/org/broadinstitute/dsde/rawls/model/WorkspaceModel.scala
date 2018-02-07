@@ -223,12 +223,10 @@ object MethodRepoMethod {
 case class AgoraMethod(methodNamespace: String, methodName: String, methodVersion: Int) extends MethodRepoMethod {
 
   def validate: Option[MethodRepoMethod] = {
-    (existsAndNonEmpty(methodNamespace),
-      existsAndNonEmpty(methodName),
-      methodVersion > 0) match {
-      case (true, true, true) => Some(this)
-      case _ => None
-    }
+    if (existsAndNonEmpty(methodNamespace) && existsAndNonEmpty(methodName) && methodVersion > 0)
+      Some(this)
+    else
+      None
   }
 
   override def repo: MethodRepository = Agora
@@ -256,11 +254,10 @@ object AgoraMethod {
 case class DockstoreMethod(methodPath: String, methodVersion: Int) extends MethodRepoMethod {
 
   def validate: Option[MethodRepoMethod] = {
-    (existsAndNonEmpty(methodPath),
-      methodVersion > 0) match {
-      case (true, true) => Some(this)
-      case _ => None
-    }
+    if (existsAndNonEmpty(methodPath) && methodVersion > 0)
+      Some(this)
+    else
+      None
   }
 
   override def repo: MethodRepository = Dockstore
