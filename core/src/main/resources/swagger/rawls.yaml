@@ -604,12 +604,12 @@ paths:
       summary: create a record of project ownership
       parameters:
         - name: project
-          description: billing project ID
+          description: Billing project ID
           required: true
           in: query
           type: string
         - name: bucket
-          description: Cromwell auth bucket
+          description: Cromwell auth bucket (without the gs:// prefix)
           required: true
           in: query
           type: string
