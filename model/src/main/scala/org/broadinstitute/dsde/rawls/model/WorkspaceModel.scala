@@ -254,7 +254,7 @@ object AgoraMethod {
 
 case class DockstoreMethod(methodPath: String, methodVersion: String) extends MethodRepoMethod {
 
-  override def validate: Option[MethodRepoMethod] = {
+  def validate: Option[MethodRepoMethod] = {
     if (methodPath.nonEmpty && methodVersion.nonEmpty)
       Some(this)
     else

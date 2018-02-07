@@ -21,18 +21,18 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Use
 
   val methodConfigRoutes = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "methodconfigs") { (workspaceNamespace, workspaceName) =>
-      get {
+      get { // Changing with GAWB-3100
         requestContext =>
           perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.ListMethodConfigurations(WorkspaceName(workspaceNamespace, workspaceName)))
       } ~
-        post {
-          entity(as[MethodConfiguration]) { methodConfiguration =>
-            requestContext =>
-              perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.CreateMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfiguration))
-          }
+      post { // Changing with GAWB-3100
+        entity(as[MethodConfiguration]) { methodConfiguration =>
+          requestContext =>
+            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.CreateMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfiguration))
         }
+      }
     } ~
       path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment) { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
         get {
@@ -107,21 +107,21 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Use
       } ~
       path("methodconfigs" / "template") {
         post {
-          entity(as[MethodRepoMethod]) { methodRepoMethod =>
+          entity(as[AgoraMethod]) { agoraMethod: AgoraMethod =>
             requestContext =>
               perRequest(requestContext,
                 WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.CreateMethodConfigurationTemplate(methodRepoMethod))
+                WorkspaceService.CreateMethodConfigurationTemplate(agoraMethod))
           }
         }
       } ~
       path("methodconfigs" / "inputsOutputs") {
         post {
-          entity(as[MethodRepoMethod]) { methodRepoMethod =>
+          entity(as[AgoraMethod]) { agoraMethod: AgoraMethod =>
             requestContext =>
               perRequest(requestContext,
                 WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.GetMethodInputsOutputs(methodRepoMethod))
+                WorkspaceService.GetMethodInputsOutputs(agoraMethod))
           }
         }
       }
