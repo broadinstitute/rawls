@@ -199,6 +199,8 @@ sealed trait MethodRepoMethod {
   def toUri: String
 
   def repo: MethodRepository
+
+  def validate: Option[MethodRepoMethod]
 }
 
 object MethodRepoMethod {
@@ -221,7 +223,7 @@ object MethodRepoMethod {
 
 case class AgoraMethod(methodNamespace: String, methodName: String, methodVersion: Int) extends MethodRepoMethod {
 
-  def validate: Option[MethodRepoMethod] = {
+  override def validate: Option[MethodRepoMethod] = {
     if (methodNamespace.nonEmpty && methodName.nonEmpty && methodVersion > 0)
       Some(this)
     else
@@ -252,7 +254,7 @@ object AgoraMethod {
 
 case class DockstoreMethod(methodPath: String, methodVersion: String) extends MethodRepoMethod {
 
-  def validate: Option[MethodRepoMethod] = {
+  override def validate: Option[MethodRepoMethod] = {
     if (methodPath.nonEmpty && methodVersion.nonEmpty)
       Some(this)
     else
