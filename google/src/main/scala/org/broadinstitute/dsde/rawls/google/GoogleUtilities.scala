@@ -49,6 +49,7 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
 
   protected def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T])(implicit counters: GoogleCounters): T = {
     executeGoogleCall(request) { response =>
+      println(s"***executeGoogleRequest: request = $request")
       response.parseAs(request.getResponseClass)
     }
   }

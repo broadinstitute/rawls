@@ -313,7 +313,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def registerBillingProject(projectName: RawlsBillingProjectName,
                              owner: RawlsUserEmail,
                              bucket: String): Future[PerRequestMessage] = {
-    val project = RawlsBillingProject(projectName, bucket, CreationStatuses.Ready, None, None)
+    val project = RawlsBillingProject(projectName, s"gs://$bucket", CreationStatuses.Ready, None, None)
 
     for {
       _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.create(project) }
