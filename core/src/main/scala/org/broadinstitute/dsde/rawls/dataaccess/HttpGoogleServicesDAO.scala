@@ -318,15 +318,13 @@ class HttpGoogleServicesDAO(
         getStorage(getBucketServiceAccountCredential).defaultObjectAccessControls.insert(bucketName, defaultObjectAcls))
 
       inserter <- inserters
-      _ = println(s"\n\n***Prior to executeGoogleRequest\n\n")
       _ <- executeGoogleRequest(inserter)
-      _ = println(s"\n\n***After executeGoogleRequest\n\n")
     } yield ()
 
     retryWithRecoverWhen500orGoogleError(
-      () => { println(s"\n\n***grantReadAccess\n\n"); insertNewAcls(); bucketName }
+      () => { insertNewAcls(); bucketName }
     ) {
-      case t: HttpResponseException if t.getStatusCode == 409 => { println("\n\n***HttpResponseException\n\n"); bucketName }
+      case t: HttpResponseException if t.getStatusCode == 409 => bucketName
     }
   }
 
