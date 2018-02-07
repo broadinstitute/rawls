@@ -9,8 +9,7 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
 
     val goodMethod = MethodRepoMethod("test-namespace", "test-name", 555)
     val badMethod1 = MethodRepoMethod("a", "", 1)
-    val badMethod2 = MethodRepoMethod(null, "b", 1)
-    val badMethod3 = MethodRepoMethod("a", "b", 0)
+    val badMethod2 = MethodRepoMethod("a", "b", 0)
 
     "Validation works as one would expect" - {
       "for a good method" in {
@@ -24,9 +23,6 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
           None
         }
         assertResult(badMethod2.validate) {
-          None
-        }
-        assertResult(badMethod3.validate) {
           None
         }
       }
@@ -51,13 +47,7 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
           badMethod2.asAgoraMethodUrl
         }
         intercept[RawlsException] {
-          badMethod3.asAgoraMethodUrl
-        }
-        intercept[RawlsException] {
           goodMethod.asMethodUrlForRepo("")
-        }
-        intercept[RawlsException] {
-          goodMethod.asMethodUrlForRepo(null)
         }
         intercept[RawlsException] {
           goodMethod.asMethodUrlForRepo("marks-methods-mart")

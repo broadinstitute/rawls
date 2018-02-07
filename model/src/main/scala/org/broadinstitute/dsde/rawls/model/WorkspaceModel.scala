@@ -197,8 +197,6 @@ sealed trait MethodRepoMethod {
 
   def toUri: String
 
-  protected def existsAndNonEmpty(subject: String): Boolean = subject != null && subject.nonEmpty
-
   def repo: MethodRepository
 }
 
@@ -223,7 +221,7 @@ object MethodRepoMethod {
 case class AgoraMethod(methodNamespace: String, methodName: String, methodVersion: Int) extends MethodRepoMethod {
 
   def validate: Option[MethodRepoMethod] = {
-    if (existsAndNonEmpty(methodNamespace) && existsAndNonEmpty(methodName) && methodVersion > 0)
+    if (methodNamespace.nonEmpty && methodName.nonEmpty && methodVersion > 0)
       Some(this)
     else
       None
@@ -254,7 +252,7 @@ object AgoraMethod {
 case class DockstoreMethod(methodPath: String, methodVersion: Int) extends MethodRepoMethod {
 
   def validate: Option[MethodRepoMethod] = {
-    if (existsAndNonEmpty(methodPath) && methodVersion > 0)
+    if (methodPath.nonEmpty && methodVersion > 0)
       Some(this)
     else
       None
