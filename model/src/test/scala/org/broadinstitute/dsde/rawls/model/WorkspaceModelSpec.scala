@@ -5,16 +5,44 @@ import org.scalatest.{FreeSpec, Matchers}
 
 class WorkspaceModelSpec extends FreeSpec with Matchers {
 
+  /*
+  TODO: Dockstore methods. They have a path (string) and a version (string), each of which may need encoding
+
+  Example paths
+  broadinstitute/wdl/Validate-Bams, dockstore-testing/Metaphlan-WDL
+
+  Example versions
+  0.0.2, develop, master, gvda_generic_preprocessing_docs#1798, vdauwera-fix_highlighter_readme
+
+  Source
+  https://dockstore.org/workflows/broadinstitute%2Fwdl%2FValidate-Bams
+  https://dockstore.org/workflows/dockstore-testing%2FMetaphlan-WDL
+  */
+
+  val trickyBit        = "/+:?&~!@#$^*()[]{}∞€\\"
+  val trickyBitEncoded = java.net.URLEncoder.encode(trickyBit, java.nio.charset.StandardCharsets.UTF_8.name)
+
+  val nameNeedsEncoding = s"${trickyBit}test${trickyBit}name$trickyBit"
+  val nameEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}name$trickyBitEncoded"
+
+  val namespaceNeedsEncoding = s"${trickyBit}test${trickyBit}namespace$trickyBit"
+  val namespaceEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}namespace$trickyBitEncoded"
+
   "MethodRepoMethod" - {
 
-    val goodMethod = MethodRepoMethod("test-namespace", "test-name", 555)
-    val badMethod1 = MethodRepoMethod("a", "", 1)
-    val badMethod2 = MethodRepoMethod("a", "b", 0)
+    val goodMethod = AgoraMethod("test-namespace", "test-name", 555)
+    val goodMethodWithCharsToEncode = AgoraMethod(namespaceNeedsEncoding, nameNeedsEncoding, 555)
+    val badMethod1 = AgoraMethod("a", "", 1)
+    val badMethod2 = AgoraMethod("a", "b", 0)
 
     "Validation works as one would expect" - {
       "for a good method" in {
         assertResult(goodMethod.validate) {
           Some(goodMethod)
+        }
+
+        assertResult(goodMethod.validate) {
+          Some(goodMethodWithCharsToEncode)
         }
       }
 
@@ -33,7 +61,11 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
 
         "for Agora" in {
           assertResult("agora://test-namespace/test-name/555") {
-            goodMethod.asAgoraMethodUrl
+            goodMethod.toUri
+          }
+
+          assertResult(s"agora://$namespaceEncoded/$nameEncoded/555") {
+            goodMethodWithCharsToEncode.toUri
           }
         }
       }
@@ -41,16 +73,10 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
       "for nasty bad methodses" in {
 
         intercept[RawlsException] {
-          badMethod1.asAgoraMethodUrl
+          badMethod1.toUri
         }
         intercept[RawlsException] {
-          badMethod2.asAgoraMethodUrl
-        }
-        intercept[RawlsException] {
-          goodMethod.asMethodUrlForRepo("")
-        }
-        intercept[RawlsException] {
-          goodMethod.asMethodUrlForRepo("marks-methods-mart")
+          badMethod2.toUri
         }
       }
 
@@ -58,10 +84,15 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
 
     "Can be created from a method URI" - {
       val methodUri = "agora://test-namespace/test-name/555"
+      val methodUriWithEncodedChars = s"agora://$namespaceEncoded/$nameEncoded/555"
 
       "from a good URI" in {
         assertResult(MethodRepoMethod("test-namespace", "test-name", 555)) {
-          MethodRepoMethod.apply(methodUri)
+          MethodRepoMethod.fromUri(methodUri)
+        }
+
+        assertResult(MethodRepoMethod(namespaceNeedsEncoding, nameNeedsEncoding, 555)) {
+          MethodRepoMethod.fromUri(methodUriWithEncodedChars)
         }
       }
 
@@ -77,31 +108,31 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
 
       "catches bad URIs" in {
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri1)
+          MethodRepoMethod.fromUri(badUri1)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri2)
+          MethodRepoMethod.fromUri(badUri2)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri3)
+          MethodRepoMethod.fromUri(badUri3)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri4)
+          MethodRepoMethod.fromUri(badUri4)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri5)
+          MethodRepoMethod.fromUri(badUri5)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri6)
+          MethodRepoMethod.fromUri(badUri6)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri7)
+          MethodRepoMethod.fromUri(badUri7)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri8)
+          MethodRepoMethod.fromUri(badUri8)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri9)
+          MethodRepoMethod.fromUri(badUri9)
         }
       }
     }
