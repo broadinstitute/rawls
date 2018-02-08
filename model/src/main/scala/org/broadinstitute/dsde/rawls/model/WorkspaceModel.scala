@@ -194,13 +194,13 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
-sealed trait MethodRepoMethod {
+abstract class MethodRepoMethod(val methodUri: String) {
 
   def toUri: String
 
   def repo: MethodRepository
 
-  def validate: Option[MethodRepoMethod]
+//  def validate: Option[MethodRepoMethod]
 }
 
 object MethodRepoMethod {
@@ -213,74 +213,137 @@ object MethodRepoMethod {
     } yield {
       repo
     }) match {
-      case Some(MethodRepos.Agora) => AgoraMethod.apply(uri)
-      case Some(MethodRepos.Dockstore) => DockstoreMethod.apply(uri)
+      case Some(MethodRepos.Agora) => new AgoraMethod(uri)
+      case Some(MethodRepos.Dockstore) => new DockstoreMethod(uri)
       case _ => throw new RawlsException("tbd")
     }
   }
 
 }
 
-case class AgoraMethod(methodNamespace: String, methodName: String, methodVersion: Int) extends MethodRepoMethod {
+class AgoraMethod(methodUri: String) extends MethodRepoMethod(methodUri) {
 
-  override def validate: Option[MethodRepoMethod] = {
-    if (methodNamespace.nonEmpty && methodName.nonEmpty && methodVersion > 0)
-      Some(this)
-    else
-      None
-  }
+  val methodNamespace: String = this.extract._1
+
+  val methodName: String = this.extract._2
+
+  val methodVersion: Int = this.extract._3
+
+//  override def validate: Option[MethodRepoMethod] = {
+//    if (methodNamespace.nonEmpty && methodName.nonEmpty && methodVersion > 0)
+//      Some(this)
+//    else
+//      None
+//  }
 
   override def repo: MethodRepository = Agora
 
   override def toUri: String = s"${this.repo.toString}://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion"
-}
 
-object AgoraMethod {
-
-  def apply(uri: String): MethodRepoMethod = {
-    (for {
-      parsedUri <- Try(parse(uri)).toOption
-      namespace <- parsedUri.host // parser does not URL-decode host
-      parts     <- Option(parsedUri.pathParts)
-      name      <- Option(parts.head.part) // parser does URL-decode path parts
-      version   <- Try(parts(1).part.toInt).toOption // encoding does not apply to ints
-      result    <- if (parts.size == 2) AgoraMethod(URLDecoder.decode(namespace, UTF_8.name), name, version).validate else None
-    } yield {
-      result
-    }).getOrElse(throw new RawlsException(s"Could not create an AgoraMethod from URI \'$uri\'"))
-  }
-
-}
-
-case class DockstoreMethod(methodPath: String, methodVersion: String) extends MethodRepoMethod {
-
-  def validate: Option[MethodRepoMethod] = {
-    if (methodPath.nonEmpty && methodVersion.nonEmpty)
-      Some(this)
+  def validate(fields: (String, String, Int)): Option[(String, String, Int)] = {
+    if (fields._1.nonEmpty && fields._2.nonEmpty && fields._3 > 0)
+      Some(fields)
     else
       None
   }
 
+  def extract: (String, String, Int) = {
+    (for {
+      parsedUri <- Try(parse(methodUri)).toOption
+      namespace <- parsedUri.host // parser does not URL-decode host
+      parts     <- Option(parsedUri.pathParts)
+      name      <- Option(parts.head.part) // parser does URL-decode path parts
+      version   <- Try(parts(1).part.toInt).toOption // encoding does not apply to ints
+      result    <- if (parts.size == 2) validate((URLDecoder.decode(namespace, UTF_8.name), name, version)) else None
+    } yield {
+      result
+    }).getOrElse(throw new RawlsException(s"Could not create an AgoraMethod from URI \'$methodUri\'"))
+  }
+}
+
+//object AgoraMethod {
+//
+//  def validate(fields: (String, String, Int)): Option[(String, String, Int)] = {
+//    if (fields._1.nonEmpty && fields._2.nonEmpty && fields._3 > 0)
+//      Some(fields)
+//    else
+//      None
+//  }
+//
+//  def extract(uri: String): (String, String, Int) = {
+//    (for {
+//      parsedUri <- Try(parse(uri)).toOption
+//      namespace <- parsedUri.host // parser does not URL-decode host
+//      parts     <- Option(parsedUri.pathParts)
+//      name      <- Option(parts.head.part) // parser does URL-decode path parts
+//      version   <- Try(parts(1).part.toInt).toOption // encoding does not apply to ints
+//      result    <- if (parts.size == 2) validate((URLDecoder.decode(namespace, UTF_8.name), name, version)) else None
+//    } yield {
+//      result
+//    }).getOrElse(throw new RawlsException(s"Could not create an AgoraMethod from URI \'$uri\'"))
+//  }
+//
+//}
+
+class DockstoreMethod(methodUri: String) extends MethodRepoMethod(methodUri) {
+
+  val methodPath: String = this.extract._1
+
+  val methodVersion: String = this.extract._2
+
+//  def validate: Option[MethodRepoMethod] = {
+//    if (methodPath.nonEmpty && methodVersion.nonEmpty)
+//      Some(this)
+//    else
+//      None
+//  }
+
   override def repo: MethodRepository = Dockstore
 
   override def toUri: String = s"${this.repo.toString}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}"
-}
 
-object DockstoreMethod {
+  def validate(fields: (String, String)): Option[(String, String)] = {
+    if (fields._1.nonEmpty && fields._2.nonEmpty)
+      Some(fields)
+    else
+      None
+  }
 
-  def apply(uri: String): MethodRepoMethod = {
+  def extract: (String, String) = {
     (for {
-      parsedUri <- Try(parse(uri)).toOption
+      parsedUri <- Try(parse(methodUri)).toOption
       path      <- parsedUri.host // parser does not URL-decode host
       parts     <- Option(parsedUri.pathParts)
       version   <- Try(parts.head.part).toOption // parser does URL-decode path parts
-      result    <- if (parts.size == 1) DockstoreMethod(URLDecoder.decode(path, UTF_8.name), version).validate else None
+      result    <- if (parts.size == 1) validate((URLDecoder.decode(path, UTF_8.name), version)) else None
     } yield {
       result
-    }).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$uri\'"))
+    }).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$methodUri\'"))
   }
-
 }
+
+//object DockstoreMethod {
+//
+//  def validate(fields: (String, String)): Option[(String, String)] = {
+//    if (fields._1.nonEmpty && fields._2.nonEmpty)
+//      Some(fields)
+//    else
+//      None
+//  }
+//
+//  def extract(uri: String): (String, String) = {
+//    (for {
+//      parsedUri <- Try(parse(uri)).toOption
+//      path      <- parsedUri.host // parser does not URL-decode host
+//      parts     <- Option(parsedUri.pathParts)
+//      version   <- Try(parts.head.part).toOption // parser does URL-decode path parts
+//      result    <- if (parts.size == 1) validate((URLDecoder.decode(path, UTF_8.name), version)) else None
+//    } yield {
+//      result
+//    }).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$uri\'"))
+//  }
+//
+//}
 
 object MethodRepos {
   sealed trait MethodRepository {
@@ -524,7 +587,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityCopyResponseFormat = jsonFormat3(EntityCopyResponse)
 
-  implicit object MethodRepoMethodFormat extends JsonFormat[MethodRepoMethod] {
+  implicit object MethodRepoMethodFormat extends RootJsonFormat[MethodRepoMethod] {
     override def write(method: MethodRepoMethod): JsValue = JsString("not implemented")
 
     override def read(json: JsValue): MethodRepoMethod = json match {
@@ -532,9 +595,25 @@ class WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val DockstoreMethodFormat = jsonFormat2(DockstoreMethod.apply)
+  implicit object DockstoreMethodFormat extends RootJsonFormat[DockstoreMethod] {
+    override def write(method: DockstoreMethod): JsValue = JsString("not implemented")
 
-  implicit val AgoraMethodFormat = jsonFormat3(AgoraMethod.apply)
+    override def read(json: JsValue): DockstoreMethod = json match {
+      case _ => throw DeserializationException("not implemented")
+    }
+  }
+
+  implicit object AgoraMethodFormat extends RootJsonFormat[AgoraMethod] {
+    override def write(method: AgoraMethod): JsValue = JsString("not implemented")
+
+    override def read(json: JsValue): AgoraMethod = json match {
+      case _ => throw DeserializationException("not implemented")
+    }
+  }
+
+//  implicit val DockstoreMethodFormat = jsonFormat2(DockstoreMethod)
+
+//  implicit val AgoraMethodFormat = jsonFormat3(AgoraMethod)
 
   implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
 

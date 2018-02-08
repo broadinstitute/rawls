@@ -56,7 +56,7 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
   }
 
   override def getMethod( methodUri: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    val method: AgoraMethod = AgoraMethod(methodUri)
+    val method: AgoraMethod = new AgoraMethod(methodUri)
     getAgoraEntity(s"${methodRepoServiceURL}/methods/${method.methodNamespace}/${method.methodName}/${method.methodVersion}",userInfo)
   }
 
