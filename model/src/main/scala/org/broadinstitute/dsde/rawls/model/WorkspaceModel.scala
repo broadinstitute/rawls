@@ -196,9 +196,9 @@ case class EntityCopyDefinition(
 
 abstract class MethodRepoMethod(val methodUri: String) {
 
-  def toUri: String
+//  def toUri: String
 
-  def repo: MethodRepository
+//  def repo: MethodRepository
 
 //  def validate: Option[MethodRepoMethod]
 }
@@ -236,9 +236,9 @@ class AgoraMethod(methodUri: String) extends MethodRepoMethod(methodUri) {
 //      None
 //  }
 
-  override def repo: MethodRepository = Agora
+//  override def repo: MethodRepository = Agora
 
-  override def toUri: String = s"${this.repo.toString}://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion"
+//  override def toUri: String = s"${this.repo.toString}://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion"
 
   def validate(fields: (String, String, Int)): Option[(String, String, Int)] = {
     if (fields._1.nonEmpty && fields._2.nonEmpty && fields._3 > 0)
@@ -261,8 +261,8 @@ class AgoraMethod(methodUri: String) extends MethodRepoMethod(methodUri) {
   }
 }
 
-//object AgoraMethod {
-//
+object AgoraMethod {
+
 //  def validate(fields: (String, String, Int)): Option[(String, String, Int)] = {
 //    if (fields._1.nonEmpty && fields._2.nonEmpty && fields._3 > 0)
 //      Some(fields)
@@ -282,8 +282,11 @@ class AgoraMethod(methodUri: String) extends MethodRepoMethod(methodUri) {
 //      result
 //    }).getOrElse(throw new RawlsException(s"Could not create an AgoraMethod from URI \'$uri\'"))
 //  }
-//
-//}
+
+  def apply(methodNamespace: String, methodName: String, methodVersion: Int): AgoraMethod =
+    new AgoraMethod(s"${MethodRepos.Agora.toString}://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion")
+
+}
 
 class DockstoreMethod(methodUri: String) extends MethodRepoMethod(methodUri) {
 
@@ -298,9 +301,9 @@ class DockstoreMethod(methodUri: String) extends MethodRepoMethod(methodUri) {
 //      None
 //  }
 
-  override def repo: MethodRepository = Dockstore
+//  override def repo: MethodRepository = Dockstore
 
-  override def toUri: String = s"${this.repo.toString}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}"
+//  override def toUri: String = s"${this.repo.toString}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}"
 
   def validate(fields: (String, String)): Option[(String, String)] = {
     if (fields._1.nonEmpty && fields._2.nonEmpty)
@@ -322,8 +325,8 @@ class DockstoreMethod(methodUri: String) extends MethodRepoMethod(methodUri) {
   }
 }
 
-//object DockstoreMethod {
-//
+object DockstoreMethod {
+
 //  def validate(fields: (String, String)): Option[(String, String)] = {
 //    if (fields._1.nonEmpty && fields._2.nonEmpty)
 //      Some(fields)
@@ -342,8 +345,11 @@ class DockstoreMethod(methodUri: String) extends MethodRepoMethod(methodUri) {
 //      result
 //    }).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$uri\'"))
 //  }
-//
-//}
+
+  def apply(methodPath: String, methodVersion: String) =
+    new DockstoreMethod(s"${MethodRepos.Dockstore.toString}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}")
+
+}
 
 object MethodRepos {
   sealed trait MethodRepository {

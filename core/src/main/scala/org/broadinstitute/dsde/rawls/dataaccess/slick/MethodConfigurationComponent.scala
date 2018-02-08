@@ -280,7 +280,7 @@ trait MethodConfigurationComponent {
      */
 
     private def marshalMethodConfig(workspaceId: UUID, methodConfig: MethodConfiguration) = {
-      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.toUri, methodConfig.methodConfigVersion, methodConfig.deleted, methodConfig.deletedDate.map( d => new Timestamp(d.getMillis)))
+      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodUri, methodConfig.methodConfigVersion, methodConfig.deleted, methodConfig.deletedDate.map( d => new Timestamp(d.getMillis)))
     }
 
     def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], prereqs: Map[String, AttributeString]): MethodConfiguration = {

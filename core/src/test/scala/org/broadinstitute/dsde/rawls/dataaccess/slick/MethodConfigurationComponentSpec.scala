@@ -21,7 +21,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
-      MethodRepoMethod("ns-config", "meth2", 2)
+      AgoraMethod("ns-config", "meth2", 2)
     )
 
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfig2))
@@ -110,7 +110,12 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       prerequisites = Map.empty,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
-      methodRepoMethod = testData.methodConfig.methodRepoMethod.copy(methodVersion = 2)
+      methodRepoMethod =
+        AgoraMethod(
+          testData.methodConfig.methodRepoMethod.methodNamespace,
+          testData.methodConfig.methodRepoMethod.methodName,
+          2
+        )
     )
 
     runAndWait(methodConfigurationQuery.update(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, changed))

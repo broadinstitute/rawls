@@ -180,7 +180,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   }
 
   def getWdl(methodConfig: MethodConfiguration, userCredentials: Credential)(implicit executionContext: ExecutionContext): ReadWriteAction[String] = {
-    withMethod(methodConfig.methodRepoMethod.toUri, UserInfo.buildFromTokens(userCredentials)) { method =>
+    withMethod(methodConfig.methodRepoMethod.methodUri, UserInfo.buildFromTokens(userCredentials)) { method =>
       withWdl(method) { wdl =>
         DBIO.successful(wdl)
       }

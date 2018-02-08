@@ -45,7 +45,7 @@ trait MethodWiths {
   def withMethodInputs[T](methodConfig: MethodConfiguration, userInfo: UserInfo)(op: (String, Seq[MethodInput], Seq[MethodInput]) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
     // TODO add Method to model instead of exposing AgoraEntity?
     val methodRepoMethod = methodConfig.methodRepoMethod
-    withMethod(methodRepoMethod.toUri, userInfo) { method =>
+    withMethod(methodRepoMethod.methodUri, userInfo) { method =>
       withWdl(method) { wdl =>
         MethodConfigResolver.gatherInputs(methodConfig, wdl) match {
           case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
