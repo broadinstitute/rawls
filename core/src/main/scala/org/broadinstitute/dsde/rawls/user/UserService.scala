@@ -24,7 +24,7 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -68,6 +68,7 @@ object UserService {
 
   case object ListBillingProjects extends UserServiceMessage
   case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
+  case class AdminRegisterBillingProject(projectName: RawlsBillingProjectName, owner: RawlsUserEmail, bucket: String) extends UserServiceMessage
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class GrantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) extends UserServiceMessage
@@ -110,6 +111,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     case ListBillingProjects => listBillingProjects pipeTo sender
     case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
+    case AdminRegisterBillingProject(projectName, owner, bucket) => asFCAdmin { registerBillingProject(projectName, owner, bucket) } pipeTo sender
 
     case AddUserToBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
     case RemoveUserFromBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
@@ -308,18 +310,30 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     gcsDAO.deleteProject(projectName).map(_ => RequestComplete(StatusCodes.OK))
   }
 
-  def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-    val isDeleted = dataSource.inTransaction { dataAccess =>
-      withBillingProject(projectName, dataAccess) { project =>
-        dataAccess.rawlsBillingProjectQuery.delete(project.projectName)
-      }
-    }
+  def registerBillingProject(projectName: RawlsBillingProjectName,
+                             owner: RawlsUserEmail,
+                             bucket: String): Future[PerRequestMessage] = {
+    val project = RawlsBillingProject(projectName, s"gs://$bucket", CreationStatuses.Ready, None, None)
 
-    //make sure we actually deleted it in the rawls database before destroying the permissions in Sam
-    isDeleted.flatMap {
-      case true => samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
-      case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
-    }.map(_ => RequestComplete(StatusCodes.OK))
+    for {
+      _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.create(project) }
+
+      _ <- samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo)
+      ownerGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
+      computeUserGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, UserService.canComputeUserPolicyName).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
+
+      policiesToAdd = Map(
+        "roles/viewer" -> List(s"group:${ownerGroupEmail.value}"),
+        "roles/billing.projectManager" -> List(s"group:${ownerGroupEmail.value}"),
+        "roles/genomics.pipelinesRunner" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"))
+
+      _ <- gcsDAO.addPolicyBindings(projectName, policiesToAdd)
+      _ <- gcsDAO.grantReadAccess(projectName, bucket, Set(ownerGroupEmail, computeUserGroupEmail))
+    } yield {
+      RequestComplete(StatusCodes.Created)
+    }
   }
 
   def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
