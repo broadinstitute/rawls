@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, RawlsExpansion, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraMethod, AgoraStatus, MethodConfiguration, Subsystems, UserInfo}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
 import spray.client.pipelining._
 import spray.http._
@@ -56,8 +56,13 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
   }
 
   override def getMethod( methodUri: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    val method: AgoraMethod = new AgoraMethod(methodUri)
-    getAgoraEntity(s"${methodRepoServiceURL}/methods/${method.methodNamespace}/${method.methodName}/${method.methodVersion}",userInfo)
+    MethodRepoMethod.fromUri(methodUri) match {
+      case agoraMethod: AgoraMethod =>
+        getAgoraEntity(s"${methodRepoServiceURL}/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}",userInfo)
+      case dockstoreMethod: DockstoreMethod =>
+        // Dockstore shenanigans
+        ???
+    }
   }
 
   private def when500( throwable: Throwable ): Boolean = {
