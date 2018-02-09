@@ -233,10 +233,10 @@ case class AgoraMethod(methodNamespace: String, methodName: String, methodVersio
 
   override def methodUri: String = {
     if (this.validate.isDefined)
-      s"${repo.toString}://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion"
+      s"${repo.scheme}://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion"
     else
       throw new RawlsException(
-        s"Could not generate a method URI from MethodRepoMethod with repo \'${repo.toString}\', namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
+        s"Could not generate a method URI from MethodRepoMethod with repo \'${repo.scheme}\', namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
       )
   }
 
@@ -272,10 +272,10 @@ case class DockstoreMethod(methodPath: String, methodVersion: String) extends Me
 
   override def methodUri: String = {
     if (this.validate.isDefined)
-      s"${repo.toString}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}"
+      s"${repo.scheme}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}"
     else
       throw new RawlsException(
-        s"Could not generate a method URI from DockstoreMethod with repo \'${repo.toString}\', path \'$methodPath\', version \'$methodVersion\'"
+        s"Could not generate a method URI from DockstoreMethod with repo \'${repo.scheme}\', path \'$methodPath\', version \'$methodVersion\'"
       )
   }
 
@@ -300,17 +300,22 @@ object DockstoreMethod {
 }
 
 sealed trait MethodRepository {
-  override def toString: String = getClass.getSimpleName.stripSuffix("$").toLowerCase
+  val scheme: String
 }
 
-case object Agora extends MethodRepository
-case object Dockstore extends MethodRepository
+case object Agora extends MethodRepository {
+  override val scheme: String = "agora"
+}
+
+case object Dockstore extends MethodRepository {
+  override val scheme: String = "dockstore"
+}
 
 object MethodRepository {
 
-  def withName(name: String): Option[MethodRepository] = name match {
-    case "agora" => Some(Agora)
-    case "dockstore" => Some(Dockstore)
+  def withName(name: String): Option[MethodRepository] = name.toLowerCase match {
+    case Agora.scheme => Some(Agora)
+    case Dockstore.scheme => Some(Dockstore)
     case _ => None
   }
 
@@ -545,6 +550,25 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val AgoraMethodFormat = jsonFormat3(AgoraMethod.apply)
 
   implicit val DockstoreMethodFormat = jsonFormat2(DockstoreMethod.apply)
+
+  implicit object MethodRepoMethodFormat extends RootJsonFormat[MethodRepoMethod] {
+    override def write(method: MethodRepoMethod): JsValue = {
+      method match {
+        case agora: AgoraMethod => agora.toJson
+        case dockstore: DockstoreMethod => dockstore.toJson
+      }
+    }
+
+    override def read(json: JsValue): MethodRepoMethod = {
+      json.asJsObject.fields.get("sourceRepo") match {
+        case Some(JsString(Dockstore.scheme)) => DockstoreMethodFormat.read(json)
+        case Some(JsString(Agora.scheme)) => AgoraMethodFormat.read(json)
+        case None => AgoraMethodFormat.read(json) // If omitted, default to Agora for backwards compatibility
+        case Some(JsString(other)) => throw DeserializationException(s"Illegal method repo \'$other\'")
+        case _ => throw DeserializationException("unexpected json type")
+      }
+    }
+  }
 
   implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
 
