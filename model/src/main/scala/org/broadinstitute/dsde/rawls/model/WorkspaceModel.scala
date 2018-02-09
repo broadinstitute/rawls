@@ -591,7 +591,7 @@ class WorkspaceJsonSupport extends JsonSupport {
     override def write(method: MethodRepoMethod): JsValue = {
       method match {
         case agora: AgoraMethod =>
-          JsObject(agora.toJson.asJsObject.fields + "methodUri" -> JsString(agora.methodUri))
+          JsObject(agora.toJson.asJsObject.fields + ("methodUri" -> JsString(agora.methodUri)))
         case dockstore: DockstoreMethod => JsObject("methodUri" -> JsString(dockstore.methodUri))
       }
     }
