@@ -11,6 +11,9 @@ object Dependencies {
 
   val cromwellVersion = "30-4fa75da"
 
+  //UPDATE THIS WITH FINAL HASH
+  val serviceTestV = "0.1.1-alpha-sam-00c1bc7-SNAP"
+
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
   val sprayJson: ModuleID =     "io.spray" %% "spray-json"    % olderSprayV
@@ -41,6 +44,7 @@ object Dependencies {
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev17-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
   val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.5.0"
+  val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
   val metricsScala: ModuleID =       "nl.grons"              %% "metrics-scala"    % "3.5.6"
@@ -60,6 +64,7 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.42"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.2"
+  val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "0.5.3"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.0.1" % "test"
   val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.7.22" % "test"
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
@@ -71,6 +76,7 @@ object Dependencies {
 
   val workbenchModelV  = "0.8-d6801ce"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
+  val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests"
 
   val metricsDependencies = Seq(
     metricsScala,
@@ -95,6 +101,7 @@ object Dependencies {
     googleAdminDirectory,
     googlePlus,
     googleOAuth2,
+    googleOAuth2too,
     googlePubSub,
     googleServicemanagement,
     googleGuava
@@ -120,6 +127,7 @@ object Dependencies {
     scalaLogging,
     httpClient,
     googleApiClient,
+    scalaUri,
     scalatest
   )
 
@@ -144,6 +152,7 @@ object Dependencies {
     mockserverNetty,
     mockito,
     googleRpc,
-    workbenchModel
+    workbenchModel,
+    workbenchServiceTest
   )
 }

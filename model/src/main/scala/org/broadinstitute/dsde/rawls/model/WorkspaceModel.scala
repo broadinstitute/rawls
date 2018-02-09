@@ -1,13 +1,19 @@
 package org.broadinstitute.dsde.rawls.model
 
+import java.net.{URLDecoder, URLEncoder}
+import java.nio.charset.StandardCharsets.UTF_8
+
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
+import com.netaporter.uri.Uri.parse
 import spray.http.StatusCode
 import spray.json._
 import UserModelJsonSupport.ManagedGroupRefFormat
+
+import scala.util.Try
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
@@ -187,11 +193,66 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
+// In the next phase (GAWB-3100), this class's members will be swapped out for a singular methodUri
 case class MethodRepoMethod(
                    methodNamespace: String,
                    methodName: String,
                    methodVersion: Int
-                   )
+                   ) {
+  def asAgoraMethodUrl: String = asMethodUrlForRepo(MethodRepos.Agora.toString)
+
+  // Next phase: this method goes away
+  def asMethodUrlForRepo(repository: String): String = {
+
+    if (repository.nonEmpty && MethodRepos.withName(repository).isDefined && this.validate.isDefined)
+      s"$repository://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion"
+    else
+      throw new RawlsException(
+        s"Could not generate a method URI from MethodRepoMethod with repo \'$repository\', namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
+      )
+  }
+
+  def validate: Option[MethodRepoMethod] = {
+    if (methodNamespace.nonEmpty && methodName.nonEmpty && methodVersion > 0)
+      Some(this)
+    else
+      None
+  }
+
+}
+
+object MethodRepoMethod {
+  def apply(uri: String): MethodRepoMethod = {
+
+    (for {
+      parsedUri <- Try(parse(uri)).toOption
+      repo      <- parsedUri.scheme
+      _         <- MethodRepos.withName(repo)
+      namespace <- parsedUri.host // parser does not URL-decode host
+      parts     <- Option(parsedUri.pathParts)
+      name      <- Option(parts.head.part) // parser does URL-decode path parts
+      version   <- Try(parts(1).part.toInt).toOption
+      result    <- if (parts.size == 2) MethodRepoMethod(URLDecoder.decode(namespace, UTF_8.name), name, version).validate else None
+    } yield {
+      result
+    }).getOrElse(throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'"))
+  }
+}
+
+object MethodRepos {
+  sealed trait MethodRepository {
+    override def toString = getClass.getSimpleName.stripSuffix("$").toLowerCase
+  }
+
+  def withName(name: String): Option[MethodRepository] = name match {
+    case "agora" => Some(Agora)
+    case _ => None
+  }
+
+  case object Agora extends MethodRepository
+
+  val all: Set[MethodRepository] = Set(Agora)
+}
 
 case class MethodInput(name: String, inputType: String, optional: Boolean)
 case class MethodOutput(name: String, outputType: String)
@@ -418,7 +479,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityCopyResponseFormat = jsonFormat3(EntityCopyResponse)
 
-  implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod)
+  implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod.apply)
 
   implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
 

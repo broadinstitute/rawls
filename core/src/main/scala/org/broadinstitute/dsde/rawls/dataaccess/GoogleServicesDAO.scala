@@ -24,9 +24,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingEmail: String
 
   // returns bucket and group information
-  def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo]
-
-  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long): Future[String]
+  def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, projectOwnerGroup: RawlsGroup, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo]
 
   def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project]
 
@@ -206,6 +204,22 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord]
 
   /**
+    * Adds the IAM policies to the project's existing policies
+    */
+  def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit]
+
+  /**
+    *
+    * @param billingProject
+    * @param bucketName
+    * @param readers emails of users to be granted read access
+    * @return bucket name
+    */
+  def grantReadAccess(billingProject: RawlsBillingProjectName,
+                      bucketName: String,
+                      readers: Set[RawlsGroupEmail]): Future[String]
+
+  /**
    * Second step of project creation. See createProject for more details.
    *
    * @param project
@@ -219,13 +233,15 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
    * @param project
    * @return
    */
-  def completeProjectSetup(project: RawlsBillingProject): Future[Try[Unit]]
+  def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[RawlsGroupEmail]): Future[Try[Unit]]
 
   def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit]
   def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit]
+
+  def getAccessTokenUsingJson(saKey: String) : Future[String]
 }
 
 case class GoogleWorkspaceInfo(bucketName: String, accessGroupsByLevel: Map[WorkspaceAccessLevel, RawlsGroup], intersectionGroupsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroup]])

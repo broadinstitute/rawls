@@ -126,7 +126,7 @@ object Boot extends App with LazyLogging {
     )
 
     val samConfig = conf.getConfig("sam")
-    val samDAO = new HttpSamDAO(samConfig.getString("server"))
+    val samDAO = new HttpSamDAO(samConfig.getString("server"), gcsDAO.getBucketServiceAccountCredential)
 
     enableServiceAccount(gcsDAO, samDAO)
 
@@ -168,7 +168,7 @@ object Boot extends App with LazyLogging {
     if(conf.getBooleanOption("backRawls").getOrElse(false)) {
       logger.info("This instance has been marked as BACK. Booting monitors...")
       BootMonitors.bootMonitors(
-        system, conf, slickDataSource, gcsDAO, pubSubDAO, methodRepoDAO, shardedExecutionServiceCluster,
+        system, conf, slickDataSource, gcsDAO, samDAO, pubSubDAO, methodRepoDAO, shardedExecutionServiceCluster,
         maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, userServiceConstructor, projectTemplate, metricsPrefix
       )
     } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")

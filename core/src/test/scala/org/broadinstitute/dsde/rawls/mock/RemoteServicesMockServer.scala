@@ -7,13 +7,16 @@ import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus, ExecutionServiceStatus}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
-import org.mockserver.model.{Delay, Header, Parameter, ParameterBody}
+import org.mockserver.model._
 import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse._
 import spray.http.StatusCodes
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceStatusFormat
 import DefaultJsonProtocol._
+import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames
+import org.broadinstitute.dsde.rawls.user.UserService
+
 import scala.concurrent.duration.FiniteDuration
 
 /**
@@ -654,6 +657,24 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
+    for {
+      project <- Seq("myNamespace", "arbitrary", "project1", "project2", "project3")
+      policy <- Seq(UserService.canComputeUserPolicyName, UserService.workspaceCreatorPolicyName, UserService.ownerPolicyName)
+    } yield {
+      mockServer.when(
+        request()
+          .withMethod("POST")
+          .withPath(s"/api/google/resource/${SamResourceTypeNames.billingProject.value}/$project/$policy/sync")
+      ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            s"""{"GROUP_${policyGroupName(SamResourceTypeNames.billingProject.value, project, policy)}@dev.firecloud.org":[{"operation":"added","email":"PROXY_112497091878448096085@dev.test.firecloud.org"},{"operation":"removed","email":"proxy_112497091878448096085@dev.test.firecloud.org"}]}""".stripMargin
+          )
+          .withStatusCode(StatusCodes.OK.intValue)
+      )
+    }
+
     mockServer.when(
       request()
         .withMethod("POST")
@@ -857,6 +878,20 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
             |    "google": true
             |  }
             |}""".stripMargin
+        )
+        .withStatusCode(StatusCodes.Created.intValue)
+
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/api/google/petServiceAccount/.*/.*")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com"}""".stripMargin
         )
         .withStatusCode(StatusCodes.Created.intValue)
     )

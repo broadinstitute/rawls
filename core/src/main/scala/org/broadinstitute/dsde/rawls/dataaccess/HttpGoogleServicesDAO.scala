@@ -16,7 +16,7 @@ import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
-import com.google.api.services.compute.model.UsageExportLocation
+import com.google.api.services.compute.model.{ServiceAccount, UsageExportLocation}
 import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.genomics.model.Operation
 import com.google.api.services.genomics.{Genomics, GenomicsScopes}
@@ -28,6 +28,7 @@ import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Cond
 import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
+import com.google.auth.oauth2.ServiceAccountCredentials
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -76,7 +77,8 @@ class HttpGoogleServicesDAO(
   val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
 
   // modify these if we need more granular access in the future
-  val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE, PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
+  val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
+  val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val genomicsScopes = Seq(GenomicsScopes.GENOMICS) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
@@ -126,7 +128,7 @@ class HttpGoogleServicesDAO(
 
   private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
-  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], authDomainProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, projectOwnerGroup: RawlsGroup, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], authDomainProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
 
     // we do not make a special access group for project owners because the only member would be a single group
     // we will just use that group directly and avoid potential google problems with a group being in too many groups
@@ -246,14 +248,14 @@ class HttpGoogleServicesDAO(
 
     val bucketInsertion = for {
       accessGroupTries <- accessGroupInserts
-      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember map { _ + (ProjectOwner -> project.ownerPolicyGroup) }
+      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember map { _ + (ProjectOwner -> projectOwnerGroup) }
       intersectionGroupTries <- intersectionGroupInserts
       intersectionGroups <- intersectionGroupTries match {
         case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertAuthDomainProjectOwnerIntersection map { Option(_) }
         case None => Future.successful(None)
       }
       bucketName <- insertBucket(accessGroups, intersectionGroups)
-      nothing <- insertInitialStorageLog(bucketName)
+      _ <- insertInitialStorageLog(bucketName)
     } yield GoogleWorkspaceInfo(bucketName, accessGroups, intersectionGroups)
 
     bucketInsertion recoverWith {
@@ -277,19 +279,53 @@ class HttpGoogleServicesDAO(
     s"I_$workspaceId-${accessLevel.toString}"
   }
 
-  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long): Future[String] = {
+  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[RawlsGroupEmail]): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
     val bucketName = getCromwellAuthBucketName(billingProject)
     retryWithRecoverWhen500orGoogleError(
       () => {
-        val bucketAcls = List(new BucketAccessControl().setEntity("project-editors-" + projectNumber).setRole("OWNER"), new BucketAccessControl().setEntity("project-owners-" + projectNumber).setRole("OWNER"))
-        val defaultObjectAcls = List(new ObjectAccessControl().setEntity("project-editors-" + projectNumber).setRole("OWNER"), new ObjectAccessControl().setEntity("project-owners-" + projectNumber).setRole("OWNER"))
+        val bucketAcls = List(
+          newBucketAccessControl("project-editors-" + projectNumber, "OWNER"),
+          newBucketAccessControl("project-owners-" + projectNumber, "OWNER")) ++
+          authBucketReaders.map(email => newBucketAccessControl(makeGroupEntityString(email.value), "READER")).toList
+
+        val defaultObjectAcls = List(
+          newObjectAccessControl("project-editors-" + projectNumber, "OWNER"),
+          newObjectAccessControl("project-owners-" + projectNumber, "OWNER")) ++
+          authBucketReaders.map(email => newObjectAccessControl(makeGroupEntityString(email.value), "READER")).toList
+
         val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
         val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(billingProject.value, bucket)
         executeGoogleRequest(inserter)
 
         bucketName
       }) { case t: HttpResponseException if t.getStatusCode == 409 => bucketName }
+  }
+
+  def grantReadAccess(billingProject: RawlsBillingProjectName,
+                      bucketName: String,
+                      authBucketReaders: Set[RawlsGroupEmail]): Future[String] = {
+    implicit val service = GoogleInstrumentedService.Storage
+
+    def insertNewAcls() = for {
+      readerEmail <- authBucketReaders
+
+      bucketAcls = newBucketAccessControl(makeGroupEntityString(readerEmail.value), "READER")
+      defaultObjectAcls = newObjectAccessControl(makeGroupEntityString(readerEmail.value), "READER")
+
+      inserters = List(
+        getStorage(getBucketServiceAccountCredential).bucketAccessControls.insert(bucketName, bucketAcls),
+        getStorage(getBucketServiceAccountCredential).defaultObjectAccessControls.insert(bucketName, defaultObjectAcls))
+
+      inserter <- inserters
+      _ <- executeGoogleRequest(inserter)
+    } yield ()
+
+    retryWithRecoverWhen500orGoogleError(
+      () => { insertNewAcls(); bucketName }
+    ) {
+      case t: HttpResponseException if t.getStatusCode == 409 => bucketName
+    }
   }
 
   def createStorageLogsBucket(billingProject: RawlsBillingProjectName): Future[String] = {
@@ -588,7 +624,17 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.Groups
     val inserter = getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
     retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(inserter) }) {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => () // it is ok of the email is already there
+      case t: HttpResponseException => {
+        StatusCode.int2StatusCode(t.getStatusCode) match {
+          case StatusCodes.Conflict => () // it is ok if the email is already there
+          case StatusCodes.PreconditionFailed => {
+            val msg = s"Precondition failed adding user $emailToAdd to group $groupEmail. Is the user a member of too many groups?"
+            logger.error(msg)
+            throw new RawlsException(msg, t)
+          }
+          case _ => throw t
+        }
+      }
     }
   }
 
@@ -889,43 +935,17 @@ class HttpGoogleServicesDAO(
     s"${Option(message).getOrElse("")} - code ${code}"
   }
 
-  private def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit] = {
-    val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
-    implicit val service = GoogleInstrumentedService.CloudResourceManager
-
-    for {
-      bindings <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)).getBindings
-      })
-
-      _ <- retryWhen500orGoogleError(() => {
-        val existingPolicies: Map[String, List[String]] = bindings.map { policy => policy.getRole -> policy.getMembers.toList }.toMap
-
-        // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
-        import cats.implicits._
-        val newPolicies = existingPolicies |+| policiesToAdd
-
-        val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
-          new Binding().setRole(role).setMembers(members.distinct)
-        }.toSeq
-
-        val policyRequest = new SetIamPolicyRequest().setPolicy(new Policy().setBindings(updatedBindings))
-        executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
-      })
-    } yield ()
-  }
-
   private def removePolicyBindings(projectName: RawlsBillingProjectName, policiesToRemove: Map[String, Seq[String]]): Future[Unit] = {
     val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
     for {
-      bindings <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)).getBindings
+      existingPolicy <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
       })
 
       _ <- retryWhen500orGoogleError(() => {
-        val existingPolicies: Map[String, Seq[String]] = bindings.map { policy => policy.getRole -> policy.getMembers.toSeq }.toMap
+        val existingPolicies: Map[String, Seq[String]] = existingPolicy.getBindings.map { policy => policy.getRole -> policy.getMembers.toSeq }.toMap
 
         // this may result in keys with empty-seq values.  That's ok, we will ignore those later
         val updatedKeysWithRemovedPolicies: Map[String, Seq[String]] = policiesToRemove.keys.map { k =>
@@ -941,7 +961,35 @@ class HttpGoogleServicesDAO(
           new Binding().setRole(role).setMembers(members.distinct)
         }.toSeq
 
-        val policyRequest = new SetIamPolicyRequest().setPolicy(new Policy().setBindings(updatedBindings))
+        // when setting IAM policies, always reuse the existing policy so the etag is preserved.
+        val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings))
+        executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
+      })
+    } yield ()
+  }
+
+  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit] = {
+    val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
+    implicit val service = GoogleInstrumentedService.CloudResourceManager
+
+    for {
+      existingPolicy <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
+      })
+
+      _ <- retryWhen500orGoogleError(() => {
+        val existingPolicies: Map[String, List[String]] = existingPolicy.getBindings.map { policy => policy.getRole -> policy.getMembers.toList }.toMap
+
+        // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
+        import cats.implicits._
+        val newPolicies = existingPolicies |+| policiesToAdd
+
+        val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
+          new Binding().setRole(role).setMembers(members.distinct)
+        }.toSeq
+
+        // when setting IAM policies, always reuse the existing policy so the etag is preserved.
+        val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings))
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
       })
     } yield ()
@@ -966,7 +1014,7 @@ class HttpGoogleServicesDAO(
       })
 
       // add new policies to the project
-      _ <- addPolicyBindings(projectName, projectTemplate.policies.mapValues(_.toList) ++ Map("roles/viewer" -> List(s"group:${project.ownerPolicyGroup.groupEmail.value}"), "roles/billing.projectManager" -> List(s"group:${project.ownerPolicyGroup.groupEmail.value}")))
+      _ <- addPolicyBindings(projectName, projectTemplate.policies.mapValues(_.toList))
 
       // enable appropriate google apis
       operations <- Future.sequence(projectTemplate.services.map { service => retryWhen500orGoogleError(() => {
@@ -988,7 +1036,7 @@ class HttpGoogleServicesDAO(
     removePolicyBindings(projectName, Map(s"roles/$role" -> Seq(s"group:${groupEmail.value}")))
   }
 
-  override def completeProjectSetup(project: RawlsBillingProject): Future[Try[Unit]] = {
+  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[RawlsGroupEmail]): Future[Try[Unit]] = {
     implicit val service = GoogleInstrumentedService.Billing
     val projectName = project.projectName
     val credential = getBillingServiceAccountCredential
@@ -1009,7 +1057,7 @@ class HttpGoogleServicesDAO(
 
       googleProject <- getGoogleProject(projectName)
 
-      cromwellAuthBucket <- createCromwellAuthBucket(projectName, googleProject.getProjectNumber)
+      cromwellAuthBucket <- createCromwellAuthBucket(projectName, googleProject.getProjectNumber, authBucketReaders)
 
       _ <- retryWhen500orGoogleError(() => {
         val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
@@ -1148,6 +1196,12 @@ class HttpGoogleServicesDAO(
       .setJsonFactory(jsonFactory)
       .setClientSecrets(tokenClientSecrets)
       .build().setFromTokenResponse(new TokenResponse().setRefreshToken(refreshToken))
+  }
+
+  def getAccessTokenUsingJson(saKey: String) : Future[String] = Future {
+    val keyStream = new ByteArrayInputStream(saKey.getBytes)
+    val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(storageScopes)
+    credential.refreshAccessToken.getTokenValue
   }
 
   def getServiceAccountRawlsUser(): Future[RawlsUser] = {

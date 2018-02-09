@@ -5,18 +5,17 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{CreateRawlsBillingProjectFullRequestFormat, RawlsBillingProjectMembershipFormat, RawlsGroupMemberListFormat, RawlsUserInfoListFormat, SyncReportFormat}
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{RawlsGroupMemberListFormat, SyncReportFormat}
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserListFormat, UserStatusFormat}
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsBillingProjectNameFormat, RawlsGroupRefFormat}
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, ErrorReportFormat, WorkspaceFormat, WorkspaceListResponseFormat, WorkspaceStatusFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceFormat, WorkspaceListResponseFormat, WorkspaceStatusFormat}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
-import spray.routing.Route
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
@@ -95,6 +94,45 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       val expected = expectedHttpRequestMetrics("get", "admin.submissions", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
+  }
+
+  val project = "some-project"
+  val bucket = "some-bucket"
+
+  it should "return 201 when registering a billing project for the 1st time, and 500 for the 2nd" in withTestDataApiServices { services =>
+    Post(s"/admin/project/registration?project=$project&bucket=$bucket") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"/admin/project/registration?project=$project&bucket=$bucket") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.InternalServerError) {
+          status
+        }
+      }
+  }
+
+  it should "reject requests with invalid parameters" in withTestDataApiServices { services =>
+    Post(s"/admin/project/registration?proj=$project&bucket=$bucket") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+
+    Post(s"/admin/project/registration?project=$project&buck=$bucket") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
   }
 
   it should "return 200 when listing active submissions on deleted entities" in withConstantTestDataApiServices { services =>
@@ -203,7 +241,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NotFound) { status }
       }
   }
-
 
   it should "return 200 when adding a library curator" in withTestDataApiServices { services =>
     val testUser = "foo@bar.com"
@@ -492,24 +529,24 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
 
         val expected = Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
-            "WORKSPACE_ACCESS_GROUP: Owner@myNamespace@billing-project" -> "FOUND",
+            "WORKSPACE_ACCESS_GROUP: owner@myNamespace@billing-project" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace-myWorkspace-OWNER" -> "FOUND",
             "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
             "WORKSPACE_USER_ACCESS_LEVEL" -> "PROJECT_OWNER",
-            "GOOGLE_ACCESS_GROUP: GROUP_Owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
+            "GOOGLE_ACCESS_GROUP: GROUP_owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace-myWorkspace-OWNER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace-myWorkspace-WRITER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace-myWorkspace-READER@example.com" -> "FOUND",
             "GOOGLE_BUCKET: aBucket" -> "FOUND",
-            "GOOGLE_USER_ACCESS_LEVEL: GROUP_Owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
+            "GOOGLE_USER_ACCESS_LEVEL: GROUP_owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
             "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace-myWorkspace-WRITER" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace-myWorkspace-READER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace-myWorkspace-READER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace-myWorkspace-WRITER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace-myWorkspace-OWNER" -> "FOUND",
-            "WORKSPACE_INTERSECTION_GROUP: Owner@myNamespace@billing-project" -> "FOUND",
-            "GOOGLE_INTERSECTION_GROUP: GROUP_Owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: owner@myNamespace@billing-project" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: GROUP_owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace-myWorkspace-OWNER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace-myWorkspace-WRITER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace-myWorkspace-READER@example.com" -> "FOUND"

@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import spray.http.StatusCodes.BadRequest
+
 /**
  * Created by tsharpe on 9/25/15.
  */
@@ -34,6 +36,15 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.AdminDeleteBillingProject(RawlsBillingProjectName(projectId)))
+      }
+    } ~
+    path("admin" / "project" / "registration") {
+      post {
+        parameters("project", "bucket") { (project, bucket) => requestContext =>
+          perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.AdminRegisterBillingProject(RawlsBillingProjectName(project), userInfo.userEmail, bucket))
+        }
       }
     } ~
     path("admin" / "submissions") {

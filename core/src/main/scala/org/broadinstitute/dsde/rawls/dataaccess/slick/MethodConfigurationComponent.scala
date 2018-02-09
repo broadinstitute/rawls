@@ -14,9 +14,7 @@ case class MethodConfigurationRecord(id: Long,
                                      name: String,
                                      workspaceId: UUID,
                                      rootEntityType: String,
-                                     methodNamespace: String,
-                                     methodName: String,
-                                     methodVersion: Int,
+                                     methodUri: String,
                                      methodConfigVersion: Int,
                                      deleted: Boolean,
                                      deletedDate: Option[Timestamp])
@@ -38,14 +36,12 @@ trait MethodConfigurationComponent {
     def name = column[String]("NAME", O.Length(254))
     def workspaceId = column[UUID]("WORKSPACE_ID")
     def rootEntityType = column[String]("ROOT_ENTITY_TYPE", O.Length(254))
-    def methodNamespace = column[String]("METHOD_NAMESPACE")
-    def methodName = column[String]("METHOD_NAME")
-    def methodVersion = column[Int]("METHOD_VERSION")
+    def methodUri = column[String]("METHOD_URI")
     def methodConfigVersion = column[Int]("METHOD_CONFIG_VERSION")
     def deleted = column[Boolean]("DELETED")
     def deletedDate = column[Option[Timestamp]]("deleted_date")
 
-    def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion, methodConfigVersion, deleted, deletedDate) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
+    def * = (id, namespace, name, workspaceId, rootEntityType, methodUri, methodConfigVersion, deleted, deletedDate) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
 
     def workspace = foreignKey("FK_MC_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def namespaceNameIdx = index("IDX_CONFIG", (workspaceId, namespace, name, methodConfigVersion), unique = true)
@@ -284,15 +280,15 @@ trait MethodConfigurationComponent {
      */
 
     private def marshalMethodConfig(workspaceId: UUID, methodConfig: MethodConfiguration) = {
-      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, methodConfig.methodConfigVersion, methodConfig.deleted, methodConfig.deletedDate.map( d => new Timestamp(d.getMillis)))
+      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.asAgoraMethodUrl, methodConfig.methodConfigVersion, methodConfig.deleted, methodConfig.deletedDate.map( d => new Timestamp(d.getMillis)))
     }
 
     def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], prereqs: Map[String, AttributeString]): MethodConfiguration = {
-      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, prereqs, inputs, outputs, MethodRepoMethod(methodConfigRec.methodNamespace, methodConfigRec.methodName, methodConfigRec.methodVersion), methodConfigRec.methodConfigVersion, methodConfigRec.deleted, methodConfigRec.deletedDate.map(ts => new DateTime(ts)))
+      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, prereqs, inputs, outputs, MethodRepoMethod.apply(methodConfigRec.methodUri), methodConfigRec.methodConfigVersion, methodConfigRec.deleted, methodConfigRec.deletedDate.map(ts => new DateTime(ts)))
     }
 
     private def unmarshalMethodConfigToShort(methodConfigRec: MethodConfigurationRecord): MethodConfigurationShort = {
-      MethodConfigurationShort(methodConfigRec.name, methodConfigRec.rootEntityType, MethodRepoMethod(methodConfigRec.methodNamespace, methodConfigRec.methodName, methodConfigRec.methodVersion), methodConfigRec.namespace)
+      MethodConfigurationShort(methodConfigRec.name, methodConfigRec.rootEntityType, MethodRepoMethod.apply(methodConfigRec.methodUri), methodConfigRec.namespace)
     }
 
     private def marshalConfigInput(configId: Long, key: String, value: AttributeString) = {

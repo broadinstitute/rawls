@@ -596,6 +596,37 @@ paths:
              - openid
              - email
              - profile
+  '/api/admin/project/registration':
+    post:
+      tags:
+        - admin
+      operationId: recordProjectOwnership
+      summary: create a record of project ownership
+      parameters:
+        - name: project
+          description: Billing project ID
+          required: true
+          in: query
+          type: string
+        - name: bucket
+          description: Cromwell auth bucket (without the gs:// prefix)
+          required: true
+          in: query
+          type: string
+      responses:
+        201:
+          description: Successful project record creation
+        403:
+          description: You must be an admin to call this endpoint.
+        404:
+          description: Missing required parameter
+        500:
+          description: Internal Server Error
+      security:
+        - authorization:
+          - openid
+          - email
+          - profile
   '/api/admin/submissions':
     get:
       responses:
