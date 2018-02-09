@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.util
 
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.expressions.{ExpressionValidator, SlickExpressionParser}
@@ -27,11 +27,15 @@ trait MethodWiths {
     }
   }
 
-  def withMethod[T](methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
-    DBIO.from(methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo)).asTry.flatMap {
-      case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")))
-      case Success(Some(agoraEntity)) => op(agoraEntity)
-      case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.", methodRepoDAO.toErrorReport(throwable))))
+  def withMethod[T](method: MethodRepoMethod, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+    method match {
+      case agoraMethod: AgoraMethod =>
+        DBIO.from(methodRepoDAO.getMethod(agoraMethod.methodNamespace, agoraMethod.methodName, agoraMethod.methodVersion, userInfo)).asTry.flatMap {
+          case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${agoraMethod.methodUri} from method repo.")))
+          case Success(Some(agoraEntity)) => op(agoraEntity)
+          case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.", methodRepoDAO.toErrorReport(throwable))))
+        }
+      case _ => throw new RawlsException("not yet supported")
     }
   }
 
@@ -44,8 +48,7 @@ trait MethodWiths {
 
   def withMethodInputs[T](methodConfig: MethodConfiguration, userInfo: UserInfo)(op: (String, Seq[MethodInput], Seq[MethodInput]) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
     // TODO add Method to model instead of exposing AgoraEntity?
-    val methodRepoMethod = methodConfig.methodRepoMethod
-    withMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo) { method =>
+    withMethod(methodConfig.methodRepoMethod, userInfo) { method =>
       withWdl(method) { wdl =>
         MethodConfigResolver.gatherInputs(methodConfig, wdl) match {
           case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
