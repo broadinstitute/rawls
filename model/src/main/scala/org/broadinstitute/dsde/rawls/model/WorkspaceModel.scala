@@ -13,7 +13,7 @@ import spray.http.StatusCode
 import spray.json._
 import UserModelJsonSupport.ManagedGroupRefFormat
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
@@ -552,65 +552,66 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val DockstoreMethodFormat = jsonFormat2(DockstoreMethod.apply)
 
   /*
+  Rawls sends:
 
-  Our existing client code, other people’s code - assumes Agora
-
-  Sends:
+  For Agora
   "methodRepoMethod": {
+    "methodUri": "agora://adam-methods/test/555"
     "methodNamespace": "adam-methods", 
     "methodName": "test",
     "methodVersion": 555
   }
 
-  Receives:
+  For Dockstore
   "methodRepoMethod": {
-    "sourceRepo": "agora",
+    "methodUri": "dockstore://broadinstitute%2Fwdl%2FValidate-Bams/develop",
+  }
+
+  Rawls can receive:
+
+  "methodRepoMethod": {
     "methodNamespace": "adam-methods",
     "methodName": "test",
      "methodVersion": 555
   }
 
-  New client code - flexible
-
-  Sends and receives
-
   "methodRepoMethod": {
-    "sourceRepo": "dockstore",
-    "methodPath": "broadinstitute/wdl/Validate-Bams",
-    "methodVersion": "develop"
+    "methodUri": "dockstore://broadinstitute%2Fwdl%2FValidate-Bams/develop",
   }
 
-  OR
-
   "methodRepoMethod": {
-    "sourceRepo": "agora",
-    "methodNamespace": "adam-methods",
-    "methodName": "test",
-     "methodVersion": 555
+    "methodUri": "agora://adam-methods/test/555",
   }
 
   */
 
   implicit object MethodRepoMethodFormat extends RootJsonFormat[MethodRepoMethod] {
 
-    // We could expand this to write "methodUri" in addition
     override def write(method: MethodRepoMethod): JsValue = {
       method match {
-        case agora: AgoraMethod => agora.toJson
-        case dockstore: DockstoreMethod => dockstore.toJson
+        case agora: AgoraMethod =>
+          JsObject(agora.toJson.asJsObject.fields + "methodUri" -> JsString(agora.methodUri))
+        case dockstore: DockstoreMethod => JsObject("methodUri" -> JsString(dockstore.methodUri))
       }
     }
 
-    // We could expand this to attempt reading from "methodUri" first
     override def read(json: JsValue): MethodRepoMethod = {
-      json.asJsObject.fields.get("sourceRepo") match {
-        case Some(JsString(Dockstore.scheme)) => DockstoreMethodFormat.read(json)
-        case Some(JsString(Agora.scheme)) => AgoraMethodFormat.read(json)
-        case None => AgoraMethodFormat.read(json) // If omitted, default to Agora for backwards compatibility
-        case Some(JsString(other)) => throw DeserializationException(s"Illegal method repo \'$other\'")
-        case _ => throw DeserializationException("unexpected json type")
+
+      val fromUri = json.asJsObject.fields.get("methodUri") match {
+        case Some(JsString(uri)) => Try(MethodRepoMethod.fromUri(uri)).toOption
+        case _ => None
+      }
+
+      fromUri match {
+        case Some(method) => method
+        case _ =>
+          Try { AgoraMethodFormat.read(json) } match {
+            case Success(method) => method
+            case Failure(t) => throw t
+          }
       }
     }
+
   }
 
   implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
