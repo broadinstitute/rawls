@@ -1439,7 +1439,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
-      withMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo) { method =>
+      withMethod(methodRepoMethod, userInfo) { method =>
         withWdl(method) { wdl => MethodConfigResolver.toMethodConfiguration(wdl, methodRepoMethod) match {
           case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
           case Success(methodConfig) => DBIO.successful(RequestComplete(StatusCodes.OK, methodConfig))
@@ -1450,7 +1450,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def getMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
-      withMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo) { method =>
+      withMethod(methodRepoMethod, userInfo) { method =>
         withWdl(method) { wdl => MethodConfigResolver.getMethodInputsOutputs(wdl) match {
           case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
           case Success(inputsOutputs) => DBIO.successful(RequestComplete(StatusCodes.OK, inputsOutputs))
