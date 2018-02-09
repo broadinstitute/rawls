@@ -551,7 +551,49 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val DockstoreMethodFormat = jsonFormat2(DockstoreMethod.apply)
 
+  /*
+
+  Our existing client code, other people’s code - assumes Agora
+
+  Sends:
+  "methodRepoMethod": {
+    "methodNamespace": "adam-methods", 
+    "methodName": "test",
+    "methodVersion": 555
+  }
+
+  Receives:
+  "methodRepoMethod": {
+    "sourceRepo": "agora",
+    "methodNamespace": "adam-methods",
+    "methodName": "test",
+     "methodVersion": 555
+  }
+
+  New client code - flexible
+
+  Sends and receives
+
+  "methodRepoMethod": {
+    "sourceRepo": "dockstore",
+    "methodPath": "broadinstitute/wdl/Validate-Bams",
+    "methodVersion": "develop"
+  }
+
+  OR
+
+  "methodRepoMethod": {
+    "sourceRepo": "agora",
+    "methodNamespace": "adam-methods",
+    "methodName": "test",
+     "methodVersion": 555
+  }
+
+  */
+
   implicit object MethodRepoMethodFormat extends RootJsonFormat[MethodRepoMethod] {
+
+    // We could expand this to write "methodUri" in addition
     override def write(method: MethodRepoMethod): JsValue = {
       method match {
         case agora: AgoraMethod => agora.toJson
@@ -559,6 +601,7 @@ class WorkspaceJsonSupport extends JsonSupport {
       }
     }
 
+    // We could expand this to attempt reading from "methodUri" first
     override def read(json: JsValue): MethodRepoMethod = {
       json.asJsObject.fields.get("sourceRepo") match {
         case Some(JsString(Dockstore.scheme)) => DockstoreMethodFormat.read(json)
