@@ -37,6 +37,7 @@ object Subsystems {
       case "GoogleGenomics" => GoogleGenomics
       case "GoogleGroups" => GoogleGroups
       case "GooglePubSub" => GooglePubSub
+      case "Mongo" => Mongo
       case "Sam" => Sam
       case _ => throw new RawlsException(s"invalid Subsystem [$name]")
     }
@@ -50,6 +51,7 @@ object Subsystems {
   case object GoogleGenomics extends Subsystem
   case object GoogleGroups extends Subsystem
   case object GooglePubSub extends Subsystem
+  case object Mongo extends Subsystem
   case object Sam extends Subsystem
 }
 

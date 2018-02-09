@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model.Subsystems._
-import org.broadinstitute.dsde.rawls.model.{AgoraStatus, RawlsUserEmail, RawlsUserSubjectId, StatusCheckResponse, SubsystemStatus}
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -261,7 +261,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     val dao = mock[MethodRepoDAO]
     when {
       dao.getStatus(any[ExecutionContext])
-    } thenReturn Future.successful(AgoraStatus(true, Seq.empty))
+    } thenReturn Future.successful(SubsystemStatus(true, None))
     dao
   }
 
@@ -287,7 +287,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       dao.getStatus(any[ExecutionContext])
     } thenReturn Future {
       Thread.sleep((1 minute).toMillis)
-      AgoraStatus(true, Seq.empty)
+      SubsystemStatus(true, None)
     }
     dao
   }
@@ -296,7 +296,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     val dao = mock[MethodRepoDAO]
     when {
       dao.getStatus(any[ExecutionContext])
-    } thenReturn Future.successful(AgoraStatus(false, Seq("agora failed")))
+    } thenReturn Future.successful(SubsystemStatus(false, Some(List("agora failed"))))
     dao
   }
 
