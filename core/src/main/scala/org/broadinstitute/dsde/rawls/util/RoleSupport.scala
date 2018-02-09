@@ -4,7 +4,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUserEmail, UserInfo}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 
 import scala.concurrent.{ExecutionContext, Future}
 

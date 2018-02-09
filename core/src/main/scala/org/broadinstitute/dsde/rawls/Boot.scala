@@ -5,8 +5,10 @@ import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.Http
 import akka.io.IO
 import akka.pattern.ask
+import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
@@ -29,12 +31,13 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import spray.can.Http
 
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
+import net.ceedubs.ficus.Ficus._
+import org.broadinstitute.dsde.rawls.config._
 
 object Boot extends App with LazyLogging {
   private def startup(): Unit = {
@@ -44,6 +47,7 @@ object Boot extends App with LazyLogging {
 
     // we need an ActorSystem to host our application in
     implicit val system = ActorSystem("rawls")
+    implicit val materializer = ActorMaterializer()
 
     val directoryConfig = DirectoryConfig(
       conf.getString("directory.url"),
@@ -138,11 +142,11 @@ object Boot extends App with LazyLogging {
     val submissionTimeout = util.toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
 
     val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = executionServiceConfig.getObject("readServers").map {
-        case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout, metricsPrefix))
+        case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix))
       }.toMap
 
     val executionServiceSubmitServers: Map[ExecutionServiceId, ExecutionServiceDAO] = executionServiceConfig.getObject("submitServers").map {
-      case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout, metricsPrefix))
+      case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix))
     }.toMap
 
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
@@ -192,7 +196,7 @@ object Boot extends App with LazyLogging {
 
     val statusServiceConstructor: () => StatusService = StatusService.constructor(healthMonitor)
 
-    val service = system.actorOf(RawlsApiServiceActor.props(
+    val service = new RawlsApiServiceImpl(
       WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
@@ -214,21 +218,20 @@ object Boot extends App with LazyLogging {
       ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
       clientSecrets.getDetails.getClientId,
       submissionTimeout,
-      rawlsMetricBaseName = metricsPrefix,
-      samDAO
-    ),
-      "rawls-service")
+      metricsPrefix,
+      samDAO,
+      conf.as[SwaggerConfig]("swagger")
+    )
 
-    implicit val timeout = Timeout(20.seconds)
-    // start a new HTTP server on port 8080 with our service actor as the handler
-    (IO(Http) ? Http.Bind(service, interface = "0.0.0.0", port = 8080)).onComplete {
-      case Success(Http.CommandFailed(failure)) =>
-        system.log.error("could not bind to port: " + failure.toString)
-        system.shutdown()
-      case Failure(t) =>
-        system.log.error(t, "could not bind to port")
-        system.shutdown()
-      case _ =>
+    for {
+      _ <- Http().bindAndHandle(service.route, "0.0.0.0", 8080) recover {
+        case t: Throwable =>
+          logger.error("FATAL - failure starting http server", t)
+          throw t
+      }
+
+    } yield {
+
     }
   }
 

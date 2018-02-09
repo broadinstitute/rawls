@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.driver.JdbcDriver
 import slick.jdbc.{GetResult, PositionedParameters, SQLActionBuilder, SetParameter}
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 
 import scala.concurrent.ExecutionContext
 

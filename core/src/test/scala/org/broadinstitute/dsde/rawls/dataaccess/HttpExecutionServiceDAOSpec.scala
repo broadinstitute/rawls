@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import cats.implicits._
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
@@ -10,10 +12,11 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import spray.http.OAuth2BearerToken
 import spray.json.JsObject
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 /**
   * Created by rtitle on 8/17/17.
@@ -21,14 +24,12 @@ import scala.concurrent.duration._
 class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServiceDAOSpec"))
   with FlatSpecLike with Matchers with BeforeAndAfterAll with ScalaFutures with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
 
+  implicit val materializer = ActorMaterializer()
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
   val mockServer = RemoteServicesMockServer()
   val userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))
-  val test = new HttpExecutionServiceDAO(
-    executionServiceURL = mockServer.mockServerBaseUrl,
-    submissionTimeout = 5 seconds,
-    workbenchMetricBaseName = "test")
+  val test = new HttpExecutionServiceDAO(executionServiceURL = mockServer.mockServerBaseUrl, workbenchMetricBaseName = "test")
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -37,7 +38,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
 
   override def afterAll(): Unit = {
     mockServer.stopServer
-    system.shutdown()
+    Await.result(system.terminate(), Duration.Inf)
     super.afterAll()
   }
 

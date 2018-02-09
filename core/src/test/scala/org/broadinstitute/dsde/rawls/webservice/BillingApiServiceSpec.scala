@@ -12,9 +12,9 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.scalatest.path
-import spray.http.{HttpMethods, StatusCodes, Uri}
+import akka.http.scaladsl.model.{HttpMethods, StatusCodes, Uri}
 import spray.json.DefaultJsonProtocol._
-import spray.routing.Route
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -22,7 +22,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 class BillingApiServiceSpec extends ApiServiceSpec {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test"))(testCode: TestApiService =>  T): T = {
     val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)

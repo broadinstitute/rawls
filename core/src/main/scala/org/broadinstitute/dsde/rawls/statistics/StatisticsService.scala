@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.statistics
 
-import akka.actor.{Actor, Props}
-import akka.pattern._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -12,8 +10,8 @@ import org.broadinstitute.dsde.rawls.statistics.StatisticsService._
 import org.broadinstitute.dsde.rawls.util.{RoleSupport, FutureSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.joda.time.DateTime
-import spray.http.StatusCodes
-import spray.httpx.SprayJsonSupport._
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import spray.json.JsObject
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -22,10 +20,6 @@ import scala.concurrent.{ExecutionContext, Future}
  * Created by mbemis on 7/18/16.
  */
 object StatisticsService {
-  def props(userServiceConstructor: UserInfo => StatisticsService, userInfo: UserInfo): Props = {
-    Props(userServiceConstructor(userInfo))
-  }
-
   def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
     new StatisticsService(userInfo, dataSource, googleServicesDAO)
 
@@ -33,13 +27,11 @@ object StatisticsService {
   case class GetStatistics(startDate: String, endDate: String) extends StatisticsServiceMessage
 }
 
-class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
+class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths {
 
   import dataSource.dataAccess.driver.api._
 
-  override def receive = {
-    case GetStatistics(startDate, endDate) => asFCAdmin {getStatistics(startDate, endDate)} pipeTo sender
-  }
+  def GetStatistics(startDate: String, endDate: String) = asFCAdmin {getStatistics(startDate, endDate)}
 
   def getStatistics(startDate: String, endDate: String): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>

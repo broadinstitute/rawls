@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteActi
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspaceAccessLevels, _}
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 
 import scala.collection.Set
 

@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -11,10 +12,11 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
-import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.server.Directive1
+import akka.http.scaladsl.server.Directives._
 import spray.json._
 import spray.json.DefaultJsonProtocol._
-import spray.routing.Directive1
 
 import scala.concurrent.ExecutionContext
 
@@ -91,7 +93,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
 
   val libraryPermissionTestData = new LibraryPermissionTestData()
 
-  case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
+  case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
 
   def withApiServices[T](dataSource: SlickDataSource, user: String)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)

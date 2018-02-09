@@ -4,8 +4,11 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import spray.routing.Directive.pimpApply
-import spray.routing._
+import akka.http.scaladsl.server
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.StatusCodes
+import CustomDirectives._
 
 import scala.concurrent.ExecutionContext
 
@@ -13,24 +16,22 @@ import scala.concurrent.ExecutionContext
   * Created by dvoet on 6/4/15.
   */
 
-trait UserApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
+trait UserApiService extends UserInfoDirectives {
+  import PerRequest.requestCompleteMarshaller
   implicit val executionContext: ExecutionContext
 
   import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
-  import spray.httpx.SprayJsonSupport._
+  import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 
   val userServiceConstructor: UserInfo => UserService
 
   // these routes have different access control and their paths have /register instead of /api
 
-  val createUserRoute = requireUserInfo() { userInfo =>
+  val createUserRoute: server.Route = requireUserInfo() { userInfo =>
     path("user") {
-      {
+      addLocationHeader(s"/user/${userInfo.userSubjectId.value}") {
         post {
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.CreateUser)
+          complete { userServiceConstructor(userInfo).CreateUser.map(_ => StatusCodes.Created) }
         }
       }
     }
@@ -38,125 +39,80 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
 
   // standard /api routes begin here
 
-  val userRoutes = requireUserInfo() { userInfo =>
+  val userRoutes: server.Route = requireUserInfo() { userInfo =>
     path("user" / "refreshToken") {
       put {
         entity(as[UserRefreshToken]) { token =>
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.SetRefreshToken(token))
+          complete { userServiceConstructor(userInfo).SetRefreshToken(token) }
         }
       }
     } ~
       path("user" / "refreshTokenDate") {
         get {
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.GetRefreshTokenDate)
+          complete { userServiceConstructor(userInfo).GetRefreshTokenDate }
         }
       } ~
       path("user" / "billing") {
         get {
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.ListBillingProjects)
+          complete { userServiceConstructor(userInfo).ListBillingProjects }
         }
       } ~
       path("user" / "role" / "admin") {
         get {
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.IsAdmin(userInfo.userEmail))
+          complete { userServiceConstructor(userInfo).IsAdmin(userInfo.userEmail) }
         }
       } ~
       path("user" / "role" / "curator") {
         get {
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.IsLibraryCurator(userInfo.userEmail))
+          complete { userServiceConstructor(userInfo).IsLibraryCurator(userInfo.userEmail) }
         }
       } ~
       path("user" / "billingAccounts") {
         get {
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.ListBillingAccounts)
+          complete { userServiceConstructor(userInfo).ListBillingAccounts }
         }
       } ~
       path("user" / "groups") {
         get {
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.ListGroupsForUser(userInfo.userEmail))
+          complete { userServiceConstructor(userInfo).ListGroupsForUser(userInfo.userEmail) }
         }
       } ~
       path("user" / "group" / Segment) { groupName =>
         get {
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.GetUserGroup(RawlsGroupRef(RawlsGroupName(groupName))))
+          complete { userServiceConstructor(userInfo).GetUserGroup(RawlsGroupRef(RawlsGroupName(groupName))) }
         }
       } ~
       pathPrefix("groups") {
         pathEnd {
           get {
-            requestContext =>
-              perRequest(requestContext,
-                UserService.props(userServiceConstructor, userInfo),
-                UserService.ListManagedGroupsForUser)
+            complete { userServiceConstructor(userInfo).ListManagedGroupsForUser }
           }
         } ~
           pathPrefix(Segment) { groupName =>
             val groupRef = ManagedGroupRef(RawlsGroupName(groupName))
             path("requestAccess") {
               post {
-                requestContext =>
-                  perRequest(requestContext,
-                    UserService.props(userServiceConstructor, userInfo),
-                    UserService.RequestAccessToManagedGroup(groupRef))
+                complete { userServiceConstructor(userInfo).RequestAccessToManagedGroup(groupRef) }
               }
             } ~
               pathEnd {
                 get {
-                  requestContext =>
-                    perRequest(requestContext,
-                      UserService.props(userServiceConstructor, userInfo),
-                      UserService.GetManagedGroup(groupRef))
+                  complete { userServiceConstructor(userInfo).GetManagedGroup(groupRef) }
                 } ~
                   post {
-                    requestContext =>
-                      perRequest(requestContext,
-                        UserService.props(userServiceConstructor, userInfo),
-                        UserService.CreateManagedGroup(groupRef))
+                    complete { userServiceConstructor(userInfo).CreateManagedGroup(groupRef) }
                   } ~
                   delete {
-                    requestContext =>
-                      perRequest(requestContext,
-                        UserService.props(userServiceConstructor, userInfo),
-                        UserService.DeleteManagedGroup(groupRef))
+                    complete { userServiceConstructor(userInfo).DeleteManagedGroup(groupRef) }
                   }
               } ~
               path(Segment / Segment) { (role, email) =>
                 put {
-                  requestContext =>
-                    perRequest(requestContext,
-                      UserService.props(userServiceConstructor, userInfo),
-                      UserService.AddManagedGroupMembers(groupRef, ManagedRoles.withName(role), email))
+                  complete { userServiceConstructor(userInfo).AddManagedGroupMembers(groupRef, ManagedRoles.withName(role), email) }
 
                 } ~
                   delete {
-                    requestContext =>
-                      perRequest(requestContext,
-                        UserService.props(userServiceConstructor, userInfo),
-                        UserService.RemoveManagedGroupMembers(groupRef, ManagedRoles.withName(role), email))
+                    complete { userServiceConstructor(userInfo).RemoveManagedGroupMembers(groupRef, ManagedRoles.withName(role), email) }
 
                   }
               }

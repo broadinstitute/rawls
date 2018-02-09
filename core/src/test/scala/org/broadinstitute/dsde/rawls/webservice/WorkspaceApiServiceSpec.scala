@@ -13,10 +13,14 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import spray.http._
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.server.Directive1
 import spray.json.DefaultJsonProtocol._
 import spray.json._
-import spray.routing._
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import akka.http.scaladsl.model.headers._
 
 import scala.concurrent.ExecutionContext
 
@@ -41,7 +45,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
+  case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
 
   def withApiServices[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
@@ -223,7 +227,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(newWorkspace) {
@@ -235,7 +239,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
           header("Location")
         }
       }
@@ -254,8 +258,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Post(s"/workspaces", httpJson(newWorkspace)) ~>
         sealRoute(services.workspaceRoutes) ~>
         check {
-          assertResult(StatusCodes.BadRequest, response.entity.asString) {
+          assertResult(StatusCodes.BadRequest) {
             status
+          }
+          assertResult(None) {
+            header("Location")
           }
         }
     }
@@ -273,7 +280,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     withStatsD {
       Post(s"/workspaces", httpJson(workspaceWithRealm)) ~> services.sealedInstrumentedRoutes ~>
         check {
-          assertResult(StatusCodes.Created, response.entity.asString) {
+          assertResult(StatusCodes.Created) {
             status
           }
           assertResult(workspaceWithRealm) {
@@ -285,7 +292,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
           }
           // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-          assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceWithRealm.path))))) {
+          assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceWithRealm.path))))) {
             header("Location")
           }
         }
@@ -309,7 +316,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(workspaceWithRealm) {
@@ -337,8 +344,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden) {
           status
+        }
+        assertResult(None) {
+          header("Location")
         }
       }
   }
@@ -356,7 +366,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
       }
@@ -365,7 +375,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${workspaceWithRealm.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
       }
 
     Get(s"${workspaceWithRealm.path}") ~>
@@ -389,7 +399,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
       }
@@ -398,7 +408,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${workspaceWithRealm.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
       }
 
     Get(s"${workspaceWithRealm.path}") ~>
@@ -439,7 +449,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
       }
@@ -448,7 +458,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
 
@@ -473,7 +483,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
       }
@@ -482,7 +492,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
 
@@ -505,7 +515,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden) {
           status
         }
         assertResult(None) {
@@ -545,7 +555,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden) {
           status
         }
       }
@@ -562,7 +572,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Post(s"/workspaces", httpJson(newWorkspace)) ~>
         sealRoute(services.workspaceRoutes) ~>
         check {
-          assertResult(StatusCodes.Created, response.entity.asString) {
+          assertResult(StatusCodes.Created) {
             status
           }
           workspaceQuery.findByName(newWorkspace.toWorkspaceName)
@@ -603,7 +613,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Accepted, response.entity.asString) {
+        assertResult(StatusCodes.Accepted) {
           status
         }
       }
@@ -623,7 +633,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Accepted, response.entity.asString) {
+        assertResult(StatusCodes.Accepted) {
           status
         }
       }
@@ -647,7 +657,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Accepted, response.entity.asString) {
+        assertResult(StatusCodes.Accepted) {
           status
         }
       }
@@ -671,7 +681,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Accepted, response.entity.asString) {
+        assertResult(StatusCodes.Accepted) {
           status
         }
       }
@@ -711,7 +721,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get("/workspaces") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
 
@@ -835,7 +845,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
 
@@ -855,7 +865,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
           header("Location")
         }
       }
@@ -889,7 +899,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
 
@@ -951,7 +961,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
 
@@ -971,7 +981,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
           header("Location")
         }
       }
@@ -986,7 +996,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
 
@@ -1006,7 +1016,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
           header("Location")
         }
       }
@@ -1088,7 +1098,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopyNoRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(Set.empty) {
@@ -1102,7 +1112,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopyRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(Set(ManagedGroup.toRef(realmGroup))) {
@@ -1204,7 +1214,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${workspaceWithRealm.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None), WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
       }
 
     //assert userWriter is not a part of realm writer ACLs
@@ -1489,7 +1499,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceNoAttrs)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(testData.workspace.attributes) {
@@ -1527,6 +1537,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.Conflict) {
           status
+        }
+        assertResult(None) {
+          header("Location")
         }
       }
   }
@@ -1638,7 +1651,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
       }
@@ -1719,13 +1732,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString ) { status }
+        assertResult(StatusCodes.OK ) { status }
       }
 
     Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString ) { status }
+        assertResult(StatusCodes.OK ) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))
       }
   }
@@ -1734,13 +1747,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString ) { status }
+        assertResult(StatusCodes.OK ) { status }
       }
 
     Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString ) { status }
+        assertResult(StatusCodes.OK ) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))
       }
   }
@@ -1749,7 +1762,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.BadRequest, response.entity.asString ) { status }
+        assertResult(StatusCodes.BadRequest ) { status }
       }
   }
 
@@ -1781,13 +1794,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.BadRequest, response.entity.asString ) { status }
+        assertResult(StatusCodes.BadRequest ) { status }
       }
 
     Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString ) { status }
+        assertResult(StatusCodes.OK ) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true))
 
       }
@@ -1814,7 +1827,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, response.entity.asString) { status }
+        assertResult(StatusCodes.Forbidden) { status }
       }
   }
 
@@ -1822,7 +1835,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound, response.entity.asString) { status }
+        assertResult(StatusCodes.NotFound) { status }
       }
   }
 
@@ -1836,7 +1849,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true, false))
       }
   }
@@ -1862,7 +1875,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, true))
       }
 
@@ -1875,7 +1888,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false))
       }
 
@@ -1888,7 +1901,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, true))
       }
 
@@ -1901,7 +1914,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true))
       }
   }
@@ -1916,7 +1929,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))
       }
   }
@@ -1926,12 +1939,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
       }
     Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))
       }
   }
@@ -1946,7 +1959,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should not contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, false, true))
       }
   }
@@ -1961,7 +1974,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true))
       }
   }
@@ -1976,7 +1989,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))
       }
   }
@@ -1991,7 +2004,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should not contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true, false))
       }
   }
@@ -2008,7 +2021,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true, false))
       }
 
@@ -2021,7 +2034,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))
       }
 
@@ -2034,7 +2047,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true, false))
       }
   }
@@ -2225,7 +2238,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden) {
           status
         }
       }
@@ -2241,7 +2254,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden) {
           status
         }
       }
@@ -2264,7 +2277,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(request)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
 
@@ -2309,7 +2322,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(request)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
 
@@ -2370,7 +2383,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         Post(s"/workspaces", httpJson(request)) ~>
           sealRoute(services.workspaceRoutes) ~>
           check {
-            assertResult(StatusCodes.Created, response.entity.asString) {
+            assertResult(StatusCodes.Created) {
               status
             }
           }
@@ -2559,7 +2572,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
       }
@@ -2569,7 +2582,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}/entities", httpJson(z1)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
       }

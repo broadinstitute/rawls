@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.model
 
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
-import spray.http.OAuth2BearerToken
 import spray.json._
 
 case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole, creationStatus: CreationStatuses.CreationStatus, message: Option[String] = None)

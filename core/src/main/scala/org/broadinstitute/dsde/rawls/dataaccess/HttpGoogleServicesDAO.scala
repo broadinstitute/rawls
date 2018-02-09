@@ -4,6 +4,11 @@ import java.io._
 import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem}
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.client.RequestBuilding
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.stream.Materializer
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -43,8 +48,6 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroup}
 import org.joda.time
-import spray.client.pipelining._
-import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
 import spray.json._
 
 import scala.collection.JavaConversions._
@@ -70,7 +73,7 @@ class HttpGoogleServicesDAO(
   val billingEmail: String,
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
-  override val workbenchMetricBaseName: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+  override val workbenchMetricBaseName: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
   val API_SERVICE_MANAGEMENT = "ServiceManagement"
@@ -824,8 +827,7 @@ class HttpGoogleServicesDAO(
     getToken(rawlsUserRef) map {
       case Some(token) =>
         val url = s"https://accounts.google.com/o/oauth2/revoke?token=$token"
-        val pipeline = sendReceive
-        pipeline(Get(url))
+        Http(system).singleRequest(RequestBuilding.Get(url))
 
       case None => Future.successful(())
     }

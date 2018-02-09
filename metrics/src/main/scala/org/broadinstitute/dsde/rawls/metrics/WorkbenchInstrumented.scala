@@ -5,11 +5,11 @@ import nl.grons.metrics.scala._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
 
 import scala.collection.JavaConverters._
-import spray.http.{HttpRequest, HttpResponse, Uri}
+import akka.http.scaladsl.model._
 
 /**
   * Mixin trait for instrumentation.
-  * Extends metrics-scala [[DefaultInstrumented]] and provides additional utilties for generating
+  * Extends metrics-scala [[DefaultInstrumented]] and provides additional utilities for generating
   * metric names for Workbench.
   */
 trait WorkbenchInstrumented extends DefaultInstrumented {

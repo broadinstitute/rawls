@@ -1,18 +1,16 @@
 package org.broadinstitute.dsde.rawls.openam
 
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.server.Directive1
+import akka.http.scaladsl.server.Directives.{headerValueByName, onSuccess}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo, UserStatus}
-import spray.http.{HttpHeader, OAuth2BearerToken}
-import spray.routing.Directive1
-import spray.routing.Directives._
-import scala.concurrent.ExecutionContext.Implicits.global
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 trait StandardUserInfoDirectives extends UserInfoDirectives {
-
+  implicit val executionContext: ExecutionContext
   val samDAO: SamDAO
-
 
   val serviceAccountDomain = "\\S+@\\S+\\.iam\\.gserviceaccount\\.com".r
 
@@ -20,20 +18,18 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
     serviceAccountDomain.pattern.matcher(email).matches
   }
 
-
-  def requireUserInfo(): Directive1[UserInfo] = detach(()) & {
-    val userInfo = for {
-      accessToken <- accessTokenHeaderDirective
-      userEmail <- emailHeaderDirective
-      accessTokenExpiresIn <- accessTokenExpiresInHeaderDirective
-      userSubjectId <- userSubjectIdDirective
-    } yield UserInfo(RawlsUserEmail(userEmail), OAuth2BearerToken(accessToken), accessTokenExpiresIn.toLong, RawlsUserSubjectId(userSubjectId))
-
-    userInfo flatMap { ui =>
-      onSuccess(getWorkbenchUserEmailId(ui)).map {
-        case Some(samUserInfo) => UserInfo(samUserInfo.userInfo.userEmail, ui.accessToken, ui.accessTokenExpiresIn, samUserInfo.userInfo.userSubjectId)
-        case None => UserInfo(ui.userEmail, ui.accessToken, ui.accessTokenExpiresIn, ui.userSubjectId)
-      }
+  def requireUserInfo: Directive1[UserInfo] = (
+    headerValueByName("OIDC_access_token") &
+      headerValueByName("OIDC_CLAIM_user_id") &
+      headerValueByName("OIDC_CLAIM_expires_in") &
+      headerValueByName("OIDC_CLAIM_email")
+    ) tflatMap {
+    case (token, userId, expiresIn, email) => {
+      val userInfo = UserInfo(RawlsUserEmail(email), OAuth2BearerToken(token), expiresIn.toLong, RawlsUserSubjectId(userId))
+      onSuccess(getWorkbenchUserEmailId(userInfo).map {
+        case Some(petOwnerUser) => UserInfo(petOwnerUser.userInfo.userEmail, OAuth2BearerToken(token), expiresIn.toLong, petOwnerUser.userInfo.userSubjectId)
+        case None => userInfo
+      })
     }
   }
 
@@ -43,22 +39,6 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
     }
     else {
       Future.successful(None)
-    }
-  }
-
-  private def accessTokenHeaderDirective: Directive1[String] = headerValueByName("OIDC_access_token")
-
-  private def accessTokenExpiresInHeaderDirective: Directive1[String] = headerValueByName("OIDC_CLAIM_expires_in")
-
-  private def emailHeaderDirective: Directive1[String] = headerValueByName("OIDC_CLAIM_email")
-
-  private def userSubjectIdDirective: Directive1[String] = headerValue(extractUniqueId)
-
-  def extractUniqueId: HttpHeader => Option[String] = {hdr:HttpHeader =>
-    hdr.name match {
-      case "OIDC_CLAIM_sub" => Some(hdr.value)
-      case "OIDC_CLAIM_user_id" => Some(hdr.value)
-      case _ => None
     }
   }
 }

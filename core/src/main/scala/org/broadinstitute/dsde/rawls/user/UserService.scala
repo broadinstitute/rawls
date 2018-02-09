@@ -15,10 +15,11 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectorySubjectNameSupport
 import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete, RequestCompleteWithLocation}
-import spray.http.{OAuth2BearerToken, StatusCodes}
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
+import akka.http.scaladsl.model.StatusCodes
 import spray.json._
-import spray.httpx.SprayJsonSupport._
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -38,123 +39,68 @@ object UserService {
   val canComputeUserPolicyName = "can-compute-user"
   val ownerPolicyName = "owner"
 
-  def props(userServiceConstructor: UserInfo => UserService, userInfo: UserInfo): Props = {
-    Props(userServiceConstructor(userInfo))
-  }
-
   def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
     new UserService(userInfo, dataSource, googleServicesDAO, gpsDAO, gpsGroupSyncTopic, notificationDAO, samDAO, projectOwnerGrantableRoles)
 
-  sealed trait UserServiceMessage
-  case class SetRefreshToken(token: UserRefreshToken) extends UserServiceMessage
-  case object GetRefreshTokenDate extends UserServiceMessage
-
-  case object CreateUser extends UserServiceMessage
-  case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
-  case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
-
-  case class CreateManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
-  case class GetManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
-  case object ListManagedGroupsForUser extends UserServiceMessage
-  case class RequestAccessToManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
-  case class SetManagedGroupAccessInstructions(groupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions) extends UserServiceMessage
-  case class AddManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) extends UserServiceMessage
-  case class RemoveManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) extends UserServiceMessage
-  case class OverwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList) extends UserServiceMessage
-  case class DeleteManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
-
-  case class AdminDeleteRefreshToken(userRef: RawlsUserRef) extends UserServiceMessage
-  case object AdminDeleteAllRefreshTokens extends UserServiceMessage
-
-  case object ListBillingProjects extends UserServiceMessage
-  case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
-  case class AdminRegisterBillingProject(xfer: RawlsBillingProjectTransfer) extends UserServiceMessage
-  case class AdminUnregisterBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) extends UserServiceMessage
-  case class AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
-  case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
-  case class GrantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) extends UserServiceMessage
-  case class RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) extends UserServiceMessage
-  case object ListBillingAccounts extends UserServiceMessage
-
-  case class CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) extends UserServiceMessage
-  case class GetBillingProjectMembers(projectName: RawlsBillingProjectName) extends UserServiceMessage
-
-  case class AdminCreateGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
-  case class AdminListGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
-  case class AdminDeleteGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
-  case class AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
-  case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
-  case class AdminAddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
-  case class AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
-  case class AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
-  case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
-  case class AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
-  case class InternalSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
-
-  case class IsAdmin(userEmail: RawlsUserEmail) extends UserServiceMessage
-  case class IsLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
-  case class AdminAddLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
-  case class AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
+  case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths with LazyLogging with DirectorySubjectNameSupport {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with DirectorySubjectNameSupport {
 
   import dataSource.dataAccess.driver.api._
   import spray.json.DefaultJsonProtocol._
 
-  override def receive = {
-    case SetRefreshToken(token) => setRefreshToken(token) pipeTo sender
-    case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender
+  def SetRefreshToken(token: UserRefreshToken) = setRefreshToken(token)
+  def GetRefreshTokenDate = getRefreshTokenDate()
 
-    case CreateUser => createUser() pipeTo sender
-    case ListGroupsForUser(userEmail) => listGroupsForUser(userEmail) pipeTo sender
-    case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
+  def CreateUser = createUser()
+  def ListGroupsForUser(userEmail: RawlsUserEmail) = listGroupsForUser(userEmail)
+  def GetUserGroup(groupRef: RawlsGroupRef) = getUserGroup(groupRef)
 
-    case ListBillingProjects => listBillingProjects pipeTo sender
-    case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
-    case AdminRegisterBillingProject(xfer) => asFCAdmin { registerBillingProject(xfer) } pipeTo sender
-    case AdminUnregisterBillingProject(projectName, ownerInfo) => asFCAdmin { unregisterBillingProject(projectName, ownerInfo) } pipeTo sender
+  def ListBillingProjects = listBillingProjects
+  def AdminDeleteBillingProject(projectName: RawlsBillingProjectName) = asFCAdmin { deleteBillingProject(projectName) }
+  def AdminRegisterBillingProject(xfer: RawlsBillingProjectTransfer) = asFCAdmin { registerBillingProject(xfer) }
+  def AdminUnregisterBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { unregisterBillingProject(projectName, ownerInfo) }
 
-    case AddUserToBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
-    case RemoveUserFromBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
-    case GrantGoogleRoleToUser(projectName, targetUserEmail, role) => requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { grantGoogleRoleToUser(projectName, targetUserEmail, role) } pipeTo sender
-    case RemoveGoogleRoleFromUser(projectName, targetUserEmail, role) => requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) } pipeTo sender
-    case ListBillingAccounts => listBillingAccounts() pipeTo sender
+  def AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) = requireProjectAction(projectName, SamResourceActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) }
+  def RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) = requireProjectAction(projectName, SamResourceActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) }
+  def GrantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { grantGoogleRoleToUser(projectName, targetUserEmail, role) }
+  def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
+  def ListBillingAccounts = listBillingAccounts()
 
-    case AdminCreateGroup(groupRef) => asFCAdmin { createGroup(groupRef) } pipeTo sender
-    case AdminListGroupMembers(groupRef) => asFCAdmin { listGroupMembers(groupRef) } pipeTo sender
-    case AdminDeleteGroup(groupName) => asFCAdmin { deleteGroup(groupName) } pipeTo sender
-    case AdminOverwriteGroupMembers(groupName, memberList) => asFCAdmin { overwriteGroupMembers(groupName, memberList) } to sender
+  def AdminCreateGroup(groupRef: RawlsGroupRef) = asFCAdmin { createGroup(groupRef) }
+  def AdminListGroupMembers(groupRef: RawlsGroupRef) = asFCAdmin { listGroupMembers(groupRef) }
+  def AdminDeleteGroup(groupName: RawlsGroupRef) = asFCAdmin { deleteGroup(groupName) }
+  def AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { overwriteGroupMembers(groupRef, memberList) }
 
-    case CreateManagedGroup(groupRef) => createManagedGroup(groupRef) pipeTo sender
-    case GetManagedGroup(groupRef) => getManagedGroup(groupRef) pipeTo sender
-    case RequestAccessToManagedGroup(groupRef) => requestAccessToManagedGroup(groupRef) pipeTo sender
-    case SetManagedGroupAccessInstructions(groupRef, instructions) => asFCAdmin { setManagedGroupAccessInstructions(groupRef, instructions) } pipeTo sender
-    case ListManagedGroupsForUser => listManagedGroupsForUser pipeTo sender
-    case AddManagedGroupMembers(groupRef, role, email) => addManagedGroupMembers(groupRef, role, email) pipeTo sender
-    case RemoveManagedGroupMembers(groupRef, role, email) => removeManagedGroupMembers(groupRef, role, email) pipeTo sender
-    case OverwriteManagedGroupMembers(groupRef, role, memberList) => overwriteManagedGroupMembers(groupRef, role, memberList) pipeTo sender
-    case DeleteManagedGroup(groupRef) => deleteManagedGroup(groupRef) pipeTo sender
+  def CreateManagedGroup(groupRef: ManagedGroupRef) = createManagedGroup(groupRef)
+  def GetManagedGroup(groupRef: ManagedGroupRef) = getManagedGroup(groupRef)
+  def RequestAccessToManagedGroup(groupRef: ManagedGroupRef) = requestAccessToManagedGroup(groupRef)
+  def SetManagedGroupAccessInstructions(groupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions) = asFCAdmin { setManagedGroupAccessInstructions(groupRef, instructions) }
+  def ListManagedGroupsForUser = listManagedGroupsForUser
+  def AddManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) = addManagedGroupMembers(groupRef, role, email)
+  def RemoveManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) = removeManagedGroupMembers(groupRef, role, email)
+  def OverwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList) = overwriteManagedGroupMembers(groupRef, role, memberList)
+  def DeleteManagedGroup(groupRef: ManagedGroupRef) = deleteManagedGroup(groupRef)
 
-    case CreateBillingProjectFull(projectName, billingAccount) => startBillingProjectCreation(projectName, billingAccount) pipeTo sender
-    case GetBillingProjectMembers(projectName) => requireProjectAction(projectName, SamResourceActions.readPolicies) { getBillingProjectMembers(projectName) } pipeTo sender
+  def CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) = startBillingProjectCreation(projectName, billingAccount)
+  def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamResourceActions.readPolicies) { getBillingProjectMembers(projectName) }
 
-    case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
-    case AdminAddGroupMembers(groupName, memberList) => asFCAdmin { updateGroupMembers(groupName, addMemberList = memberList) } to sender
-    case AdminRemoveGroupMembers(groupName, memberList) => asFCAdmin { updateGroupMembers(groupName, removeMemberList = memberList) } to sender
-    case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, addMemberList = memberList) to sender
-    case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, removeMemberList = memberList) to sender
-    case AdminSynchronizeGroupMembers(groupRef) => asFCAdmin { synchronizeGroupMembersApi(groupRef) } pipeTo sender
-    case InternalSynchronizeGroupMembers(groupRef) => synchronizeGroupMembers(groupRef) pipeTo sender
+  def OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = overwriteGroupMembers(groupRef, memberList)
+  def AdminAddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { updateGroupMembers(groupRef, addMemberList = memberList) }
+  def AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { updateGroupMembers(groupRef, removeMemberList = memberList) }
+  def AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = updateGroupMembers(groupRef, addMemberList = memberList)
+  def RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = updateGroupMembers(groupRef, removeMemberList = memberList)
+  def AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) = asFCAdmin { synchronizeGroupMembersApi(groupRef) }
+  def InternalSynchronizeGroupMembers(groupRef: RawlsGroupRef) = synchronizeGroupMembers(groupRef)
 
-    case AdminDeleteRefreshToken(userRef) => asFCAdmin { deleteRefreshToken(userRef) } pipeTo sender
-    case AdminDeleteAllRefreshTokens => asFCAdmin { deleteAllRefreshTokens() } pipeTo sender
+  def AdminDeleteRefreshToken(userRef: RawlsUserRef) = asFCAdmin { deleteRefreshToken(userRef) }
+  def AdminDeleteAllRefreshTokens = asFCAdmin { deleteAllRefreshTokens() }
 
-    case IsAdmin(userEmail) => { isAdmin(userEmail) } pipeTo sender
-    case IsLibraryCurator(userEmail) => { isLibraryCurator(userEmail) } pipeTo sender
-    case AdminAddLibraryCurator(userEmail) => asFCAdmin { addLibraryCurator(userEmail) } pipeTo sender
-    case AdminRemoveLibraryCurator(userEmail) => asFCAdmin { removeLibraryCurator(userEmail) } pipeTo sender
-  }
+  def IsAdmin(userEmail: RawlsUserEmail) = { isAdmin(userEmail) }
+  def IsLibraryCurator(userEmail: RawlsUserEmail) = { isLibraryCurator(userEmail) }
+  def AdminAddLibraryCurator(userEmail: RawlsUserEmail) = asFCAdmin { addLibraryCurator(userEmail) }
+  def AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) = asFCAdmin { removeLibraryCurator(userEmail) }
 
   def requireProjectAction(projectName: RawlsBillingProjectName, action: SamResourceActions.SamResourceAction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, userInfo).flatMap {
@@ -179,13 +125,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   //Note: As of Sam Phase I, this function only fires off the welcome email and updates pending workspace access
   //The rest of user registration now takes place in Sam
-  def createUser(): Future[PerRequestMessage] = {
+  def createUser(): Future[Unit] = {
     val user = RawlsUser(userInfo)
 
-    handleFutures(Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user)))))(_ => {
+    val response = handleFutures(Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user)))))(_ => {
       notificationDAO.fireAndForgetNotification(ActivationNotification(user.userSubjectId))
-      RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}")
     }, handleException("Errors creating user"))
+
+    response.map(_ => ())
   }
 
   def turnInvitesIntoRealAccess(user: RawlsUser) = {
@@ -997,7 +944,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
    * @tparam T
    * @return
    */
-  private def handleFutures[T](futures: Future[Seq[Try[T]]])(success: Seq[T] => PerRequestMessage, failure: Seq[Throwable] => PerRequestMessage): Future[PerRequestMessage] = {
+  private def handleFutures[T, R](futures: Future[Seq[Try[T]]])(success: Seq[T] => R, failure: Seq[Throwable] => R): Future[R] = {
     futures map { tries =>
       val exceptions = tries.collect { case Failure(t) => t }
       if (exceptions.isEmpty) {

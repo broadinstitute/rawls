@@ -12,8 +12,9 @@ import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Seconds, Span}
-import spray.http.HttpMethods._
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.HttpMethods._
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -32,7 +33,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
   // See: http://doc.scalatest.org/2.2.4/index.html#org.scalatest.concurrent.Futures
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource, subsystemsOk: Boolean, apiService: TestApiService)(testCode: TestApiService => T): T = {
     try {

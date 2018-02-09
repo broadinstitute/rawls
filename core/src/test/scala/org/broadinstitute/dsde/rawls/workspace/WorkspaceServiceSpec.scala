@@ -4,6 +4,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import akka.actor.PoisonPill
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -25,8 +26,8 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUt
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
-import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes}
-import spray.testkit.ScalatestRouteTest
+import akka.http.scaladsl.model.{ StatusCode, StatusCodes}
+import akka.http.scaladsl.testkit.ScalatestRouteTest
 
 import scala.concurrent.duration.{Duration, FiniteDuration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -69,8 +70,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   case class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
     private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
-    lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo1)).underlyingActor
-    lazy val userService: UserService = TestActorRef(UserService.props(userServiceConstructor, userInfo1)).underlyingActor
+    lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
+    lazy val userService: UserService = userServiceConstructor(userInfo1)
 
 
     def actorRefFactory = system
@@ -83,7 +84,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
 
-    val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
+    val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       slickDataSource,
@@ -1051,7 +1052,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   for ((accessLevel, callCount) <- Seq((Write, 1), (Read, 0))) {
     it should s"share billing compute $callCount times when workspace $accessLevel access granted" in withTestDataServices { services =>
-      import spray.httpx.SprayJsonSupport._
+      import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
       import WorkspaceACLJsonSupport._
       val email = s"${UUID.randomUUID}@bar.com"
       val results = RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse("foo", email, accessLevel)), Seq.empty, Seq.empty, Seq.empty))

@@ -4,8 +4,10 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import spray.httpx.SprayJsonSupport._
-import spray.routing._
+import akka.http.scaladsl.server
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.StatusCodes
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
@@ -13,83 +15,62 @@ import scala.concurrent.duration.FiniteDuration
 /**
   * Created by dvoet on 6/4/15.
   */
-trait SubmissionApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
+trait SubmissionApiService extends UserInfoDirectives {
+  import PerRequest.requestCompleteMarshaller
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val submissionTimeout: FiniteDuration
 
 
-  val submissionRoutes = requireUserInfo() { userInfo =>
+  val submissionRoutes: server.Route = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
       get {
-        requestContext =>
-          perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.ListSubmissions(WorkspaceName(workspaceNamespace, workspaceName)))
+        complete { workspaceServiceConstructor(userInfo).ListSubmissions(WorkspaceName(workspaceNamespace, workspaceName)) }
       }
     } ~
       path("workspaces" / Segment / Segment / "submissionsCount") { (workspaceNamespace, workspaceName) =>
         get {
-          requestContext =>
-            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.CountSubmissions(WorkspaceName(workspaceNamespace, workspaceName)))
+          complete { workspaceServiceConstructor(userInfo).CountSubmissions(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
         post {
           entity(as[SubmissionRequest]) { submission =>
-            requestContext =>
-              perRequest(requestContext,
-                WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.CreateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission),
-                submissionTimeout)
+            complete { workspaceServiceConstructor(userInfo).CreateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission) },
           }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / "validate") { (workspaceNamespace, workspaceName) =>
         post {
           entity(as[SubmissionRequest]) { submission =>
-            requestContext =>
-              perRequest(requestContext,
-                WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.ValidateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission))
+            complete { workspaceServiceConstructor(userInfo).ValidateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission) }
           }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
         get {
-          requestContext =>
-            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.GetSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
+          complete { workspaceServiceConstructor(userInfo).GetSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId) }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
         delete {
-          requestContext =>
-            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.AbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
+          complete { workspaceServiceConstructor(userInfo).AbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId) }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment) { (workspaceNamespace, workspaceName, submissionId, workflowId) =>
         get {
-          requestContext =>
-            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.GetWorkflowMetadata(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId))
+          complete { workspaceServiceConstructor(userInfo).GetWorkflowMetadata(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId) }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment / "outputs") { (workspaceNamespace, workspaceName, submissionId, workflowId) =>
         get {
-          requestContext =>
-            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.GetWorkflowOutputs(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId))
+          complete { workspaceServiceConstructor(userInfo).GetWorkflowOutputs(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId) }
         }
       } ~
       path("submissions" / "queueStatus") {
         get {
-          requestContext =>
-            perRequest(requestContext,
-              WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.WorkflowQueueStatus)
+          complete { workspaceServiceConstructor(userInfo).WorkflowQueueStatus }
         }
       }
   }

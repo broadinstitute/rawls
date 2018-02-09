@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.openam
 
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo}
-import spray.http.OAuth2BearerToken
-import spray.routing.Directive1
-import spray.routing.Directives._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.server.Directive1
+import akka.http.scaladsl.server.Directives._
 
 trait MockUserInfoDirectives extends UserInfoDirectives {
   protected def userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))

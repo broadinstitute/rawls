@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls
 
 import org.broadinstitute.dsde.rawls.model.{Attributable, AttributeName, ErrorReport, ErrorReportSource}
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 
 trait StringValidationUtils {
   implicit val errorReportSource: ErrorReportSource

@@ -11,7 +11,7 @@ import com.google.api.services.pubsub.{Pubsub, PubsubScopes}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.util.FutureSupport
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 
 import scala.collection.JavaConversions._
 import scala.concurrent._

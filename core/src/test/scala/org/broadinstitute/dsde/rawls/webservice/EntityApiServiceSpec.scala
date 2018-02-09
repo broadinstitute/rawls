@@ -7,12 +7,14 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.SortDirections.{Descending, Ascending}
+import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import spray.http._
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import spray.json.DefaultJsonProtocol._
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 
 import scala.concurrent.ExecutionContext
 import scala.util.Random
@@ -22,7 +24,7 @@ import scala.util.Random
  */
 class EntityApiServiceSpec extends ApiServiceSpec {
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
@@ -122,7 +124,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Post(s"${workspaceSrcRequest.path}/entities", httpJson(z1)) ~>
           sealRoute(services.entityRoutes) ~>
           check {
-            assertResult(StatusCodes.Created, response.entity.asString) {
+            assertResult(StatusCodes.Created) {
               status
             }
             assertResult(z1) {
@@ -135,7 +137,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
               sealRoute(services.entityRoutes) ~>
               check {
-                assertResult(StatusCodes.Created, response.entity.asString) {
+                assertResult(StatusCodes.Created) {
                   status
                 }
               }
@@ -209,7 +211,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newSample.path(testData.workspace)))))) {
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newSample.path(testData.workspace)))))) {
           header("Location")
         }
       }
@@ -785,7 +787,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.NoContent, response.entity.asString) {
+        assertResult(StatusCodes.NoContent) {
           status
         }
         assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> referenceList)))) {
@@ -832,7 +834,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden) {
           status
         }
       }
@@ -946,7 +948,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden) {
           status
         }
       }
@@ -1446,7 +1448,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Post(s"${workspace2Request.path}/entities", httpJson(z1)) ~>
           sealRoute(services.entityRoutes) ~>
           check {
-            assertResult(StatusCodes.Created, response.entity.asString) {
+            assertResult(StatusCodes.Created) {
               status
             }
             assertResult(z1) {
@@ -1459,7 +1461,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
               sealRoute(services.entityRoutes) ~>
               check {
-                assertResult(StatusCodes.Created, response.entity.asString) {
+                assertResult(StatusCodes.Created) {
                   status
                 }
                 assertResult(z1) {
@@ -1498,7 +1500,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post("/workspaces", httpJson(newWorkspaceCreate)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
       }
@@ -1506,7 +1508,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post("/workspaces/entities/copy", httpJson(copyAliquot1)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
 
@@ -1520,7 +1522,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post("/workspaces/entities/copy", httpJson(copySample3)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Conflict, response.entity.asString) {
+        assertResult(StatusCodes.Conflict) {
           status
         }
 
@@ -1548,7 +1550,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Post("/workspaces/entities/copy", httpJson(entityCopyDefinition1)) ~>
         services.sealedInstrumentedRoutes ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
 
@@ -1574,7 +1576,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Post("/workspaces/entities/copy", httpJson(entityCopyDefinition2)) ~>
       services.sealedInstrumentedRoutes ~>
       check {
-        assertResult(StatusCodes.Conflict, response.entity.asString) {
+        assertResult(StatusCodes.Conflict) {
           status
         }
         assertResult(expectedSoftConflictResponse) {
@@ -1590,7 +1592,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Post("/workspaces/entities/copy?linkExistingEntities=false", httpJson(entityCopyDefinition2)) ~>
         services.sealedInstrumentedRoutes ~>
         check {
-          assertResult(StatusCodes.Conflict, response.entity.asString) {
+          assertResult(StatusCodes.Conflict) {
             status
           }
           assertResult(expectedSoftConflictResponse) {
@@ -1605,7 +1607,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post("/workspaces/entities/copy?linkExistingEntities=true", httpJson(entityCopyDefinition2)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(EntityCopyResponse(Seq(testData.sample3).map(_.toReference), Seq.empty, Seq.empty)) {
@@ -1623,7 +1625,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${srcWorkspace.path}/entities", httpJson(z1)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(z1) {
@@ -1642,7 +1644,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/clone", httpJson(wrongRealmCloneRequest)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(Set(ManagedGroup.toRef(newRealm))) {
@@ -1685,7 +1687,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post("/workspaces", x) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(authDomain) {
@@ -1697,7 +1699,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${srcWorkspaceName.namespace}/source_ws/clone", httpJson(destCloneRequest)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(authDomain) {
@@ -1708,7 +1710,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${srcWorkspaceName.namespace}/${srcWorkspaceName.name}/entities", httpJson(z1)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
       }
@@ -1735,7 +1737,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${srcWorkspace.path}/entities", httpJson(z1)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult(z1) {
@@ -1888,7 +1890,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=asdfasdfasdf") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -1915,7 +1917,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -1932,7 +1934,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"${paginationTestData.workspace.path}/entityQuery/blarf") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -1973,7 +1975,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(s"${paginationTestData.workspace.path}/entityQuery/bar") ~>
         services.sealedInstrumentedRoutes ~>
         check {
-          assertResult(StatusCodes.OK, response.entity.asString) {
+          assertResult(StatusCodes.OK) {
             status
           }
           assertResult(EntityQueryResponse(
@@ -1997,7 +1999,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?filterTerms=qqq") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -2016,7 +2018,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?page=$page") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -2035,7 +2037,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -2053,7 +2055,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=number") ~>
         services.sealedInstrumentedRoutes ~>
         check {
-          assertResult(StatusCodes.OK, response.entity.asString) {
+          assertResult(StatusCodes.OK) {
             status
           }
           assertResult(EntityQueryResponse(
@@ -2075,7 +2077,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=random&sordDirection=asc") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -2148,7 +2150,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=sparse&pageSize=${paginationTestData.numEntities}") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
 
@@ -2164,7 +2166,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?sortField=random&sortDirection=desc") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -2187,7 +2189,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&filterTerms=$vocab1Term%20$vocab2Term") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
         assertResult(EntityQueryResponse(

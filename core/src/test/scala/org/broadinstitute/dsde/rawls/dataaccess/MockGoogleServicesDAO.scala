@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.util.UUID
 
 import akka.actor.ActorRef
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
@@ -17,7 +18,6 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
-import spray.http.OAuth2BearerToken
 import spray.json._
 
 import scala.collection.concurrent.TrieMap

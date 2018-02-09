@@ -1,10 +1,10 @@
+import Dependencies.excludeAkkaActor
 import sbt._
 
 object Dependencies {
-  val akkaV = "2.3.6"
-  val sprayV = "1.3.4"
-  val olderSprayV = "1.3.3" // "latest" is different for various spray packages
-  val slickV = "3.1.1"
+  val akkaV = "2.4.19"
+  val akkaHttpV = "10.0.10"
+  val slickV = "3.2.1"
 
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
@@ -12,23 +12,23 @@ object Dependencies {
   val cromwellVersion = "30-9a7de06"
 
   //UPDATE THIS WITH FINAL HASH
-  val serviceTestV = "0.1.1-alpha-sam-00c1bc7-SNAP"
+  val serviceTestV = "0.4-d072389"
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
-
-  val sprayJson: ModuleID =     "io.spray" %% "spray-json"    % olderSprayV
-  val sprayHttp: ModuleID =     "io.spray" %% "spray-http"    % sprayV
-  val sprayHttpx: ModuleID =    "io.spray" %% "spray-httpx"   % sprayV
-  val sprayCan: ModuleID =      "io.spray" %% "spray-can"     % sprayV
-  val sprayRouting: ModuleID =  "io.spray" %% "spray-routing-shapeless23" % sprayV
-  val sprayClient: ModuleID =   "io.spray" %% "spray-client"  % sprayV
-  val sprayTestkit: ModuleID =  "io.spray" %% "spray-testkit" % sprayV % "test"
 
   val slick: ModuleID =         "com.typesafe.slick" %% "slick"           % slickV
   val slickHikariCP: ModuleID = "com.typesafe.slick" %% "slick-hikaricp"  % slickV
 
-  val akkaActor: ModuleID =   "com.typesafe.akka" %% "akka-actor"   % akkaV
-  val akkaTestkit: ModuleID = "com.typesafe.akka" %% "akka-testkit" % akkaV % "test"
+  val excludeAkkaActor =        ExclusionRule(organization = "com.typesafe.akka", name = "akka-actor_2.12")
+  val excludeAkkaStream =       ExclusionRule(organization = "com.typesafe.akka", name = "akka-stream_2.12")
+
+  val akkaActor: ModuleID =         "com.typesafe.akka"   %%  "akka-actor"           % akkaV
+  val akkaContrib: ModuleID =       "com.typesafe.akka"   %%  "akka-contrib"         % akkaV
+  val akkaSlf4j: ModuleID =         "com.typesafe.akka"   %%  "akka-slf4j"           % akkaV
+  val akkaHttp: ModuleID =          "com.typesafe.akka"   %%  "akka-http"            % akkaHttpV           excludeAll(excludeAkkaActor, excludeAkkaStream)
+  val akkaHttpSprayJson: ModuleID = "com.typesafe.akka"   %%  "akka-http-spray-json" % akkaHttpV
+  val akkaTestKit: ModuleID =       "com.typesafe.akka"   %%  "akka-testkit"         % akkaV     % "test"
+  val akkaHttpTestKit: ModuleID =   "com.typesafe.akka"   %%  "akka-http-testkit"    % akkaHttpV % "test"
 
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleV)
   val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev7-" + googleV))
@@ -68,29 +68,32 @@ object Dependencies {
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.0.1" % "test"
   val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.7.22" % "test"
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
+  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
 
   val cromwellWdl: ModuleID = ("org.broadinstitute" %% "cromwell-wdl" % cromwellVersion
-    exclude("org.typelevel", "cats_2.11")
-    exclude("io.spray", "spray-json_2.11")
-    exclude("com.typesafe.akka", "akka-actor_2.11"))
+    exclude("org.typelevel", "cats_2.12")
+    exclude("io.spray", "spray-json_2.12")
+    exclude("io.spray", "akka-parsing_2.12")
+    exclude("io.spray", "akka-stream_2.12")
+    exclude("com.typesafe.akka", "akka-actor_2.12"))
 
-  val workbenchModelV  = "0.8-d6801ce"
+  val workbenchModelV  = "0.10-6800f3a"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests"
 
   val metricsDependencies = Seq(
     metricsScala,
     metricsStatsd,
-    sprayHttp,
+    akkaHttp,
     scalatest,
     mockito
   )
 
   val googleDependencies = metricsDependencies ++ Seq(
-    sprayJson,
-    sprayHttp,
+    akkaHttpSprayJson,
+    akkaHttp,
     akkaActor,
-    akkaTestkit,
+    akkaHttpTestKit,
     scalatest,
 
     googleCloudBilling,
@@ -111,7 +114,7 @@ object Dependencies {
     scalaLogging,
     akkaActor,
     cats,
-    akkaTestkit,
+    akkaHttpTestKit,
     scalatest,
     mockito
   )
@@ -119,9 +122,8 @@ object Dependencies {
   val modelDependencies = Seq(
     // I am not certain why I need jackson-core here but IntelliJ is confused without it and tests don't run
     jacksonCore,
-    sprayJson,
-    sprayHttp,
-    sprayHttpx,
+    akkaHttpSprayJson,
+    akkaHttp,
     jodaTime,
     jodaConvert,
     scalaLogging,
@@ -137,9 +139,8 @@ object Dependencies {
     ravenLogback,
     slick,
     slickHikariCP,
-    sprayCan,
-    sprayRouting,
-    sprayClient,
+    akkaHttp,
+    akkaHttp,
     swaggerUI,
     commonsJEXL,
     cromwellWdl,
@@ -147,12 +148,13 @@ object Dependencies {
     mysqlConnector,
     liquibaseCore,
     logbackClassic,
-    akkaTestkit,
-    sprayTestkit,
+    akkaTestKit,
+    akkaHttpTestKit,
     mockserverNetty,
     mockito,
     googleRpc,
     workbenchModel,
-    workbenchServiceTest
+    workbenchServiceTest,
+    ficus
   )
 }

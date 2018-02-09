@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.model._
 import slick.ast.{BaseTypedType, TypedType}
 import slick.dbio.Effect.Write
 import slick.driver.JdbcDriver
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 
 import reflect.runtime.universe._
 

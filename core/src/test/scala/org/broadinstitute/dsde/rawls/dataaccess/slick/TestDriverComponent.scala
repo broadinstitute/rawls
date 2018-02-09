@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers, Suite}
-import spray.http.OAuth2BearerToken
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -972,14 +972,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   def withCustomTestDatabaseInternal[T](data: TestData)(testCode: => T): T = {
+    runAndWait(DBIO.seq(slickDataSource.dataAccess.truncateAll), 2 minutes)
+    Await.result(slickDataSource.dataAccess.clearLdap(), 2 minutes)
     try {
       runAndWait(data.save())
       testCode
     } catch {
       case t: Throwable => t.printStackTrace; throw t
-    } finally {
-      runAndWait(DBIO.seq(slickDataSource.dataAccess.truncateAll), 2 minutes)
-      Await.result(slickDataSource.dataAccess.clearLdap(), 2 minutes)
     }
   }
 

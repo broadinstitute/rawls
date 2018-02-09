@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.auth.oauth2.Credential
-import spray.http.OAuth2BearerToken
 
 /**
  * Created by dvoet on 7/21/15.
