@@ -236,7 +236,7 @@ case class AgoraMethod(methodNamespace: String, methodName: String, methodVersio
       s"${repo.scheme}://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion"
     else
       throw new RawlsException(
-        s"Could not generate a method URI from MethodRepoMethod with repo \'${repo.scheme}\', namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
+        s"Could not generate a method URI from AgoraMethod with namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
       )
   }
 
@@ -275,7 +275,7 @@ case class DockstoreMethod(methodPath: String, methodVersion: String) extends Me
       s"${repo.scheme}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}"
     else
       throw new RawlsException(
-        s"Could not generate a method URI from DockstoreMethod with repo \'${repo.scheme}\', path \'$methodPath\', version \'$methodVersion\'"
+        s"Could not generate a method URI from DockstoreMethod with path \'$methodPath\', version \'$methodVersion\'"
       )
   }
 
@@ -294,7 +294,7 @@ object DockstoreMethod {
       result    <- if (parts.size == 1) DockstoreMethod(URLDecoder.decode(path, UTF_8.name), version).validate else None
     } yield {
       result
-    }).getOrElse(throw new RawlsException(s"Could not create an AgoraMethod from URI \'$uri\'"))
+    }).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$uri\'"))
   }
 
 }
