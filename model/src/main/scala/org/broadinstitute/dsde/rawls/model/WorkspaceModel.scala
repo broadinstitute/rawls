@@ -565,6 +565,7 @@ class WorkspaceJsonSupport extends JsonSupport {
   For Dockstore
   "methodRepoMethod": {
     "methodUri": "dockstore://broadinstitute%2Fwdl%2FValidate-Bams/develop",
+    ...we can cobble something together here that approximates namespace/name/version, for compatibility
   }
 
   Rawls can receive:
