@@ -232,7 +232,7 @@ case class AgoraMethod(methodNamespace: String, methodName: String, methodVersio
   }
 
   override def methodUri: String = {
-    if (this.validate.isDefined)
+    if (validate.isDefined)
       s"${repo.scheme}://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion"
     else
       throw new RawlsException(
@@ -271,7 +271,7 @@ case class DockstoreMethod(methodPath: String, methodVersion: String) extends Me
   }
 
   override def methodUri: String = {
-    if (this.validate.isDefined)
+    if (validate.isDefined)
       s"${repo.scheme}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}"
     else
       throw new RawlsException(
