@@ -280,15 +280,15 @@ trait MethodConfigurationComponent {
      */
 
     private def marshalMethodConfig(workspaceId: UUID, methodConfig: MethodConfiguration) = {
-      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.asAgoraMethodUrl, methodConfig.methodConfigVersion, methodConfig.deleted, methodConfig.deletedDate.map( d => new Timestamp(d.getMillis)))
+      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodUri, methodConfig.methodConfigVersion, methodConfig.deleted, methodConfig.deletedDate.map( d => new Timestamp(d.getMillis)))
     }
 
     def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], prereqs: Map[String, AttributeString]): MethodConfiguration = {
-      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, prereqs, inputs, outputs, MethodRepoMethod.apply(methodConfigRec.methodUri), methodConfigRec.methodConfigVersion, methodConfigRec.deleted, methodConfigRec.deletedDate.map(ts => new DateTime(ts)))
+      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, prereqs, inputs, outputs, MethodRepoMethod.fromUri(methodConfigRec.methodUri), methodConfigRec.methodConfigVersion, methodConfigRec.deleted, methodConfigRec.deletedDate.map(ts => new DateTime(ts)))
     }
 
     private def unmarshalMethodConfigToShort(methodConfigRec: MethodConfigurationRecord): MethodConfigurationShort = {
-      MethodConfigurationShort(methodConfigRec.name, methodConfigRec.rootEntityType, MethodRepoMethod.apply(methodConfigRec.methodUri), methodConfigRec.namespace)
+      MethodConfigurationShort(methodConfigRec.name, methodConfigRec.rootEntityType, MethodRepoMethod.fromUri(methodConfigRec.methodUri), methodConfigRec.namespace)
     }
 
     private def marshalConfigInput(configId: Long, key: String, value: AttributeString) = {
