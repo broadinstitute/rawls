@@ -592,7 +592,8 @@ class WorkspaceJsonSupport extends JsonSupport {
       method match {
         case agora: AgoraMethod =>
           JsObject(agora.toJson.asJsObject.fields + ("methodUri" -> JsString(agora.methodUri)))
-        case dockstore: DockstoreMethod => JsObject("methodUri" -> JsString(dockstore.methodUri))
+        case dockstore: DockstoreMethod =>
+          JsObject("methodUri" -> JsString(dockstore.methodUri))
       }
     }
 
