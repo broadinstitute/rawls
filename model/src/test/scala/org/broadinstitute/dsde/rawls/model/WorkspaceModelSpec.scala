@@ -16,11 +16,11 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
 
   "MethodRepoMethod" - {
 
-    val goodMethod = MethodRepoMethod("test-namespace", "test-name", 555)
+    val goodMethod = AgoraMethod("test-namespace", "test-name", 555)
     val goodMethodWithCharsToEncode =
-      MethodRepoMethod(namespaceNeedsEncoding, nameNeedsEncoding, 555)
-    val badMethod1 = MethodRepoMethod("a", "", 1)
-    val badMethod2 = MethodRepoMethod("a", "b", 0)
+      AgoraMethod(namespaceNeedsEncoding, nameNeedsEncoding, 555)
+    val badMethod1 = AgoraMethod("a", "", 1)
+    val badMethod2 = AgoraMethod("a", "b", 0)
 
     "Validation works as one would expect" - {
       "for good methods" in {
@@ -48,11 +48,11 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
 
         "for Agora" in {
           assertResult("agora://test-namespace/test-name/555") {
-            goodMethod.asAgoraMethodUrl
+            goodMethod.methodUri
           }
 
           assertResult(s"agora://$namespaceEncoded/$nameEncoded/555") {
-            goodMethodWithCharsToEncode.asAgoraMethodUrl
+            goodMethodWithCharsToEncode.methodUri
           }
         }
       }
@@ -60,16 +60,10 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
       "for nasty bad methodses" in {
 
         intercept[RawlsException] {
-          badMethod1.asAgoraMethodUrl
+          badMethod1.methodUri
         }
         intercept[RawlsException] {
-          badMethod2.asAgoraMethodUrl
-        }
-        intercept[RawlsException] {
-          goodMethod.asMethodUrlForRepo("")
-        }
-        intercept[RawlsException] {
-          goodMethod.asMethodUrlForRepo("marks-methods-mart")
+          badMethod2.methodUri
         }
       }
 
@@ -80,12 +74,12 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
       val methodUriWithEncodedChars = s"agora://$namespaceEncoded/$nameEncoded/555"
 
       "from good URIs" in {
-        assertResult(MethodRepoMethod("test-namespace", "test-name", 555)) {
-          MethodRepoMethod.apply(methodUri)
+        assertResult(AgoraMethod("test-namespace", "test-name", 555)) {
+          MethodRepoMethod.fromUri(methodUri)
         }
 
-        assertResult(MethodRepoMethod(namespaceNeedsEncoding, nameNeedsEncoding, 555)) {
-          MethodRepoMethod.apply(methodUriWithEncodedChars)
+        assertResult(AgoraMethod(namespaceNeedsEncoding, nameNeedsEncoding, 555)) {
+          MethodRepoMethod.fromUri(methodUriWithEncodedChars)
         }
       }
 
@@ -101,31 +95,31 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
 
       "catches bad URIs" in {
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri1)
+          MethodRepoMethod.fromUri(badUri1)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri2)
+          MethodRepoMethod.fromUri(badUri2)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri3)
+          MethodRepoMethod.fromUri(badUri3)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri4)
+          MethodRepoMethod.fromUri(badUri4)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri5)
+          MethodRepoMethod.fromUri(badUri5)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri6)
+          MethodRepoMethod.fromUri(badUri6)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri7)
+          MethodRepoMethod.fromUri(badUri7)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri8)
+          MethodRepoMethod.fromUri(badUri8)
         }
         intercept[RawlsException] {
-          MethodRepoMethod.apply(badUri9)
+          MethodRepoMethod.fromUri(badUri9)
         }
       }
     }
