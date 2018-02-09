@@ -35,7 +35,7 @@ trait MethodWiths {
           case Success(Some(agoraEntity)) => op(agoraEntity)
           case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.", methodRepoDAO.toErrorReport(throwable))))
         }
-      case _ => throw new RawlsException("not yet supported")
+      case _ => throw new RawlsException("method repository not yet supported")
     }
   }
 
