@@ -187,7 +187,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
             DBIO.successful(wdl)
           }
         }
-      case _ => throw new RawlsException("not yet supported")
+      case _ => throw new RawlsException("method repository not yet supported")
     }
   }
 
