@@ -220,6 +220,10 @@ object MethodRepoMethod {
     }
   }
 
+  def apply(methodNamespace: String, methodName: String, methodVersion: Int): AgoraMethod = AgoraMethod(methodNamespace, methodName, methodVersion)
+
+  def apply(methodPath: String, methodVersion: String): DockstoreMethod = DockstoreMethod(methodPath, methodVersion)
+
 }
 
 case class AgoraMethod(methodNamespace: String, methodName: String, methodVersion: Int) extends MethodRepoMethod {
