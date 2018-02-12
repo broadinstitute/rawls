@@ -216,7 +216,7 @@ object MethodRepoMethod {
     }) match {
       case Some(Agora) => AgoraMethod(uri)
       case Some(Dockstore) => DockstoreMethod(uri)
-      case _ => throw new RawlsException("Illegal method repo specified in URI \'$uri\'")
+      case _ => throw new RawlsException(s"Illegal method repo specified in URI \'$uri\'")
     }
   }
 
