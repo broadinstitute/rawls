@@ -180,14 +180,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   }
 
   def getWdl(methodConfig: MethodConfiguration, userCredentials: Credential)(implicit executionContext: ExecutionContext): ReadWriteAction[String] = {
-    methodConfig.methodRepoMethod match {
-      case agoraMethod: AgoraMethod =>
-        withMethod(agoraMethod, UserInfo.buildFromTokens(userCredentials)) { method =>
-          withWdl(method) { wdl =>
-            DBIO.successful(wdl)
-          }
-        }
-      case _ => throw new RawlsException("method repository not yet supported")
+    withMethod(methodConfig.methodRepoMethod, UserInfo.buildFromTokens(userCredentials)) { method =>
+      withWdl(method) { wdl =>
+        DBIO.successful(wdl)
+      }
     }
   }
 

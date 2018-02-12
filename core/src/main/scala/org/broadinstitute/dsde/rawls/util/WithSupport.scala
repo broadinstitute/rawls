@@ -28,14 +28,10 @@ trait MethodWiths {
   }
 
   def withMethod[T](method: MethodRepoMethod, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
-    method match {
-      case agoraMethod: AgoraMethod =>
-        DBIO.from(methodRepoDAO.getMethod(agoraMethod.methodNamespace, agoraMethod.methodName, agoraMethod.methodVersion, userInfo)).asTry.flatMap {
-          case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${agoraMethod.methodUri} from method repo.")))
-          case Success(Some(agoraEntity)) => op(agoraEntity)
-          case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.", methodRepoDAO.toErrorReport(throwable))))
-        }
-      case _ => throw new RawlsException("method repository not yet supported")
+    DBIO.from(methodRepoDAO.getMethod(method, userInfo)).asTry.flatMap {
+      case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${method.methodUri} from method repo.")))
+      case Success(Some(agoraEntity)) => op(agoraEntity)
+      case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.", methodRepoDAO.toErrorReport(throwable))))
     }
   }
 
