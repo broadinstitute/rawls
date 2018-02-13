@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, Rawl
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
 import spray.client.pipelining._
 import spray.http._
