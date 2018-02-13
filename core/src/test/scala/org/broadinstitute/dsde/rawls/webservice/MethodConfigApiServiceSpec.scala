@@ -39,7 +39,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   "MethodConfigApi" should "return 201 on create method configuration" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
-      MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+      AgoraMethod(testData.wsName.namespace, "method-a", 1))
     withStatsD {
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
         services.sealedInstrumentedRoutes ~>
@@ -64,7 +64,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "update the workspace last modified date on create method configuration" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
-      MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+      AgoraMethod(testData.wsName.namespace, "method-a", 1))
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -89,7 +89,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val inputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
     val outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
-      MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+      AgoraMethod(testData.wsName.namespace, "method-a", 1))
 
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
@@ -123,7 +123,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val inputs = Map("lib_ent_in" -> AttributeString("this.library:foo"), "lib_ws_in" -> AttributeString("workspace.library:foo"))
     val outputs = Map("lib_ent_out" -> AttributeString("this.library:bar"),"lib_ws_out" -> AttributeString("workspace.library:bar"))
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
-      MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+      AgoraMethod(testData.wsName.namespace, "method-a", 1))
 
     val expectedSuccessInputs = Seq("lib_ent_in", "lib_ws_in")
     val expectedSuccessOutputs = Seq("lib_ent_out", "lib_ws_out")
@@ -141,7 +141,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val inputs = Map("lib_ent_in" -> AttributeString("this.library:foo"), "lib_ws_in" -> AttributeString("workspace.library:foo"))
     val outputs = Map("lib_ent_out" -> AttributeString("this.bar"),"lib_ws_out" -> AttributeString("workspace.bar"))
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
-      MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+      AgoraMethod(testData.wsName.namespace, "method-a", 1))
 
     val expectedSuccessInputs = Seq("lib_ent_in", "lib_ws_in")
     val expectedSuccessOutputs = Seq("lib_ent_out", "lib_ws_out")
@@ -171,7 +171,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val inputs = Map("lib_ent_in" -> AttributeString("this.library:foo"), "lib_ws_in" -> AttributeString("workspace.library:foo"))
     val outputs = Map("lib_ent_out" -> AttributeString("this.library:bar"),"lib_ws_out" -> AttributeString("workspace.library:bar"))
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
-      MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+      AgoraMethod(testData.wsName.namespace, "method-a", 1))
 
     revokeCuratorRole(services)
 
@@ -189,8 +189,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   // DSDEEPB-1433
   it should "successfully create two method configs with the same name but different namespaces" in withTestDataApiServices { services =>
-    val mc1 = MethodConfiguration("ws1", "testConfig", "samples", Map(), Map(), Map(), MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
-    val mc2 = MethodConfiguration("ws2", "testConfig", "samples", Map(), Map(), Map(), MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+    val mc1 = MethodConfiguration("ws1", "testConfig", "samples", Map(), Map(), Map(), AgoraMethod(testData.wsName.namespace, "method-a", 1))
+    val mc2 = MethodConfiguration("ws2", "testConfig", "samples", Map(), Map(), Map(), AgoraMethod(testData.wsName.namespace, "method-a", 1))
 
     create(mc1)
     create(mc2)
@@ -784,13 +784,13 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when generating a method config template from a valid method" in withTestDataApiServices { services =>
-    val method = MethodRepoMethod("dsde","three_step",1)
+    val method = AgoraMethod("dsde","three_step",1)
     Post("/methodconfigs/template", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         val methodConfiguration = MethodConfiguration("namespace","name","rootEntityType",Map(), Map("three_step.cgrep.pattern" -> AttributeString("")),
           Map("three_step.ps.procs"->AttributeString(""),"three_step.cgrep.count"->AttributeString(""), "three_step.wc.count"->AttributeString("")),
-          MethodRepoMethod("dsde","three_step",1))
+          AgoraMethod("dsde","three_step",1))
         assertResult(methodConfiguration) { responseAs[MethodConfiguration] }
         assertResult(StatusCodes.OK) { status }
       }
@@ -798,7 +798,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 getting method inputs and outputs" in withTestDataApiServices { services =>
     withStatsD {
-      val method = MethodRepoMethod("dsde", "three_step", 1)
+      val method = AgoraMethod("dsde", "three_step", 1)
       Post("/methodconfigs/inputsOutputs", httpJson(method)) ~>
         sealRoute(services.methodConfigRoutes) ~>
         check {
@@ -816,7 +816,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when generating a method config template from a missing method" in withTestDataApiServices { services =>
-    Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
+    Post("/methodconfigs/template", httpJson(AgoraMethod("dsde","three_step",2))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -824,7 +824,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 getting method inputs and outputs from a missing method" in withTestDataApiServices { services =>
-    Post("/methodconfigs/inputsOutputs", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
+    Post("/methodconfigs/inputsOutputs", httpJson(AgoraMethod("dsde","three_step",2))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -832,7 +832,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 400 when generating a method config template from an invalid method" in withTestDataApiServices { services =>
-    Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","bad_wdl",1))) ~>
+    Post("/methodconfigs/template", httpJson(AgoraMethod("dsde","bad_wdl",1))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
@@ -840,7 +840,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 400 getting method inputs and outputs from an invalid method" in withTestDataApiServices { services =>
-    Post("/methodconfigs/inputsOutputs", httpJson(MethodRepoMethod("dsde","bad_wdl",1))) ~>
+    Post("/methodconfigs/inputsOutputs", httpJson(AgoraMethod("dsde","bad_wdl",1))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
