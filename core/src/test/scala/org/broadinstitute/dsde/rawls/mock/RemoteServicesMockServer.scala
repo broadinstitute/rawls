@@ -4,7 +4,8 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, AgoraStatus, ExecutionServiceStatus}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, StatusCheckResponse}
+import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
 import org.mockserver.model._
@@ -288,7 +289,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     ).respond(
       response()
         .withHeaders(jsonHeader)
-        .withBody(AgoraStatus(true, Seq.empty).toJson.prettyPrint)
+        .withBody(StatusCheckResponse(ok = true, Map.empty).toJson.prettyPrint)
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
