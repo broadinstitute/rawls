@@ -127,7 +127,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource, val googleSer
     */
   private def checkAgora: Future[SubsystemStatus] = {
     logger.debug("Checking Agora...")
-    methodRepoDAO.getStatus.map(agoraStatus => SubsystemStatus(agoraStatus.up, if (agoraStatus.messages.nonEmpty) Some(agoraStatus.messages.toList) else None))
+    methodRepoDAO.getStatus
   }
 
   /**

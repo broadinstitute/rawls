@@ -18,6 +18,7 @@ import spray.json._
 import spray.routing.directives.PathDirectives._
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 import scala.util.control.NonFatal
 
 /**
@@ -83,12 +84,14 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
     postAgoraEntity(s"${methodRepoServiceURL}/configurations", agoraEntity, userInfo)
   }
 
-  override def getStatus(implicit executionContext: ExecutionContext): Future[AgoraStatus] = {
+  override def getStatus(implicit executionContext: ExecutionContext): Future[SubsystemStatus] = {
     val url = s"${baseMethodRepoServiceURL}/status"
-    val pipeline = sendReceive ~> unmarshal[AgoraStatus]
+    val pipeline = sendReceive ~> unmarshal[StatusCheckResponse]
     // Don't retry on the status check
-    pipeline(Get(url)) recover {
-      case NonFatal(e) => AgoraStatus(false, Seq(e.getMessage))
+    pipeline(Get(url)).map { statusCheck =>
+      SubsystemStatus(ok = statusCheck.ok, None)
+    } recover {
+      case NonFatal(e) => SubsystemStatus(ok = false, Some(List(e.getMessage)))
     }
   }
 

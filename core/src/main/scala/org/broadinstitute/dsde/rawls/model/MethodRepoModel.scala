@@ -23,11 +23,6 @@ case class AgoraEntity(
                         url: Option[String] = None,
                         entityType: Option[AgoraEntityType.EntityType] = None)
 
-case class AgoraStatus(
-  up: Boolean,
-  messages: Seq[String]
-)
-
 class MethodRepoJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 
@@ -53,19 +48,6 @@ class MethodRepoJsonSupport extends JsonSupport {
     override def read(value: JsValue): AgoraEntityType.EntityType = value match {
       case JsString(name) => AgoraEntityType.withName(name)
       case _ => throw new DeserializationException("only string supported")
-    }
-  }
-
-  implicit object AgoraStatusFormat extends RootJsonFormat[AgoraStatus] {
-    override def write(obj: AgoraStatus): JsObject = {
-      JsObject("status" -> JsString(if (obj.up) "up" else "down"),
-        "message" -> JsArray(obj.messages.map(JsString.apply).toVector)
-      )
-    }
-    override def read(json: JsValue): AgoraStatus = json.asJsObject.getFields("status", "message") match {
-      case Seq(JsString(status), m @ JsArray(_)) =>
-        AgoraStatus(status == "up", m.convertTo[Seq[String]])
-      case _ => throw new DeserializationException("Cannot read AgoraStatus in JSON")
     }
   }
 
