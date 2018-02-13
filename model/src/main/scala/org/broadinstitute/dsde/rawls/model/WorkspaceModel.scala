@@ -555,41 +555,6 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val DockstoreMethodFormat = jsonFormat2(DockstoreMethod.apply)
 
-  /*
-  Rawls sends:
-
-  For Agora
-  "methodRepoMethod": {
-    "methodUri": "agora://adam-methods/test/555"
-    "methodNamespace": "adam-methods", 
-    "methodName": "test",
-    "methodVersion": 555
-  }
-
-  For Dockstore
-  "methodRepoMethod": {
-    "methodUri": "dockstore://broadinstitute%2Fwdl%2FValidate-Bams/develop",
-    ...we can cobble something together here that approximates namespace/name/version, for compatibility
-  }
-
-  Rawls can receive:
-
-  "methodRepoMethod": {
-    "methodNamespace": "adam-methods",
-    "methodName": "test",
-     "methodVersion": 555
-  }
-
-  "methodRepoMethod": {
-    "methodUri": "dockstore://broadinstitute%2Fwdl%2FValidate-Bams/develop",
-  }
-
-  "methodRepoMethod": {
-    "methodUri": "agora://adam-methods/test/555",
-  }
-
-  */
-
   implicit object MethodRepoMethodFormat extends RootJsonFormat[MethodRepoMethod] {
 
     override def write(method: MethodRepoMethod): JsValue = {
