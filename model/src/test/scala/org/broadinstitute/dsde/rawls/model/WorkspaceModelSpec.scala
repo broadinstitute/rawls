@@ -30,7 +30,7 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
           assertResult {
             """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace","methodUri":"agora://test-namespace/test-name/555","sourceRepo":"agora"}""".parseJson
           } {
-            AgoraMethod("test-namespace", "test-name", 555).asInstanceOf[MethodRepoMethod].toJson
+            MethodRepoMethodFormat.write(AgoraMethod("test-namespace", "test-name", 555))
           }
         }
 
@@ -38,13 +38,92 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
           assertResult {
             """{"methodUri":"dockstore://test-path/test-version","sourceRepo":"dockstore","methodPath":"test-path","methodVersion":"test-version"}""".parseJson
           } {
-            DockstoreMethod("test-path", "test-version").asInstanceOf[MethodRepoMethod].toJson
+            MethodRepoMethodFormat.write(DockstoreMethod("test-path", "test-version"))
           }
         }
       }
 
       "Deserialize" - {
-        // TODO
+
+        "Agora" in {
+
+          // Round-trip
+          assertResult {
+            AgoraMethod("test-namespace", "test-name", 555)
+          } {
+            MethodRepoMethodFormat.read(
+              """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace","methodUri":"agora://test-namespace/test-name/555","sourceRepo":"agora"}""".parseJson)
+          }
+
+          // URI takes precedence
+          assertResult {
+            AgoraMethod("test-namespace", "test-name", 555)
+          } {
+            MethodRepoMethodFormat.read(
+              """{"methodName":"not-the-name","methodVersion":777,"methodNamespace":"not-the-namespace","methodUri":"agora://test-namespace/test-name/555","sourceRepo":"fake-repo"}""".parseJson)
+          }
+
+          // Fall back to fields
+          assertResult {
+            AgoraMethod("test-namespace", "test-name", 555)
+          } {
+            MethodRepoMethodFormat.read(
+              """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace","sourceRepo":"agora"}""".parseJson)
+          }
+
+          // No "sourceRepo" -> default to Agora
+          assertResult {
+            AgoraMethod("test-namespace", "test-name", 555)
+          } {
+            MethodRepoMethodFormat.read(
+              """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace"}""".parseJson)
+          }
+        }
+
+        "Dockstore" in {
+
+          // Round-trip
+          assertResult {
+            DockstoreMethod("test-path", "test-version")
+          } {
+            MethodRepoMethodFormat.read(
+              """{"methodUri":"dockstore://test-path/test-version","sourceRepo":"dockstore","methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+          }
+
+          // URI takes precedence
+          assertResult {
+            DockstoreMethod("test-path", "test-version")
+          } {
+            MethodRepoMethodFormat.read(
+              """{"methodUri":"dockstore://test-path/test-version","sourceRepo":"fake-repo","methodPath":"not-the-path","methodVersion":"not-the-version"}""".parseJson)
+          }
+
+          // Fall back to fields
+          assertResult {
+            DockstoreMethod("test-path", "test-version")
+          } {
+            MethodRepoMethodFormat.read(
+              """{"sourceRepo":"dockstore","methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+          }
+
+          // No "sourceRepo" -> Dockstore throws an exception because we default to Agora
+          intercept[spray.json.DeserializationException] {
+            MethodRepoMethodFormat.read(
+              """{"methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+          }
+        }
+
+        // Bad "sourceRepo"
+        intercept[spray.json.DeserializationException] {
+          MethodRepoMethodFormat.read(
+            """{"sourceRepo":"marks-methods-mart","methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+        }
+
+        // Bad "sourceRepo"
+        intercept[spray.json.DeserializationException] {
+          MethodRepoMethodFormat.read(
+            """{"sourceRepo":777,"methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+        }
       }
     }
 
