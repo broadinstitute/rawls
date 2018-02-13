@@ -595,19 +595,28 @@ class WorkspaceJsonSupport extends JsonSupport {
     override def write(method: MethodRepoMethod): JsValue = {
       method match {
         case agora: AgoraMethod =>
-          JsObject(Map("sourceRepo" -> JsString(agora.repo.scheme)) ++ agora.toJson.asJsObject.fields)
+          JsObject(Map("methodUri" -> JsString(agora.methodUri), "sourceRepo" -> JsString(agora.repo.scheme)) ++ agora.toJson.asJsObject.fields)
         case dockstore: DockstoreMethod =>
-          JsObject(Map("sourceRepo" -> JsString(dockstore.repo.scheme)) ++ dockstore.toJson.asJsObject.fields)
+          JsObject(Map("methodUri" -> JsString(dockstore.methodUri), "sourceRepo" -> JsString(dockstore.repo.scheme)) ++ dockstore.toJson.asJsObject.fields)
       }
     }
 
     override def read(json: JsValue): MethodRepoMethod = {
-      json.asJsObject.fields.get("sourceRepo") match {
-        case Some(JsString(Dockstore.scheme)) => DockstoreMethodFormat.read(json)
-        case Some(JsString(Agora.scheme)) => AgoraMethodFormat.read(json)
-        case None => AgoraMethodFormat.read(json) // If omitted, default to Agora for backwards compatibility
-        case Some(JsString(other)) => throw DeserializationException(s"Illegal method repo \'$other\'")
-        case _ => throw DeserializationException("unexpected json type")
+      val fromUri = json.asJsObject.fields.get("methodUri") match {
+        case Some(JsString(uri)) => Try(MethodRepoMethod.fromUri(uri)).toOption
+        case _ => None
+      }
+
+      fromUri match {
+        case Some(method) => method
+        case _ =>
+          json.asJsObject.fields.get("sourceRepo") match {
+            case Some(JsString(Dockstore.scheme)) => DockstoreMethodFormat.read(json)
+            case Some(JsString(Agora.scheme)) => AgoraMethodFormat.read(json)
+            case None => AgoraMethodFormat.read(json) // If omitted, default to Agora for backwards compatibility
+            case Some(JsString(other)) => throw DeserializationException(s"Illegal method repo \'$other\'")
+            case _ => throw DeserializationException("unexpected json type")
+          }
       }
     }
 
