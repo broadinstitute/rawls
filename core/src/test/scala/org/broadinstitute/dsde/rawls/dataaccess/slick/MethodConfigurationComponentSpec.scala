@@ -21,7 +21,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
-      MethodRepoMethod("ns-config", "meth2", 2)
+      AgoraMethod("ns-config", "meth2", 2)
     )
 
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfig2))
@@ -140,7 +140,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
-      MethodRepoMethod("ns-config", "meth2", 2)
+      AgoraMethod("ns-config", "meth2", 2)
     )
 
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigOldName))
@@ -171,7 +171,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
-      MethodRepoMethod("ns-config", "meth2", 2)
+      AgoraMethod("ns-config", "meth2", 2)
     )
 
     val methodConfigAlreadyThere = MethodConfiguration(
@@ -181,7 +181,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("already.there")),
       Map("prereq.expression" -> AttributeString("already.there")),
-      MethodRepoMethod("ns-config", "meth2", 2),
+      AgoraMethod("ns-config", "meth2", 2),
       methodConfigVersion = 10
     )
 

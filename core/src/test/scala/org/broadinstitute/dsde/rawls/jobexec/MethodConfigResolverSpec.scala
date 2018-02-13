@@ -142,7 +142,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(
       sampleGood.toReference))))
 
-  val dummyMethod = MethodRepoMethod("method_namespace", "test_method", 1)
+  val dummyMethod = AgoraMethod("method_namespace", "test_method", 1)
 
   val configGood = MethodConfiguration("config_namespace", "configGood", "Sample",
     Map.empty, Map(intArgName -> AttributeString("this.blah")), Map.empty, dummyMethod)
