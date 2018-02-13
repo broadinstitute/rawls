@@ -3,18 +3,61 @@ package org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.scalatest.{FreeSpec, Matchers}
 
+import spray.json._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
+
 class WorkspaceModelSpec extends FreeSpec with Matchers {
 
   val trickyBit        = "/+:?&~!@#$^*()[]{}∞€\\"
   val trickyBitEncoded = java.net.URLEncoder.encode(trickyBit, java.nio.charset.StandardCharsets.UTF_8.name)
 
-  val nameNeedsEncoding = s"${trickyBit}test${trickyBit}name$trickyBit"
-  val nameEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}name$trickyBitEncoded"
-
-  val namespaceNeedsEncoding = s"${trickyBit}test${trickyBit}namespace$trickyBit"
-  val namespaceEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}namespace$trickyBitEncoded"
-
   "MethodRepoMethod" - {
+
+    "apply() does the right thing" in {
+      assertResult(MethodRepoMethod.apply("path", "version")) {
+        DockstoreMethod("path", "version")
+      }
+      assertResult(MethodRepoMethod.apply("namespace", "name", 555)) {
+        AgoraMethod("namespace", "name", 555)
+      }
+    }
+
+    "JSON logic" - {
+
+      "Serialize" - {
+
+        "Agora" in {
+          assertResult {
+            """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace","methodUri":"agora://test-namespace/test-name/555","sourceRepo":"agora"}""".parseJson
+          } {
+            AgoraMethod("test-namespace", "test-name", 555).asInstanceOf[MethodRepoMethod].toJson
+          }
+        }
+
+        "Dockstore" in {
+          assertResult {
+            """{"methodUri":"dockstore://test-path/test-version","sourceRepo":"dockstore","methodPath":"test-path","methodVersion":"test-version"}""".parseJson
+          } {
+            DockstoreMethod("test-path", "test-version").asInstanceOf[MethodRepoMethod].toJson
+          }
+        }
+      }
+
+      "Deserialize" - {
+        // TODO
+      }
+    }
+
+  }
+
+  "AgoraMethod" - {
+
+    val nameNeedsEncoding = s"${trickyBit}test${trickyBit}name$trickyBit"
+    val nameEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}name$trickyBitEncoded"
+
+    val namespaceNeedsEncoding = s"${trickyBit}test${trickyBit}namespace$trickyBit"
+    val namespaceEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}namespace$trickyBitEncoded"
+
 
     val goodMethod = AgoraMethod("test-namespace", "test-name", 555)
     val goodMethodWithCharsToEncode =
@@ -120,6 +163,116 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
         }
         intercept[RawlsException] {
           MethodRepoMethod.fromUri(badUri9)
+        }
+      }
+    }
+  }
+
+  "DockstoreMethod" - {
+
+    val pathNeedsEncoding = s"${trickyBit}test${trickyBit}path$trickyBit"
+    val pathEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}path$trickyBitEncoded"
+
+    val versionNeedsEncoding = s"${trickyBit}test${trickyBit}version$trickyBit"
+    val versionEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}version$trickyBitEncoded"
+
+
+    val goodMethod = DockstoreMethod("test-path", "test-version")
+    val goodMethodWithCharsToEncode =
+      DockstoreMethod(pathNeedsEncoding, versionNeedsEncoding)
+    val badMethod1 = DockstoreMethod("a", "")
+    val badMethod2 = DockstoreMethod("", "b")
+
+    "Validation works as one would expect" - {
+      "for good methods" in {
+        assertResult(goodMethod.validate) {
+          Some(goodMethod)
+        }
+
+        assertResult(goodMethodWithCharsToEncode.validate) {
+          Some(goodMethodWithCharsToEncode)
+        }
+      }
+
+      "for bad methods" in {
+        assertResult(badMethod1.validate) {
+          None
+        }
+        assertResult(badMethod2.validate) {
+          None
+        }
+      }
+    }
+
+    "Can convert to a method repo URI" - {
+      "For valid methods" - {
+
+        "for Dockstore" in {
+          assertResult("dockstore://test-path/test-version") {
+            goodMethod.methodUri
+          }
+
+          assertResult(s"dockstore://$pathEncoded/$versionEncoded") {
+            goodMethodWithCharsToEncode.methodUri
+          }
+        }
+      }
+
+      "for nasty bad methodses" in {
+
+        intercept[RawlsException] {
+          badMethod1.methodUri
+        }
+        intercept[RawlsException] {
+          badMethod2.methodUri
+        }
+      }
+
+    }
+
+    "Can be created from a method URI" - {
+      val methodUri = "dockstore://test-path/test-version"
+      val methodUriWithEncodedChars = s"dockstore://$pathEncoded/$versionEncoded"
+
+      "from good URIs" in {
+        assertResult(DockstoreMethod("test-path", "test-version")) {
+          MethodRepoMethod.fromUri(methodUri)
+        }
+
+        assertResult(DockstoreMethod(pathNeedsEncoding, versionNeedsEncoding)) {
+          MethodRepoMethod.fromUri(methodUriWithEncodedChars)
+        }
+      }
+
+      val badUri1 = null
+      val badUri2 = ""
+      val badUri3 = "dockstoreblah"
+      val badUri4 = "dockstore://"
+      val badUri5 = "dockstore://path-but-no-version"
+      val badUri6 = "marks-methods-mart://test-path/test-version"
+      val badUri7 = "marks-methods-mart://test-path"
+
+      "catches bad URIs" in {
+        intercept[RawlsException] {
+          MethodRepoMethod.fromUri(badUri1)
+        }
+        intercept[RawlsException] {
+          MethodRepoMethod.fromUri(badUri2)
+        }
+        intercept[RawlsException] {
+          MethodRepoMethod.fromUri(badUri3)
+        }
+        intercept[RawlsException] {
+          MethodRepoMethod.fromUri(badUri4)
+        }
+        intercept[RawlsException] {
+          MethodRepoMethod.fromUri(badUri5)
+        }
+        intercept[RawlsException] {
+          MethodRepoMethod.fromUri(badUri6)
+        }
+        intercept[RawlsException] {
+          MethodRepoMethod.fromUri(badUri7)
         }
       }
     }
