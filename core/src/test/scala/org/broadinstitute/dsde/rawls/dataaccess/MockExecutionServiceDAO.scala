@@ -1,7 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.model.Subsystems.Cromwell
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import spray.http.StatusCodes
 
 import scala.concurrent.Future
@@ -46,4 +48,11 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
   override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
 
   override def version = Future.successful(ExecutionServiceVersion("25"))
+
+  override def getStatus = {
+    // these differ from Rawls model Subsystems
+    val execSubsystems = Seq("DockerHub", "Engine Database", "PAPI", "GCS")
+    val systemsMap: Map[String, SubsystemStatus] = (execSubsystems map { _ -> HealthMonitor.OkStatus}).toMap
+    Future.successful(systemsMap)
+  }
 }

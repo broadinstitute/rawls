@@ -139,7 +139,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
 
     val healthMonitor = system.actorOf(HealthMonitor.props(
-      dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO,
+      dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO, executionServiceCluster.readMembers,
       Seq.empty, Seq.empty, Seq("my-favorite-bucket")))
     val statusServiceConstructor = StatusService.constructor(healthMonitor)_
 

@@ -6,6 +6,8 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, RawlsExpansion, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
+import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
+import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
@@ -79,6 +81,11 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
   override def version: Future[ExecutionServiceVersion] = {
     val url = executionServiceURL + s"/engine/v1/version"
     retry(when500) { () => pipelineNoAuth[ExecutionServiceVersion] apply Get(url) }
+  }
+
+  override def getStatus(): Future[Map[String, SubsystemStatus]] = {
+    val url = executionServiceURL + s"/engine/v1/status"
+    retry(when500) { () => pipelineNoAuth[Map[String, SubsystemStatus]] apply Get(url) }
   }
 
   private def when500( throwable: Throwable ): Boolean = {
