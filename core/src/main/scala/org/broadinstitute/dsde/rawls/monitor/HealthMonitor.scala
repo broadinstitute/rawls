@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 
-import scala.collection.immutable
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
@@ -116,7 +115,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
   }
 
   private def checkAll: Unit = {
-    val foo = List(
+    List(
       (Agora, checkAgora),
       (Cromwell, checkCromwell),
       (Database, checkDB),
@@ -126,8 +125,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
       (GoogleGroups, checkGoogleGroups),
       (GooglePubSub, checkGooglePubsub),
       (Sam, checkSam)
-    )
-      foo.foreach(processSubsystemResult)
+    ).foreach(processSubsystemResult)
   }
 
   /**
@@ -149,6 +147,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
       subsystemStatus.copy(messages = subsystemStatus.messages.map { msgList => msgList.map { msg => s"${serviceId.id}-$execSubsystem: $msg" } })
     }
 
+    // Note: calls to `foldMap` depend on SubsystemStatusMonoid
     executionServiceServers.toList.foldMap { case (id, dao) =>
       dao.getStatus() map { _.toList.foldMap { case (execSubsystem, execSubStatus) =>
         annotateSubsystem(id, execSubsystem, execSubStatus)

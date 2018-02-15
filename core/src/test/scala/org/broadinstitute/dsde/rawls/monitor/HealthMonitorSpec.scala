@@ -40,7 +40,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   // Cromwell reports the status of its subsystems
 
   val execSubsystems = Seq("DockerHub", "Engine Database", "PAPI", "GCS")
-  val okExecSubsytems: Map[String, SubsystemStatus] = (execSubsystems map { _ -> HealthMonitor.OkStatus}).toMap
+  val okExecSubsytems: Map[String, SubsystemStatus] = (execSubsystems map { _ -> HealthMonitor.OkStatus }).toMap
 
   val sadExecSubsystems: Map[String, SubsystemStatus] = (execSubsystems map { sub =>
     sub -> SubsystemStatus(false, Option(List(s"""{"$sub": "is unhappy"}""")))}).toMap
@@ -119,12 +119,12 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
           messages(0) should equal("""{"some": "json"}""")
       })
   }
-
-  val expectedMessages = sadExecSubsystems.keys map { sub =>
-    s"""sadCrom-$sub: {"$sub": "is unhappy"}"""
-  }
-
+  
   it should "return a non-ok for Cromwell" in {
+    val expectedMessages = sadExecSubsystems.keys map { sub =>
+      s"""sadCrom-$sub: {"$sub": "is unhappy"}"""
+    }
+
     val actor = newHealthMonitorActor(executionServiceServers = failingExecutionServiceServers)
     actor ! CheckAll
     checkCurrentStatus(actor, false,
