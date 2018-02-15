@@ -857,8 +857,22 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "list method Configuration" in withTestDataApiServices { services =>
+  it should "list method Configurations for Agora" in withTestDataApiServices { services =>
     Get(s"${testData.workspace.path}/methodconfigs") ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val configs = runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspace))).toSet.filterNot(_ == constantData.methodConfigDockstore)
+        assertResult(configs) {
+          responseAs[Array[MethodConfigurationShort]].toSet
+        }
+      }
+  }
+
+  it should "list method Configurations for all repos" in withTestDataApiServices { services =>
+    Get(s"/workspaces/v2/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs") ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {

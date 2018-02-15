@@ -24,7 +24,7 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Use
       get {
         requestContext =>
           perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.ListMethodConfigurations(WorkspaceName(workspaceNamespace, workspaceName)))
+            WorkspaceService.ListAgoraMethodConfigurations(WorkspaceName(workspaceNamespace, workspaceName)))
       } ~
         post {
           entity(as[MethodConfiguration]) { methodConfiguration =>
@@ -33,6 +33,13 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Use
                 WorkspaceService.CreateMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfiguration))
           }
         }
+    } ~
+    path("workspaces" / "v2" / Segment / Segment /  "methodconfigs") { (workspaceNamespace, workspaceName) =>
+      get {
+        requestContext =>
+          perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.ListMethodConfigurations(WorkspaceName(workspaceNamespace, workspaceName)))
+      }
     } ~
       path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment) { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
         get {
