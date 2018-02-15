@@ -92,6 +92,7 @@ object WorkspaceService {
   case class CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) extends WorkspaceServiceMessage
   case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationImport) extends WorkspaceServiceMessage
   case class CopyMethodConfigurationToMethodRepo(query: MethodRepoConfigurationExport) extends WorkspaceServiceMessage
+  case class ListAgoraMethodConfigurations(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) extends WorkspaceServiceMessage
   case class GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) extends WorkspaceServiceMessage
@@ -175,6 +176,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case CopyMethodConfiguration(methodConfigNamePair) => pipe(copyMethodConfiguration(methodConfigNamePair)) to sender
     case CopyMethodConfigurationFromMethodRepo(query) => pipe(copyMethodConfigurationFromMethodRepo(query)) to sender
     case CopyMethodConfigurationToMethodRepo(query) => pipe(copyMethodConfigurationToMethodRepo(query)) to sender
+    case ListAgoraMethodConfigurations(workspaceName) => pipe(listAgoraMethodConfigurations(workspaceName)) to sender
     case ListMethodConfigurations(workspaceName) => pipe(listMethodConfigurations(workspaceName)) to sender
     case CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) => pipe(createMethodConfigurationTemplate(methodRepoMethod)) to sender
     case GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) => pipe(getMethodInputsOutputs(methodRepoMethod)) to sender
@@ -241,14 +243,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     DBIO.sequence(accessLevels).map { _.fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max) }
   }
-  
+
   def getWorkspaceOwners(workspace: Workspace, dataAccess: DataAccess): ReadWriteAction[Seq[String]] = {
     dataAccess.rawlsGroupQuery.load(workspace.accessLevels(WorkspaceAccessLevels.Owner)).flatMap {
       case None => DBIO.failed(new RawlsException(s"Unable to load owners for workspace ${workspace.toWorkspaceName}"))
       case Some(ownerGroup) =>
         val usersAction = DBIO.sequence(ownerGroup.users.map(dataAccess.rawlsUserQuery.load(_).map(_.get.userEmail.value)).toSeq)
         val subGroupsAction = DBIO.sequence(ownerGroup.subGroups.map(dataAccess.rawlsGroupQuery.load(_).map(_.get.groupEmail.value)).toSeq)
-        
+
         for {
           users <- usersAction
           subGroups <- subGroupsAction
@@ -1430,10 +1432,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }.map(validatedTarget => RequestCompleteWithLocation((StatusCodes.Created, validatedTarget), target.path(dest.workspaceName)))
   }
 
+  def listAgoraMethodConfigurations(workspaceName: WorkspaceName): Future[PerRequestMessage] =
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        dataAccess.methodConfigurationQuery.listActive(workspaceContext).map { r =>
+          RequestComplete(StatusCodes.OK, r.toList.filter(_.methodRepoMethod.repo == Agora))
+        }
+      }
+    }
+
   def listMethodConfigurations(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.methodConfigurationQuery.listActive(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r.toList))
+        dataAccess.methodConfigurationQuery.listActive(workspaceContext).map { r =>
+          RequestComplete(StatusCodes.OK, r.toList)
+        }
       }
     }
 
