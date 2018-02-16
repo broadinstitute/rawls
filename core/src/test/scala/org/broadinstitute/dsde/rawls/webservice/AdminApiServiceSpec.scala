@@ -108,7 +108,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value)) ~>
+    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.InternalServerError) {
