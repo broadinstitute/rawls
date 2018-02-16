@@ -40,10 +40,11 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
     } ~
     path("admin" / "project" / "registration") {
       post {
-        parameters("project", "bucket") { (project, bucket) => requestContext =>
+        entity(as[RawlsBillingProjectTransfer]) { xfer =>
+        requestContext =>
           perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminRegisterBillingProject(RawlsBillingProjectName(project), userInfo.userEmail, bucket))
+            UserService.AdminRegisterBillingProject(RawlsBillingProjectName(xfer.project), RawlsUserEmail(xfer.newOwner), xfer.bucket))
         }
       }
     } ~

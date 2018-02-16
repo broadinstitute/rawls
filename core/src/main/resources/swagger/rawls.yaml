@@ -603,16 +603,12 @@ paths:
       operationId: recordProjectOwnership
       summary: create a record of project ownership
       parameters:
-        - name: project
-          description: Billing project ID
+        - in: body
+          description: create project request
+          name: createProjectRequest
           required: true
-          in: query
-          type: string
-        - name: bucket
-          description: Cromwell auth bucket (without the gs:// prefix)
-          required: true
-          in: query
-          type: string
+          schema:
+            $ref: '#/definitions/RawlsBillingProjectTransfer'
       responses:
         201:
           description: Successful project record creation
@@ -5258,6 +5254,22 @@ definitions:
       role:
         type: string
         description: the role of the user in the project
+  RawlsBillingProjectTransfer:
+    description: admin request to transfer a pre-created billing project to a new owner
+    required:
+      - project
+      - bucket
+      - newOwner
+    properties:
+      project:
+        type: string
+        description: the name of the new google project
+      bucket:
+        type: string
+        description: generated Cromwell auth bucket, minus the gs:// prefix
+      newOwner:
+        type: string
+        description: email address of the new billing project owner
   WorkspaceTag:
     description: tag with count
     required:
