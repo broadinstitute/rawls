@@ -119,7 +119,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
           messages(0) should equal("""{"some": "json"}""")
       })
   }
-  
+
   it should "return a non-ok for Cromwell" in {
     val expectedMessages = sadExecSubsystems.keys map { sub =>
       s"""sadCrom-$sub: {"$sub": "is unhappy"}"""

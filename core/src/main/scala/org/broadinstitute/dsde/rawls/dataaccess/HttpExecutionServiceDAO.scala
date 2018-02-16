@@ -85,7 +85,8 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
 
   override def getStatus(): Future[Map[String, SubsystemStatus]] = {
     val url = executionServiceURL + s"/engine/v1/status"
-    retry(when500) { () => pipelineNoAuth[Map[String, SubsystemStatus]] apply Get(url) }
+    // we're explicitly not retrying on 500 here
+    pipelineNoAuth[Map[String, SubsystemStatus]] apply Get(url)
   }
 
   private def when500( throwable: Throwable ): Boolean = {
