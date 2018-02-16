@@ -77,13 +77,20 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
   }
 
   override def postMethodConfig(namespace: String, name: String, methodConfiguration: MethodConfiguration, userInfo: UserInfo): Future[AgoraEntity] = {
-    val agoraEntity = AgoraEntity(
-      namespace = Option(namespace),
-      name = Option(name),
-      payload = Option(methodConfiguration.toJson.toString),
-      entityType = Option(AgoraEntityType.Configuration)
-    )
-    postAgoraEntity(s"${methodRepoServiceURL}/configurations", agoraEntity, userInfo)
+    methodConfiguration.methodRepoMethod match {
+      case _ : AgoraMethod =>
+        val agoraEntity = AgoraEntity(
+          namespace = Option(namespace),
+          name = Option(name),
+          payload = Option(methodConfiguration.toJson.toString),
+          entityType = Option(AgoraEntityType.Configuration)
+        )
+        postAgoraEntity(s"${methodRepoServiceURL}/configurations", agoraEntity, userInfo)
+      case otherMethod =>
+        throw new RawlsException(s"Method repo \'${otherMethod.repo.scheme}\' not yet supported")
+    }
+
+
   }
 
   override def getStatus(implicit executionContext: ExecutionContext): Future[SubsystemStatus] = {
