@@ -24,6 +24,8 @@ import scala.concurrent.{ExecutionContext, Future}
   * Created by rtitle on 5/19/17.
   */
 class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures with Eventually with FlatSpecLike with MockitoSugar with Matchers with TestDriverComponent with BeforeAndAfterAll {
+
+  // actor ask timeout
   implicit val timeout = Timeout(5 seconds)
 
   // This configures how long the calls to `whenReady(Future)` and `eventually` will wait
@@ -34,6 +36,15 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
   }
+
+  // Cromwell reports the status of its subsystems
+
+  val execSubsystems = Seq("DockerHub", "Engine Database", "PAPI", "GCS")
+  val okExecSubsytems: Map[String, SubsystemStatus] = (execSubsystems map { _ -> HealthMonitor.OkStatus }).toMap
+
+  val sadExecSubsystems: Map[String, SubsystemStatus] = (execSubsystems map { sub =>
+    sub -> SubsystemStatus(false, Option(List(s"""{"$sub": "is unhappy"}""")))}).toMap
+
 
   "HealthMonitor" should "start with unknown status for all subsystems" in {
     checkCurrentStatus(newHealthMonitorActor(), false, unknowns = AllSubsystems)
@@ -49,8 +60,9 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     val actor = newHealthMonitorActor()
     actor ! CheckAll
     checkCurrentStatus(actor, true, successes = AllSubsystems)
-    // The stale threshold is 3 seconds
-    Thread.sleep(5000)
+    // after 3 second stale threshold
+    val afterStaleMillis = 5000
+    Thread.sleep(afterStaleMillis)
     checkCurrentStatus(actor, false, unknowns = AllSubsystems)
   }
 
@@ -108,8 +120,21 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       })
   }
 
-  it should "return a non-ok for Cromwell" ignore {
-    // Stubbed; Cromwell doesn't have a health check yet
+  it should "return a non-ok for Cromwell" in {
+    val expectedMessages = sadExecSubsystems.keys map { sub =>
+      s"""sadCrom-$sub: {"$sub": "is unhappy"}"""
+    }
+
+    val actor = newHealthMonitorActor(executionServiceServers = failingExecutionServiceServers)
+    actor ! CheckAll
+    checkCurrentStatus(actor, false,
+      successes = AllSubsystems.filterNot(_ == Cromwell),
+      failures = Set(Cromwell),
+      errorMessages = {
+        case (Cromwell, Some(messages)) =>
+          messages.size should be(4)
+          messages should contain theSameElementsAs expectedMessages
+      })
   }
 
   it should "return a non-ok for Google Billing" in {
@@ -204,10 +229,19 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     }
   }
 
-  def newHealthMonitorActor(googleServicesDAO: => GoogleServicesDAO = mockGoogleServicesDAO, googlePubSubDAO: => GooglePubSubDAO = mockGooglePubSubDAO,
-                            methodRepoDAO: => MethodRepoDAO = mockMethodRepoDAO, samDAO: SamDAO = mockSamDAO): ActorRef = {
-    system.actorOf(HealthMonitor.props(slickDataSource, googleServicesDAO, googlePubSubDAO, methodRepoDAO, samDAO,
-      Seq("group1", "group2"), Seq("topic1", "topic2"), Seq("bucket1", "bucket2"), 1 second, 3 seconds))
+  // health monitor subsystem wait time
+  val futureTimeout: FiniteDuration = 1 second
+
+  // after this period, subsystem status revert to Unknown
+  val staleThreshold: FiniteDuration = 3 seconds
+
+  def newHealthMonitorActor(googleServicesDAO: => GoogleServicesDAO = mockGoogleServicesDAO,
+                            googlePubSubDAO: => GooglePubSubDAO = mockGooglePubSubDAO,
+                            methodRepoDAO: => MethodRepoDAO = mockMethodRepoDAO,
+                            samDAO: SamDAO = mockSamDAO,
+                            executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = mockExecutionServiceServers): ActorRef = {
+    system.actorOf(HealthMonitor.props(slickDataSource, googleServicesDAO, googlePubSubDAO, methodRepoDAO, samDAO, executionServiceServers,
+      Seq("group1", "group2"), Seq("topic1", "topic2"), Seq("bucket1", "bucket2"), futureTimeout, staleThreshold))
   }
 
   def mockGoogleServicesDAO: GoogleServicesDAO = new MockGoogleServicesDAO("group")
@@ -261,15 +295,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     val dao = mock[MethodRepoDAO]
     when {
       dao.getStatus(any[ExecutionContext])
-    } thenReturn Future.successful(SubsystemStatus(true, None))
-    dao
-  }
-
-  def mockSamDAO: SamDAO = {
-    val dao = mock[SamDAO]
-    when {
-      dao.getStatus()
-    } thenReturn Future.successful(SubsystemStatus(true, None))
+    } thenReturn Future.successful(HealthMonitor.OkStatus)
     dao
   }
 
@@ -287,7 +313,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
       dao.getStatus(any[ExecutionContext])
     } thenReturn Future {
       Thread.sleep((1 minute).toMillis)
-      SubsystemStatus(true, None)
+      HealthMonitor.OkStatus
     }
     dao
   }
@@ -300,6 +326,14 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     dao
   }
 
+  def mockSamDAO: SamDAO = {
+    val dao = mock[SamDAO]
+    when {
+      dao.getStatus()
+    } thenReturn Future.successful(HealthMonitor.OkStatus)
+    dao
+  }
+
   def failingSamDAO: SamDAO = {
     val dao = mock[SamDAO]
     when {
@@ -307,4 +341,28 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     } thenReturn Future.successful(SubsystemStatus(false, Option(List("""{"some": "json"}"""))))
     dao
   }
+
+  def mockExecutionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = {
+    val dao = mock[ExecutionServiceDAO]
+    when {
+      dao.getStatus()
+    } thenReturn Future.successful(okExecSubsytems)
+
+    Map(ExecutionServiceId("crom1") -> dao, ExecutionServiceId("crom2") -> dao)
+  }
+
+  def failingExecutionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = {
+    val happyDao = mock[ExecutionServiceDAO]
+    when {
+      happyDao.getStatus()
+    } thenReturn Future.successful(okExecSubsytems)
+
+    val sadDao = mock[ExecutionServiceDAO]
+    when {
+      sadDao.getStatus()
+    } thenReturn Future.successful(sadExecSubsystems)
+
+    Map(ExecutionServiceId("happyCrom") -> happyDao, ExecutionServiceId("sadCrom") -> sadDao)
+  }
+
 }

@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
+import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.scalatest.concurrent.Eventually
@@ -69,7 +70,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
             assertResult(StatusCodes.OK) {
               status
             }
-            assertResult(StatusCheckResponse(true, AllSubsystems.map(_ -> SubsystemStatus(true, None)).toMap)) {
+            assertResult(StatusCheckResponse(true, AllSubsystems.map(_ -> HealthMonitor.OkStatus).toMap)) {
               responseAs[StatusCheckResponse]
             }
           }
@@ -91,7 +92,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
             }
             assertResult(StatusCheckResponse(false, AllSubsystems.map {
               case GoogleBuckets => GoogleBuckets -> SubsystemStatus(false, Some(List("Could not find bucket: my-favorite-bucket")))
-              case other => other -> SubsystemStatus(true, None)
+              case other => other -> HealthMonitor.OkStatus
             }.toMap)) {
               responseAs[StatusCheckResponse]
             }

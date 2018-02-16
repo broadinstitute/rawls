@@ -615,6 +615,17 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     mockServer.when(
       request()
+        .withMethod("GET")
+        .withPath("/engine/v1/status")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withStatusCode(StatusCodes.OK.intValue)
+        .withBody("""{"DockerHub":{"ok":true},"Engine Database":{"ok":true},"PAPI":{"ok":true},"GCS":{"ok":true}}""")
+    )
+
+    mockServer.when(
+      request()
         .withMethod("POST")
         .withPath("/api/resource/.*/.*")
       ).respond(

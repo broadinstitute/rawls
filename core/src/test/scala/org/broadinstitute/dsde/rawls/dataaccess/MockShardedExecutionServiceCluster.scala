@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 /**
   * Created by davidan on 6/16/16.
   */
-class MockShardedExecutionServiceCluster(readMembers: Map[ExecutionServiceId, ExecutionServiceDAO], submitMembers: Map[ExecutionServiceId, ExecutionServiceDAO], dataSource: SlickDataSource)
+class MockShardedExecutionServiceCluster(val readMembers: Map[ExecutionServiceId, ExecutionServiceDAO], submitMembers: Map[ExecutionServiceId, ExecutionServiceDAO], dataSource: SlickDataSource)
   extends ShardedHttpExecutionServiceCluster(readMembers: Map[ExecutionServiceId, ExecutionServiceDAO], submitMembers: Map[ExecutionServiceId, ExecutionServiceDAO], dataSource: SlickDataSource) {
 
   // for unit tests

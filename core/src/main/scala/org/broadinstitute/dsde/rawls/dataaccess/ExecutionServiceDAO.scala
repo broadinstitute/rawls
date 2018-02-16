@@ -18,4 +18,7 @@ trait ExecutionServiceDAO extends ErrorReportable {
   def logs(id: String, userInfo: UserInfo): Future[ExecutionServiceLogs]
   def abort(id: String, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]]
   def version: Future[ExecutionServiceVersion]
+
+  // get the status of the execution service itself
+  def getStatus(): Future[Map[String, SubsystemStatus]]
 }
