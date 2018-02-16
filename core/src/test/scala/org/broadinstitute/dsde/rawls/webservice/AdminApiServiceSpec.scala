@@ -100,7 +100,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   val bucket = "some-bucket"
 
   it should "return 201 when registering a billing project for the 1st time, and 500 for the 2nd" in withTestDataApiServices { services =>
-    Post(s"/admin/project/registration?project=$project&bucket=$bucket") ~>
+    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -108,28 +108,10 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Post(s"/admin/project/registration?project=$project&bucket=$bucket") ~>
+    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.InternalServerError) {
-          status
-        }
-      }
-  }
-
-  it should "reject requests with invalid parameters" in withTestDataApiServices { services =>
-    Post(s"/admin/project/registration?proj=$project&bucket=$bucket") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-
-    Post(s"/admin/project/registration?project=$project&buck=$bucket") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
           status
         }
       }
