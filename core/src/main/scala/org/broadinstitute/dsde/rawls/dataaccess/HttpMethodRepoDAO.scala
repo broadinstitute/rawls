@@ -63,9 +63,26 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
     method match {
       case agoraMethod: AgoraMethod =>
         getAgoraEntity(s"${methodRepoServiceURL}/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo)
-      case _ =>
-        throw new RawlsException(s"Method repo '${method.repo.scheme}' not yet supported")
+      case dockstoreMethod: DockstoreMethod =>
+        getDockstoreEntity(dockstoreMethod) flatMap { response: Option[GA4GHToolDescriptor] =>
+          response match {
+            case Some(validResponse) => Future(Some(AgoraEntity(payload = Some(validResponse.descriptor))))
+            case None => Future.failed(new RawlsException("request failed"))
+          }
+        }
     }
+  }
+
+  // https://firecloud-orchestration.dsde-alpha.broadinstitute.org/ga4gh/v1/tools/anichols:cnv_common_tasks/versions/1/plain-WDL/descriptor
+  // https://dockstore.org:8443/api/ga4gh/v1/tools/%23workflow%2Fbroadinstitute%2Fwdl%2FValidate-Bams/versions/develop/plain-WDL/descriptor
+  private def getDockstoreEntity(method: DockstoreMethod): Future[Option[GA4GHToolDescriptor]] = {
+    val baseUrl = "https://dockstore.org:8443/api/ga4gh/v1/tools"
+
+    Get(s"$baseUrl/%23workflow%2F${method.methodPathEncoded}/versions/${method.methodVersionEncoded}/WDL/descriptor") ~>
+      sendReceive map unmarshal[Option[GA4GHToolDescriptor]]
+
+//    Get("https://firecloud-orchestration.dsde-alpha.broadinstitute.org/ga4gh/v1/tools/anichols:cnv_common_tasks/versions/1/WDL/descriptor") ~>
+//      sendReceive map unmarshal[Option[GA4GHToolDescriptor]]
   }
 
   private def when500( throwable: Throwable ): Boolean = {

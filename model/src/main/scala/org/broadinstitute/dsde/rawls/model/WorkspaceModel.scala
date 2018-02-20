@@ -283,6 +283,10 @@ case class DockstoreMethod(methodPath: String, methodVersion: String) extends Me
       )
   }
 
+  def methodPathEncoded: String = URLEncoder.encode(methodPath, UTF_8.name)
+
+  def methodVersionEncoded: String = URLEncoder.encode(methodVersion, UTF_8.name)
+
   override def repo: MethodRepository = Dockstore
 }
 
@@ -325,6 +329,8 @@ object MethodRepository {
 
   val all: Set[MethodRepository] = Set(Agora, Dockstore)
 }
+
+case class GA4GHToolDescriptor(`type`: String, descriptor: String, url: String)
 
 case class MethodInput(name: String, inputType: String, optional: Boolean)
 case class MethodOutput(name: String, outputType: String)
@@ -606,6 +612,8 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 
   implicit val ValidatedMethodConfigurationFormat = jsonFormat5(ValidatedMethodConfiguration)
+
+  implicit val GA4GHToolDescriptorFormat = jsonFormat3(GA4GHToolDescriptor)
 
   implicit val MethodInputFormat = jsonFormat3(MethodInput)
 
