@@ -401,6 +401,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val indiv2 = Entity("indiv2", "Individual",
       Map(AttributeName.withDefaultNS("sset") -> sset2.toReference ) )
 
+    val method = AgoraMethod("ns-config", "meth1", 1)
+
     val methodConfig = MethodConfiguration(
       "ns",
       "testConfig1",
@@ -408,7 +410,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Map("p1" -> AttributeString("prereq")),
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
-      AgoraMethod("ns-config", "meth1", 1)
+      method
     )
 
     val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(wsName.namespace, "method-a", 1))
