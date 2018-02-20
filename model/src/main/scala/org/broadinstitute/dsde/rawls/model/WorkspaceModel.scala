@@ -283,9 +283,14 @@ case class DockstoreMethod(methodPath: String, methodVersion: String) extends Me
       )
   }
 
-  def methodPathEncoded: String = URLEncoder.encode(methodPath, UTF_8.name)
+  private def methodVersionEncoded: String = URLEncoder.encode(methodVersion, UTF_8.name)
 
-  def methodVersionEncoded: String = URLEncoder.encode(methodVersion, UTF_8.name)
+  private def toolId = s"#workflow/$methodPath"
+
+  private def toolIdEncoded = URLEncoder.encode(toolId, UTF_8.name)
+
+  def ga4ghDescriptorUrl(baseUrl: String): String =
+    s"$baseUrl/ga4gh/v1/tools/$toolIdEncoded/versions/$methodVersionEncoded/WDL/descriptor"
 
   override def repo: MethodRepository = Dockstore
 }

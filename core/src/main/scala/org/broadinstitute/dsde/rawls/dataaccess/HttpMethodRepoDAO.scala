@@ -73,16 +73,11 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
     }
   }
 
-  // https://firecloud-orchestration.dsde-alpha.broadinstitute.org/ga4gh/v1/tools/anichols:cnv_common_tasks/versions/1/plain-WDL/descriptor
-  // https://dockstore.org:8443/api/ga4gh/v1/tools/%23workflow%2Fbroadinstitute%2Fwdl%2FValidate-Bams/versions/develop/plain-WDL/descriptor
   private def getDockstoreEntity(method: DockstoreMethod): Future[Option[GA4GHToolDescriptor]] = {
-    val baseUrl = "https://dockstore.org:8443/api/ga4gh/v1/tools"
+    // TODO: put in a config
+    val baseUrl = "https://dockstore.org:8443/api"
 
-    Get(s"$baseUrl/%23workflow%2F${method.methodPathEncoded}/versions/${method.methodVersionEncoded}/WDL/descriptor") ~>
-      sendReceive map unmarshal[Option[GA4GHToolDescriptor]]
-
-//    Get("https://firecloud-orchestration.dsde-alpha.broadinstitute.org/ga4gh/v1/tools/anichols:cnv_common_tasks/versions/1/WDL/descriptor") ~>
-//      sendReceive map unmarshal[Option[GA4GHToolDescriptor]]
+    Get(method.ga4ghDescriptorUrl(baseUrl)) ~> sendReceive map unmarshal[Option[GA4GHToolDescriptor]]
   }
 
   private def when500( throwable: Throwable ): Boolean = {
@@ -104,7 +99,7 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
         )
         postAgoraEntity(s"${methodRepoServiceURL}/configurations", agoraEntity, userInfo)
       case otherMethod =>
-        throw new RawlsException(s"Action not supported for method repo '${otherMethod.repo.scheme}'")
+        throw new RawlsException(s"Action not supported for method repo \'${otherMethod.repo.scheme}\'")
     }
 
 
