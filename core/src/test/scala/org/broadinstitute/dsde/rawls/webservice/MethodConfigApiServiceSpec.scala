@@ -864,8 +864,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        val configs = runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspace))).toSet.filterNot(_ == constantData.methodConfigDockstore)
-        assertResult(configs) {
+        val allConfigs = runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspace))).toSet
+        val agoraConfigs = allConfigs.filterNot(_ == constantData.methodConfigDockstore)
+        assertResult(agoraConfigs) {
           responseAs[Array[MethodConfigurationShort]].toSet
         }
       }
