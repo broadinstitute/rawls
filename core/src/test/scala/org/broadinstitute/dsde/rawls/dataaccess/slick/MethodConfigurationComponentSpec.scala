@@ -81,7 +81,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       prerequisites = Map.empty,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
-      methodRepoMethod = testData.methodConfig.methodRepoMethod.asInstanceOf[AgoraMethod].copy(methodVersion = 2)
+      methodRepoMethod = testData.method.copy(methodVersion = 2)
     )
 
     runAndWait(methodConfigurationQuery.upsert(workspaceContext, changed))
@@ -110,7 +110,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       prerequisites = Map.empty,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
-      methodRepoMethod = testData.methodConfig.methodRepoMethod.asInstanceOf[AgoraMethod].copy(methodVersion = 2)
+      methodRepoMethod = testData.method.copy(methodVersion = 2)
     )
 
     runAndWait(methodConfigurationQuery.update(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, changed))
