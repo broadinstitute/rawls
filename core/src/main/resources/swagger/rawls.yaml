@@ -2112,11 +2112,49 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: List all method configurations in a workspace
+      description: List method configurations in a workspace that refer to Agora methods. Excludes method configurations for other repositories.
       tags:
         - methodconfigs
-      summary: list method configurations in a workspace
+      summary: List Agora method configurations in a workspace
       operationId: list_method_configurations
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/api/workspaces/v2/{workspaceNamespace}/{workspaceName}/methodconfigs':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/MethodConfiguration'
+        '404':
+          description: Workspace not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: List all method configurations in a workspace, from any method repository.
+      tags:
+        - methodconfigs
+      summary: List all method configurations in a workspace
+      operationId: list_all_method_configurations
       parameters:
         - in: path
           description: Workspace Namespace
@@ -4698,13 +4736,22 @@ definitions:
     properties:
       methodNamespace:
         type: string
-        description: The namespace of method from method store
+        description: The namespace of the method in Agora
       methodName:
         type: string
-        description: The name of method from method store
+        description: The name of the method in Agora
       methodVersion:
-        type: integer
-        description: The version of method from method store
+        type: int
+        description: The integer method version in Agora (or a string method version for Dockstore)
+      methodPath:
+        type: string
+        description: The path of the method in Dockstore
+      sourceRepo:
+        description: The method's repository, currently one of "agora" or "dockstore"
+        type: string
+      methodUri:
+        description: URI that specifies the method's repository and captures all the information necessary to identify the method within its repository (e.g. agora://namespace/name/1, dockstore://path/version)
+        type: string
 
   WorkspaceACL:
     description: ''
