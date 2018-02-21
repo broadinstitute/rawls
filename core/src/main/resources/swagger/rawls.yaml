@@ -628,7 +628,7 @@ paths:
       tags:
         - admin
       operationId: unregisterBillingProject
-      summary: foo
+      summary: remove the record for a billing project
       parameters:
         - in: path
           description: name of the project
