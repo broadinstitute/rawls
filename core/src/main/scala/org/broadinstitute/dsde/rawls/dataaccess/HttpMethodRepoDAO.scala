@@ -66,8 +66,11 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
       case dockstoreMethod: DockstoreMethod =>
         getDockstoreEntity(dockstoreMethod) flatMap { response: Option[GA4GHToolDescriptor] =>
           response match {
-            case Some(validResponse) => Future(Some(AgoraEntity(payload = Some(validResponse.descriptor))))
-            case None => Future.failed(new RawlsException("request failed"))
+            case Some(validResponse) =>
+              // TODO: re-using AgoraEntity feels sketchy to me. It seems to work without any changes, but should we create a DockstoreEntity?
+              Future(Some(AgoraEntity(payload = Some(validResponse.descriptor), entityType = Some(AgoraEntityType.Workflow))))
+            case None =>
+              Future.failed(new RawlsException(s"Failed to retrieve method ${dockstoreMethod.methodUri} from Dockstore"))
           }
         }
     }
@@ -99,12 +102,13 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
         )
         postAgoraEntity(s"${methodRepoServiceURL}/configurations", agoraEntity, userInfo)
       case otherMethod =>
-        throw new RawlsException(s"Action not supported for method repo \'${otherMethod.repo.scheme}\'")
+        throw new RawlsException(s"Action not supported for method repo ${otherMethod.repo.scheme}")
     }
 
 
   }
 
+  // TODO: if we ever want Dockstore healthchecks, we will need to split this DAO in two
   override def getStatus(implicit executionContext: ExecutionContext): Future[SubsystemStatus] = {
     val url = s"${baseMethodRepoServiceURL}/status"
     val pipeline = sendReceive ~> unmarshal[StatusCheckResponse]
