@@ -117,6 +117,24 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 204 when unregistering a billing project" in withTestDataApiServices { services =>
+    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value))) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Delete(s"/admin/project/registration/$project") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+  }
+
   it should "return 200 when listing active submissions on deleted entities" in withConstantTestDataApiServices { services =>
     Post(s"${constantData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(constantData.indiv1))) ~>
       sealRoute(services.entityRoutes) ~>
