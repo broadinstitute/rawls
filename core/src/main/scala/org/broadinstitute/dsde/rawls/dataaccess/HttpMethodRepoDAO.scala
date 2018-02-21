@@ -64,7 +64,7 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
       case agoraMethod: AgoraMethod =>
         getAgoraEntity(s"${methodRepoServiceURL}/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo)
       case _ =>
-        throw new RawlsException(s"Method repo \'${method.repo.scheme}\' not yet supported")
+        throw new RawlsException(s"Method repo '${method.repo.scheme}' not yet supported")
     }
   }
 
@@ -87,7 +87,7 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
         )
         postAgoraEntity(s"${methodRepoServiceURL}/configurations", agoraEntity, userInfo)
       case otherMethod =>
-        throw new RawlsException(s"Method repo \'${otherMethod.repo.scheme}\' not yet supported")
+        throw new RawlsException(s"Action not supported for method repo '${otherMethod.repo.scheme}'")
     }
 
 
