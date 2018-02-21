@@ -63,6 +63,14 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
               """{"methodName":"not-the-name","methodVersion":777,"methodNamespace":"not-the-namespace","methodUri":"agora://test-namespace/test-name/555","sourceRepo":"fake-repo"}""".parseJson)
           }
 
+          // URI alone is OK
+          assertResult {
+            AgoraMethod("test-namespace", "test-name", 555)
+          } {
+            MethodRepoMethodFormat.read(
+              """{"methodUri":"agora://test-namespace/test-name/555"}""".parseJson)
+          }
+
           // Fall back to fields
           assertResult {
             AgoraMethod("test-namespace", "test-name", 555)
@@ -96,6 +104,14 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
           } {
             MethodRepoMethodFormat.read(
               """{"methodUri":"dockstore://test-path/test-version","sourceRepo":"fake-repo","methodPath":"not-the-path","methodVersion":"not-the-version"}""".parseJson)
+          }
+
+          // URI alone is OK
+          assertResult {
+            DockstoreMethod("test-path", "test-version")
+          } {
+            MethodRepoMethodFormat.read(
+              """{"methodUri":"dockstore://test-path/test-version"}""".parseJson)
           }
 
           // Fall back to fields
