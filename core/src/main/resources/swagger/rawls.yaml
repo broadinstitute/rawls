@@ -623,6 +623,32 @@ paths:
           - openid
           - email
           - profile
+  '/api/admin/project/registration/{projectName}':
+    delete:
+      tags:
+        - admin
+      operationId: unregisterBillingProject
+      summary: foo
+      parameters:
+        - in: path
+          description: name of the project
+          name: projectName
+          required: true
+          type: string
+      responses:
+        204:
+          description: Successful project record removal
+        403:
+          description: You must be an admin to call this endpoint.
+        404:
+          description: Missing required parameter
+        500:
+          description: Internal Server Error
+      security:
+        - authorization:
+          - openid
+          - email
+          - profile
   '/api/admin/submissions':
     get:
       responses:

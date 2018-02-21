@@ -69,6 +69,7 @@ object UserService {
   case object ListBillingProjects extends UserServiceMessage
   case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AdminRegisterBillingProject(projectName: RawlsBillingProjectName, owner: RawlsUserEmail, bucket: String) extends UserServiceMessage
+  case class AdminUnregisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class GrantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) extends UserServiceMessage
@@ -112,6 +113,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case ListBillingProjects => listBillingProjects pipeTo sender
     case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
     case AdminRegisterBillingProject(projectName, owner, bucket) => asFCAdmin { registerBillingProject(projectName, owner, bucket) } pipeTo sender
+    case AdminUnregisterBillingProject(projectName) => asFCAdmin { unregisterBillingProject(projectName) } pipeTo sender
 
     case AddUserToBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
     case RemoveUserFromBillingProject(projectName, projectAccessUpdate) => requireProjectAction(projectName, SamResourceActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
@@ -303,6 +305,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         email <- policy.memberEmails
       } yield RawlsBillingProjectMember(RawlsUserEmail(email), role)
     }.map(RequestComplete(_))
+  }
+
+  def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    for {
+      _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) }
+      _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
+    } yield {
+      RequestComplete(StatusCodes.NoContent)
+    }
   }
 
   def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
