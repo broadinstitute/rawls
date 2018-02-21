@@ -57,6 +57,8 @@ case class RawlsGroupEmail(value: String) extends UserAuthType
 case class RawlsBillingAccountName(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType
 
+case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwner: String)
+
 class UserModelJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 
@@ -93,6 +95,8 @@ class UserModelJsonSupport extends JsonSupport {
   implicit val ManagedGroupAccessFormat = jsonFormat2(ManagedGroupAccess)
   implicit val ManagedGroupAccessResponseFormat = jsonFormat3(ManagedGroupAccessResponse)
   implicit val ManagedGroupWithMembersFormat = jsonFormat4(ManagedGroupWithMembers)
+
+  implicit val RawlsBillingProjectTransferFormat = jsonFormat3(RawlsBillingProjectTransfer)
 }
 
 object UserModelJsonSupport extends UserModelJsonSupport
