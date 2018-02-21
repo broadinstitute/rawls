@@ -228,7 +228,7 @@ object MethodRepoMethod {
 
 case class AgoraMethod(methodNamespace: String, methodName: String, methodVersion: Int) extends MethodRepoMethod {
 
-  def validate: Option[MethodRepoMethod] = {
+  override def validate: Option[AgoraMethod] = {
     if (methodNamespace.nonEmpty && methodName.nonEmpty && methodVersion > 0)
       Some(this)
     else
@@ -249,7 +249,7 @@ case class AgoraMethod(methodNamespace: String, methodName: String, methodVersio
 
 object AgoraMethod {
 
-  def apply(uri: String): MethodRepoMethod = {
+  def apply(uri: String): AgoraMethod = {
 
     (for {
       parsedUri <- Try(parse(uri)).toOption
@@ -267,7 +267,7 @@ object AgoraMethod {
 
 case class DockstoreMethod(methodPath: String, methodVersion: String) extends MethodRepoMethod {
 
-  def validate: Option[MethodRepoMethod] = {
+  override def validate: Option[DockstoreMethod] = {
     if (methodPath.nonEmpty && methodVersion.nonEmpty)
       Some(this)
     else
@@ -288,7 +288,7 @@ case class DockstoreMethod(methodPath: String, methodVersion: String) extends Me
 
 object DockstoreMethod {
 
-  def apply(uri: String): MethodRepoMethod = {
+  def apply(uri: String): DockstoreMethod = {
 
     (for {
       parsedUri <- Try(parse(uri)).toOption
