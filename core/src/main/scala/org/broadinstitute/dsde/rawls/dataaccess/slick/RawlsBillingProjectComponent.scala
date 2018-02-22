@@ -6,7 +6,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.model._
 
 case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String])
-case class RawlsBillingProjectGroupRecord(projectName: String, groupName: String, role: String)
 case class RawlsBillingProjectOperationRecord(projectName: String, operationName: String, operationId: String, done: Boolean, errorMessage: Option[String], api: String)
 
 trait RawlsBillingProjectComponent {
