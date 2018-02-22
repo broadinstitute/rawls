@@ -2052,7 +2052,7 @@ paths:
 
         #### Expanded discussion on methodRepoMethod
 
-        To create a method config for an Agora method, `"sourceRepo": "agora"` is optional; the following is sufficient
+        To create a method config for an Agora method, `"sourceRepo": "agora"` is optional; the following is sufficient:
         ```
         "methodRepoMethod": {
           "methodNamespace": "namespace",
@@ -2122,7 +2122,22 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: List method configurations in a workspace that refer to Agora methods. Excludes method configurations for other repositories.
+      description: |
+        List method configurations in a workspace that refer to Agora methods. Excludes method configurations for other repositories.
+
+        #### Expanded discussion on methodRepoMethod
+
+        The method configurations are returned in the format
+        ```
+        "methodRepoMethod": {
+          "methodNamespace": "namespace",
+          "methodName": "name",
+          "methodVersion": 1
+          "sourceRepo": "agora",
+          "methodUri": "agora://namespace/name/1"
+        }
+        ```
+        The fields `"sourceRepo"` and `"methodUri"` can be considered informational and do not need to be round-tripped (see the corresponding `POST /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs` for more details).
       tags:
         - methodconfigs
       summary: List Agora method configurations in a workspace
@@ -2160,7 +2175,31 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: List all method configurations in a workspace, from any method repository.
+      description: |
+        List all method configurations in a workspace, from any method repository.
+
+        #### Expanded discussion on methodRepoMethod
+
+        This endpoint returns method configurations for Agora in the format
+        ```
+        "methodRepoMethod": {
+          "methodNamespace": "namespace",
+          "methodName": "name",
+          "methodVersion": 1
+          "sourceRepo": "agora",
+          "methodUri": "agora://namespace/name/1"
+        }
+        ```
+        and for Dockstore in the format
+        ```
+        "methodRepoMethod": {
+          "methodPath": "path",
+          "methodVersion": "version",
+          "sourceRepo": "agora",
+          "methodUri": "dockstore://path/version"
+        }
+        ```
+        Not all of these fields need to be round-tripped; see the documentation of `POST /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs` for more details.
       tags:
         - methodconfigs
       summary: List all method configurations in a workspace
