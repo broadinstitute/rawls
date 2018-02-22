@@ -4741,7 +4741,7 @@ definitions:
         type: string
         description: The name of the method in Agora
       methodVersion:
-        type: int
+        type: integer
         description: The integer method version in Agora (or a string method version for Dockstore)
       methodPath:
         type: string
