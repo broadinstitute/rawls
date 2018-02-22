@@ -309,8 +309,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     for {
-      _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) }
       _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, userInfo)
+      _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) }
     } yield {
       RequestComplete(StatusCodes.NoContent)
     }
