@@ -118,7 +118,9 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 204 when unregistering a billing project" in withTestDataApiServices { services =>
-    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value))) ~>
+    val projectName = "unregistered-bp"
+
+    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(projectName, bucket, userInfo.userEmail.value))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -126,7 +128,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Delete(s"/admin/project/registration/$project") ~>
+    Delete(s"/admin/project/registration/$projectName") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
