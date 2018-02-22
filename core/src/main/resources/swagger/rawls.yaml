@@ -2137,7 +2137,7 @@ paths:
           "methodUri": "agora://namespace/name/1"
         }
         ```
-        The fields `"sourceRepo"` and `"methodUri"` can be considered informational and do not need to be round-tripped (see the corresponding `POST /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs` for more details).
+        If you are only working with Agora methods, the fields `"sourceRepo"` and `"methodUri"` can be considered informational and do not need to be round-tripped (see the corresponding `POST /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs` for more details).
       tags:
         - methodconfigs
       summary: List Agora method configurations in a workspace
