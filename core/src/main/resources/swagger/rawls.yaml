@@ -2069,7 +2069,39 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: Create method configurations
+      description: |
+        Create method configurations.
+
+        #### Expanded discussion on methodRepoMethod
+
+        To create a method config for an Agora method, `"sourceRepo": "agora"` is optional; the following is sufficient
+        ```
+        "methodRepoMethod": {
+          "methodNamespace": "namespace",
+          "methodName": "name",
+          "methodVersion": 1
+        }
+        ```
+        To create a method config for a Dockstore method, ``"sourceRepo": "dockstore"` is required:
+        ```
+        "methodRepoMethod": {
+          "sourceRepo": "dockstore",
+          "methodPath": "path",
+          "methodVersion": "version"
+        }
+        ```
+        You may also use the URI on its own to create a config referencing any method repo:
+        ```
+        "methodRepoMethod": {
+          "methodUri": "agora://namespace/name/1"
+        }
+        ```
+        ```
+        "methodRepoMethod": {
+          "methodUri": "dockstore://path/version"
+        }
+        ```
+        The system is specified to check for a URI first before falling back to the legacy fields.
       tags:
         - methodconfigs
       summary: Create Method configuration in a workspace
