@@ -140,6 +140,12 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
           MethodRepoMethodFormat.read(
             """{"sourceRepo":777,"methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
         }
+
+        // Bad repo in URI
+        intercept[spray.json.DeserializationException] {
+          MethodRepoMethodFormat.read(
+            """{"methodUri":"marks-methods-mart://test-path/test-version"}""".parseJson)
+        }
       }
     }
 
