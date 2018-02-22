@@ -2185,7 +2185,7 @@ paths:
         "methodRepoMethod": {
           "methodNamespace": "namespace",
           "methodName": "name",
-          "methodVersion": 1
+          "methodVersion": 1,
           "sourceRepo": "agora",
           "methodUri": "agora://namespace/name/1"
         }
