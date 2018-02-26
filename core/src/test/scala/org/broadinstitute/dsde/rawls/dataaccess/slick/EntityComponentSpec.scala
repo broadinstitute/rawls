@@ -307,7 +307,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     val veryLongString = "a" * 65533   //the limit is 65534, but it'll get the entity name
     val sample1 = new Entity("sample1", "Sample",
       Map(AttributeName.withDefaultNS("veryLongString") -> AttributeString(veryLongString)))
-    withWorkspaceContext(testData.workspace) { context =>
+    withWorkspaceContext(testWorkspace.workspace) { context =>
       runAndWait(entityQuery.save(context, sample1))
 
       val entityRec = runAndWait(uniqueResult(entityQuery.findEntityByName(UUID.fromString(testData.workspace.workspaceId), "Sample", "sample1").result))
