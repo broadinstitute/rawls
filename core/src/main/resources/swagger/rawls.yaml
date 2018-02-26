@@ -2072,7 +2072,7 @@ paths:
       description: |
         Create method configurations.
 
-        #### Expanded discussion on methodRepoMethod
+        #### Expanded discussion on the methodRepoMethod field
 
         To create a method config for an Agora method, `"sourceRepo": "agora"` is optional; the following is sufficient:
         ```
@@ -2147,9 +2147,9 @@ paths:
       description: |
         List method configurations in a workspace that refer to Agora methods. Excludes method configurations for other repositories.
 
-        #### Expanded discussion on methodRepoMethod
+        #### Expanded discussion on the methodRepoMethod field
 
-        The method configurations are returned in the format
+        The method references are returned in the format
         ```
         "methodRepoMethod": {
           "methodNamespace": "namespace",
@@ -2200,9 +2200,9 @@ paths:
       description: |
         List all method configurations in a workspace, from any method repository.
 
-        #### Expanded discussion on methodRepoMethod
+        #### Expanded discussion on the methodRepoMethod field
 
-        This endpoint returns method configurations for Agora in the format
+        This endpoint returns method references to Agora in the format
         ```
         "methodRepoMethod": {
           "methodNamespace": "namespace",
