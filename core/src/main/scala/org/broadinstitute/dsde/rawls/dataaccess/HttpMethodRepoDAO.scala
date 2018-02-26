@@ -100,7 +100,7 @@ class HttpMethodRepoDAO(baseAgoraServiceURL: String, agoraApiPath: String, baseD
         )
         postAgoraEntity(s"${agoraServiceURL}/configurations", agoraEntity, userInfo)
       case otherMethod =>
-        throw new RawlsException(s"Action not supported for method repo ${otherMethod.repo.scheme}")
+        throw new RawlsException(s"Action not supported for method repo '${otherMethod.repo.scheme}'")
     }
 
 
