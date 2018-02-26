@@ -310,7 +310,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     withWorkspaceContext(testWorkspace.workspace) { context =>
       runAndWait(entityQuery.save(context, sample1))
 
-      val entityRec = runAndWait(uniqueResult(entityQuery.findEntityByName(UUID.fromString(testData.workspace.workspaceId), "Sample", "sample1").result))
+      val entityRec = runAndWait(uniqueResult(entityQuery.findEntityByName(UUID.fromString(testWorkspace.workspace.workspaceId), "Sample", "sample1").result))
       assertResult(65534) {
         entityRec.get.allAttributeValues.get.length
       }
