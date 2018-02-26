@@ -2123,60 +2123,7 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
       description: |
-        List method configurations in a workspace that refer to Agora methods. Excludes method configurations for other repositories.
-
-        #### Expanded discussion on the methodRepoMethod field
-
-        The method references are returned in the format
-        ```
-        "methodRepoMethod": {
-          "methodNamespace": "namespace",
-          "methodName": "name",
-          "methodVersion": 1
-          "sourceRepo": "agora",
-          "methodUri": "agora://namespace/name/1"
-        }
-        ```
-        If you are only working with Agora methods, the fields `"sourceRepo"` and `"methodUri"` can be considered informational and do not need to be round-tripped (see the corresponding `POST /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs` for more details).
-      tags:
-        - methodconfigs
-      summary: List Agora method configurations in a workspace
-      operationId: list_method_configurations
-      parameters:
-        - in: path
-          description: Workspace Namespace
-          name: workspaceNamespace
-          required: true
-          type: string
-        - in: path
-          description: Workspace Name
-          name: workspaceName
-          required: true
-          type: string
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
-  '/api/workspaces/v2/{workspaceNamespace}/{workspaceName}/methodconfigs':
-    get:
-      responses:
-        '200':
-          description: Successful Request
-          schema:
-            type: array
-            items:
-              $ref: '#/definitions/MethodConfiguration'
-        '404':
-          description: Workspace not found
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
-          description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: |
-        List all method configurations in a workspace, from any method repository.
+        List method configurations in a workspace. By default, only Agora method configs are returned. To return configs for all repos, specify `allRepos` to be `true`.
 
         #### Expanded discussion on the methodRepoMethod field
 
@@ -2199,11 +2146,11 @@ paths:
           "methodUri": "dockstore://path/version"
         }
         ```
-        Not all of these fields need to be round-tripped; see the documentation of `POST /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs` for more details.
+        If you are only working with Agora methods, the fields `"sourceRepo"` and `"methodUri"` can be considered informational and do not need to be round-tripped (see the corresponding `POST /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs` for more details).
       tags:
         - methodconfigs
-      summary: List all method configurations in a workspace
-      operationId: list_all_method_configurations
+      summary: List method configurations in a workspace
+      operationId: list_method_configurations
       parameters:
         - in: path
           description: Workspace Namespace
@@ -2215,6 +2162,12 @@ paths:
           name: workspaceName
           required: true
           type: string
+        - in: query
+          description: Configs for all repos, not just Agora
+          name: allRepos
+          required: false
+          type: boolean
+          default: false
       security:
         - authorization:
             - openid

@@ -857,30 +857,67 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "list method Configurations for Agora" in withTestDataApiServices { services =>
+  private def getConfigs(includeDockstore: Boolean) = {
+    val allConfigs = runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspace))).toSet
+
+    // Protect against test data changing and silently invalidating tests
+    assertResult(true) {
+      allConfigs.exists(_.methodRepoMethod.repo == Dockstore)
+    }
+
+    if (includeDockstore)
+      allConfigs
+    else
+      allConfigs.filterNot(_.methodRepoMethod.repo == Dockstore)
+  }
+
+  it should "list method Configurations for Agora by default" in withTestDataApiServices { services =>
     Get(s"${testData.workspace.path}/methodconfigs") ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-        val allConfigs = runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspace))).toSet
-        val agoraConfigs = allConfigs.filterNot(_ == constantData.methodConfigDockstore)
-        assertResult(agoraConfigs) {
+
+        assertResult(getConfigs(includeDockstore = false)) {
           responseAs[Array[MethodConfigurationShort]].toSet
         }
       }
   }
 
-  it should "list method Configurations for all repos" in withTestDataApiServices { services =>
-    Get(s"/workspaces/v2/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs") ~>
+  it should "list method Configurations for Agora with allRepos=false" in withTestDataApiServices { services =>
+    Get(s"${testData.workspace.path}/methodconfigs?allRepos=false") ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-        val configs = runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspace))).toSet
-        assertResult(configs) {
+
+        assertResult(getConfigs(includeDockstore = false)) {
+          responseAs[Array[MethodConfigurationShort]].toSet
+        }
+      }
+  }
+
+  it should "return Bad Request if you use a bogus value for allRepos" in withTestDataApiServices { services =>
+    Get(s"${testData.workspace.path}/methodconfigs?allRepos=banana") ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "list method Configurations for all repos with allRepos=true" in withTestDataApiServices { services =>
+    Get(s"${testData.workspace.path}/methodconfigs?allRepos=true") ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        assertResult(getConfigs(includeDockstore = true)) {
           responseAs[Array[MethodConfigurationShort]].toSet
         }
       }
