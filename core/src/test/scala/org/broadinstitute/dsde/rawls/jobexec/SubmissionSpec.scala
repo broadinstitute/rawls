@@ -146,7 +146,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
           DBIO.seq(
             entityQuery.save(context, sample1),
             entityQuery.save(context, sample2),
-            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("std", "someMethod", 1))),
+            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("std", "someMethod", 1))),
             submissionQuery.create(context, submissionTestAbortMissingWorkflow),
             submissionQuery.create(context, submissionTestAbortMalformedWorkflow),
             submissionQuery.create(context, submissionTestAbortGoodWorkflow),
@@ -208,7 +208,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val maxActiveWorkflowsPerUser = 2
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
-        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, "", mockServer.mockServerBaseUrl, "", workbenchMetricBaseName = workbenchMetricBaseName),
         execServiceCluster,
         execServiceBatchSize,
         gcsDAO,

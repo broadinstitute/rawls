@@ -115,7 +115,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
-      new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+      new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, "", mockServer.mockServerBaseUrl, "", workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
       execServiceBatchSize,
       gcsDAO,
@@ -765,8 +765,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig2","Sample",MethodRepoMethod("myNamespace","method-a",1),"dsde"),
-      MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
+    assertResult(Vector(MethodConfigurationShort("testConfig2","Sample",AgoraMethod("myNamespace","method-a",1),"dsde"),
+      MethodConfigurationShort("testConfig1","Sample",AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
     }
 
@@ -821,7 +821,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
+    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
     }
 
@@ -877,7 +877,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
+    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
     }
 
@@ -932,7 +932,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
+    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
     }
 

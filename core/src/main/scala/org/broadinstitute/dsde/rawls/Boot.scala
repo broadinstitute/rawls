@@ -159,8 +159,10 @@ object Boot extends App with LazyLogging {
 
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
-    val agoraConfig = conf.getConfig("methodrepo")
-    val methodRepoDAO = new HttpMethodRepoDAO(agoraConfig.getString("server"), agoraConfig.getString("path"), metricsPrefix)
+    val agoraConfig = conf.getConfig("agora")
+    val dockstoreConfig = conf.getConfig("dockstore")
+    val methodRepoDAO =
+      new HttpMethodRepoDAO(agoraConfig.getString("server"), agoraConfig.getString("path"), dockstoreConfig.getString("server"), dockstoreConfig.getString("path"), metricsPrefix)
 
     val maxActiveWorkflowsTotal = conf.getInt("executionservice.maxActiveWorkflowsPerServer") * executionServiceServers.size
     val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt("executionservice.activeWorkflowHogFactor")

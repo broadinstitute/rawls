@@ -2,11 +2,13 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, RawlsExpansion, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, MethodConfiguration, StatusCheckResponse, SubsystemStatus, Subsystems, UserInfo}
+import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
 import spray.client.pipelining._
@@ -24,10 +26,11 @@ import scala.util.control.NonFatal
 /**
  * @author tsharpe
  */
-class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", override val workbenchMetricBaseName: String)(implicit val system: ActorSystem) extends MethodRepoDAO with DsdeHttpDAO with InstrumentedRetry with LazyLogging with RawlsInstrumented {
+class HttpMethodRepoDAO(baseAgoraServiceURL: String, agoraApiPath: String, baseDockstoreServiceURL: String, dockstoreApiPath: String, override val workbenchMetricBaseName: String)(implicit val system: ActorSystem) extends MethodRepoDAO with DsdeHttpDAO with InstrumentedRetry with LazyLogging with RawlsInstrumented {
   import system.dispatcher
 
-  private val methodRepoServiceURL = baseMethodRepoServiceURL + apiPath
+  private val agoraServiceURL = baseAgoraServiceURL + agoraApiPath
+  private val dockstoreServiceURL = baseDockstoreServiceURL + dockstoreApiPath
 
   private lazy implicit val baseMetricBuilder: ExpandedMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Agora)
@@ -54,11 +57,28 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
   }
 
   override def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    getAgoraEntity(s"${methodRepoServiceURL}/configurations/${namespace}/${name}/${version}",userInfo)
+    getAgoraEntity(s"${agoraServiceURL}/configurations/${namespace}/${name}/${version}",userInfo)
   }
 
-  override def getMethod( namespace: String, name: String, version: Int, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    getAgoraEntity(s"${methodRepoServiceURL}/methods/${namespace}/${name}/${version}",userInfo)
+  override def getMethod( method: MethodRepoMethod, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
+    method match {
+      case agoraMethod: AgoraMethod =>
+        getAgoraEntity(s"${agoraServiceURL}/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo)
+      case dockstoreMethod: DockstoreMethod =>
+        getDockstoreEntity(dockstoreMethod) flatMap { response: Option[GA4GHToolDescriptor] =>
+          response match {
+            case Some(validResponse) =>
+              // TODO: re-using AgoraEntity feels sketchy to me. It seems to work without any changes, but should we create a DockstoreEntity?
+              Future(Some(AgoraEntity(payload = Some(validResponse.descriptor), entityType = Some(AgoraEntityType.Workflow))))
+            case None =>
+              Future.failed(new RawlsException(s"Failed to retrieve method ${dockstoreMethod.methodUri} from Dockstore"))
+          }
+        }
+    }
+  }
+
+  private def getDockstoreEntity(method: DockstoreMethod): Future[Option[GA4GHToolDescriptor]] = {
+    Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)) ~> sendReceive map unmarshal[Option[GA4GHToolDescriptor]]
   }
 
   private def when500( throwable: Throwable ): Boolean = {
@@ -70,17 +90,25 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
   }
 
   override def postMethodConfig(namespace: String, name: String, methodConfiguration: MethodConfiguration, userInfo: UserInfo): Future[AgoraEntity] = {
-    val agoraEntity = AgoraEntity(
-      namespace = Option(namespace),
-      name = Option(name),
-      payload = Option(methodConfiguration.toJson.toString),
-      entityType = Option(AgoraEntityType.Configuration)
-    )
-    postAgoraEntity(s"${methodRepoServiceURL}/configurations", agoraEntity, userInfo)
+    methodConfiguration.methodRepoMethod match {
+      case _ : AgoraMethod =>
+        val agoraEntity = AgoraEntity(
+          namespace = Option(namespace),
+          name = Option(name),
+          payload = Option(methodConfiguration.toJson.toString),
+          entityType = Option(AgoraEntityType.Configuration)
+        )
+        postAgoraEntity(s"${agoraServiceURL}/configurations", agoraEntity, userInfo)
+      case otherMethod =>
+        throw new RawlsException(s"Action not supported for method repo '${otherMethod.repo.scheme}'")
+    }
+
+
   }
 
+  // TODO: if we ever want Dockstore healthchecks, we will need to split this DAO in two
   override def getStatus(implicit executionContext: ExecutionContext): Future[SubsystemStatus] = {
-    val url = s"${baseMethodRepoServiceURL}/status"
+    val url = s"${baseAgoraServiceURL}/status"
     val pipeline = sendReceive ~> unmarshal[StatusCheckResponse]
     // Don't retry on the status check
     pipeline(Get(url)).map { statusCheck =>

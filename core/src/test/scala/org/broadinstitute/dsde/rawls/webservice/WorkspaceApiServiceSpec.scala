@@ -132,7 +132,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       sample3.toReference
     ))))
 
-    val methodConfig = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoMethod(workspaceName.namespace, "method-a", 1))
+    val methodConfig = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(workspaceName.namespace, "method-a", 1))
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, workspaceName)
     val submissionTemplate = createTestSubmission(workspace, methodConfig, sampleSet, userOwner,
       Seq(sample1, sample2, sample3), Map(sample1 -> testData.inputResolutions, sample2 -> testData.inputResolutions, sample3 -> testData.inputResolutions),
@@ -2542,9 +2542,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     withApiServices(dataSource, testData.userReader.userEmail.value) { services =>
       val wsName = testData.wsName
       val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-      val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+      val agoraMethodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+      val dockstoreMethodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, DockstoreMethod("path", "version"))
 
-      createSubmission(wsName, methodConf, testData.sample1, None, services, exectedStatus)
+      List(agoraMethodConf, dockstoreMethodConf).foreach(createSubmission(wsName, _, testData.sample1, None, services, exectedStatus))
     }
   }
 
@@ -2575,7 +2576,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     val mcName = MethodConfigurationName("no_input", "dsde", newWorkspace.toWorkspaceName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     createSubmission(newWorkspace.toWorkspaceName, methodConf, z1, None, services, StatusCodes.Forbidden)
   }

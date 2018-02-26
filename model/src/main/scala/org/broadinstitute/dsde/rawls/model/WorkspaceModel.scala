@@ -13,7 +13,7 @@ import spray.http.StatusCode
 import spray.json._
 import UserModelJsonSupport.ManagedGroupRefFormat
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
@@ -193,66 +193,149 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
-// In the next phase (GAWB-3100), this class's members will be swapped out for a singular methodUri
-case class MethodRepoMethod(
-                   methodNamespace: String,
-                   methodName: String,
-                   methodVersion: Int
-                   ) {
-  def asAgoraMethodUrl: String = asMethodUrlForRepo(MethodRepos.Agora.toString)
 
-  // Next phase: this method goes away
-  def asMethodUrlForRepo(repository: String): String = {
+sealed trait MethodRepoMethod {
 
-    if (repository.nonEmpty && MethodRepos.withName(repository).isDefined && this.validate.isDefined)
-      s"$repository://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion"
-    else
-      throw new RawlsException(
-        s"Could not generate a method URI from MethodRepoMethod with repo \'$repository\', namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
-      )
+  def methodUri: String
+
+  def repo: MethodRepository
+
+  def validate: Option[MethodRepoMethod]
+
+}
+
+object MethodRepoMethod {
+
+  def fromUri(uri: String): MethodRepoMethod = {
+    (for {
+      parsedUri <- Try(parse(uri)).toOption
+      repoName  <- parsedUri.scheme
+      repo      <- MethodRepository.withName(repoName)
+    } yield {
+      repo
+    }) match {
+      case Some(Agora) => AgoraMethod(uri)
+      case Some(Dockstore) => DockstoreMethod(uri)
+      case _ => throw new RawlsException(s"Illegal method repo specified in URI \'$uri\'")
+    }
   }
 
-  def validate: Option[MethodRepoMethod] = {
+  def apply(methodNamespace: String, methodName: String, methodVersion: Int): AgoraMethod = AgoraMethod(methodNamespace, methodName, methodVersion)
+
+  def apply(methodPath: String, methodVersion: String): DockstoreMethod = DockstoreMethod(methodPath, methodVersion)
+
+}
+
+case class AgoraMethod(methodNamespace: String, methodName: String, methodVersion: Int) extends MethodRepoMethod {
+
+  override def validate: Option[AgoraMethod] = {
     if (methodNamespace.nonEmpty && methodName.nonEmpty && methodVersion > 0)
       Some(this)
     else
       None
   }
 
+  override def methodUri: String = {
+    if (validate.isDefined)
+      s"${repo.scheme}://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion"
+    else
+      throw new RawlsException(
+        s"Could not generate a method URI from AgoraMethod with namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
+      )
+  }
+
+  override def repo: MethodRepository = Agora
 }
 
-object MethodRepoMethod {
-  def apply(uri: String): MethodRepoMethod = {
+object AgoraMethod {
+
+  def apply(uri: String): AgoraMethod = {
 
     (for {
       parsedUri <- Try(parse(uri)).toOption
-      repo      <- parsedUri.scheme
-      _         <- MethodRepos.withName(repo)
       namespace <- parsedUri.host // parser does not URL-decode host
       parts     <- Option(parsedUri.pathParts)
       name      <- Option(parts.head.part) // parser does URL-decode path parts
-      version   <- Try(parts(1).part.toInt).toOption
-      result    <- if (parts.size == 2) MethodRepoMethod(URLDecoder.decode(namespace, UTF_8.name), name, version).validate else None
+      version   <- Try(parts(1).part.toInt).toOption // encoding does not apply to ints
+      result    <- if (parts.size == 2) AgoraMethod(URLDecoder.decode(namespace, UTF_8.name), name, version).validate else None
     } yield {
       result
-    }).getOrElse(throw new RawlsException(s"Could not create a MethodRepoMethod from URI \'$uri\'"))
+    }).getOrElse(throw new RawlsException(s"Could not create an AgoraMethod from URI \'$uri\'"))
   }
+
 }
 
-object MethodRepos {
-  sealed trait MethodRepository {
-    override def toString = getClass.getSimpleName.stripSuffix("$").toLowerCase
+case class DockstoreMethod(methodPath: String, methodVersion: String) extends MethodRepoMethod {
+
+  override def validate: Option[DockstoreMethod] = {
+    if (methodPath.nonEmpty && methodVersion.nonEmpty)
+      Some(this)
+    else
+      None
   }
 
-  def withName(name: String): Option[MethodRepository] = name match {
-    case "agora" => Some(Agora)
+  override def methodUri: String = {
+    if (validate.isDefined)
+      s"${repo.scheme}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}"
+    else
+      throw new RawlsException(
+        s"Could not generate a method URI from DockstoreMethod with path \'$methodPath\', version \'$methodVersion\'"
+      )
+  }
+
+  private def methodVersionEncoded: String = URLEncoder.encode(methodVersion, UTF_8.name)
+
+  private def toolId = s"#workflow/$methodPath"
+
+  private def toolIdEncoded = URLEncoder.encode(toolId, UTF_8.name)
+
+  def ga4ghDescriptorUrl(baseUrl: String): String =
+    s"$baseUrl/ga4gh/v1/tools/$toolIdEncoded/versions/$methodVersionEncoded/WDL/descriptor"
+
+  override def repo: MethodRepository = Dockstore
+}
+
+object DockstoreMethod {
+
+  def apply(uri: String): DockstoreMethod = {
+
+    (for {
+      parsedUri <- Try(parse(uri)).toOption
+      path      <- parsedUri.host // parser does not URL-decode host
+      parts     <- Option(parsedUri.pathParts)
+      version   <- Try(parts.head.part).toOption // parser does URL-decode path parts
+      result    <- if (parts.size == 1) DockstoreMethod(URLDecoder.decode(path, UTF_8.name), version).validate else None
+    } yield {
+      result
+    }).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$uri\'"))
+  }
+
+}
+
+sealed trait MethodRepository {
+  val scheme: String
+}
+
+case object Agora extends MethodRepository {
+  override val scheme: String = "agora"
+}
+
+case object Dockstore extends MethodRepository {
+  override val scheme: String = "dockstore"
+}
+
+object MethodRepository {
+
+  def withName(name: String): Option[MethodRepository] = name.toLowerCase match {
+    case Agora.scheme => Some(Agora)
+    case Dockstore.scheme => Some(Dockstore)
     case _ => None
   }
 
-  case object Agora extends MethodRepository
-
-  val all: Set[MethodRepository] = Set(Agora)
+  val all: Set[MethodRepository] = Set(Agora, Dockstore)
 }
+
+case class GA4GHToolDescriptor(`type`: String, descriptor: String, url: String)
 
 case class MethodInput(name: String, inputType: String, optional: Boolean)
 case class MethodOutput(name: String, outputType: String)
@@ -479,7 +562,41 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityCopyResponseFormat = jsonFormat3(EntityCopyResponse)
 
-  implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod.apply)
+  implicit val AgoraMethodFormat = jsonFormat3(AgoraMethod.apply)
+
+  implicit val DockstoreMethodFormat = jsonFormat2(DockstoreMethod.apply)
+
+  implicit object MethodRepoMethodFormat extends RootJsonFormat[MethodRepoMethod] {
+
+    override def write(method: MethodRepoMethod): JsValue = {
+      method match {
+        case agora: AgoraMethod =>
+          JsObject(Map("methodUri" -> JsString(agora.methodUri), "sourceRepo" -> JsString(agora.repo.scheme)) ++ agora.toJson.asJsObject.fields)
+        case dockstore: DockstoreMethod =>
+          JsObject(Map("methodUri" -> JsString(dockstore.methodUri), "sourceRepo" -> JsString(dockstore.repo.scheme)) ++ dockstore.toJson.asJsObject.fields)
+      }
+    }
+
+    override def read(json: JsValue): MethodRepoMethod = {
+      val fromUri = json.asJsObject.fields.get("methodUri") match {
+        case Some(JsString(uri)) => Try(MethodRepoMethod.fromUri(uri)).toOption
+        case _ => None
+      }
+
+      fromUri match {
+        case Some(method) => method
+        case _ =>
+          json.asJsObject.fields.get("sourceRepo") match {
+            case Some(JsString(Dockstore.scheme)) => DockstoreMethodFormat.read(json)
+            case Some(JsString(Agora.scheme)) => AgoraMethodFormat.read(json)
+            case None => AgoraMethodFormat.read(json) // If omitted, default to Agora for backwards compatibility
+            case Some(JsString(other)) => throw DeserializationException(s"Illegal method repo \'$other\'")
+            case _ => throw DeserializationException("unexpected json type")
+          }
+      }
+    }
+
+  }
 
   implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
 
@@ -500,6 +617,8 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 
   implicit val ValidatedMethodConfigurationFormat = jsonFormat5(ValidatedMethodConfiguration)
+
+  implicit val GA4GHToolDescriptorFormat = jsonFormat3(GA4GHToolDescriptor)
 
   implicit val MethodInputFormat = jsonFormat3(MethodInput)
 

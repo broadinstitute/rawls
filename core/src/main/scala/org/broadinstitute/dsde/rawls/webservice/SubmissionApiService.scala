@@ -37,7 +37,7 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with UserI
       } ~
       path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
         post {
-          entity(as[SubmissionRequest]) { submission =>
+          entity(as[SubmissionRequest]) { submission: SubmissionRequest =>
             requestContext =>
               perRequest(requestContext,
                 WorkspaceService.props(workspaceServiceConstructor, userInfo),
