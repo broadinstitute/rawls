@@ -2542,9 +2542,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     withApiServices(dataSource, testData.userReader.userEmail.value) { services =>
       val wsName = testData.wsName
       val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-      val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+      val agoraMethodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+      val dockstoreMethodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, DockstoreMethod("path", "version"))
 
-      createSubmission(wsName, methodConf, testData.sample1, None, services, exectedStatus)
+      List(agoraMethodConf, dockstoreMethodConf).foreach(createSubmission(wsName, _, testData.sample1, None, services, exectedStatus))
     }
   }
 

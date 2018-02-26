@@ -202,6 +202,8 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
           .withStatusCode(StatusCodes.NotFound.intValue)
       )
 
+    // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
+
     // Saving invalid WDL as a Method Repo Method is allowed
 
     val badSyntaxWDL = threeStepWDL.replace("workflow", "not-a-workflow")

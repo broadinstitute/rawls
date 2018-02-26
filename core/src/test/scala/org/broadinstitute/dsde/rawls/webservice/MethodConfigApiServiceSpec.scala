@@ -784,16 +784,27 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when generating a method config template from a valid method" in withTestDataApiServices { services =>
-    val method = AgoraMethod("dsde","three_step",1)
-    Post("/methodconfigs/template", httpJson(method)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
-      check {
-        val methodConfiguration = MethodConfiguration("namespace","name","rootEntityType",Map(), Map("three_step.cgrep.pattern" -> AttributeString("")),
-          Map("three_step.ps.procs"->AttributeString(""),"three_step.cgrep.count"->AttributeString(""), "three_step.wc.count"->AttributeString("")),
-          AgoraMethod("dsde","three_step",1))
-        assertResult(methodConfiguration) { responseAs[MethodConfiguration] }
-        assertResult(StatusCodes.OK) { status }
-      }
+    import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
+    import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.DockstoreMethodFormat
+    import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AgoraMethodFormat
+
+    val testMethods = List(AgoraMethod("dsde","three_step",1), DockstoreMethod("path", "version"))
+
+    testMethods.foreach { method =>
+      Post("/methodconfigs/template", httpJsonStr(MethodRepoMethodFormat.write(method).toString())) ~>
+        sealRoute(services.methodConfigRoutes) ~>
+        check {
+          val methodConfiguration = MethodConfiguration("namespace", "name", "rootEntityType", Map(), Map("three_step.cgrep.pattern" -> AttributeString("")),
+            Map("three_step.ps.procs" -> AttributeString(""), "three_step.cgrep.count" -> AttributeString(""), "three_step.wc.count" -> AttributeString("")),
+            AgoraMethod("dsde", "three_step", 1))
+          assertResult(methodConfiguration) {
+            responseAs[MethodConfiguration]
+          }
+          assertResult(StatusCodes.OK) {
+            status
+          }
+        }
+    }
   }
 
   it should "return 200 getting method inputs and outputs" in withTestDataApiServices { services =>
@@ -856,6 +867,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
+
+  // ^^^ anything that creates an AgoraMethod instance or references testData.methodConfig should probably have a Dockstore sibling
 
   it should "list method Configurations for Agora" in withTestDataApiServices { services =>
     Get(s"${testData.workspace.path}/methodconfigs") ~>
