@@ -4705,6 +4705,12 @@ definitions:
       methodRepoMethod:
         $ref: '#/definitions/MethodRepoMethod'
         description: The properties of the method from the method store that this config is associated with
+      methodConfigVersion:
+        type: integer
+        description: 'Version number, incremented on edit'
+      deleted:
+        type: boolean
+        description: 'Is this config marked as deleted?'
 
   ValidatedMethodConfiguration:
     description: ''
