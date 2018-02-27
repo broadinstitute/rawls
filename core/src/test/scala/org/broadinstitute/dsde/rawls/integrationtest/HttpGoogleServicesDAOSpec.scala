@@ -168,7 +168,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
     val project = model.RawlsBillingProject(RawlsBillingProjectName(testProject), "", Ready, None, None)
 
-    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, projectOwnerGoogleGroup, testWorkspaceId, testWorkspace, Set(ManagedGroupRef(testRealm.groupName)), Option(Set(RawlsUserRef(testCreator.userSubjectId)))), Duration.Inf)
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, projectOwnerGoogleGroup, testWorkspaceId, testWorkspace, Set(ManagedGroupRef(testRealm.groupName)), Option(Set(RawlsUserRef(testCreator.userId)))), Duration.Inf)
 
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 
@@ -276,15 +276,15 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val projectOwnerGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
     val project = RawlsBillingProject(RawlsBillingProjectName(testProject), "", Ready, None, None)
     val random = scala.util.Random
-    val testUser = testCreator.copy(userSubjectId = RawlsUserSubjectId(random.nextLong().toString))
+    val testUser = testCreator.copy(userId = RawlsUserSubjectId(random.nextLong().toString))
     val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testUser, project, projectOwnerGroup, testWorkspaceId, testWorkspace, Set.empty, None), Duration.Inf)
 
-    val user = RawlsUser(UserInfo(RawlsUserEmail("foo@bar.com"), null, 0, testUser.userSubjectId))
+    val user = RawlsUser(UserInfo(RawlsUserEmail("foo@bar.com"), null, 0, testUser.userId))
 
     Await.result(gcsDAO.createProxyGroup(user), Duration.Inf)
     assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf)) //quickest way to remove access to a workspace bucket
 
-    assert(Await.result(gcsDAO.diagnosticBucketRead(userInfo.copy(userSubjectId = testUser.userSubjectId), googleWorkspaceInfo.bucketName), Duration.Inf).get.statusCode.get == StatusCodes.Unauthorized)
+    assert(Await.result(gcsDAO.diagnosticBucketRead(userInfo.copy(userId = testUser.userId), googleWorkspaceInfo.bucketName), Duration.Inf).get.statusCode.get == StatusCodes.Unauthorized)
     Await.result(gcsDAO.deleteProxyGroup(user), Duration.Inf)
     Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo), Duration.Inf)
     Await.result(gcsDAO.deleteGoogleGroup(projectOwnerGroup), Duration.Inf)

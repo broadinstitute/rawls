@@ -6,7 +6,7 @@ import spray.http.OAuth2BearerToken
 /**
  * Created by dvoet on 7/21/15.
  */
-case class UserInfo(userEmail: RawlsUserEmail, accessToken: OAuth2BearerToken, accessTokenExpiresIn: Long, userSubjectId: RawlsUserSubjectId)
+case class UserInfo(userEmail: RawlsUserEmail, accessToken: OAuth2BearerToken, tokenExpiresIn: Long, userId: RawlsUserSubjectId)
 
 object UserInfo {
   def buildFromTokens(credential: Credential): UserInfo = {

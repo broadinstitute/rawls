@@ -775,7 +775,7 @@ class HttpGoogleServicesDAO(
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Storage
     retryWhen500orGoogleError(() => {
-      val so = new StorageObject().setName(userInfo.userSubjectId.value)
+      val so = new StorageObject().setName(userInfo.userId.value)
       val encryptedToken = Aes256Cbc.encrypt(refreshToken.getBytes, tokenSecretKey).get
       so.setMetadata(Map("iv" -> encryptedToken.base64Iv))
       val media = new InputStreamContent("text/plain", new ByteArrayInputStream(encryptedToken.base64CipherText.getBytes))
@@ -1125,7 +1125,7 @@ class HttpGoogleServicesDAO(
   }
 
   private def getUserCredential(userInfo: UserInfo): Credential = {
-    new GoogleCredential().setAccessToken(userInfo.accessToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
+    new GoogleCredential().setAccessToken(userInfo.accessToken.token).setExpiresInSeconds(userInfo.tokenExpiresIn)
   }
 
   private def getGroupServiceAccountCredential: Credential = {
@@ -1171,7 +1171,7 @@ class HttpGoogleServicesDAO(
   }
 
   def toProxyFromUser(rawlsUser: RawlsUser): String = toProxyFromUser(rawlsUser.userSubjectId)
-  def toProxyFromUser(userInfo: UserInfo): String = toProxyFromUser(userInfo.userSubjectId)
+  def toProxyFromUser(userInfo: UserInfo): String = toProxyFromUser(userInfo.userId)
   def toProxyFromUser(subjectId: RawlsUserSubjectId): String = s"PROXY_${subjectId.value}@${appsDomain}"
   def toUserFromProxy(proxy: String): String = {
     implicit val service = GoogleInstrumentedService.Groups

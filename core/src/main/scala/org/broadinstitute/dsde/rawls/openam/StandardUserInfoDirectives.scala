@@ -31,8 +31,8 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
 
     userInfo flatMap { ui =>
       onSuccess(getWorkbenchUserEmailId(ui)).map {
-        case Some(samUserInfo) => UserInfo(samUserInfo.userInfo.userEmail, ui.accessToken, ui.accessTokenExpiresIn, samUserInfo.userInfo.userSubjectId)
-        case None => UserInfo(ui.userEmail, ui.accessToken, ui.accessTokenExpiresIn, ui.userSubjectId)
+        case Some(samUserInfo) => UserInfo(samUserInfo.userInfo.userEmail, ui.accessToken, ui.tokenExpiresIn, samUserInfo.userInfo.userSubjectId)
+        case None => UserInfo(ui.userEmail, ui.accessToken, ui.tokenExpiresIn, ui.userId)
       }
     }
   }
