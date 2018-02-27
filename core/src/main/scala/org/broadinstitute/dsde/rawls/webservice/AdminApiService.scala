@@ -44,16 +44,18 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           requestContext =>
             perRequest(requestContext,
               UserService.props(userServiceConstructor, userInfo),
-              UserService.AdminRegisterBillingProject(RawlsBillingProjectName(xfer.project), RawlsUserEmail(xfer.newOwner), xfer.bucket))
+              UserService.AdminRegisterBillingProject(xfer))
         }
       }
     } ~
     path("admin" / "project" / "registration" / Segment) { (projectName) =>
       delete {
-        requestContext =>
-          perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminUnregisterBillingProject(RawlsBillingProjectName(projectName)))
+        entity(as[UserInfo]) { ownerUserInfo =>
+          requestContext =>
+            perRequest(requestContext,
+              UserService.props(userServiceConstructor, ownerUserInfo),
+              UserService.AdminUnregisterBillingProject(RawlsBillingProjectName(projectName), ownerUserInfo))
+        }
       }
     } ~
     path("admin" / "submissions") {

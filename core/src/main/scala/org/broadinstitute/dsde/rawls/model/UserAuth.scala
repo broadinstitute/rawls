@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
+import spray.http.OAuth2BearerToken
 import spray.json._
 
 case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole, creationStatus: CreationStatuses.CreationStatus, message: Option[String] = None)
@@ -41,6 +42,8 @@ case class ManagedGroup(membersGroup: RawlsGroup, adminsGroup: RawlsGroup) exten
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
 case class RawlsBillingProject(projectName: RawlsBillingProjectName, cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String])
+
+case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwner: UserInfo)
 
 case class ProjectAccessUpdate(email: String, role: ProjectRole)
 
@@ -124,6 +127,10 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsBillingProjectFormat = jsonFormat5(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
+
+  implicit val OAuth2BearerTokenFormat = jsonFormat1(OAuth2BearerToken)
+  implicit val UserInfoFormat = jsonFormat4(UserInfo.apply)
+  implicit val RawlsBillingProjectTransferFormat = jsonFormat3(RawlsBillingProjectTransfer)
 
   implicit val RawlsUserInfoFormat = jsonFormat2(RawlsUserInfo)
 
