@@ -304,14 +304,15 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
 
   it should "trim giant all_attribute_values types so they don't overflow" in withCustomTestDatabase(testWorkspace) { dataSource =>
-    val veryLongString = "a" * 65533   //the limit is 65534, but it'll get the entity name
-    val sample1 = new Entity("sample1", "Sample",
+    //it'll be longer than this (and thus will need trimming) because it'll get the entity name too
+    val veryLongString = "a" * EntityComponent.allAttributeValuesColumnSize
+    val sample1 = Entity("sample1", "Sample",
       Map(AttributeName.withDefaultNS("veryLongString") -> AttributeString(veryLongString)))
     withWorkspaceContext(testWorkspace.workspace) { context =>
       runAndWait(entityQuery.save(context, sample1))
 
       val entityRec = runAndWait(uniqueResult(entityQuery.findEntityByName(UUID.fromString(testWorkspace.workspace.workspaceId), "Sample", "sample1").result))
-      assertResult(65534) {
+      assertResult(EntityComponent.allAttributeValuesColumnSize) {
         entityRec.get.allAttributeValues.get.length
       }
     }

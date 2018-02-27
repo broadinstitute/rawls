@@ -28,6 +28,11 @@ case class EntityRecord(id: Long,
   def toReference = AttributeEntityReference(entityType, name)
 }
 
+object EntityComponent {
+  //the length of the all_attribute_values column, which is TEXT, -1 becaue i'm nervous
+  val allAttributeValuesColumnSize = 65534
+}
+
 trait EntityComponent {
   this: DriverComponent
     with WorkspaceComponent
@@ -687,7 +692,7 @@ trait EntityComponent {
     // Utility methods
 
     private def createAllAttributesString(entity: Entity): Option[String] = {
-      val trimToSize = 65534 //the length of the all_attribute_values column, which is TEXT, -1 becaue i'm nervous
+      val trimToSize = EntityComponent.allAttributeValuesColumnSize
       Option(s"${entity.name} ${entity.attributes.values.filterNot(_.isInstanceOf[AttributeList[_]]).map(AttributeStringifier(_)).mkString(" ")}".toLowerCase.take(trimToSize))
     }
 
