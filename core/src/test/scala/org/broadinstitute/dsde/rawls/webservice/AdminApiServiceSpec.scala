@@ -5,9 +5,9 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{RawlsGroupMemberListFormat, SyncReportFormat}
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{RawlsGroupMemberListFormat, SyncReportFormat, RawlsBillingProjectTransferFormat, UserInfoFormat}
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserListFormat, UserStatusFormat}
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsGroupRefFormat, RawlsBillingProjectTransferFormat}
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceFormat, WorkspaceListResponseFormat, WorkspaceStatusFormat}
 import org.broadinstitute.dsde.rawls.model._
@@ -100,7 +100,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   val bucket = "some-bucket"
 
   it should "return 201 when registering a billing project for the 1st time, and 500 for the 2nd" in withTestDataApiServices { services =>
-    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value))) ~>
+    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value, userInfo.accessToken.value))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -108,7 +108,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value))) ~>
+    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value, userInfo.accessToken.value))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.InternalServerError) {
@@ -120,7 +120,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "return 204 when unregistering a billing project" in withTestDataApiServices { services =>
     val projectName = "unregistered-bp"
 
-    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(projectName, bucket, userInfo.userEmail.value))) ~>
+    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(projectName, bucket, userInfo.userEmail.value, userInfo.accessToken.value))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -128,7 +128,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Delete(s"/admin/project/registration/$projectName") ~>
+    Delete(s"/admin/project/registration/$projectName", httpJson(Map("newOwnerEmail" -> userInfo.userEmail.value, "newOwnerToken" -> userInfo.accessToken.token))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {

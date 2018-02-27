@@ -16,6 +16,8 @@ import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing._
+import spray.httpx.SprayJsonSupport._
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 
@@ -44,16 +46,18 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           requestContext =>
             perRequest(requestContext,
               UserService.props(userServiceConstructor, userInfo),
-              UserService.AdminRegisterBillingProject(RawlsBillingProjectName(xfer.project), RawlsUserEmail(xfer.newOwner), xfer.bucket))
+              UserService.AdminRegisterBillingProject(xfer))
         }
       }
     } ~
     path("admin" / "project" / "registration" / Segment) { (projectName) =>
       delete {
-        requestContext =>
-          perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminUnregisterBillingProject(RawlsBillingProjectName(projectName)))
+        entity(as[Map[String, String]]) { ownerInfo =>
+          requestContext =>
+            perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.AdminUnregisterBillingProject(RawlsBillingProjectName(projectName), ownerInfo))
+        }
       }
     } ~
     path("admin" / "submissions") {
