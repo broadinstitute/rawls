@@ -303,7 +303,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   }
 
 
-  it should "trim giant all_attribute_values types so they don't overflow" in withCustomTestDatabase(testWorkspace) { dataSource =>
+  it should "trim giant all_attribute_values strings so they don't overflow" in withCustomTestDatabase(testWorkspace) { dataSource =>
     //it'll be longer than this (and thus will need trimming) because it'll get the entity name too
     val veryLongString = "a" * EntityComponent.allAttributeValuesColumnSize
     val sample1 = Entity("sample1", "Sample",
