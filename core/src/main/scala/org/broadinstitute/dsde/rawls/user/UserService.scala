@@ -563,7 +563,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def listManagedGroupsForUser(): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       for {
-        groupsWithAccess <- dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUserRef(userInfo.userId))
+        groupsWithAccess <- dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUserRef(userInfo.userSubjectId))
         emailsByGroup <- dataAccess.rawlsGroupQuery.loadEmails(groupsWithAccess.map(_.managedGroupRef.toMembersGroupRef).toSeq)
       } yield {
         val response = groupsWithAccess.groupBy(_.managedGroupRef).map { case (groupRef, accessEntries) =>
@@ -589,7 +589,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             else {
               dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
                 users.foreach { user =>
-                  notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId, groupRef.membersGroupName.value, users.map(_.userSubjectId) + userInfo.userId, userInfo.userId))
+                  notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId, groupRef.membersGroupName.value, users.map(_.userSubjectId) + userInfo.userSubjectId, userInfo.userSubjectId))
                 }
                 RequestComplete(StatusCodes.NoContent)
               }
@@ -631,7 +631,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
         if (role == ManagedRoles.Admin &&
           (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail.value) ||
-            removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userId.value))) {
+            removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId.value))) {
 
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
         }
@@ -655,7 +655,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
         if (role == ManagedRoles.Admin &&
           !memberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail.value) &&
-            !memberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userId.value)) {
+            !memberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId.value)) {
 
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
         }

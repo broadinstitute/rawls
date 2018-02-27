@@ -353,7 +353,7 @@ trait WorkflowComponent {
     }
 
     def countWorkflowsAheadOfUserInQueue(userInfo: UserInfo): ReadAction[Int] = {
-      getFirstQueuedWorkflow(userInfo.userId.value) flatMap { optRec =>
+      getFirstQueuedWorkflow(userInfo.userSubjectId.value) flatMap { optRec =>
         val query = optRec match {
           case Some(workflow) => findWorkflowsQueuedBefore(workflow.statusLastChangedDate)
           case _ => findQueuedWorkflows(Seq.empty, Seq.empty)
