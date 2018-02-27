@@ -3,9 +3,9 @@ package org.broadinstitute.dsde.rawls.expressions
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
-import org.broadinstitute.dsde.rawls.model.{AttributeString, MethodConfiguration, MethodRepoMethod}
+import org.broadinstitute.dsde.rawls.model.{AgoraMethod, AttributeString, MethodConfiguration}
 import org.scalatest.FlatSpec
-import wom.callable.Callable.{InputDefinition, OptionalInputDefinition, InputDefinitionWithDefault, RequiredInputDefinition}
+import wom.callable.Callable.{InputDefinition, InputDefinitionWithDefault, OptionalInputDefinition, RequiredInputDefinition}
 import wom.types.WomStringType
 
 class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with ExpressionFixture with RawlsTestUtils  {
@@ -24,19 +24,19 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
   val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", "Sample", prerequisites=Map.empty,
     inputs = toExpressionMap(parseableInputExpressions),
     outputs = toExpressionMap(parseableOutputExpressions),
-    MethodRepoMethod("dsde", "three_step", 1))
+    AgoraMethod("dsde", "three_step", 1))
 
   val allInvalid = MethodConfiguration("dsde", "methodConfigInvalidExprs", "Sample", prerequisites=Map.empty,
     inputs = toExpressionMap(unparseableInputExpressions),
     outputs = toExpressionMap(unparseableOutputExpressions),
-    MethodRepoMethod("dsde", "three_step", 1))
+    AgoraMethod("dsde", "three_step", 1))
 
   val emptyExpr = "this.empty" -> AttributeString("")
 
   val oneEmpty = MethodConfiguration("dsde", "methodConfigEmptyExpr", "Sample", prerequisites=Map.empty,
     inputs = toExpressionMap(parseableInputExpressions) + emptyExpr,
     outputs = toExpressionMap(parseableOutputExpressions),
-    MethodRepoMethod("dsde", "three_step", 1))
+    AgoraMethod("dsde", "three_step", 1))
 
   "ExpressionValidator" should "validateAndParse" in {
 

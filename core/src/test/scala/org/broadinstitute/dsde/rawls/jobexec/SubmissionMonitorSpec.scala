@@ -305,7 +305,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   it should "handle inputs and outputs with library attributes" in withDefaultTestDatabase { dataSource: SlickDataSource =>
 
-    val mcUpdateEntityLibraryOutputs = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), Map("o1_lib" -> AttributeString("this.library:foo")), MethodRepoMethod("ns-config", "meth1", 1))
+    val mcUpdateEntityLibraryOutputs = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), Map("o1_lib" -> AttributeString("this.library:foo")), AgoraMethod("ns-config", "meth1", 1))
 
     val subUpdateEntityLibraryOutputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryOutputs, testData.indiv1, testData.userOwner,
       Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
@@ -328,7 +328,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       }
     }
 
-    val mcUpdateEntityLibraryInputs = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map("i_lib" -> AttributeString("this.library:foo")), Map("o2_lib" -> AttributeString("this.library:bar")), MethodRepoMethod("ns-config", "meth1", 1))
+    val mcUpdateEntityLibraryInputs = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map("i_lib" -> AttributeString("this.library:foo")), Map("o2_lib" -> AttributeString("this.library:bar")), AgoraMethod("ns-config", "meth1", 1))
 
     val subUpdateEntityLibraryInputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryInputs, testData.indiv1, testData.userOwner,
       Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
@@ -426,7 +426,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       case _ => fail
     }
 
-    val mcUnboundExpr = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), outputExpressions, MethodRepoMethod("ns-config", "meth1", 1))
+    val mcUnboundExpr = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), outputExpressions, AgoraMethod("ns-config", "meth1", 1))
 
     val subUnboundExpr = createTestSubmission(testData.workspace, mcUnboundExpr, testData.indiv1, testData.userOwner,
       Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
@@ -479,7 +479,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       "*")
 
     badExprs foreach { badExpr =>
-      val mcBadExprs = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), Map("bad1" -> AttributeString(badExpr)), MethodRepoMethod("ns-config", "meth1", 1))
+      val mcBadExprs = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), Map("bad1" -> AttributeString(badExpr)), AgoraMethod("ns-config", "meth1", 1))
 
       val subBadExprs = createTestSubmission(testData.workspace, mcBadExprs, testData.indiv1, testData.userOwner,
         Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),

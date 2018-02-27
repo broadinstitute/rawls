@@ -401,6 +401,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val indiv2 = Entity("indiv2", "Individual",
       Map(AttributeName.withDefaultNS("sset") -> sset2.toReference ) )
 
+    val method = AgoraMethod("ns-config", "meth1", 1)
+
     val methodConfig = MethodConfiguration(
       "ns",
       "testConfig1",
@@ -408,29 +410,30 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Map("p1" -> AttributeString("prereq")),
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
-      MethodRepoMethod("ns-config", "meth1", 1)
+      method
     )
 
-    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoMethod(wsName.namespace, "method-a", 1))
-    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), MethodRepoMethod("ns-config", "meth1", 1))
+    val methodConfigDockstore = MethodConfiguration("dsde", "DockstoreConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), DockstoreMethod("dockstore-path", "dockstore-version"))
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(wsName.namespace, "method-a", 1))
+    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(), Map("o1" -> AttributeString("this.foo")), MethodRepoMethod("ns-config", "meth1", 1))
-    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), MethodRepoMethod("ns-config", "meth1", 1))
-    val methodConfigWorkspaceLibraryUpdate = MethodConfiguration("ns", "testConfigLib", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.library:foo")), MethodRepoMethod("ns-config", "meth1", 1))
-    val methodConfigMissingOutputs = MethodConfiguration("ns", "testConfigMissingOutputs", "Sample", Map(), Map(), Map("some.workflow.output" -> AttributeString("this.might_not_be_here")), MethodRepoMethod("ns-config", "meth1", 1))
+    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigWorkspaceLibraryUpdate = MethodConfiguration("ns", "testConfigLib", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.library:foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigMissingOutputs = MethodConfiguration("ns", "testConfigMissingOutputs", "Sample", Map(), Map(), Map("some.workflow.output" -> AttributeString("this.might_not_be_here")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigUnparseableInputs = MethodConfiguration("dsde", "UnparseableInputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigUnparseableOutputs = MethodConfiguration("dsde", "UnparseableOutputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigUnparseableBoth = MethodConfiguration("dsde", "UnparseableBothMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..is...bad")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigEmptyOutputs = MethodConfiguration("dsde", "EmptyOutputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("")), MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
+    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableInputs = MethodConfiguration("dsde", "UnparseableInputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableOutputs = MethodConfiguration("dsde", "UnparseableOutputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableBoth = MethodConfiguration("dsde", "UnparseableBothMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..is...bad")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), AgoraMethod("dsde", "three_step", 1))
+    val methodConfigEmptyOutputs = MethodConfiguration("dsde", "EmptyOutputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("")), AgoraMethod("dsde", "three_step", 1))
+    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
 
     val methodConfigArrayType = MethodConfiguration("dsde", "ArrayMethodConfig", "SampleSet", prerequisites=Map.empty,
       inputs=Map("aggregate_data_workflow.aggregate_data.input_array" -> AttributeString("this.samples.type")),
       outputs=Map("aggregate_data_workflow.aggregate_data.output_array" -> AttributeString("this.output_array")),
-      MethodRepoMethod("dsde", "array_task", 1))
+      AgoraMethod("dsde", "array_task", 1))
 
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, wsName)
     val methodConfigName2 = methodConfigName.copy(name="novelName")
@@ -620,6 +623,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                 methodConfigurationQuery.create(context, methodConfig2),
                 methodConfigurationQuery.create(context, methodConfig3),
                 methodConfigurationQuery.create(context, methodConfigValid),
+                methodConfigurationQuery.create(context, methodConfigDockstore),
                 methodConfigurationQuery.create(context, methodConfigUnparseableInputs),
                 methodConfigurationQuery.create(context, methodConfigUnparseableOutputs),
                 methodConfigurationQuery.create(context, methodConfigUnparseableBoth),
@@ -862,19 +866,19 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Map("p1" -> AttributeString("prereq")),
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
-      MethodRepoMethod("ns-config", "meth1", 1)
+      AgoraMethod("ns-config", "meth1", 1)
     )
 
-    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoMethod(wsName.namespace, "method-a", 1))
-    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), MethodRepoMethod("ns-config", "meth1", 1))
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(wsName.namespace, "method-a", 1))
+    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(), Map("o1" -> AttributeString("this.foo")), MethodRepoMethod("ns-config", "meth1", 1))
-    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), MethodRepoMethod("ns-config", "meth1", 1))
+    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
-    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
+    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
 
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, wsName)
     val methodConfigName2 = methodConfigName.copy(name="novelName")

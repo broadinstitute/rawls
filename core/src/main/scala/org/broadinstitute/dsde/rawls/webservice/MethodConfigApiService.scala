@@ -22,9 +22,17 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Use
   val methodConfigRoutes = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "methodconfigs") { (workspaceNamespace, workspaceName) =>
       get {
-        requestContext =>
-          perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.ListMethodConfigurations(WorkspaceName(workspaceNamespace, workspaceName)))
+        parameters( "allRepos".as[Boolean] ? false ) { allRepos =>
+          if (allRepos) {
+            requestContext =>
+              perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+                WorkspaceService.ListMethodConfigurations(WorkspaceName(workspaceNamespace, workspaceName)))
+          } else {
+            requestContext =>
+              perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+                WorkspaceService.ListAgoraMethodConfigurations(WorkspaceName(workspaceNamespace, workspaceName)))
+          }
+        }
       } ~
         post {
           entity(as[MethodConfiguration]) { methodConfiguration =>
