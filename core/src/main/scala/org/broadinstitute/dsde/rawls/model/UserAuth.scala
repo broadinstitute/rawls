@@ -43,7 +43,7 @@ case class ManagedGroup(membersGroup: RawlsGroup, adminsGroup: RawlsGroup) exten
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
 case class RawlsBillingProject(projectName: RawlsBillingProjectName, cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String])
 
-case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwner: UserInfo)
+case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
 case class ProjectAccessUpdate(email: String, role: ProjectRole)
 
@@ -130,7 +130,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val OAuth2BearerTokenFormat = jsonFormat1(OAuth2BearerToken)
   implicit val UserInfoFormat = jsonFormat4(UserInfo.apply)
-  implicit val RawlsBillingProjectTransferFormat = jsonFormat3(RawlsBillingProjectTransfer)
+  implicit val RawlsBillingProjectTransferFormat = jsonFormat4(RawlsBillingProjectTransfer)
 
   implicit val RawlsUserInfoFormat = jsonFormat2(RawlsUserInfo)
 
