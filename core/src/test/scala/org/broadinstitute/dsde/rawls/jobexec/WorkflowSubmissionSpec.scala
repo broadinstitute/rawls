@@ -18,7 +18,8 @@ import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
+import akka.stream.ActorMaterializer
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -30,6 +31,7 @@ import scala.concurrent.duration.{FiniteDuration, _}
  */
 class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
   import driver.api._
+  implicit val materializer = ActorMaterializer()
 
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
   val mockServer = RemoteServicesMockServer()
@@ -49,7 +51,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
     val googleServicesDAO = mockGoogleServicesDAO
-    val executionServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName = workbenchMetricBaseName), dataSource)
+    val executionServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), dataSource)
     val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName)
     val samDAO = mockSamDAO
   }
@@ -77,7 +79,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   }
 
   override def afterAll(): Unit = {
-    system.shutdown()
+    Await.result(system.terminate(), Duration.Inf)
     mockServer.stopServer
     super.afterAll()
   }
@@ -302,7 +304,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
         mockSamDAO,
-        MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
+        MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
         3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
       )
 

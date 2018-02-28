@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses._
-import spray.http.OAuth2BearerToken
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats._
 import cats.implicits._
 

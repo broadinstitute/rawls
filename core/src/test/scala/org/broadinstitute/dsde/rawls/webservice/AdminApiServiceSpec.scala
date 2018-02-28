@@ -13,9 +13,11 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeRefere
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import spray.http._
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
@@ -25,7 +27,7 @@ import scala.concurrent.{Await, ExecutionContext}
  */
 class AdminApiServiceSpec extends ApiServiceSpec {
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService =>  T): T = {
     val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
@@ -200,7 +202,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Post(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.Created, response.entity.asString) { status }
+        assertResult(StatusCodes.Created) { status }
       }
   }
 
@@ -386,7 +388,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Put(s"/admin/groups/${testGroup.groupName.value}/members", httpJson(RawlsGroupMemberList(userEmails = Option(Seq(user2.userEmail.value, user3.userEmail.value)), subGroupEmails = Option(Seq(subGroup2.groupEmail.value, subGroup3.groupEmail.value))))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.NoContent, response.entity.asString) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
 
     assertResult(Option(testGroup.copy(users = Set[RawlsUserRef](user2, user3), subGroups = Set[RawlsGroupRef](subGroup2, subGroup3)))) { runAndWait(rawlsGroupQuery.load(testGroup)) }
@@ -409,19 +411,19 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound, response.entity.asString) { status }
+        assertResult(StatusCodes.NotFound) { status }
       }
 
     services.gpsDAO.messageLog.clear()
     Put(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.NoContent, response.entity.asString) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
     Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.NoContent, response.entity.asString) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
 
     val group = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
@@ -436,12 +438,12 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Delete(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.NoContent, response.entity.asString) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
     Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound, response.entity.asString) { status }
+        assertResult(StatusCodes.NotFound) { status }
       }
     assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 2))
 
@@ -501,7 +503,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Post(s"/admin/groups/${topGroup.groupName.value}/sync") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(StatusCodes.OK) { status }
 
         val expected = Seq(
           SyncReportItem("added", inDbUser.userEmail.value, None),
@@ -598,7 +600,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Delete(s"/admin/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.Accepted, response.entity.asString) {
+        assertResult(StatusCodes.Accepted) {
           status
         }
       }

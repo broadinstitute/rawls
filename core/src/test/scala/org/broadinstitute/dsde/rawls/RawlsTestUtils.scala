@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls
 
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.Workspace
 import org.mockserver.model.StringBody
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.{Matchers, Suite}
-import spray.http.{StatusCode, StatusCodes}
 
 import scala.util.matching.Regex
 

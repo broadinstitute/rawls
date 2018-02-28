@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext

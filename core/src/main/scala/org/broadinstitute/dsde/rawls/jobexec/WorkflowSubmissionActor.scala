@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureM
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, addJitter}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 

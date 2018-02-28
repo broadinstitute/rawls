@@ -5,12 +5,17 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import spray.http._
-import spray.http.HttpMethods
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.HttpMethods
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import akka.http.scaladsl.testkit.RouteTestTimeout
+import akka.http.scaladsl.model.headers.Location
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
+
 
 /**
  * Created by dvoet on 4/24/15.
@@ -20,7 +25,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   // intermittent failures occur on requests not completing in time
   override implicit val routeTestTimeout = RouteTestTimeout(500.seconds)
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
@@ -51,7 +56,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
             runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get
           }
           // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-          assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
+          assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
             header("Location")
           }
         }
@@ -575,7 +580,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Get(s"${mc.path(testData.workspace)}/validate") ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
         val validated = responseAs[ValidatedMethodConfiguration]
@@ -674,7 +679,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       Post(copyToMethodRepo, httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.methodConfigName))) ~>
         sealRoute(services.methodConfigRoutes) ~>
         check {
-          assertResult(StatusCodes.OK, response.entity.asString) {
+          assertResult(StatusCodes.OK) {
             status
           }
         }

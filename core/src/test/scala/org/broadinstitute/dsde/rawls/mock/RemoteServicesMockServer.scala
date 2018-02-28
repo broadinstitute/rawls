@@ -11,7 +11,7 @@ import org.mockserver.integration.ClientAndServer._
 import org.mockserver.model._
 import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse._
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceStatusFormat
 import DefaultJsonProtocol._
@@ -36,8 +36,6 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
   val jsonHeader = new Header("Content-Type", "application/json")
   val mockServer = startClientAndServer(port)
-
-  val defaultWorkflowSubmissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
   def startServer(numWorkflows: Int = 3) = {
     // copy method config endpoint

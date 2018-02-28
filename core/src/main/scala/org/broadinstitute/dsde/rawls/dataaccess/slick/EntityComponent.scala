@@ -12,7 +12,7 @@ import slick.dbio.DBIOAction
 import slick.dbio.Effect.{Read, Write}
 import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 
 /**
  * Created by dvoet on 2/4/16.

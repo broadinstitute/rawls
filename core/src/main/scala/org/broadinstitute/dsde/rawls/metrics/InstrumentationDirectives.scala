@@ -2,18 +2,17 @@ package org.broadinstitute.dsde.rawls.metrics
 
 import java.util.concurrent.TimeUnit
 
-import shapeless._
-import spray.http.Uri
-import spray.routing.{Directive0, PathMatcher0}
-import spray.routing.PathMatchers.Segment
-import spray.routing.directives.BasicDirectives.mapHttpResponse
-import spray.routing.directives.MiscDirectives.requestInstance
-import spray.routing.directives.PathDirectives._
+import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.server.{Directive0, PathMatcher, PathMatcher0}
+import akka.http.scaladsl.server.directives.BasicDirectives.mapResponse
+import akka.http.scaladsl.server.directives.BasicDirectives.extractRequest
+import akka.http.scaladsl.server.directives.PathDirectives._
+import akka.http.scaladsl.server.PathMatchers.Segment
 
 trait InstrumentationDirectives extends RawlsInstrumented {
 
   // Like Segment in that it matches and consumes any path segment, but does not extract a value.
-  private val SegmentIgnore: PathMatcher0 = Segment.hmap(_ => HNil)
+  private val SegmentIgnore: PathMatcher0 = Segment.tmap(_ => PathMatcher.provide(()))
 
   private val redactBillingProject =
     (Slash ~ "api").? / "billing" / Segment / "members"
@@ -34,22 +33,22 @@ trait InstrumentationDirectives extends RawlsInstrumented {
     (Slash ~ "api").? / "groups" / Segment
 
   private val redactWorkflowIds =
-    (Slash ~ "api").? / "workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / (Segment ~ SegmentIgnore.repeat(separator = Slash))
+    (Slash ~ "api").? / "workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / (Segment ~ SegmentIgnore.repeat(0, Int.MaxValue, separator = Slash))
 
   private val redactSubmissionIds =
-    (Slash ~ "api").? / "workspaces" / Segment / Segment / "submissions" / (!"validate" ~ Segment ~ SegmentIgnore.repeat(separator = Slash))
+    (Slash ~ "api").? / "workspaces" / Segment / Segment / "submissions" / (!"validate" ~ Segment ~ SegmentIgnore.repeat(0, Int.MaxValue, separator = Slash))
 
   private val redactEntityIds =
-    (Slash ~ "api").? / "workspaces" / Segment / Segment / "entities" / SegmentIgnore / (Segment ~ SegmentIgnore.repeat(separator = Slash))
+    (Slash ~ "api").? / "workspaces" / Segment / Segment / "entities" / SegmentIgnore / (Segment ~ SegmentIgnore.repeat(0, Int.MaxValue, separator = Slash))
 
   private val redactMethodConfigs =
-    (Slash ~ "api").? / "workspaces" / Segment / Segment / "methodconfigs" / Segment / (Segment ~ SegmentIgnore.repeat(separator = Slash))
+    (Slash ~ "api").? / "workspaces" / Segment / Segment / "methodconfigs" / Segment / (Segment ~ SegmentIgnore.repeat(0, Int.MaxValue, separator = Slash))
 
   private val redactGenomicsOperations =
     (Slash ~ "api").? / "workspaces" / Segment / Segment / "genomics" / "operations" / Segment
 
   private val redactWorkspaceNames =
-    (Slash ~ "api").? / "workspaces" / (!"entities" ~ Segment) / (Segment ~ SegmentIgnore.repeat(separator = Slash))
+    (Slash ~ "api").? / "workspaces" / (!"entities" ~ Segment) / (Segment ~ SegmentIgnore.repeat(0, Int.MaxValue, separator = Slash))
 
   private val redactAdminBilling =
     (Slash ~ "admin").? / "billing" / Segment / SegmentIgnore / Segment
@@ -63,17 +62,21 @@ trait InstrumentationDirectives extends RawlsInstrumented {
 
   // Strip out unique IDs from metrics by providing a redactedUriExpansion
   override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
-    redactBillingProject | redactBillingProjectRoleEmail | redactUserGroup | redactUserGroupRoleEmail | redactGroupAndUser | redactGroups
-      | redactWorkflowIds | redactSubmissionIds | redactEntityIds | redactMethodConfigs | redactGenomicsOperations | redactWorkspaceNames
-      | redactAdminBilling | redactAdminAllUserReadAccess | redactNotifications
+    Seq(redactBillingProject, redactBillingProjectRoleEmail, redactUserGroup, redactUserGroupRoleEmail, redactGroupAndUser, redactGroups,
+      redactWorkflowIds, redactSubmissionIds, redactEntityIds, redactMethodConfigs, redactGenomicsOperations, redactWorkspaceNames,
+      redactAdminBilling, redactAdminAllUserReadAccess, redactNotifications).map(_.asInstanceOf[PathMatcher[Product]])
   )
 
   private lazy val globalRequestCounter = ExpandedMetricBuilder.empty.asCounter("request")
   private lazy val globalRequestTimer = ExpandedMetricBuilder.empty.asTimer("latency")
 
-  def instrumentRequest: Directive0 = requestInstance flatMap { request =>
+  /**
+    * Captures elapsed time of request and increments counter. Important note: the route passed into this
+    * directive must be sealed otherwise exceptions escape and are not instrumented appropriately.
+    */
+  def instrumentRequest: Directive0 = extractRequest flatMap { request =>
     val timeStamp = System.currentTimeMillis
-    mapHttpResponse { response =>
+    mapResponse { response =>
       val elapsed = System.currentTimeMillis - timeStamp
       globalRequestCounter.inc()
       globalRequestTimer.update(elapsed, TimeUnit.MILLISECONDS)

@@ -9,9 +9,10 @@ import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
 import com.netaporter.uri.Uri.parse
-import spray.http.StatusCode
+import akka.http.scaladsl.model.StatusCode
 import spray.json._
 import UserModelJsonSupport.ManagedGroupRefFormat
+import akka.http.scaladsl.model.StatusCode
 
 import scala.util.{Failure, Success, Try}
 

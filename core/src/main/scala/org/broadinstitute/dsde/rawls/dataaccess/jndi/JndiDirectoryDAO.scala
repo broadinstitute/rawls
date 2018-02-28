@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteActi
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
 import slick.dbio.DBIO
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}

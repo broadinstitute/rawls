@@ -22,22 +22,29 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.concurrent.Eventually
-import spray.http.{ContentTypes, HttpEntity, StatusCodes}
-import spray.httpx.SprayJsonSupport
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import akka.http.scaladsl.server._
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import spray.json._
-import spray.routing._
-import spray.testkit.ScalatestRouteTest
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
+import akka.http.scaladsl.server.Directives._
+import akka.stream.ActorMaterializer
+import org.broadinstitute.dsde.rawls.config.SwaggerConfig
 
 import scala.concurrent.duration._
 
 // common trait to be inherited by API service tests
 trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils with RawlsInstrumented
-  with RawlsStatsDTestUtils with InstrumentationDirectives with HttpService with ScalatestRouteTest with TestKitBase
+  with RawlsStatsDTestUtils with InstrumentationDirectives with ScalatestRouteTest with TestKitBase
   with SprayJsonSupport with MockitoTestUtils with Eventually with LazyLogging {
 
   // increase the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
+
+  // this gets fed into sealRoute so that exceptions are handled the same in tests as in real life
+  implicit val exceptionHandler = RawlsApiService.exceptionHandler
 
   override val workbenchMetricBaseName = "test"
 
@@ -86,7 +93,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
   }
 
   trait ApiServices extends AdminApiService with BillingApiService with EntityApiService with MethodConfigApiService
-    with NotificationsApiService with RootRawlsApiService with StatusApiService with SubmissionApiService with UserApiService with WorkspaceApiService {
+    with NotificationsApiService with RawlsApiService with StatusApiService with SubmissionApiService with UserApiService with WorkspaceApiService {
 
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
@@ -94,9 +101,12 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     def actorRefFactory = system
 
-    val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
+    override implicit val materializer = ActorMaterializer()
+    override val workbenchMetricBaseName: String = "test"
+    override val swaggerConfig: SwaggerConfig = SwaggerConfig("foo", "bar")
+    override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-    val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
+    override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
@@ -112,7 +122,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
 
-    val userServiceConstructor = UserService.constructor(
+    override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
       gpsDAO,
@@ -124,12 +134,12 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, googleGroupSyncTopic, "test-sub-name", 1, userServiceConstructor))
 
-    val genomicsServiceConstructor = GenomicsService.constructor(
+    override val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
       gcsDAO
     )_
 
-    val statisticsServiceConstructor = StatisticsService.constructor(
+    override val statisticsServiceConstructor = StatisticsService.constructor(
       slickDataSource,
       gcsDAO
     )_
@@ -141,12 +151,12 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val healthMonitor = system.actorOf(HealthMonitor.props(
       dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO, executionServiceCluster.readMembers,
       Seq.empty, Seq.empty, Seq("my-favorite-bucket")))
-    val statusServiceConstructor = StatusService.constructor(healthMonitor)_
+    override val statusServiceConstructor = StatusService.constructor(healthMonitor)_
 
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
-    val workspaceServiceConstructor = WorkspaceService.constructor(
+    override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       methodRepoDAO,
       executionServiceCluster,
@@ -170,11 +180,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val googleClientId = "dummy"
 
     // for metrics testing
-    val sealedInstrumentedRoutes: Route = sealRoute {
-      instrumentRequest {
-        adminRoutes ~ billingRoutes ~ entityRoutes ~  methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
-          submissionRoutes ~ userRoutes ~ createUserRoute ~ versionRoutes ~ workspaceRoutes
-      }
+    val sealedInstrumentedRoutes: Route = instrumentRequest {
+      sealRoute(adminRoutes ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
+        submissionRoutes ~ userRoutes ~ createUserRoute ~ workspaceRoutes)
     }
   }
 

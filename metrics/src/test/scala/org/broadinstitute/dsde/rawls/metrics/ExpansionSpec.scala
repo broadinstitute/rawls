@@ -2,9 +2,9 @@ package org.broadinstitute.dsde.rawls.metrics
 
 import java.util.UUID
 
+import akka.http.scaladsl.model._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http._
 
 /**
   * Created by rtitle on 7/16/17.

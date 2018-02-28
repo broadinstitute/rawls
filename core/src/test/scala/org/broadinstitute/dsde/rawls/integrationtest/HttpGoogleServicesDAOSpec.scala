@@ -24,7 +24,9 @@ import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.util.{MockitoTestUtils, Retry}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
-import spray.http.{OAuth2BearerToken, StatusCodes}
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.stream.ActorMaterializer
 
 import scala.collection.JavaConversions._
 import scala.concurrent.duration.{Duration, _}
@@ -34,6 +36,8 @@ import scala.util.Try
 class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with Retry with TestDriverComponent with BeforeAndAfterAll with LazyLogging with Eventually with MockitoTestUtils with StatsDTestUtils {
 
   implicit val system = ActorSystem("HttpGoogleCloudStorageDAOSpec")
+  implicit val materializer = ActorMaterializer()
+
   val gcsDAO = new HttpGoogleServicesDAO(
     true, // use service account to manage buckets
     GoogleClientSecrets.load(

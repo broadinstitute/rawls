@@ -1,56 +1,56 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.Http
 import akka.util.Timeout
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, RawlsExpansion, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsGzipInstrumented}
+import spray.json.JsObject
+import akka.http.scaladsl.client.RequestBuilding._
+import akka.http.scaladsl.model.{Multipart, RequestEntity, Uri}
+import akka.http.scaladsl.server.directives.PathDirectives._
+import akka.http.scaladsl.server.PathMatchers.Segment
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.marshalling.Marshal
+import akka.stream.Materializer
+import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
-import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
-import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.FutureSupport
-import org.broadinstitute.dsde.rawls.util.SprayClientUtils._
-import spray.client.pipelining._
-import spray.http._
-import spray.httpx.SprayJsonSupport._
-import spray.httpx.unmarshalling.FromResponseUnmarshaller
-import spray.json.DefaultJsonProtocol._
-import spray.json.JsObject
-import spray.routing.directives.PathDirectives._
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 /**
  * @author tsharpe
  */
-class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: FiniteDuration, override val workbenchMetricBaseName: String )( implicit val system: ActorSystem ) extends ExecutionServiceDAO with DsdeHttpDAO with InstrumentedRetry with FutureSupport with LazyLogging with RawlsInstrumented {
+class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenchMetricBaseName: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends ExecutionServiceDAO with DsdeHttpDAO with InstrumentedRetry with FutureSupport with LazyLogging with RawlsInstrumented {
   import system.dispatcher
 
   private implicit lazy val baseMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Cromwell)
 
+  override val http = Http(system)
+  override val httpClientUtils = HttpClientUtilsGzipInstrumented()
+
   // Strip out workflow IDs from metrics by providing a redactedUriExpansion
   override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
-    (Slash ~ "api").? / "workflows" / "v1" / Segment / Neutral
+    Seq((Slash ~ "api").? / "workflows" / "v1" / Segment / Neutral)
   )
 
-  private def pipelineNoAuth[A: FromResponseUnmarshaller] =
-    instrumentedGzSendReceive ~> unmarshal[A]
-
-  private def pipeline[A: FromResponseUnmarshaller](userInfo: UserInfo) =
-    addAuthHeader(userInfo) ~> instrumentedGzSendReceive ~> unmarshal[A]
-
-  private def pipelineWithTimeout[A: FromResponseUnmarshaller](userInfo: UserInfo, timeout: Timeout) =
-    addAuthHeader(userInfo) ~> instrumentedGzSendReceive(timeout) ~> unmarshal[A]
-
   override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]] = {
-    val timeout = Timeout(submissionTimeout)
     val url = executionServiceURL+"/api/workflows/v1/batch"
-    val formData = Map("workflowSource" -> BodyPart(wdl), "workflowInputs" -> BodyPart(inputs.mkString("[", ",", "]"))) ++ options.map("workflowOptions" -> BodyPart(_))
-    pipelineWithTimeout[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]](userInfo, timeout) apply (Post(url, MultipartFormData(formData)))
+
+    val bodyParts = Seq(Multipart.FormData.BodyPart("workflowSource", wdl),
+      Multipart.FormData.BodyPart("workflowInputs", inputs.mkString("[", ",", "]"))
+    ) ++ options.map(Multipart.FormData.BodyPart("workflowOptions", _))
+
+    val formData = Multipart.FormData(bodyParts:_*)
+
+    pipeline[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]](userInfo) apply (Post(url, Marshal(formData).to[RequestEntity]))
   }
 
   override def status(id: String, userInfo: UserInfo): Future[ExecutionServiceStatus] = {
@@ -80,20 +80,12 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
 
   override def version: Future[ExecutionServiceVersion] = {
     val url = executionServiceURL + s"/engine/v1/version"
-    retry(when500) { () => pipelineNoAuth[ExecutionServiceVersion] apply Get(url) }
+    retry(when500) { () => httpClientUtils.executeRequestUnmarshalResponse[ExecutionServiceVersion](http, Get(url)) }
   }
 
   override def getStatus(): Future[Map[String, SubsystemStatus]] = {
     val url = executionServiceURL + s"/engine/v1/status"
     // we're explicitly not retrying on 500 here
-    pipelineNoAuth[Map[String, SubsystemStatus]] apply Get(url)
-  }
-
-  private def when500( throwable: Throwable ): Boolean = {
-    throwable match {
-      case ure: spray.client.UnsuccessfulResponseException => ure.responseStatus.intValue/100 == 5
-      case ure: spray.httpx.UnsuccessfulResponseException => ure.response.status.intValue/100 == 5
-      case _ => false
-    }
+    httpClientUtils.executeRequestUnmarshalResponse[Map[String, SubsystemStatus]](http, Get(url))
   }
 }

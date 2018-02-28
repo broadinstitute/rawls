@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, RawlsBillingProjectOperationRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, TestData}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
@@ -14,11 +14,14 @@ import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import spray.http._
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import spray.json.DefaultJsonProtocol._
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import akka.http.scaladsl.unmarshalling.Unmarshal
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Future, Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Try}
 
 /**
@@ -130,7 +133,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
         check {
-          assertResult(StatusCodes.OK, response.entity.asString) {
+          assertResult(StatusCodes.OK) {
             status
           }
 
@@ -171,7 +174,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
         check {
-          assertResult(StatusCodes.OK, response.entity.asString) {
+          assertResult(StatusCodes.OK) {
             status
           }
           assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
@@ -439,7 +442,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
       }
@@ -449,7 +452,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     Put(s"/billing/not_an_owner/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden) {
           status
         }
       }
@@ -477,7 +480,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     Put(s"/billing/${project1.projectName.value}/user/${testData.dbGapAuthorizedUsersGroup.membersGroup.groupEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
       }
@@ -523,7 +526,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     Put(s"/billing/no_access/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden) {
           status
         }
       }
@@ -592,7 +595,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     Get(s"/user/group/${group2.groupName.value}") ~>
       sealRoute(services.userRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound) { status }
+        assertResult(StatusCodes.NotFound, Await.result(Unmarshal(responseEntity).to[String], Duration.Inf)) { status }
       }
     Get(s"/user/group/${group1.groupName.value}") ~>
       sealRoute(services.userRoutes) ~>
@@ -697,7 +700,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     Post(s"/groups/$testGroupName") ~>
       sealRoute(services.userRoutes) ~>
       check {
-        assertResult(StatusCodes.BadRequest, response.entity.asString) {
+        assertResult(StatusCodes.BadRequest) {
           status
         }
       }
@@ -709,7 +712,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     Post(s"/groups/$testGroupName") ~>
       sealRoute(services.userRoutes) ~>
       check {
-        assertResult(StatusCodes.BadRequest, response.entity.asString) {
+        assertResult(StatusCodes.BadRequest) {
           status
         }
       }
@@ -946,7 +949,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     Post(s"/groups/$testGroupName") ~>
       sealRoute(services.userRoutes) ~>
       check {
-        assertResult(expectedStatusCode, response.entity.asString) {
+        assertResult(expectedStatusCode) {
           status
         }
         if (status.isSuccess) {

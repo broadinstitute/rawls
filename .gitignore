@@ -13,7 +13,7 @@ test-output/
 /.settings/
 /bin/
 *.log
-config/
+/config/
 rawlsdb/
 
 *.pid

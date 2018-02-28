@@ -5,7 +5,7 @@ import javax.naming.directory._
 
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.{BaseDirContext, DirectorySubjectNameSupport, JndiSupport}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsGroup, RawlsGroupRef, RawlsUserRef}
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try

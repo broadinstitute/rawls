@@ -1,12 +1,11 @@
 package org.broadinstitute.dsde.rawls.metrics
 
+import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.server.PathMatcher
+import akka.http.scaladsl.server.PathMatcher.Matched
 import org.broadinstitute.dsde.rawls.metrics.Expansion.UriExpansion
 import org.broadinstitute.dsde.rawls.model.{RawlsEnumeration, WorkspaceName}
-import shapeless._
-import spray.http.Uri
-import spray.http.Uri.Path.{Segment, Slash, Empty}
-import spray.routing.PathMatcher.Matched
-import spray.routing.PathMatcher
+import akka.http.scaladsl.model.Uri.Path.{Empty, Segment, Slash}
 
 import scala.annotation.tailrec
 
@@ -35,33 +34,47 @@ object RawlsExpansion {
 
   /**
     * Creates an expansion for Uri which redacts pieces of the Uri matched by the provided PathMatcher.
-    * @param pathMatcher a PathMatcher which matches 1 or more String elements. If the PathMatcher matches,
+    * @param pathMatchers seq of PathMatcher which matches 1 or more String elements. If the PathMatcher matches,
     *                    any matched Strings will be redacted from the Uri. Otherwise, the Uri is unchanged.
     * @return Uri Expansion instance
     */
-  def redactedUriExpansion[L <: HList](pathMatcher: PathMatcher[L]): Expansion[Uri] = {
+  def redactedUriExpansion[L <: Product](pathMatchers: Seq[PathMatcher[L]]): Expansion[Uri] = {
 
     new Expansion[Uri] {
       override def makeName(uri: Uri): String = {
-        // Apply the provided PathMatcher. This will give us a HList of extractions, if it matches the Path.
-        val updatedPath = pathMatcher.apply(uri.path) match {
-          case Matched(_, extractions) =>
-            // Fold through the URI path elements, building up a new Path that has each extraction replaced
-            // with the string "redacted".
-            // Note the extractions are returned in the same order as they occur in the path, so we only need
-            // to traverse the path once.
-            uri.path.foldLeft[(Uri.Path, HList)]((Uri.Path.Empty, extractions)) { case ((resultPath, remainingExtractions), currentSegment) =>
-              remainingExtractions match {
-                case (h: String) :: tail if h == currentSegment =>
-                  (resultPath / "redacted", tail)
-                case _  =>
-                  (resultPath / currentSegment, remainingExtractions)
-              }
-            }._1
-          case _ =>
+        val maybePathMatcher = pathMatchers.find {
+          m => m.apply(uri.path) match {
+            case Matched(_, _) => true
+            case _ => false
+          }
+        }
+
+        val updatedPath = maybePathMatcher match {
+          case Some(pathMatcher) => pathMatcher.apply(uri.path) match {
+            case Matched(_, extractions) =>
+              // Fold through the URI path elements, building up a new Path that has each extraction replaced
+              // with the string "redacted".
+              // Note the extractions are returned in the same order as they occur in the path, so we only need
+              // to traverse the path once.
+              uri.path.foldLeft[(Uri.Path, List[Any])]((Uri.Path.Empty, extractions.productIterator.toList)) { case ((resultPath, remainingExtractions), currentSegment) =>
+                remainingExtractions match {
+                  case (h: String) :: tail if h == currentSegment =>
+                    (resultPath / "redacted", tail)
+                  case _ =>
+                    (resultPath / currentSegment, remainingExtractions)
+                }
+              }._1
+
+            case _ =>
+              // shouldn't hit this case since we already know it is a match but it makes the compiler happy
+              uri.path
+          }
+
+          case None =>
             // For non-matches, return the path unchanged.
             uri.path
         }
+
         // Finally invoke UriExpansion with our updated path
         UriExpansion.makeName(uri.copy(path = updatedPath))
       }

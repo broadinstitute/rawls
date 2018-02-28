@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import spray.http.StatusCodes.BadRequest
-
 /**
  * Created by tsharpe on 9/25/15.
  */
@@ -15,78 +13,65 @@ import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import spray.routing._
-import spray.httpx.SprayJsonSupport._
+import akka.http.scaladsl.server
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.StatusCodes
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 
-trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
+trait AdminApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-  import spray.httpx.SprayJsonSupport._
+  import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+  import PerRequest.requestCompleteMarshaller
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val userServiceConstructor: UserInfo => UserService
   val statisticsServiceConstructor: UserInfo => StatisticsService
 
-  val adminRoutes = requireUserInfo() { userInfo =>
+  val adminRoutes: server.Route = requireUserInfo() { userInfo =>
     path("admin" / "billing" / Segment) { (projectId) =>
       delete {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminDeleteBillingProject(RawlsBillingProjectName(projectId)))
+        complete { userServiceConstructor(userInfo).AdminDeleteBillingProject(RawlsBillingProjectName(projectId)) }
       }
     } ~
     path("admin" / "project" / "registration") {
       post {
         entity(as[RawlsBillingProjectTransfer]) { xfer =>
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.AdminRegisterBillingProject(xfer))
+          complete { userServiceConstructor(userInfo).AdminRegisterBillingProject(xfer) }
         }
       }
     } ~
     path("admin" / "project" / "registration" / Segment) { (projectName) =>
       delete {
         entity(as[Map[String, String]]) { ownerInfo =>
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.AdminUnregisterBillingProject(RawlsBillingProjectName(projectName), ownerInfo))
+          complete { userServiceConstructor(userInfo).AdminUnregisterBillingProject(RawlsBillingProjectName(projectName), ownerInfo) }
         }
       }
     } ~
     path("admin" / "submissions") {
       get {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.AdminListAllActiveSubmissions)
+        complete { workspaceServiceConstructor(userInfo).AdminListAllActiveSubmissions }
       }
     } ~
     path("admin" / "submissions" / Segment / Segment / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
       delete {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.AdminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
+        complete { workspaceServiceConstructor(userInfo).AdminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId) }
       }
     } ~
     path("admin" / "submissions" / "queueStatusByUser") {
       get {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.AdminWorkflowQueueStatusByUser)
+        complete { workspaceServiceConstructor(userInfo).AdminWorkflowQueueStatusByUser }
       }
     } ~
     path("admin" / "groups") { //create group
       post {
         entity(as[RawlsGroupRef]) { groupRef =>
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminCreateGroup(groupRef))
+          complete { userServiceConstructor(userInfo).AdminCreateGroup(groupRef) }
         }
       }
     } ~
@@ -94,18 +79,13 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       val rawlsGroupRef = RawlsGroupRef(RawlsGroupName(URLDecoder.decode(groupNameRaw, "UTF-8")))
       pathEnd {
         delete {
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminDeleteGroup(rawlsGroupRef))
+          complete { userServiceConstructor(userInfo).AdminDeleteGroup(rawlsGroupRef) }
         }
       } ~
       path("accessInstructions") {
         post {
           entity(as[ManagedGroupAccessInstructions]) { instructions =>
-            requestContext =>
-              perRequest(requestContext,
-                UserService.props(userServiceConstructor, userInfo),
-                UserService.SetManagedGroupAccessInstructions(ManagedGroupRef(RawlsGroupName(URLDecoder.decode(groupNameRaw, "UTF-8"))), instructions))
+            complete { userServiceConstructor(userInfo).SetManagedGroupAccessInstructions(ManagedGroupRef(RawlsGroupName(URLDecoder.decode(groupNameRaw, "UTF-8"))), instructions) }
           }
         }
       } ~
@@ -116,128 +96,93 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       path("members") {
         put {
           entity(as[RawlsGroupMemberList]) { memberList =>
-            requestContext => perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.AdminOverwriteGroupMembers(rawlsGroupRef, memberList))
+            complete { userServiceConstructor(userInfo).AdminOverwriteGroupMembers(rawlsGroupRef, memberList) }
           }
         } ~
         post {
           entity(as[RawlsGroupMemberList]) { memberList =>
-            requestContext => perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.AdminAddGroupMembers(rawlsGroupRef, memberList))
+            complete { userServiceConstructor(userInfo).AdminAddGroupMembers(rawlsGroupRef, memberList) }
           }
         } ~
         delete {
           entity(as[RawlsGroupMemberList]) { memberList =>
-            requestContext => perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.AdminRemoveGroupMembers(rawlsGroupRef, memberList))
+            complete { userServiceConstructor(userInfo).AdminRemoveGroupMembers(rawlsGroupRef, memberList) }
           }
         } ~
         get {
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminListGroupMembers(rawlsGroupRef))
+          complete { userServiceConstructor(userInfo).AdminListGroupMembers(rawlsGroupRef) }
         }
       }
     } ~
     path("admin" / "groups" / Segment / "sync") { (groupNameRaw) =>
       val groupName = URLDecoder.decode(groupNameRaw, "UTF-8")
       post {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminSynchronizeGroupMembers(RawlsGroupRef(RawlsGroupName(groupName))))
+        complete { userServiceConstructor(userInfo).AdminSynchronizeGroupMembers(RawlsGroupRef(RawlsGroupName(groupName))) }
       }
     } ~
     path("admin" / "user" / "role" / "curator" / Segment) { (userEmail) =>
       put {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminAddLibraryCurator(RawlsUserEmail(userEmail)))
+        complete { userServiceConstructor(userInfo).AdminAddLibraryCurator(RawlsUserEmail(userEmail)) }
       } ~
       delete {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminRemoveLibraryCurator(RawlsUserEmail(userEmail)))
+        complete { userServiceConstructor(userInfo).AdminRemoveLibraryCurator(RawlsUserEmail(userEmail)) }
       }
     } ~
     path("admin" / "allUserReadAccess" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       get {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.HasAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)))
+        complete { workspaceServiceConstructor(userInfo).HasAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
       } ~
       put {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.GrantAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)))
+        complete { workspaceServiceConstructor(userInfo).GrantAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
       } ~
       delete {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.RevokeAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)))
+        complete { workspaceServiceConstructor(userInfo).RevokeAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
       }
     } ~
     path("admin" / "validate" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       get {
         parameters('userSubjectId.?) { (userSubjectId) =>
-          requestContext => perRequest(requestContext,
-            WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.GetWorkspaceStatus(WorkspaceName(workspaceNamespace, workspaceName), userSubjectId))
+          complete { workspaceServiceConstructor(userInfo).GetWorkspaceStatus(WorkspaceName(workspaceNamespace, workspaceName), userSubjectId) }
         }
       }
     } ~
     path("admin" / "workspaces") {
       get {
         parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) { (nameOption, stringOption, numberOption, booleanOption) =>
-          requestContext =>
-            val msg = nameOption match {
-              case None => WorkspaceService.ListAllWorkspaces
-              case Some(attributeName) =>
-                val name = AttributeName.fromDelimitedName(attributeName)
-                (stringOption, numberOption, booleanOption) match {
-                  case (Some(string), None, None) => WorkspaceService.AdminListWorkspacesWithAttribute(name, AttributeString(string))
-                  case (None, Some(number), None) => WorkspaceService.AdminListWorkspacesWithAttribute(name, AttributeNumber(number.toDouble))
-                  case (None, None, Some(boolean)) => WorkspaceService.AdminListWorkspacesWithAttribute(name, AttributeBoolean(boolean.toBoolean))
-                  case _ => throw new RawlsException("Specify exactly one of valueString, valueNumber, or valueBoolean")
-                }
-            }
-            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), msg)
+          val resultFuture = nameOption match {
+            case None => workspaceServiceConstructor(userInfo).ListAllWorkspaces
+            case Some(attributeName) =>
+              val name = AttributeName.fromDelimitedName(attributeName)
+              (stringOption, numberOption, booleanOption) match {
+                case (Some(string), None, None) => workspaceServiceConstructor(userInfo).AdminListWorkspacesWithAttribute(name, AttributeString(string))
+                case (None, Some(number), None) => workspaceServiceConstructor(userInfo).AdminListWorkspacesWithAttribute(name, AttributeNumber(number.toDouble))
+                case (None, None, Some(boolean)) => workspaceServiceConstructor(userInfo).AdminListWorkspacesWithAttribute(name, AttributeBoolean(boolean.toBoolean))
+                case _ => throw new RawlsException("Specify exactly one of valueString, valueNumber, or valueBoolean")
+              }
+          }
+         complete { resultFuture }
         }
       }
     } ~
     path("admin" / "workspaces" / Segment / Segment ) { (workspaceNamespace, workspaceName) =>
       delete {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.AdminDeleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
-        )
+        complete { workspaceServiceConstructor(userInfo).AdminDeleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
       }
     } ~
     path("admin" / "refreshToken" / Segment ) { userSubjectId =>
       delete {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId)))
-        )
+        complete { userServiceConstructor(userInfo).AdminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))) }
       }
     } ~
     path("admin" / "allRefreshTokens" ) {
       delete {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminDeleteAllRefreshTokens
-        )
+        complete { userServiceConstructor(userInfo).AdminDeleteAllRefreshTokens }
       }
     } ~
     path("admin" / "statistics") {
       get {
         parameters('startDate, 'endDate) { (startDate, endDate) =>
-          requestContext => perRequest(requestContext,
-            StatisticsService.props(statisticsServiceConstructor, userInfo),
-            StatisticsService.GetStatistics(startDate, endDate)
-          )
+          complete { statisticsServiceConstructor(userInfo).GetStatistics(startDate, endDate) }
         }
       }
     }

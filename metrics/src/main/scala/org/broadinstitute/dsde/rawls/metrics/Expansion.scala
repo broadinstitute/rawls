@@ -1,7 +1,9 @@
 package org.broadinstitute.dsde.rawls.metrics
 
 import java.util.UUID
-import spray.http.{HttpMethod, StatusCode, Uri}
+
+import akka.http.scaladsl.model.{HttpMethod, StatusCode, Uri}
+
 import scala.annotation.implicitNotFound
 
 /**
@@ -30,7 +32,7 @@ object Expansion {
     * Implicit expansion for HttpMethod.
     */
   implicit object HttpMethodExpansion extends Expansion[HttpMethod] {
-    override def makeName(m: HttpMethod): String = m.toString.toLowerCase
+    override def makeName(m: HttpMethod): String = m.value.toLowerCase
   }
 
   /**

@@ -4,8 +4,10 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
-import spray.routing.Directive.pimpApply
-import spray.routing._
+import akka.http.scaladsl.server
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.StatusCodes
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -14,64 +16,47 @@ import scala.concurrent.duration._
   * Created by dvoet on 6/4/15.
   */
 
-trait BillingApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
+trait BillingApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-  import spray.httpx.SprayJsonSupport._
+  import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+  import PerRequest.requestCompleteMarshaller
 
   val userServiceConstructor: UserInfo => UserService
 
-  val billingRoutes = requireUserInfo() { userInfo =>
+  val billingRoutes: server.Route = requireUserInfo() { userInfo =>
     pathPrefix("billing" / Segment) { projectId =>
       path("members") {
         get {
-          requestContext =>
-            perRequest(requestContext,
-              UserService.props(userServiceConstructor, userInfo),
-              UserService.GetBillingProjectMembers(RawlsBillingProjectName(projectId)))
+          complete { userServiceConstructor(userInfo).GetBillingProjectMembers(RawlsBillingProjectName(projectId)) }
         }
       } ~
         // these routes are for setting/unsetting Google cloud roles
         path("googleRole" / Segment / Segment) { (googleRole, userEmail) =>
           put {
-            requestContext =>
-              perRequest(requestContext,
-                UserService.props(userServiceConstructor, userInfo),
-                UserService.GrantGoogleRoleToUser(RawlsBillingProjectName(projectId), WorkbenchEmail(userEmail), googleRole))
+            complete { userServiceConstructor(userInfo).GrantGoogleRoleToUser(RawlsBillingProjectName(projectId), WorkbenchEmail(userEmail), googleRole) }
           } ~
             delete {
-              requestContext =>
-                perRequest(requestContext,
-                  UserService.props(userServiceConstructor, userInfo),
-                  UserService.RemoveGoogleRoleFromUser(RawlsBillingProjectName(projectId), WorkbenchEmail(userEmail), googleRole))
+              complete { userServiceConstructor(userInfo).RemoveGoogleRoleFromUser(RawlsBillingProjectName(projectId), WorkbenchEmail(userEmail), googleRole) }
             }
         } ~
         // these routes are for adding/removing users from projects
         path(Segment / Segment) { (workbenchRole, userEmail) =>
           put {
-            requestContext =>
-              perRequest(requestContext,
-                UserService.props(userServiceConstructor, userInfo),
-                UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))))
+            complete { userServiceConstructor(userInfo).AddUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))) }
           } ~
             delete {
-              requestContext =>
-                perRequest(requestContext,
-                  UserService.props(userServiceConstructor, userInfo),
-                  UserService.RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))))
+              complete { userServiceConstructor(userInfo).RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))) }
             }
         }
     } ~
-      path("billing") {
-        post {
-          entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
-            requestContest =>
-              perRequest(requestContest,
-                UserService.props(userServiceConstructor, userInfo),
-                UserService.CreateBillingProjectFull(createProjectRequest.projectName, createProjectRequest.billingAccount), 7 minutes) // it can take a while
-          }
+    path("billing") {
+      post {
+        entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
+          complete { userServiceConstructor(userInfo).CreateBillingProjectFull(createProjectRequest.projectName, createProjectRequest.billingAccount) }
         }
       }
+    }
   }
 }

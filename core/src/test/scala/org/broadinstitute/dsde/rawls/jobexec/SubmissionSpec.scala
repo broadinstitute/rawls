@@ -4,6 +4,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
+import akka.http.scaladsl.model._
 import akka.pattern.AskTimeoutException
 import akka.testkit.{TestActorRef, TestKit}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -21,7 +22,8 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import spray.http.{StatusCode, StatusCodes}
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.stream.ActorMaterializer
 import spray.json._
 
 import scala.concurrent.Await
@@ -38,6 +40,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   import driver.api._
   
   def this() = this(ActorSystem("SubmissionSpec"))
+  implicit val materializer = ActorMaterializer()
 
   val testDbName = "SubmissionSpec"
   val submissionSupervisorActorName = "test-subspec-submission-supervisor"
@@ -165,7 +168,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   def withDataAndService[T](
       testCode: WorkspaceService => T,
       withDataOp: (SlickDataSource => T) => T,
-      executionServiceDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName) ): T = {
+      executionServiceDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName) ): T = {
 
     withDataOp { dataSource =>
       val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
@@ -220,7 +223,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         maxActiveWorkflowsPerUser,
         "test"
       )_
-      lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
+      lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {
         testCode(workspaceService)
       }
@@ -351,24 +354,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
     assert( submission.workflows.forall(_.status == WorkflowStatuses.Queued) )
-  }
-
-  it should "cause the configurable workflow submissions timeout to trigger" in {
-    def wdl = "dummy"
-    def wdlInputs = "dummy"
-    def workflowOptions = Option("two_second_delay")
-
-    def expectedResponse = ExecutionServiceStatus("69d1d92f-3895-4a7b-880a-82535e9a096e", "Submitted")
-
-    def execWith1SecTimeout = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, FiniteDuration(1, TimeUnit.SECONDS), workbenchMetricBaseName)
-    def execWith3SecTimeout = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, FiniteDuration(3, TimeUnit.SECONDS), workbenchMetricBaseName)
-
-    val execResponse = Await.result(execWith3SecTimeout.submitWorkflows(wdl, Seq(wdlInputs), workflowOptions, userInfo), Duration.Inf)
-    assertResult(expectedResponse) { execResponse.head.left.get }
-
-    intercept[AskTimeoutException] {
-      Await.result(execWith1SecTimeout.submitWorkflows(wdl, Seq(wdlInputs), workflowOptions, userInfo), Duration.Inf)
-    }
   }
 
   it should "400 when given an entity expression that evaluates to an empty set of entities" in withWorkspaceService { workspaceService =>
@@ -694,7 +679,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       JsArray(Vector(JsString("foo"), JsString("bar"))),
       JsArray(Vector(JsString("baz"), JsString("qux")))))))))) {
 
-      Await.result(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName).outputs(workflowId, userInfo), Duration.Inf)
+      Await.result(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName).outputs(workflowId, userInfo), Duration.Inf)
     }
 
   }

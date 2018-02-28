@@ -4,7 +4,7 @@ import javax.naming.NameAlreadyBoundException
 
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUser, RawlsUserEmail, RawlsUserSubjectId}
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}

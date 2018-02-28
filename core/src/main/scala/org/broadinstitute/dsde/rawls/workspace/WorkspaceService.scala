@@ -2,8 +2,6 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 
-import akka.actor._
-import akka.pattern._
 import akka.util.Timeout
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
@@ -26,14 +24,14 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.user.UserService.OverwriteGroupMembers
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
-import spray.http.{OAuth2BearerToken, StatusCode, StatusCodes, Uri}
-import spray.httpx.SprayJsonSupport._
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -47,167 +45,88 @@ import scala.util.control.NonFatal
  */
 
 object WorkspaceService {
-  sealed trait WorkspaceServiceMessage
-  case class CreateWorkspace(workspace: WorkspaceRequest) extends WorkspaceServiceMessage
-  case class GetWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class DeleteWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
-  case class UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
-  case object ListWorkspaces extends WorkspaceServiceMessage
-  case object ListAllWorkspaces extends WorkspaceServiceMessage
-  case class GetTags(query: Option[String]) extends WorkspaceServiceMessage
-  case class AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) extends WorkspaceServiceMessage
-  case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
-  case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class UpdateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate], inviteUsersNotFound: Boolean) extends WorkspaceServiceMessage
-  case class SendChangeNotifications(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class GetCatalog(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class UpdateCatalog(workspaceName: WorkspaceName, catalogUpdates: Seq[WorkspaceCatalog]) extends WorkspaceServiceMessage
-  case class LockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class UnlockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class CheckBucketReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class GetWorkspaceStatus(workspaceName: WorkspaceName, userSubjectId: Option[String]) extends WorkspaceServiceMessage
-  case class GetBucketUsage(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class GetAccessInstructions(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-
-  case class CreateEntity(workspaceName: WorkspaceName, entity: Entity) extends WorkspaceServiceMessage
-  case class GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) extends WorkspaceServiceMessage
-  case class UpdateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
-  case class DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference]) extends WorkspaceServiceMessage
-  case class RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) extends WorkspaceServiceMessage
-  case class EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) extends WorkspaceServiceMessage
-  case class GetEntityTypeMetadata(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class QueryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery) extends WorkspaceServiceMessage
-  case class ListEntities(workspaceName: WorkspaceName, entityType: String) extends WorkspaceServiceMessage
-  case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri, linkExistingEntities: Boolean) extends WorkspaceServiceMessage
-  case class BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
-  case class BatchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
-
-  case class CreateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
-  case class GetMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
-  case class OverwriteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
-  case class UpdateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
-  case class DeleteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
-  case class RenameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: MethodConfigurationName) extends WorkspaceServiceMessage
-  case class CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) extends WorkspaceServiceMessage
-  case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationImport) extends WorkspaceServiceMessage
-  case class CopyMethodConfigurationToMethodRepo(query: MethodRepoConfigurationExport) extends WorkspaceServiceMessage
-  case class ListAgoraMethodConfigurations(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class ListMethodConfigurations(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) extends WorkspaceServiceMessage
-  case class GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) extends WorkspaceServiceMessage
-  case class GetAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
-  case class GetGenomicsOperation(workspaceName: WorkspaceName, jobId: String) extends WorkspaceServiceMessage
-
-  case class ListSubmissions(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class CountSubmissions(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) extends WorkspaceServiceMessage
-  case class ValidateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) extends WorkspaceServiceMessage
-  case class GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
-  case class AbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
-  case class GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
-  case class GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
-  case object WorkflowQueueStatus extends WorkspaceServiceMessage
-
-  case object AdminListAllActiveSubmissions extends WorkspaceServiceMessage
-  case class AdminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
-  case class AdminDeleteWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case object AdminWorkflowQueueStatusByUser extends WorkspaceServiceMessage
-
-  case class HasAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class GrantAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class RevokeAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-
-  def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userInfo: UserInfo): Props = {
-    Props(workspaceServiceConstructor(userInfo))
-  }
-
   def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
     new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
   import dataSource.dataAccess.driver.api._
 
-  implicit val timeout = Timeout(5 minutes)
+  def CreateWorkspace(workspace: WorkspaceRequest) = createWorkspace(workspace)
+  def GetWorkspace(workspaceName: WorkspaceName) = getWorkspace(workspaceName)
+  def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
+  def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)
+  def UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateLibraryAttributes(workspaceName, operations)
+  def ListWorkspaces = listWorkspaces()
+  def ListAllWorkspaces = listAllWorkspaces()
+  def GetTags(query: Option[String]) = getTags(query)
+  def AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) = asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) }
+  def CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) = cloneWorkspace(sourceWorkspace, destWorkspace)
+  def GetACL(workspaceName: WorkspaceName) = getACL(workspaceName)
+  def UpdateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate], inviteUsersNotFound: Boolean) = updateACL(workspaceName, aclUpdates, inviteUsersNotFound)
+  def SendChangeNotifications(workspaceName: WorkspaceName) = sendChangeNotifications(workspaceName)
+  def GetCatalog(workspaceName: WorkspaceName) = getCatalog(workspaceName)
+  def UpdateCatalog(workspaceName: WorkspaceName, catalogUpdates: Seq[WorkspaceCatalog]) = updateCatalog(workspaceName, catalogUpdates)
+  def LockWorkspace(workspaceName: WorkspaceName) = lockWorkspace(workspaceName)
+  def UnlockWorkspace(workspaceName: WorkspaceName) = unlockWorkspace(workspaceName)
+  def CheckBucketReadAccess(workspaceName: WorkspaceName) = checkBucketReadAccess(workspaceName)
+  def GetWorkspaceStatus(workspaceName: WorkspaceName, userSubjectId: Option[String]) = getWorkspaceStatus(workspaceName, userSubjectId)
+  def GetBucketUsage(workspaceName: WorkspaceName) = getBucketUsage(workspaceName)
+  def GetAccessInstructions(workspaceName: WorkspaceName) = getAccessInstructions(workspaceName)
 
-  override def receive = {
-    case CreateWorkspace(workspace) => pipe(createWorkspace(workspace)) to sender
-    case GetWorkspace(workspaceName) => pipe(getWorkspace(workspaceName)) to sender
-    case DeleteWorkspace(workspaceName) => pipe(deleteWorkspace(workspaceName)) to sender
-    case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to sender
-    case UpdateLibraryAttributes(workspaceName, operations) => pipe(updateLibraryAttributes(workspaceName, operations)) to sender
-    case ListWorkspaces => pipe(listWorkspaces()) to sender
-    case ListAllWorkspaces => pipe(listAllWorkspaces()) to sender
-    case GetTags(query) => pipe(getTags(query)) to sender
-    case AdminListWorkspacesWithAttribute(attributeName, attributeValue) => asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) } pipeTo sender
-    case CloneWorkspace(sourceWorkspace, destWorkspaceRequest) => pipe(cloneWorkspace(sourceWorkspace, destWorkspaceRequest)) to sender
-    case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
-    case UpdateACL(workspaceName, aclUpdates, inviteUsersNotFound) => pipe(updateACL(workspaceName, aclUpdates, inviteUsersNotFound)) to sender
-    case SendChangeNotifications(workspaceName) => pipe(sendChangeNotifications(workspaceName)) to sender
-    case GetCatalog(workspaceName) => pipe(getCatalog(workspaceName)) to sender
-    case UpdateCatalog(workspaceName, catalogUpdates) => pipe(updateCatalog(workspaceName, catalogUpdates)) to sender
-    case LockWorkspace(workspaceName: WorkspaceName) => pipe(lockWorkspace(workspaceName)) to sender
-    case UnlockWorkspace(workspaceName: WorkspaceName) => pipe(unlockWorkspace(workspaceName)) to sender
-    case CheckBucketReadAccess(workspaceName: WorkspaceName) => pipe(checkBucketReadAccess(workspaceName)) to sender
-    case GetWorkspaceStatus(workspaceName, userSubjectId) => pipe(getWorkspaceStatus(workspaceName, userSubjectId)) to sender
-    case GetBucketUsage(workspaceName) => pipe(getBucketUsage(workspaceName)) to sender
-    case GetAccessInstructions(workspaceName) => pipe(getAccessInstructions(workspaceName)) to sender
+  def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
+  def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) = getEntity(workspaceName, entityType, entityName)
+  def UpdateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) = updateEntity(workspaceName, entityType, entityName, operations)
+  def DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference]) = deleteEntities(workspaceName, entities)
+  def RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) = renameEntity(workspaceName, entityType, entityName, newName)
+  def EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) = evaluateExpression(workspaceName, entityType, entityName, expression)
+  def GetEntityTypeMetadata(workspaceName: WorkspaceName) = entityTypeMetadata(workspaceName)
+  def ListEntities(workspaceName: WorkspaceName, entityType: String) = listEntities(workspaceName, entityType)
+  def QueryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery) = queryEntities(workspaceName, entityType, query)
+  def CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri, linkExistingEntities: Boolean) = copyEntities(entityCopyDefinition, uri, linkExistingEntities)
+  def BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) = batchUpdateEntities(workspaceName, entityUpdates, true)
+  def BatchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) = batchUpdateEntities(workspaceName, entityUpdates, false)
 
-    case CreateEntity(workspaceName, entity) => pipe(createEntity(workspaceName, entity)) to sender
-    case GetEntity(workspaceName, entityType, entityName) => pipe(getEntity(workspaceName, entityType, entityName)) to sender
-    case UpdateEntity(workspaceName, entityType, entityName, operations) => pipe(updateEntity(workspaceName, entityType, entityName, operations)) to sender
-    case DeleteEntities(workspaceName, entities) => pipe(deleteEntities(workspaceName, entities)) to sender
-    case RenameEntity(workspaceName, entityType, entityName, newName) => pipe(renameEntity(workspaceName, entityType, entityName, newName)) to sender
-    case EvaluateExpression(workspaceName, entityType, entityName, expression) => pipe(evaluateExpression(workspaceName, entityType, entityName, expression)) to sender
-    case GetEntityTypeMetadata(workspaceName) => pipe(entityTypeMetadata(workspaceName)) to sender
-    case ListEntities(workspaceName, entityType) => pipe(listEntities(workspaceName, entityType)) to sender
-    case QueryEntities(workspaceName, entityType, query) => pipe(queryEntities(workspaceName, entityType, query)) to sender
-    case CopyEntities(entityCopyDefinition, uri: Uri, linkExistingEntities: Boolean) => pipe(copyEntities(entityCopyDefinition, uri, linkExistingEntities)) to sender
-    case BatchUpsertEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, true)) to sender
-    case BatchUpdateEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, false)) to sender
+  def CreateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration) = createMethodConfiguration(workspaceName, methodConfiguration)
+  def RenameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: MethodConfigurationName) = renameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)
+  def DeleteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) = deleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
+  def GetMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) = getMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
+  def OverwriteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration: MethodConfiguration) = overwriteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newMethodConfiguration)
+  def UpdateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration: MethodConfiguration) = updateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newMethodConfiguration)
+  def CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) = copyMethodConfiguration(methodConfigNamePair)
+  def CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationImport) = copyMethodConfigurationFromMethodRepo(query)
+  def CopyMethodConfigurationToMethodRepo(query: MethodRepoConfigurationExport) = copyMethodConfigurationToMethodRepo(query)
+  def ListAgoraMethodConfigurations(workspaceName: WorkspaceName) = listAgoraMethodConfigurations(workspaceName)
+  def ListMethodConfigurations(workspaceName: WorkspaceName) = listMethodConfigurations(workspaceName)
+  def CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) = createMethodConfigurationTemplate(methodRepoMethod)
+  def GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) = getMethodInputsOutputs(methodRepoMethod)
+  def GetAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) = getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
+  def GetGenomicsOperation(workspaceName: WorkspaceName, jobId: String) = getGenomicsOperation(workspaceName, jobId)
 
-    case CreateMethodConfiguration(workspaceName, methodConfiguration) => pipe(createMethodConfiguration(workspaceName, methodConfiguration)) to sender
-    case RenameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName) => pipe(renameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)) to sender
-    case DeleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(deleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to sender
-    case GetMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(getMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to sender
-    case OverwriteMethodConfiguration(workspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration) => pipe(overwriteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newMethodConfiguration)) to sender
-    case UpdateMethodConfiguration(workspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfiguration) => pipe(updateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newMethodConfiguration)) to sender
-    case CopyMethodConfiguration(methodConfigNamePair) => pipe(copyMethodConfiguration(methodConfigNamePair)) to sender
-    case CopyMethodConfigurationFromMethodRepo(query) => pipe(copyMethodConfigurationFromMethodRepo(query)) to sender
-    case CopyMethodConfigurationToMethodRepo(query) => pipe(copyMethodConfigurationToMethodRepo(query)) to sender
-    case ListAgoraMethodConfigurations(workspaceName) => pipe(listAgoraMethodConfigurations(workspaceName)) to sender
-    case ListMethodConfigurations(workspaceName) => pipe(listMethodConfigurations(workspaceName)) to sender
-    case CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) => pipe(createMethodConfigurationTemplate(methodRepoMethod)) to sender
-    case GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) => pipe(getMethodInputsOutputs(methodRepoMethod)) to sender
-    case GetAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to sender
-    case GetGenomicsOperation(workspaceName, jobId) => pipe(getGenomicsOperation(workspaceName, jobId)) to sender
+  def ListSubmissions(workspaceName: WorkspaceName) = listSubmissions(workspaceName)
+  def CountSubmissions(workspaceName: WorkspaceName) = countSubmissions(workspaceName)
+  def CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) = createSubmission(workspaceName, submission)
+  def ValidateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) = validateSubmission(workspaceName, submission)
+  def GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = getSubmissionStatus(workspaceName, submissionId)
+  def AbortSubmission(workspaceName: WorkspaceName, submissionId: String) = abortSubmission(workspaceName, submissionId)
+  def GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = workflowOutputs(workspaceName, submissionId, workflowId)
+  def GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = workflowMetadata(workspaceName, submissionId, workflowId)
+  def WorkflowQueueStatus = workflowQueueStatus()
 
-    case ListSubmissions(workspaceName) => pipe(listSubmissions(workspaceName)) to sender
-    case CountSubmissions(workspaceName) => pipe(countSubmissions(workspaceName)) to sender
-    case CreateSubmission(workspaceName, submission) => pipe(createSubmission(workspaceName, submission)) to sender
-    case ValidateSubmission(workspaceName, submission) => pipe(validateSubmission(workspaceName, submission)) to sender
-    case GetSubmissionStatus(workspaceName, submissionId) => pipe(getSubmissionStatus(workspaceName, submissionId)) to sender
-    case AbortSubmission(workspaceName, submissionId) => pipe(abortSubmission(workspaceName, submissionId)) to sender
-    case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => pipe(workflowOutputs(workspaceName, submissionId, workflowId)) to sender
-    case GetWorkflowMetadata(workspaceName, submissionId, workflowId) => pipe(workflowMetadata(workspaceName, submissionId, workflowId)) to sender
-    case WorkflowQueueStatus => pipe(workflowQueueStatus()) to sender
+  def AdminListAllActiveSubmissions = asFCAdmin { listAllActiveSubmissions() }
+  def AdminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) = adminAbortSubmission(workspaceName,submissionId)
+  def AdminDeleteWorkspace(workspaceName: WorkspaceName) = adminDeleteWorkspace(workspaceName)
+  def AdminWorkflowQueueStatusByUser = adminWorkflowQueueStatusByUser()
 
-    case AdminListAllActiveSubmissions => asFCAdmin { listAllActiveSubmissions() } pipeTo sender
-    case AdminAbortSubmission(workspaceName,submissionId) => pipe(adminAbortSubmission(workspaceName,submissionId)) to sender
-    case AdminDeleteWorkspace(workspaceName) => pipe(adminDeleteWorkspace(workspaceName)) to sender
-    case AdminWorkflowQueueStatusByUser => pipe(adminWorkflowQueueStatusByUser()) to sender
+  def HasAllUserReadAccess(workspaceName: WorkspaceName) = hasAllUserReadAccess(workspaceName)
+  def GrantAllUserReadAccess(workspaceName: WorkspaceName) = grantAllUserReadAccess(workspaceName)
+  def RevokeAllUserReadAccess(workspaceName: WorkspaceName) = revokeAllUserReadAccess(workspaceName)
 
-    case HasAllUserReadAccess(workspaceName) => pipe(hasAllUserReadAccess(workspaceName)) to sender
-    case GrantAllUserReadAccess(workspaceName) => pipe(grantAllUserReadAccess(workspaceName)) to sender
-    case RevokeAllUserReadAccess(workspaceName) => pipe(revokeAllUserReadAccess(workspaceName)) to sender
-  }
-
-  def createWorkspace(workspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
+  def createWorkspace(workspaceRequest: WorkspaceRequest): Future[Workspace] =
     withAttributeNamespaceCheck(workspaceRequest) {
       dataSource.inTransaction { dataAccess =>
         withNewWorkspaceContext(workspaceRequest, dataAccess) { workspaceContext =>
-          DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, workspaceContext.workspace), workspaceRequest.toWorkspaceName.path))
+          DBIO.successful(workspaceContext.workspace)
         }
       }
     }
@@ -450,7 +369,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       .map {p => p.get(workspaceContext.workspaceId).get}
   }
 
-  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[PerRequestMessage] = {
+  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
     withAttributeNamespaceCheck(workspaceAttributeNames) {
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
@@ -471,7 +390,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                     }
                     DBIO.seq(inserts: _*)
                   } andThen {
-                  DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceRequest.toWorkspaceName.path))
+                  DBIO.successful(destWorkspaceContext.workspace)
                 }
               }
             }
@@ -481,7 +400,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def withClonedAuthDomain(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Set[ManagedGroupRef]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  private def withClonedAuthDomain[T](sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Set[ManagedGroupRef]) => ReadWriteAction[T]): ReadWriteAction[T] = {
     // if the source has an auth domain, the dest must also have that auth domain as a subset
     // otherwise, the caller may choose to add to the auth domain
     val sourceWorkspaceADs = sourceWorkspaceContext.workspace.authorizationDomain
@@ -626,10 +545,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-    val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
+    val userServiceRef = userServiceConstructor(userInfo)
     val resultsFuture = for {
       (overwriteGroupMessages, emailsNotFound, actualChangesToMake, actualShareChangesToMake, actualComputeChangesToMake, refsToUpdateByEmail) <- overwriteGroupMessagesFuture
-      overwriteGroupResults <- Future.traverse(overwriteGroupMessages) { message => (userServiceRef ? message).asInstanceOf[Future[PerRequestMessage]] }
+      overwriteGroupResults <- Future.traverse(overwriteGroupMessages) { message => (userServiceRef.OverwriteGroupMembers(message.groupRef, message.memberList)) }
       existingInvites <- getExistingWorkspaceInvites(workspaceName)
       _ <- updateWorkspaceSharePermissions(actualShareChangesToMake)
       _ <- updateWorkspaceComputePermissions(actualComputeChangesToMake)
@@ -760,7 +679,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @param workspaceContext
    * @return tuple: messages to send to UserService to overwrite acl groups, email that were not found in the process
    */
-  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]], Map[String, Either[RawlsUserRef,RawlsGroupRef]])] = {
+  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[(Iterable[UserService.OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]], Map[String, Either[RawlsUserRef,RawlsGroupRef]])] = {
     for {
       refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(aclUpdates.map(_.email))
       existingRefsAndLevels <- dataAccess.workspaceQuery.findWorkspaceUsersAndAccessLevel(workspaceContext.workspaceId)
@@ -936,13 +855,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[PerRequestMessage] =
+  def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
     withAttributeNamespaceCheck(entity) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
             case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceName}")))
-            case None => dataAccess.entityQuery.save(workspaceContext, entity).map(e => RequestCompleteWithLocation((StatusCodes.Created, e), entity.path(workspaceName)))
+            case None => dataAccess.entityQuery.save(workspaceContext, entity)
           }
         }
       }
@@ -1250,15 +1169,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] = {
+  def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[ValidatedMethodConfiguration] = {
     withAttributeNamespaceCheck(methodConfiguration) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
             case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")))
             case None => createMCAndValidateExpressions(workspaceContext, methodConfiguration, dataAccess)
-          } map { validatedMethodConfiguration =>
-            RequestCompleteWithLocation((StatusCodes.Created, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
           }
         }
       }
@@ -1297,7 +1214,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   //Overwrite the method configuration at methodConfiguration[namespace|name] with the new method configuration.
-  def overwriteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] = {
+  def overwriteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration): Future[ValidatedMethodConfiguration] = {
     withAttributeNamespaceCheck(methodConfiguration) {
       // create transaction
       dataSource.inTransaction { dataAccess =>
@@ -1307,9 +1224,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest,
               s"The method configuration name and namespace in the URI should match the method configuration name and namespace in the request body. If you want to move this method configuration, use POST.")))
           } else {
-            createMCAndValidateExpressions(workspaceContext, methodConfiguration, dataAccess) map { validatedMethodConfiguration =>
-              RequestCompleteWithLocation((StatusCodes.OK, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
-            }
+            createMCAndValidateExpressions(workspaceContext, methodConfiguration, dataAccess)
           }
         }
       }
@@ -1348,7 +1263,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): Future[PerRequestMessage] = {
+  def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): Future[ValidatedMethodConfiguration] = {
     // split into two transactions because we need to call out to Google after retrieving the source MC
 
     val transaction1Result = dataSource.inTransaction { dataAccess =>
@@ -1373,7 +1288,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationImport): Future[PerRequestMessage] =
+  def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationImport): Future[ValidatedMethodConfiguration] =
     methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo) flatMap {
       case None =>
         val name = s"${methodRepoQuery.methodRepoNamespace}/${methodRepoQuery.methodRepoName}/${methodRepoQuery.methodRepoSnapshotId}"
@@ -1429,7 +1344,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataAccess.methodConfigurationQuery.get(destContext, dest.namespace, dest.name).flatMap {
       case Some(existingMethodConfig) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"A method configuration named ${dest.namespace}/${dest.name} already exists in ${dest.workspaceName}")))
       case None => createMCAndValidateExpressions(destContext, target, dataAccess)
-    }.map(validatedTarget => RequestCompleteWithLocation((StatusCodes.Created, validatedTarget), target.path(dest.workspaceName)))
+    }
   }
 
   def listAgoraMethodConfigurations(workspaceName: WorkspaceName): Future[PerRequestMessage] =
@@ -1716,10 +1631,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
-          DBIO.from((userServiceRef ? UserService.AddGroupMembers(
+          val userServiceRef = userServiceConstructor(userInfo)
+          DBIO.from(userServiceRef.AddGroupMembers(
             workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
-            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value))))).asInstanceOf[Future[PerRequestMessage]])
+            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value)))))
         } map {
           case RequestComplete(StatusCodes.OK) => RequestComplete(StatusCodes.Created)
           case otherwise => otherwise
@@ -1732,10 +1647,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
-          DBIO.from((userServiceRef ? UserService.RemoveGroupMembers(
+          val userServiceRef = userServiceConstructor(userInfo)
+          DBIO.from(userServiceRef.RemoveGroupMembers(
             workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
-            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value))))).asInstanceOf[Future[PerRequestMessage]])
+            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value)))))
         }
       }
     }
@@ -1860,7 +1775,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case (_, STATUS_FOUND) =>
           "WORKSPACE_USER_ACCESS_LEVEL" -> run {
             getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _)
-          }.toString()
+          }.toString
         case (_, _) => "WORKSPACE_USER_ACCESS_LEVEL" -> STATUS_NA
       }
 
@@ -1934,8 +1849,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
     // Next call GenomicsService, which actually makes the Google Genomics API call.
     .flatMap { _ =>
-      val genomicsServiceRef = context.actorOf(GenomicsService.props(genomicsServiceConstructor, userInfo))
-      (genomicsServiceRef ? GenomicsService.GetOperation(jobId)).mapTo[PerRequestMessage]
+      val genomicsServiceRef = genomicsServiceConstructor(userInfo)
+      genomicsServiceRef.GetOperation(jobId)
     }
   }
 
@@ -1971,8 +1886,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     withAttributeNamespaceCheck(attrNames)(op)
   }
 
-  private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
-                                     (op: (SlickWorkspaceContext) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
+                                     (op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
     def saveNewWorkspace(workspaceId: String, googleWorkspaceInfo: GoogleWorkspaceInfo, workspaceRequest: WorkspaceRequest, dataAccess: DataAccess): ReadWriteAction[Workspace] = {
       val currentDate = DateTime.now
@@ -2035,7 +1950,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
   private def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 
-  private def requireCreateWorkspaceAccess(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)(op: => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  private def requireCreateWorkspaceAccess[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
     val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
     DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamResourceActions.createWorkspace, userInfo)) flatMap {
       case true =>

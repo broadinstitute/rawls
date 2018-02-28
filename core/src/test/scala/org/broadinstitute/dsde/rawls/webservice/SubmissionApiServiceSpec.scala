@@ -14,9 +14,13 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.joda.time.DateTime
 import org.scalatest.time.{Seconds, Span}
-import spray.http._
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.server.Route
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import akka.http.scaladsl.testkit.RouteTestTimeout
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -26,7 +30,7 @@ import scala.concurrent.duration._
  */
 class SubmissionApiServiceSpec extends ApiServiceSpec {
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   // increase the route timeout slightly for this test as the "large submission" tests sometimes
   // bump up against the default 5 second timeout.
@@ -76,7 +80,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       services.methodRepoDAO,
       services.gcsDAO,
       services.samDAO,
-      MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout, workbenchMetricBaseName), slickDataSource),
+      MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName), slickDataSource),
       10,
       services.gcsDAO.getPreparedMockGoogleCredential(),
       50 milliseconds,
@@ -279,7 +283,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.wsName.path}/submissions") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {
+        assertResult(StatusCodes.OK) {
           status
         }
         responseAs[Seq[SubmissionListResponse]] should contain allOf (
@@ -383,7 +387,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.wsName.path}/submissions/${testData.submission1.submissionId}") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString) {status}
+        assertResult(StatusCodes.OK) {status}
         assertResult(new SubmissionStatusResponse(testData.submission1, testData.userOwner)) {responseAs[SubmissionStatusResponse]}
       }
   }
@@ -438,7 +442,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   // Submissions Queue methods
 
-  def getQueueStatus(route: spray.routing.Route): WorkflowQueueStatusResponse =
+  def getQueueStatus(route: Route): WorkflowQueueStatusResponse =
     Get("/submissions/queueStatus") ~>
       sealRoute(route) ~>
       check {
@@ -595,7 +599,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       Get(s"${testData.wsName.path}/submissions/${testSubmission.submissionId}/workflows/${testSubmission.workflows.head.workflowId.get}/outputs") ~>
         services.sealedInstrumentedRoutes
         check {
-          assertResult(StatusCodes.OK, response.entity.asString) {
+          assertResult(StatusCodes.OK) {
             status
           }
           val expectedOutputs = WorkflowOutputs(workflowId, Map("aggregate_data_workflow.aggregate_data" -> TaskOutput(None, Option(Map("aggregate_data_workflow.aggregate_data.output_array" -> Left(AttributeValueRawJson(JsArray(Vector(
