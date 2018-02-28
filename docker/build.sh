@@ -82,6 +82,7 @@ ENV=${ENV:-""}  # if env is not set, push an image with branch name
 while [ "$1" != "" ]; do
     case $1 in
         jar) make_jar ;;
+	publish) artifactory_push ;;
         -d | --docker) shift
                        echo $1
                        DOCKER_CMD=$1
