@@ -636,11 +636,15 @@ paths:
           required: true
           type: string
         - in: body
-          name: newOwner
+          name: newOwnerEmail
           required: true
-          schema:
-            ref: '#/definitions/UserInfo'
-          description: UserInfo of the billing project owner
+          type: string
+          description: Email of the current owner
+        - in: body
+          name: newOwnerToken
+          required: true
+          type: string
+          description: OAuth2Token of the current owner
       responses:
         204:
           description: Successful project record removal
@@ -5368,7 +5372,8 @@ definitions:
     required:
       - project
       - bucket
-      - newOwner
+      - newOwnerEmail
+      - newOwnerToken
     properties:
       project:
         type: string
@@ -5376,9 +5381,12 @@ definitions:
       bucket:
         type: string
         description: generated Cromwell auth bucket, minus the gs:// prefix
-      newOwner:
-        ref: '#/definitions/UserInfo'
-        description: UserInfo of the new billing project owner
+      newOwnerEmail:
+        type: string
+        description: Email of the new billing project owner
+      newOwnerToken:
+        type: string
+        description: OAuth2AccessToken of the new billing project owner
   WorkspaceTag:
     description: tag with count
     required:
