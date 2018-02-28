@@ -67,7 +67,6 @@ class HttpGoogleServicesDAO(
   serviceProject: String,
   tokenEncryptionKey: String,
   tokenClientSecretsJson: String,
-  billingClientSecrets: GoogleClientSecrets,
   billingPemEmail: String,
   billingPemFile: String,
   val billingEmail: String,
