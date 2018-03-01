@@ -1072,6 +1072,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     val partiallyRemovedWorkspace = workspaces.head.workspace
+
+    assert(workspaces.find(_.workspace.toWorkspaceName == partiallyRemovedWorkspace.toWorkspaceName).get.owners.nonEmpty)
+
     services.dataSource.inTransaction { dataaccess =>
       DBIO.sequence(partiallyRemovedWorkspace.accessLevels.values.map(dataaccess.rawlsGroupQuery.delete))
     }
