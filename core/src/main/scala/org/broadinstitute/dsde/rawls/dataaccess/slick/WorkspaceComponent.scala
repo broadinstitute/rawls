@@ -566,8 +566,9 @@ trait WorkspaceComponent {
         val subGroupsByName = subGroups.map(g => g.groupName -> g).toMap
 
         accessQuery.flatMap { rec =>
-          groupsByName(RawlsGroupName(rec.groupName)).users.map(u => rec.workspaceId -> usersById(u.userSubjectId).userEmail.value) ++
-            groupsByName(RawlsGroupName(rec.groupName)).subGroups.map(sg => rec.workspaceId -> subGroupsByName(sg.groupName).groupEmail.value)
+          val users = groupsByName.get(RawlsGroupName(rec.groupName)).map(_.users.map(u => rec.workspaceId -> usersById(u.userSubjectId).userEmail.value))
+          val groups = groupsByName.get(RawlsGroupName(rec.groupName)).map(_.subGroups.map(sg => rec.workspaceId -> subGroupsByName(sg.groupName).groupEmail.value))
+          (users ++ groups).flatten
         }.groupBy{ case (wsid, email) => wsid }.mapValues(_.map { case (wsid, email) => email})
 
       }
