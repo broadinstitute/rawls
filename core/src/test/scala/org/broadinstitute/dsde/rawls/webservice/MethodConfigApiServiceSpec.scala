@@ -43,27 +43,29 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   "MethodConfigApi" should "return 201 on create method configuration" in withTestDataApiServices { services =>
-    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
-      AgoraMethod(testData.wsName.namespace, "method-a", 1))
-    withStatsD {
-      Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-        services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
+    List(AgoraMethod(testData.wsName.namespace, "method-a", 1), DockstoreMethod("path", "version")) foreach { method =>
+      val newMethodConfig =
+        MethodConfiguration("dsde", s"testConfigNew-${method.repo.scheme}", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")), method)
+      withStatsD {
+        Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+          services.sealedInstrumentedRoutes ~>
+          check {
+            assertResult(StatusCodes.Created) {
+              status
+            }
+            assertResult(newMethodConfig) {
+              runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get
+            }
+            // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+            assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
+              header("Location")
+            }
           }
-          assertResult(newMethodConfig) {
-            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get
-          }
-          // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-          assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
-            header("Location")
-          }
-        }
-    } {capturedMetrics =>
-      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
-      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs", StatusCodes.Created.intValue, 1)
-      assertSubsetOf(expected, capturedMetrics)
+      } { capturedMetrics =>
+        val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
+        val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs", StatusCodes.Created.intValue, 1)
+        assertSubsetOf(expected, capturedMetrics)
+      }
     }
   }
 
@@ -227,24 +229,24 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 204 on method configuration rename" in withTestDataApiServices { services =>
-    Post(s"${testData.methodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+    Post(s"${testData.agoraMethodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName("testConfig2_changed", testData.agoraMethodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
         }
         assertResult(true) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, "testConfig2_changed")).isDefined
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, "testConfig2_changed")).isDefined
         }
         assertResult(None) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name))
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))
         }
       }
   }
 
   it should "return 204 on method configuration rename on top of yourself" in withTestDataApiServices { services =>
     withStatsD {
-      Post(s"${testData.methodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+      Post(s"${testData.agoraMethodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.agoraMethodConfig.name, testData.agoraMethodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
         services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.NoContent) {
@@ -260,7 +262,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "return 400 on method configuration rename when workspace in URI doesn't match payload" in withTestDataApiServices { services =>
     withStatsD {
-      Post(s"${testData.methodConfig2.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName("uh_oh", "bad_times")))) ~>
+      Post(s"${testData.methodConfig2.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.agoraMethodConfig.name, testData.agoraMethodConfig.namespace, WorkspaceName("uh_oh", "bad_times")))) ~>
         services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.BadRequest) {
@@ -276,7 +278,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "return 409 on method configuration rename when destination already exists" in withTestDataApiServices { services =>
     withStatsD {
-      Post(s"${testData.methodConfig2.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+      Post(s"${testData.methodConfig2.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.agoraMethodConfig.name, testData.agoraMethodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
         services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.Conflict) {
@@ -291,7 +293,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the workspace last modified date on method configuration rename" in withTestDataApiServices { services =>
-    Post(s"${testData.methodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+    Post(s"${testData.agoraMethodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName("testConfig2_changed", testData.agoraMethodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -306,17 +308,17 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on method configuration rename, method configuration does not exist" in withTestDataApiServices { services =>
-    Post(s"${testData.workspace.path}/methodconfigs/${testData.methodConfig.namespace}/foox/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+    Post(s"${testData.workspace.path}/methodconfigs/${testData.agoraMethodConfig.namespace}/foox/rename", httpJson(MethodConfigurationName(testData.agoraMethodConfig.name, testData.agoraMethodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
         }
         assertResult(true) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).isDefined
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).isDefined
         }
         assertResult(None) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, "foox"))
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, "foox"))
         }
       }
   }
@@ -325,14 +327,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
    * test disabled until we decide what to do with submissions that reference deleted configs
    */
   ignore should "*DISABLED* return 204 method configuration delete" in withTestDataApiServices { services =>
-    Delete(testData.methodConfig.path(testData.workspace)) ~>
+    Delete(testData.agoraMethodConfig.path(testData.workspace)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
         }
         assertResult(None) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name))
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))
         }
       }
   }
@@ -374,7 +376,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
 
   it should "return 404 method configuration delete, method configuration does not exist" in withTestDataApiServices { services =>
-    Delete(testData.methodConfig.copy(name = "DNE").path(testData.workspace)) ~>
+    Delete(testData.agoraMethodConfig.copy(name = "DNE").path(testData.workspace)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -382,29 +384,41 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(true) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).isDefined
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).isDefined
         }
         assertResult(None) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, "foox"))
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, "foox"))
         }
       }
   }
 
   def check200AddMC(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
-    val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
-    httpMethod(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
-      sealRoute(services.methodConfigRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+    val combinations =
+      List(
+        (testData.agoraMethodConfig,     testData.agoraMethodConfig.copy(inputs = testData.agoraMethodConfig.inputs + ("param2" -> AttributeString("foo2"))), 2),
+        (testData.dockstoreMethodConfig, testData.dockstoreMethodConfig.copy(inputs = testData.dockstoreMethodConfig.inputs + ("param3" -> AttributeString("foo3"))), 3)
+      )
+
+    combinations foreach { pair: (MethodConfiguration, MethodConfiguration, Int) =>
+
+      val original  = pair._1
+      val edited    = pair._2
+      val fooFactor = pair._3
+
+      httpMethod(original.path(testData.workspace), httpJson(edited)) ~>
+        sealRoute(services.methodConfigRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(edited) {
+            responseAs[ValidatedMethodConfiguration].methodConfiguration
+          }
+          assertResult(Option(AttributeString(s"foo$fooFactor"))) {
+            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), original.namespace, original.name)).get.inputs.get(s"param$fooFactor")
+          }
         }
-        assertResult(modifiedMethodConfig) {
-          responseAs[ValidatedMethodConfiguration].methodConfiguration
-        }
-        assertResult(Option(AttributeString("foo2"))) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.inputs.get("param2")
-        }
-      }
+    }
   }
 
   it should "return 200 on put method configuration" in {
@@ -416,9 +430,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   def checkLastModified(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
-    val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
+    val modifiedMethodConfig = testData.agoraMethodConfig.copy(inputs = testData.agoraMethodConfig.inputs + ("param2" -> AttributeString("foo2")))
     withStatsD {
-      httpMethod(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+      httpMethod(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
         services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.OK) {
@@ -449,14 +463,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   def checkValidAttributeSyntax(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
     val newOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
-    val modifiedMethodConfig = testData.methodConfig.copy(inputs = newInputs, outputs = newOutputs)
+    val modifiedMethodConfig = testData.agoraMethodConfig.copy(inputs = newInputs, outputs = newOutputs)
 
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
     val expectedSuccessOutputs = Seq("good_out", "empty_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
-    httpMethod(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+    httpMethod(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -470,10 +484,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
         // all inputs and outputs are saved, regardless of parsing errors
         for ((key, value) <- newInputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.inputs.get(key)
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).get.inputs.get(key)
         }
         for ((key, value) <- newOutputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.outputs.get(key)
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).get.outputs.get(key)
         }
       }
   }
@@ -489,14 +503,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   def checkNoLibraryAttributesInOutputsByCurator(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"))
     val newOutputs = Map("good_out" -> AttributeString("this.library:bar"))
-    val modifiedMethodConfig = testData.methodConfig.copy(inputs = newInputs, outputs = newOutputs)
+    val modifiedMethodConfig = testData.agoraMethodConfig.copy(inputs = newInputs, outputs = newOutputs)
 
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map.empty[String, String]
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map.empty[String, String]
 
-    httpMethod(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+    httpMethod(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -516,7 +530,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   def checkNoLibraryAttributesInOutputsByNonCurator(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"))
     val newOutputs = Map("good_out" -> AttributeString("this.library:bar"))
-    val modifiedMethodConfig = testData.methodConfig.copy(inputs = newInputs, outputs = newOutputs)
+    val modifiedMethodConfig = testData.agoraMethodConfig.copy(inputs = newInputs, outputs = newOutputs)
 
     revokeCuratorRole(services)
 
@@ -525,7 +539,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map.empty[String, String]
 
-    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+    Put(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -543,8 +557,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 400 on put method configuration if the location differs between URI and JSON body" in withTestDataApiServices { services =>
-    val modifiedMethodConfig = testData.methodConfig.copy(name = "different", inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
-    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+    val modifiedMethodConfig = testData.agoraMethodConfig.copy(name = "different", inputs = testData.agoraMethodConfig.inputs + ("param2" -> AttributeString("foo2")))
+    Put(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -554,8 +568,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 409 on update method configuration if the destination already exists" in withTestDataApiServices { services =>
-    val modifiedMethodConfig = testData.methodConfig2.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
-    Post(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+    val modifiedMethodConfig = testData.methodConfig2.copy(inputs = testData.agoraMethodConfig.inputs + ("param2" -> AttributeString("foo2")))
+    Post(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -573,7 +587,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessOutputs = Seq("good_out", "empty_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
-    val mc = testData.methodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
+    val mc = testData.agoraMethodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
 
     runAndWait(methodConfigurationQuery.create(SlickWorkspaceContext(testData.workspace), mc))
 
@@ -593,7 +607,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on update method configuration" in withTestDataApiServices { services =>
-    Post(s"${testData.workspace.path}/methodconfigs/update}", httpJson(testData.methodConfig)) ~>
+    Post(s"${testData.workspace.path}/methodconfigs/update}", httpJson(testData.agoraMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -602,7 +616,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 201 on copy method configuration" in withTestDataApiServices { services =>
+  it should "return 201 on copy method Agora configuration" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairCreated)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -610,7 +624,20 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult("testConfig1") {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.name
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).get.name
+        }
+      }
+  }
+
+  it should "return 201 on copy Dockstore method configuration" in withTestDataApiServices { services =>
+    Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairCreatedDockstore)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult("dockstore-config-name") {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.dockstoreMethodConfig.namespace, testData.dockstoreMethodConfig.name)).get.name
         }
       }
   }
@@ -674,9 +701,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   val copyToMethodRepo = "/methodconfigs/copyToMethodRepo"
 
-  it should "return 200 on copy method configuration to method repo" in withTestDataApiServices { services =>
+  it should "return 200 on copy Agora method configuration to Agora" in withTestDataApiServices { services =>
     withStatsD {
-      Post(copyToMethodRepo, httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.methodConfigName))) ~>
+      Post(copyToMethodRepo, httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.agoraMethodConfigName))) ~>
         sealRoute(services.methodConfigRoutes) ~>
         check {
           assertResult(StatusCodes.OK) {
@@ -687,6 +714,17 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       val expected = expectedHttpRequestMetrics("post", "configurations", StatusCodes.OK.intValue, 1, Some(Subsystems.Agora))
       assertSubsetOf(expected, capturedMetrics)
     }
+  }
+
+  it should "return 400 on copy Dockstore method configuration to Agora" in withTestDataApiServices { services =>
+    Post(copyToMethodRepo, httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.dockstoreMethodConfigName))) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+        assert(response.entity.toString.contains("Action not supported for method repo"))
+      }
   }
 
   it should "return 404 on copy method configuration to method repo if config dne" in withTestDataApiServices { services =>
@@ -710,7 +748,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult("testConfig1") {
-            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.name
+            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).get.name
           }
         }
     } { capturedMetrics =>
@@ -720,7 +758,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 409 on copy method configuration from method repo to existing name" in withTestDataApiServices { services =>
-    val existingMethodConfigCopy = MethodRepoConfigurationImport("workspace_test", "rawls_test_good", 1, testData.methodConfigName)
+    val existingMethodConfigCopy = MethodRepoConfigurationImport("workspace_test", "rawls_test_good", 1, testData.agoraMethodConfigName)
     Post(copyFromMethodRepo, httpJson(existingMethodConfigCopy)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -788,7 +826,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when generating a method config template from a valid method" in withTestDataApiServices { services =>
+  it should "return 200 when generating a method config template from a valid Agora method" in withTestDataApiServices { services =>
     val method = AgoraMethod("dsde","three_step",1)
     Post("/methodconfigs/template", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -801,7 +839,20 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 getting method inputs and outputs" in withTestDataApiServices { services =>
+  it should "return 200 when generating a method config template from a valid Dockstore method" in withTestDataApiServices { services =>
+    val method: MethodRepoMethod = DockstoreMethod("dockstore-method-path", "dockstore-method-version")
+    Post("/methodconfigs/template", httpJson(method)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        val methodConfiguration = MethodConfiguration("namespace","name","rootEntityType",Map(), Map("three_step_dockstore.cgrep.pattern" -> AttributeString("")),
+          Map("three_step_dockstore.ps.procs"->AttributeString(""),"three_step_dockstore.cgrep.count"->AttributeString(""), "three_step_dockstore.wc.count"->AttributeString("")),
+          method)
+        assertResult(methodConfiguration) { responseAs[MethodConfiguration] }
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "return 200 getting method inputs and outputs for an Agora method" in withTestDataApiServices { services =>
     withStatsD {
       val method = AgoraMethod("dsde", "three_step", 1)
       Post("/methodconfigs/inputsOutputs", httpJson(method)) ~>
@@ -818,6 +869,20 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       val expected = expectedHttpRequestMetrics("get", "methods.redacted.redacted.redacted", StatusCodes.OK.intValue, 1, Some(Subsystems.Agora))
       assertSubsetOf(expected, capturedMetrics)
     }
+  }
+
+  it should "return 200 getting method inputs and outputs for a Dockstore method" in withTestDataApiServices { services =>
+    val method: MethodRepoMethod = DockstoreMethod("dockstore-method-path", "dockstore-method-version")
+    Post("/methodconfigs/inputsOutputs", httpJson(method)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expectedIn = Seq(MethodInput("three_step_dockstore.cgrep.pattern", "String", false))
+        val expectedOut = Seq(MethodOutput("three_step_dockstore.ps.procs", "File"), MethodOutput("three_step_dockstore.cgrep.count", "Int"), MethodOutput("three_step_dockstore.wc.count", "Int"))
+        val result = responseAs[MethodInputsOutputs]
+        assertSameElements(expectedIn, result.inputs)
+        assertSameElements(expectedOut, result.outputs)
+      }
   }
 
   it should "return 404 when generating a method config template from a missing method" in withTestDataApiServices { services =>
@@ -853,7 +918,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 on get method configuration" in withTestDataApiServices { services =>
-    Get(testData.methodConfig.path(testData.workspace)) ~>
+    Get(testData.agoraMethodConfig.path(testData.workspace)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {

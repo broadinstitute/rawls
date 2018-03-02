@@ -211,7 +211,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val maxActiveWorkflowsPerUser = 2
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
-        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, "", mockServer.mockServerBaseUrl, "", workbenchMetricBaseName = workbenchMetricBaseName),
         execServiceCluster,
         execServiceBatchSize,
         gcsDAO,

@@ -75,13 +75,13 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
   "MethodConfigurationComponent.upsert" should "in-place update a method config with incremented version" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.methodConfig.namespace, testData.methodConfig.name))).get
+    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
 
-    val changed = testData.methodConfig.copy(rootEntityType = "goober",
+    val changed = testData.agoraMethodConfig.copy(rootEntityType = "goober",
       prerequisites = Map.empty,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
-      methodRepoMethod = testData.method.copy(methodVersion = 2)
+      methodRepoMethod = testData.agoraMethod.copy(methodVersion = 2)
     )
 
     runAndWait(methodConfigurationQuery.upsert(workspaceContext, changed))
@@ -97,23 +97,23 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val listActive = runAndWait(methodConfigurationQuery.listActive(workspaceContext))
 
     assertResult(0) {
-      listActive.filter(_.name.contains(testData.methodConfig.name + "_")).size
+      listActive.filter(_.name.contains(testData.agoraMethodConfig.name + "_")).size
     }
   }
 
   "MethodConfigurationComponent.update" should "in-place update a method config with incremented version" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.methodConfig.namespace, testData.methodConfig.name))).get
+    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
 
-    val changed = testData.methodConfig.copy(rootEntityType = "goober",
+    val changed = testData.agoraMethodConfig.copy(rootEntityType = "goober",
       prerequisites = Map.empty,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
-      methodRepoMethod = testData.method.copy(methodVersion = 2)
+      methodRepoMethod = testData.agoraMethod.copy(methodVersion = 2)
     )
 
-    runAndWait(methodConfigurationQuery.update(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, changed))
+    runAndWait(methodConfigurationQuery.update(workspaceContext, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, changed))
 
     assertResult(Option(changed.copy(methodConfigVersion = 2))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
@@ -126,7 +126,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val listActive = runAndWait(methodConfigurationQuery.listActive(workspaceContext))
 
     assertResult(0) {
-      listActive.filter(_.name.contains(testData.methodConfig.name + "_")).size
+      listActive.filter(_.name.contains(testData.agoraMethodConfig.name + "_")).size
     }
   }
 

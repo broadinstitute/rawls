@@ -294,6 +294,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val (workspace, workspaceGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
+    val (workspace2, _) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName2.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+
     val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", Set.empty, UUID.randomUUID().toString, "aBucket3", currentTime(), currentTime(), "testUser",
       wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)), Map.empty, Map.empty)
     val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", Set.empty, UUID.randomUUID().toString, "aBucket4", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
@@ -401,16 +403,28 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val indiv2 = Entity("indiv2", "Individual",
       Map(AttributeName.withDefaultNS("sset") -> sset2.toReference ) )
 
-    val method = AgoraMethod("ns-config", "meth1", 1)
+    val agoraMethod = AgoraMethod("ns-config", "meth1", 1)
 
-    val methodConfig = MethodConfiguration(
+    val agoraMethodConfig = MethodConfiguration(
       "ns",
       "testConfig1",
       "Sample",
       Map("p1" -> AttributeString("prereq")),
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
-      method
+      agoraMethod
+    )
+
+    val dockstoreMethod = DockstoreMethod("dockstore/method/path", "dockstore-method-version")
+
+    val dockstoreMethodConfig = MethodConfiguration(
+      "dockstore-config-namespace",
+      "dockstore-config-name",
+      "Sample",
+      Map("p1" -> AttributeString("prereq")),
+      Map("i1" -> AttributeString("input")),
+      Map("o1" -> AttributeString("output")),
+      dockstoreMethod
     )
 
     val methodConfigDockstore = MethodConfiguration("dsde", "DockstoreConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), DockstoreMethod("dockstore-path", "dockstore-version"))
@@ -435,30 +449,33 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       outputs=Map("aggregate_data_workflow.aggregate_data.output_array" -> AttributeString("this.output_array")),
       AgoraMethod("dsde", "array_task", 1))
 
-    val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, wsName)
-    val methodConfigName2 = methodConfigName.copy(name="novelName")
-    val methodConfigName3 = methodConfigName.copy(name="noSuchName")
-    val methodConfigName4 = methodConfigName.copy(name=methodConfigWorkspaceLibraryUpdate.name)
-    val methodConfigNamePairCreated = MethodConfigurationNamePair(methodConfigName,methodConfigName2)
-    val methodConfigNamePairConflict = MethodConfigurationNamePair(methodConfigName,methodConfigName)
+    val agoraMethodConfigName = MethodConfigurationName(agoraMethodConfig.name, agoraMethodConfig.namespace, wsName)
+    val dockstoreMethodConfigName = MethodConfigurationName(dockstoreMethodConfig.name, dockstoreMethodConfig.namespace, wsName)
+    val methodConfigName2 = agoraMethodConfigName.copy(name="novelName")
+    val methodConfigName3 = agoraMethodConfigName.copy(name="noSuchName")
+    val methodConfigName4 = agoraMethodConfigName.copy(name=methodConfigWorkspaceLibraryUpdate.name)
+    val methodConfigNamePairCreated = MethodConfigurationNamePair(agoraMethodConfigName,methodConfigName2)
+    // Copy from "myNamespace/myWorkspace" to "myNamespace/myWorkspace2"
+    val methodConfigNamePairCreatedDockstore = MethodConfigurationNamePair(dockstoreMethodConfigName, dockstoreMethodConfigName.copy(workspaceName = wsName2))
+    val methodConfigNamePairConflict = MethodConfigurationNamePair(agoraMethodConfigName,agoraMethodConfigName)
     val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3,methodConfigName2)
     val methodConfigNamePairFromLibrary = MethodConfigurationNamePair(methodConfigName4,methodConfigName2)
     val uniqueMethodConfigName = UUID.randomUUID.toString
-    val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, wsName)
+    val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, agoraMethodConfig.namespace, wsName)
     val methodRepoGood = MethodRepoConfigurationImport("workspace_test", "rawls_test_good", 1, newMethodConfigName)
-    val methodRepoMissing = MethodRepoConfigurationImport("workspace_test", "rawls_test_missing", 1, methodConfigName)
-    val methodRepoEmptyPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_empty_payload", 1, methodConfigName)
-    val methodRepoBadPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_bad_payload", 1, methodConfigName)
+    val methodRepoMissing = MethodRepoConfigurationImport("workspace_test", "rawls_test_missing", 1, agoraMethodConfigName)
+    val methodRepoEmptyPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_empty_payload", 1, agoraMethodConfigName)
+    val methodRepoBadPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_bad_payload", 1, agoraMethodConfigName)
     val methodRepoLibrary = MethodRepoConfigurationImport("workspace_test", "rawls_test_library", 1, newMethodConfigName)
 
     val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
     val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2"))
     val missingOutputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
 
-    val submissionNoWorkflows = createTestSubmission(workspace, methodConfig, indiv1, userOwner,
+    val submissionNoWorkflows = createTestSubmission(workspace, agoraMethodConfig, indiv1, userOwner,
       Seq.empty, Map.empty,
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
-    val submission1 = createTestSubmission(workspace, methodConfig, indiv1, userOwner,
+    val submission1 = createTestSubmission(workspace, agoraMethodConfig, indiv1, userOwner,
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
     val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, userOwner,
@@ -476,38 +493,38 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val submissionMissingOutputs = createTestSubmission(workspace, methodConfigMissingOutputs, indiv1, userOwner,
       Seq(indiv1), Map(indiv1 -> missingOutputResolutions), Seq(), Map())
 
-    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfig.namespace,methodConfig.name,indiv1.toReference,
+    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,agoraMethodConfig.namespace,agoraMethodConfig.name,indiv1.toReference,
       Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,sample1.toReference, inputResolutions),
         Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,sample2.toReference, inputResolutions),
         Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,sample3.toReference, inputResolutions),
         Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,sample4.toReference, inputResolutions)), SubmissionStatuses.Submitted, false)
 
     //a submission with a succeeeded workflow
-    val submissionSuccessful1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val submissionSuccessful1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
 
     //a submission with a succeeeded workflow
-    val submissionSuccessful2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val submissionSuccessful2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
 
     //a submission with a failed workflow
-    val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("worklowFailed"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
 
     //a submission with a submitted workflow
-    val submissionSubmitted = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val submissionSubmitted = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowSubmitted"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Submitted, false)
 
     //a submission with an aborted workflow
-    val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowAborted1"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted, false)
 
     //a submission with an aborted workflow
-    val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowAborted2"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted, false)
 
     //a submission with multiple failed and succeeded workflows
-    val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowSuccessful3"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions),
         Workflow(Option("workflowSuccessful4"), WorkflowStatuses.Succeeded, testDate, sample2.toReference, inputResolutions),
         Workflow(Option("worklowFailed1"), WorkflowStatuses.Failed, testDate, sample3.toReference, inputResolutions),
@@ -521,13 +538,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val t2 = new DateTime(2017, 1, 1, 5, 15)
     val t3 = new DateTime(2017, 1, 1, 5, 20)
     val t4 = new DateTime(2017, 1, 1, 5, 30)
-    val outerSubmission = Submission(UUID.randomUUID().toString(), t1, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val outerSubmission = Submission(UUID.randomUUID().toString(), t1, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, t4, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
-    val innerSubmission = Submission(UUID.randomUUID().toString(), t2, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val innerSubmission = Submission(UUID.randomUUID().toString(), t2, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowFailed1"), WorkflowStatuses.Failed, t3, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
 
     // a submission with a submitted workflow and a custom workflow failure mode
-    val submissionWorkflowFailureMode = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val submissionWorkflowFailureMode = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowFailureMode"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Submitted, false,
       Some(WorkflowFailureModes.ContinueWhilePossible))
 
@@ -554,7 +571,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       groups.foreach(gcsDAO.createGoogleGroup(_))
     }
 
-    val allWorkspaces = Seq(workspace,
+    val allWorkspaces = Seq(
+      workspace,
+      workspace2,
       controlledWorkspace,
       workspacePublished,
       workspaceNoAttrs,
@@ -619,7 +638,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
           DBIO.seq(
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-                methodConfigurationQuery.create(context, methodConfig),
+                methodConfigurationQuery.create(context, agoraMethodConfig),
+                methodConfigurationQuery.create(context, dockstoreMethodConfig),
                 methodConfigurationQuery.create(context, methodConfig2),
                 methodConfigurationQuery.create(context, methodConfig3),
                 methodConfigurationQuery.create(context, methodConfigValid),
@@ -667,7 +687,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.create(context, methodConfig),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
             methodConfigurationQuery.create(context, methodConfig2),
 
             submissionQuery.create(context, submissionSuccessful1),
@@ -678,7 +698,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.create(context, methodConfig),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
 
             submissionQuery.create(context, submissionFailed),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -688,7 +708,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.create(context, methodConfig),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
 
             submissionQuery.create(context, submissionSubmitted),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -698,7 +718,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.create(context, methodConfig),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
 
             submissionQuery.create(context, submissionAborted2),
             submissionQuery.create(context, submissionSuccessful2),
@@ -709,7 +729,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.create(context, methodConfig),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
 
             submissionQuery.create(context, submissionAborted1),
             submissionQuery.create(context, submissionMixed),
@@ -720,7 +740,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.create(context, methodConfig),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
 
             submissionQuery.create(context, outerSubmission),
             submissionQuery.create(context, innerSubmission),
@@ -731,7 +751,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.create(context, methodConfig),
+            methodConfigurationQuery.create(context, agoraMethodConfig),
 
             submissionQuery.create(context, submissionWorkflowFailureMode),
             updateWorkflowExecutionServiceKey("unittestdefault")

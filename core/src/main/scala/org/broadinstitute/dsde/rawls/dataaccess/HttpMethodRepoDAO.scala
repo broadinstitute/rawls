@@ -29,14 +29,15 @@ import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
 /**
  * @author tsharpe
  */
-class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", override val workbenchMetricBaseName: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends MethodRepoDAO with DsdeHttpDAO with InstrumentedRetry with LazyLogging with RawlsInstrumented with ServiceDAOWithStatus {
+class HttpMethodRepoDAO(baseAgoraServiceURL: String, agoraApiPath: String, baseDockstoreServiceURL: String, dockstoreApiPath: String, override val workbenchMetricBaseName: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends MethodRepoDAO with DsdeHttpDAO with InstrumentedRetry with LazyLogging with RawlsInstrumented with ServiceDAOWithStatus {
   import system.dispatcher
 
   override val http = Http(system)
   override val httpClientUtils = HttpClientUtilsGzipInstrumented()
 
-  private val methodRepoServiceURL = baseMethodRepoServiceURL + apiPath
-  protected val statusUrl = s"${baseMethodRepoServiceURL}/status"
+  private val agoraServiceURL = baseAgoraServiceURL + agoraApiPath
+  private val dockstoreServiceURL = baseDockstoreServiceURL + dockstoreApiPath
+  protected val statusUrl = s"$agoraServiceURL/status"
 
   private lazy implicit val baseMetricBuilder: ExpandedMetricBuilder =
     ExpandedMetricBuilder.expand(SubsystemMetricKey, Subsystems.Agora)
@@ -59,16 +60,23 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
   }
 
   override def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    getAgoraEntity(s"${methodRepoServiceURL}/configurations/${namespace}/${name}/${version}",userInfo)
+    getAgoraEntity(s"$agoraServiceURL/configurations/$namespace/$name/$version",userInfo)
   }
 
   override def getMethod( method: MethodRepoMethod, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
     method match {
       case agoraMethod: AgoraMethod =>
-        getAgoraEntity(s"${methodRepoServiceURL}/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo)
-      case _ =>
-        throw new RawlsException(s"Method repo '${method.repo.scheme}' not yet supported")
+        getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo)
+      case dockstoreMethod: DockstoreMethod =>
+        getDockstoreEntity(dockstoreMethod) flatMap { response: GA4GHToolDescriptor =>
+          // TODO: re-using AgoraEntity feels sketchy to me. It seems to work without any changes, but should we create a DockstoreEntity?
+          Future(Some(AgoraEntity(payload = Some(response.descriptor), entityType = Some(AgoraEntityType.Workflow))))
+        }
     }
+  }
+
+  private def getDockstoreEntity(method: DockstoreMethod): Future[GA4GHToolDescriptor] = {
+    httpClientUtils.executeRequestUnmarshalResponse[GA4GHToolDescriptor](http, Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)))
   }
 
   override def postMethodConfig(namespace: String, name: String, methodConfiguration: MethodConfiguration, userInfo: UserInfo): Future[AgoraEntity] = {
@@ -80,16 +88,18 @@ class HttpMethodRepoDAO(baseMethodRepoServiceURL: String, apiPath: String = "", 
           payload = Option(methodConfiguration.toJson.toString),
           entityType = Option(AgoraEntityType.Configuration)
         )
-        postAgoraEntity(s"${methodRepoServiceURL}/configurations", agoraEntity, userInfo)
+        postAgoraEntity(s"$agoraServiceURL/configurations", agoraEntity, userInfo)
       case otherMethod =>
-        throw new RawlsException(s"Action not supported for method repo '${otherMethod.repo.scheme}'")
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Action not supported for method repo '${otherMethod.repo.scheme}'"))
     }
 
 
   }
 
+  // TODO: if we ever want Dockstore healthchecks, we will need to split this DAO in two
   override def getStatus(implicit executionContext: ExecutionContext): Future[SubsystemStatus] = {
-    val url = s"${baseMethodRepoServiceURL}/status"
+    val url = s"$baseAgoraServiceURL/status"
     // Don't retry on the status check
     httpClientUtils.executeRequestUnmarshalResponse[StatusCheckResponse](http, RequestBuilding.Get(url)) map { statusCheck =>
       SubsystemStatus(ok = statusCheck.ok, None)

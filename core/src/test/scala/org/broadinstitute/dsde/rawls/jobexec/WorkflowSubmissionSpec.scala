@@ -52,7 +52,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     val googleServicesDAO = mockGoogleServicesDAO
     val executionServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), dataSource)
-    val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName)
+    val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, "", mockServer.mockServerBaseUrl, "", workbenchMetricBaseName = workbenchMetricBaseName)
     val samDAO = mockSamDAO
   }
 
@@ -301,7 +301,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       val workflowSubmissionActor = system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
-        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, "", mockServer.mockServerBaseUrl, "", workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
         mockSamDAO,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
@@ -332,7 +332,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       val workflowSubmissionActor = system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
-        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, "", mockServer.mockServerBaseUrl, "", workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
         mockSamDAO,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
