@@ -1064,4 +1064,26 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       mockServer.mockServer.verify(request().withMethod("PUT").withPath(s"/api/resource/${SamResourceTypeNames.billingProject.value}/${testData.workspace.namespace}/policies/${UserService.canComputeUserPolicyName}/memberEmails/$email"), VerificationTimes.exactly(callCount))
     }
   }
+
+  it should "not fail horribly when workspace access groups are missing" in withTestDataServices { services =>
+    val workspaces = Await.result(services.workspaceService.ListWorkspaces, Duration.Inf) match {
+      case RequestComplete((StatusCodes.OK, responses: Seq[Option[WorkspaceListResponse]])) => responses.flatten
+      case x => fail(s"unexpected response from ListWorkspaces: $x")
+    }
+
+    val partiallyRemovedWorkspace = workspaces.head.workspace
+
+    assert(workspaces.find(_.workspace.toWorkspaceName == partiallyRemovedWorkspace.toWorkspaceName).get.owners.nonEmpty)
+
+    services.dataSource.inTransaction { dataaccess =>
+      DBIO.sequence(partiallyRemovedWorkspace.accessLevels.values.map(dataaccess.rawlsGroupQuery.delete))
+    }
+
+    val workspacesAgain = Await.result(services.workspaceService.ListWorkspaces, Duration.Inf) match {
+      case RequestComplete((StatusCodes.OK, responses: Seq[Option[WorkspaceListResponse]])) => responses.flatten
+      case x => fail(s"unexpected response from ListWorkspaces: $x")
+    }
+
+    assert(workspacesAgain.find(_.workspace.toWorkspaceName == partiallyRemovedWorkspace.toWorkspaceName).get.owners.isEmpty)
+  }
 }
