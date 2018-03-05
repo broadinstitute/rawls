@@ -101,7 +101,6 @@ object Boot extends App with LazyLogging {
 
     val jsonFactory = JacksonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
-    val billingClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("billingSecrets")))
     val gcsDAO = new HttpGoogleServicesDAO(
       false,
       clientSecrets,
@@ -113,7 +112,6 @@ object Boot extends App with LazyLogging {
       gcsConfig.getString("serviceProject"),
       gcsConfig.getString("tokenEncryptionKey"),
       gcsConfig.getString("tokenSecretsJson"),
-      billingClientSecrets,
       gcsConfig.getString("billingPemEmail"),
       gcsConfig.getString("pathToBillingPem"),
       gcsConfig.getString("billingEmail"),
