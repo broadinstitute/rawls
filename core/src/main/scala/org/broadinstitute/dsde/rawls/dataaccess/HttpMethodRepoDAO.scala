@@ -100,7 +100,7 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora], dockstoreConfig: M
 
   // TODO: if we ever want Dockstore healthchecks, we will need to split this DAO in two
   override def getStatus(implicit executionContext: ExecutionContext): Future[SubsystemStatus] = {
-    val url = s"$baseAgoraServiceURL/status"
+    val url = s"${agoraConfig.baseUrl}/status"
     // Don't retry on the status check
     httpClientUtils.executeRequestUnmarshalResponse[StatusCheckResponse](http, RequestBuilding.Get(url)) map { statusCheck =>
       SubsystemStatus(ok = statusCheck.ok, None)
