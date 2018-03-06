@@ -62,5 +62,3 @@ Revolver.enableDebugging(port = 5050, suspend = false)
 sys.env.getOrElse("JAVA_OPTS", "").split(" ").toSeq.map { opt =>
   javaOptions in reStart += opt
 }
-
-mainClass in reStart := Some("org.broadinstitute.dsde.rawls.Boot")
