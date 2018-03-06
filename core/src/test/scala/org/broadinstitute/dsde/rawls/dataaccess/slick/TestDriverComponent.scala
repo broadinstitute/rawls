@@ -351,7 +351,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val (workspaceToTestGrant, workspaceToTestGrantGroups) = makeWorkspaceToTestGrant(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName9.name, Set.empty, workspaceToTestGrantId.toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Test copying configs between workspaces
-    val (workspaceConfigCopyDestination, _) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsNameConfigCopyDestination.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceConfigCopyDestination, workspaceConfigCopyDestinationGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsNameConfigCopyDestination.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
@@ -630,6 +630,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         DBIO.sequence(workspaceInterleavedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceWorkflowFailureModeGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceToTestGrantGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceConfigCopyDestinationGroups.map(rawlsGroupQuery.save).toSeq),
         managedGroupQuery.createManagedGroup(realm),
         managedGroupQuery.createManagedGroup(realm2),
         managedGroupQuery.createManagedGroup(dbGapAuthorizedUsersGroup),
