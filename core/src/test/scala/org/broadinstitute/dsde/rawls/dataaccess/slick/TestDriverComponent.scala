@@ -294,6 +294,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", Set.empty, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", wsAttrs, Map.empty, Map.empty)
 
     val (workspace, workspaceGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+
     val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", Set.empty, UUID.randomUUID().toString, "aBucket3", currentTime(), currentTime(), "testUser",
       wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)), Map.empty, Map.empty)
     val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", Set.empty, UUID.randomUUID().toString, "aBucket4", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)

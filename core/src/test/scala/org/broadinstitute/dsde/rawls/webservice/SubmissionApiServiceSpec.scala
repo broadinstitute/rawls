@@ -102,32 +102,20 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   "SubmissionApi" should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde", "not there", "Pattern", "pattern1", None, false))) ~>
+    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde","not there","Pattern","pattern1", None, false))) ~>
       sealRoute(services.submissionRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
+      check { assertResult(StatusCodes.NotFound) {status} }
   }
 
   it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    val mcName = MethodConfigurationName("three_step", "dsde", testData.wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Pattern", Map.empty, Map("three_step.cgrep.pattern" -> AttributeString("this.input_expression")), Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val mcName = MethodConfigurationName("three_step","dsde", testData.wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Pattern", Map.empty, Map("three_step.cgrep.pattern"->AttributeString("this.input_expression")), Map.empty, AgoraMethod("dsde", "three_step", 1))
     Post(s"${testData.wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest(mcName.namespace, mcName.name, "Pattern", "pattern1", None, false))) ~>
+      check { assertResult(StatusCodes.Created) {status} }
+    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest(mcName.namespace,mcName.name,"Pattern","pattern1", None, false))) ~>
       sealRoute(services.submissionRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
+      check { assertResult(StatusCodes.NotFound) {status} }
   }
 
   private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
@@ -193,7 +181,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         runAndWait(submissionQuery.findById(UUID.fromString(submissionId)).result.head).status
       }
     } { capturedMetrics =>
-      capturedMetrics should contain(expectedSubmissionStatusMetric(wsName, SubmissionStatuses.Aborting, 1))
+      capturedMetrics should contain (expectedSubmissionStatusMetric(wsName, SubmissionStatuses.Aborting, 1))
 
       val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
       val expected = expectedHttpRequestMetrics("delete", s"$wsPathForRequestMetrics.submissions.redacted", StatusCodes.NoContent.intValue, 1)
