@@ -245,6 +245,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val wsName8 = WorkspaceName("myNamespace", "myWSwithADsMCAbortedSuccessfulSub")
     val wsName9 = WorkspaceName("myNamespace", "myWSToTestGrantPermissions")
     val wsName10 = WorkspaceName("myNamespace", "myMultiGroupADWorkspace")
+    val wsNameConfigCopyDestination = WorkspaceName("myNamespace", "configCopyDestinationWS")
     val wsInterleaved = WorkspaceName("myNamespace", "myWSToTestInterleavedSubs")
     val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWSToTestWFFailureMode")
     val workspaceToTestGrantId = UUID.randomUUID()
@@ -293,9 +294,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", Set.empty, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", wsAttrs, Map.empty, Map.empty)
 
     val (workspace, workspaceGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
-
-    val (workspace2, _) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName2.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
-
     val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", Set.empty, UUID.randomUUID().toString, "aBucket3", currentTime(), currentTime(), "testUser",
       wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)), Map.empty, Map.empty)
     val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", Set.empty, UUID.randomUUID().toString, "aBucket4", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
@@ -350,6 +348,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     // Standard workspace to test grant permissions
     val (workspaceToTestGrant, workspaceToTestGrantGroups) = makeWorkspaceToTestGrant(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName9.name, Set.empty, workspaceToTestGrantId.toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+
+    // Test copying configs between workspaces
+    val (workspaceConfigCopyDestination, _) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsNameConfigCopyDestination.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
@@ -455,8 +456,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val methodConfigName3 = agoraMethodConfigName.copy(name="noSuchName")
     val methodConfigName4 = agoraMethodConfigName.copy(name=methodConfigWorkspaceLibraryUpdate.name)
     val methodConfigNamePairCreated = MethodConfigurationNamePair(agoraMethodConfigName,methodConfigName2)
-    // Copy from "myNamespace/myWorkspace" to "myNamespace/myWorkspace2"
-    val methodConfigNamePairCreatedDockstore = MethodConfigurationNamePair(dockstoreMethodConfigName, dockstoreMethodConfigName.copy(workspaceName = wsName2))
+    // Copy from "myNamespace/myWorkspace" to "myNamespace/configCopyDestinationWS"
+    val methodConfigNamePairCreatedDockstore = MethodConfigurationNamePair(dockstoreMethodConfigName, dockstoreMethodConfigName.copy(workspaceName = wsNameConfigCopyDestination))
     val methodConfigNamePairConflict = MethodConfigurationNamePair(agoraMethodConfigName,agoraMethodConfigName)
     val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3,methodConfigName2)
     val methodConfigNamePairFromLibrary = MethodConfigurationNamePair(methodConfigName4,methodConfigName2)
@@ -573,7 +574,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val allWorkspaces = Seq(
       workspace,
-      workspace2,
       controlledWorkspace,
       workspacePublished,
       workspaceNoAttrs,
@@ -589,7 +589,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceTerminatedSubmissions,
       workspaceInterleavedSubmissions,
       workspaceWorkflowFailureMode,
-      workspaceToTestGrant)
+      workspaceToTestGrant,
+      workspaceConfigCopyDestination)
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
 
     override def save() = {
