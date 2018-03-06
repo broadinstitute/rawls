@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, RawlsUser}
+import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
 import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor, HealthMonitor}
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -30,7 +30,7 @@ import spray.json._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
-import org.broadinstitute.dsde.rawls.config.SwaggerConfig
+import org.broadinstitute.dsde.rawls.config.{MethodRepoConfig, SwaggerConfig}
 
 import scala.concurrent.duration._
 
@@ -144,7 +144,10 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       gcsDAO
     )_
 
-    val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, "", mockServer.mockServerBaseUrl, "", workbenchMetricBaseName = workbenchMetricBaseName)
+    val methodRepoDAO = new HttpMethodRepoDAO(
+      MethodRepoConfig[Agora](mockServer.mockServerBaseUrl, ""),
+      MethodRepoConfig[Dockstore](mockServer.mockServerBaseUrl, ""),
+      workbenchMetricBaseName = workbenchMetricBaseName)
 
     val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
 

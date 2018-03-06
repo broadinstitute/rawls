@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, UserInfo}
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -161,13 +161,10 @@ object Boot extends App with LazyLogging {
 
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
-    val agoraConfig = conf.getConfig("agora")
-    val dockstoreConfig = conf.getConfig("dockstore")
+
     val methodRepoDAO = new HttpMethodRepoDAO(
-      agoraConfig.getString("server"),
-      agoraConfig.getString("path"),
-      dockstoreConfig.getString("server"),
-      dockstoreConfig.getString("path"),
+      MethodRepoConfig[Agora](conf.getConfig("agora")),
+      MethodRepoConfig[Dockstore](conf.getConfig("dockstore")),
       metricsPrefix
     )
 

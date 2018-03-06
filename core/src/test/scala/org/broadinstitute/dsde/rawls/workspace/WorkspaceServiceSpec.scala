@@ -26,8 +26,9 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUt
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
-import akka.http.scaladsl.model.{ StatusCode, StatusCodes}
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 
 import scala.concurrent.duration.{Duration, FiniteDuration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -116,7 +117,10 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
-      new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, "", mockServer.mockServerBaseUrl, "", workbenchMetricBaseName = workbenchMetricBaseName),
+      new HttpMethodRepoDAO(
+        MethodRepoConfig[Agora](mockServer.mockServerBaseUrl, ""),
+        MethodRepoConfig[Dockstore](mockServer.mockServerBaseUrl, ""),
+        workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
       execServiceBatchSize,
       gcsDAO,

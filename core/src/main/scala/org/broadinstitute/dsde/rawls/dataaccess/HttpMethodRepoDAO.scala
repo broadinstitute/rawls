@@ -21,6 +21,7 @@ import akka.http.scaladsl.server.PathMatchers.Segment
 import org.broadinstitute.dsde.rawls.util.HttpClientUtilsGzipInstrumented
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.stream.Materializer
+import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -29,14 +30,14 @@ import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
 /**
  * @author tsharpe
  */
-class HttpMethodRepoDAO(baseAgoraServiceURL: String, agoraApiPath: String, baseDockstoreServiceURL: String, dockstoreApiPath: String, override val workbenchMetricBaseName: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends MethodRepoDAO with DsdeHttpDAO with InstrumentedRetry with LazyLogging with RawlsInstrumented with ServiceDAOWithStatus {
+class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora], dockstoreConfig: MethodRepoConfig[Dockstore], override val workbenchMetricBaseName: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends MethodRepoDAO with DsdeHttpDAO with InstrumentedRetry with LazyLogging with RawlsInstrumented with ServiceDAOWithStatus {
   import system.dispatcher
 
   override val http = Http(system)
   override val httpClientUtils = HttpClientUtilsGzipInstrumented()
 
-  private val agoraServiceURL = baseAgoraServiceURL + agoraApiPath
-  private val dockstoreServiceURL = baseDockstoreServiceURL + dockstoreApiPath
+  private val agoraServiceURL = agoraConfig.serviceUrl
+  private val dockstoreServiceURL = dockstoreConfig.serviceUrl
   protected val statusUrl = s"$agoraServiceURL/status"
 
   private lazy implicit val baseMetricBuilder: ExpandedMetricBuilder =
