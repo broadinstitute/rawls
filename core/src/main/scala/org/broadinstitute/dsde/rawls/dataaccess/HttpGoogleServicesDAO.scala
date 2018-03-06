@@ -597,18 +597,34 @@ class HttpGoogleServicesDAO(
     val groups = directory.groups
 
     for {
-      googleGroup <- retryWhen500orGoogleError (() => {
+      // first verify it does not exist
+      // then try to create it, sometimes we get a 503 error creating the group but it actually gets created
+      // so we get a 409 on subsequent retries - because we have already check it does not exist assume that any
+      // 409 means we created it
+      // last verify it is there
+      preexistingGroup <- retryWithRecoverWhen500orGoogleError( () => {
+        Option(executeGoogleRequest(groups.get(newGroup.groupEmail.value)))
+      }) {
+        case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound => None
+      }
+
+      _ <- if (preexistingGroup.isDefined) Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"google group ${newGroup.groupEmail.value} already exists"))) else Future.successful(())
+
+      _ <- retryWithRecoverWhen500orGoogleError (() => {
         // group names have a 60 char limit
         executeGoogleRequest(groups.insert(new Group().setEmail(newGroup.groupEmail.value).setName(newGroup.groupName.value.take(60))))
-      })
+        () // need this because in the recover case below we can't create a Group object to return
+      }) {
+        case e: HttpResponseException if e.getStatusCode == StatusCodes.Conflict =>
+      }
 
       // GAWB-853 verify that the group exists by retrying to get group until success or too many tries
       _ <- retryWhen500orGoogleError (() => {
-        executeGoogleRequest(groups.get(googleGroup.getEmail))
+        executeGoogleRequest(groups.get(newGroup.groupEmail.value))
       }) recover {
         case t: Throwable =>
         // log but ignore any error in the getter, downstream code will fail or not as appropriate
-        logger.debug(s"could not verify that google group $googleGroup exists", t)
+        logger.debug(s"could not verify that google group ${newGroup.groupEmail.value} exists", t)
       }
 
     } yield newGroup

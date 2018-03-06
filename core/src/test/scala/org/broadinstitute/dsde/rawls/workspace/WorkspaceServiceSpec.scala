@@ -1066,12 +1066,15 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "not fail horribly when workspace access groups are missing" in withTestDataServices { services =>
+    val workspaceName = UUID.randomUUID().toString
+    Await.result(services.workspaceService.CreateWorkspace(WorkspaceRequest(testData.billingProject.projectName.value, workspaceName, Map.empty, None)), Duration.Inf)
+
     val workspaces = Await.result(services.workspaceService.ListWorkspaces, Duration.Inf) match {
       case RequestComplete((StatusCodes.OK, responses: Seq[Option[WorkspaceListResponse]])) => responses.flatten
       case x => fail(s"unexpected response from ListWorkspaces: $x")
     }
 
-    val partiallyRemovedWorkspace = workspaces.head.workspace
+    val partiallyRemovedWorkspace = workspaces.find(_.workspace.name == workspaceName).get.workspace
 
     assert(workspaces.find(_.workspace.toWorkspaceName == partiallyRemovedWorkspace.toWorkspaceName).get.owners.nonEmpty)
 
