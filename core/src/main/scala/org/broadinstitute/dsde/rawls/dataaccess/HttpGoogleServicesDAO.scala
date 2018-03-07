@@ -605,7 +605,7 @@ class HttpGoogleServicesDAO(
       preexistingGroup <- retryWithRecoverWhen500orGoogleError( () => {
         Option(executeGoogleRequest(groups.get(newGroup.groupEmail.value)))
       }) {
-        case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound => None
+        case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
       }
 
       _ <- if (preexistingGroup.isDefined) Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"google group ${newGroup.groupEmail.value} already exists"))) else Future.successful(())
@@ -615,7 +615,7 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(groups.insert(new Group().setEmail(newGroup.groupEmail.value).setName(newGroup.groupName.value.take(60))))
         () // need this because in the recover case below we can't create a Group object to return
       }) {
-        case e: HttpResponseException if e.getStatusCode == StatusCodes.Conflict =>
+        case e: HttpResponseException if e.getStatusCode == StatusCodes.Conflict.intValue =>
       }
 
       // GAWB-853 verify that the group exists by retrying to get group until success or too many tries
