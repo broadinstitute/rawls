@@ -73,6 +73,8 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
         val userBWorkspace = Rawls.workspaces.list()(studentBToken)
         userBWorkspace should include(workspaceNameB)
 
+        //TODO: this would be better as a cleanUp, but due to issues with ordering, the GPAlloc'd project
+        //is released before the cleanUp functions are able to run, resulting in stranded users
         Orchestration.billing.removeUserFromBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
         Orchestration.billing.removeUserFromBillingProject(projectName, studentB.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
 
