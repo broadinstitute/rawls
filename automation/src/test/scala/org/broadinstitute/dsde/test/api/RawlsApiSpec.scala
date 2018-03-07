@@ -17,7 +17,6 @@ import scala.concurrent.duration._
 
 class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtures {
   // We only want to see the users' workspaces so we can't be Project Owners
-  println(UserPool.allUsers)
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
   val studentAToken: AuthToken = studentA.makeAuthToken()
   val studentBToken: AuthToken = studentB.makeAuthToken()
@@ -33,7 +32,6 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
 
   "Rawls" - {
     "pets should have same access as their owners" in {
-
       withCleanBillingProject(owner) { projectName =>
 
         //Create workspaces for Students
