@@ -33,53 +33,52 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
   "Rawls" - {
     "pets should have same access as their owners" in {
       withCleanBillingProject(owner) { projectName =>
+        withCleanUp {
+          //Create workspaces for Students
 
-        //Create workspaces for Students
+          Orchestration.billing.addUserToBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
+          register cleanUp Orchestration.billing.removeUserFromBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
 
-        Orchestration.billing.addUserToBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
-        Orchestration.billing.addUserToBillingProject(projectName, studentB.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
+          Orchestration.billing.addUserToBillingProject(projectName, studentB.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
+          register cleanUp Orchestration.billing.removeUserFromBillingProject(projectName, studentB.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
 
-        val uuid = UUID.randomUUID().toString
+          val uuid = UUID.randomUUID().toString
 
-        val workspaceNameA = "rawls_test_User_A_Workspace" + uuid
-        Rawls.workspaces.create(projectName, workspaceNameA)(studentAToken)
-        register cleanUp Rawls.workspaces.delete(projectName, workspaceNameA)(studentAToken)
+          val workspaceNameA = "rawls_test_User_A_Workspace" + uuid
+          Rawls.workspaces.create(projectName, workspaceNameA)(studentAToken)
+          register cleanUp Rawls.workspaces.delete(projectName, workspaceNameA)(studentAToken)
 
-        val workspaceNameB = "rawls_test_User_B_Workspace" + uuid
-        Rawls.workspaces.create(projectName, workspaceNameB)(studentBToken)
-        register cleanUp Rawls.workspaces.delete(projectName, workspaceNameB)(studentBToken)
+          val workspaceNameB = "rawls_test_User_B_Workspace" + uuid
+          Rawls.workspaces.create(projectName, workspaceNameB)(studentBToken)
+          register cleanUp Rawls.workspaces.delete(projectName, workspaceNameB)(studentBToken)
 
-        //Remove the pet SA for a clean test environment
-        val userAStatus = Sam.user.status()(studentAToken).get
-        Sam.removePet(projectName, userAStatus.userInfo)
-        findPetInGoogle(projectName, userAStatus.userInfo) shouldBe None
+          //Remove the pet SA for a clean test environment
+          val userAStatus = Sam.user.status()(studentAToken).get
+          Sam.removePet(projectName, userAStatus.userInfo)
+          findPetInGoogle(projectName, userAStatus.userInfo) shouldBe None
 
-        //Validate that the pet SA has been created
-        val petAccountEmail = Sam.user.petServiceAccountEmail(projectName)(studentAToken)
-        petAccountEmail.value should not be userAStatus.userInfo.userEmail
-        findPetInGoogle(projectName, userAStatus.userInfo).map(_.email) shouldBe Some(petAccountEmail)
+          //Validate that the pet SA has been created
+          val petAccountEmail = Sam.user.petServiceAccountEmail(projectName)(studentAToken)
+          petAccountEmail.value should not be userAStatus.userInfo.userEmail
+          findPetInGoogle(projectName, userAStatus.userInfo).map(_.email) shouldBe Some(petAccountEmail)
 
-        val petAuthToken = ServiceAccountAuthTokenFromJson(Sam.user.petServiceAccountKey(projectName)(studentAToken))
+          val petAuthToken = ServiceAccountAuthTokenFromJson(Sam.user.petServiceAccountKey(projectName)(studentAToken))
 
-        //TODO: Deserialize the json instead of checking for substring
-        val petWorkspace = Rawls.workspaces.list()(petAuthToken)
-        petWorkspace should include(workspaceNameA)
-        petWorkspace should not include (workspaceNameB)
+          //TODO: Deserialize the json instead of checking for substring
+          val petWorkspace = Rawls.workspaces.list()(petAuthToken)
+          petWorkspace should include(workspaceNameA)
+          petWorkspace should not include (workspaceNameB)
 
-        val userAWorkspace = Rawls.workspaces.list()(studentAToken)
-        userAWorkspace should include(workspaceNameA)
-        userAWorkspace should not include (workspaceNameB)
+          val userAWorkspace = Rawls.workspaces.list()(studentAToken)
+          userAWorkspace should include(workspaceNameA)
+          userAWorkspace should not include (workspaceNameB)
 
-        val userBWorkspace = Rawls.workspaces.list()(studentBToken)
-        userBWorkspace should include(workspaceNameB)
+          val userBWorkspace = Rawls.workspaces.list()(studentBToken)
+          userBWorkspace should include(workspaceNameB)
 
-        //TODO: this would be better as a cleanUp, but due to issues with ordering, the GPAlloc'd project
-        //is released before the cleanUp functions are able to run, resulting in stranded users
-        Orchestration.billing.removeUserFromBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
-        Orchestration.billing.removeUserFromBillingProject(projectName, studentB.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
-
-        Sam.removePet(projectName, userAStatus.userInfo)
-        findPetInGoogle(projectName, userAStatus.userInfo) shouldBe None
+          Sam.removePet(projectName, userAStatus.userInfo)
+          findPetInGoogle(projectName, userAStatus.userInfo) shouldBe None
+        }
       }
     }
   }
