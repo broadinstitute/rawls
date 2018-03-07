@@ -30,7 +30,7 @@ import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
 /**
  * @author tsharpe
  */
-class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora], dockstoreConfig: MethodRepoConfig[Dockstore], override val workbenchMetricBaseName: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends MethodRepoDAO with DsdeHttpDAO with InstrumentedRetry with LazyLogging with RawlsInstrumented with ServiceDAOWithStatus {
+class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConfig: MethodRepoConfig[Dockstore.type], override val workbenchMetricBaseName: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends MethodRepoDAO with DsdeHttpDAO with InstrumentedRetry with LazyLogging with RawlsInstrumented with ServiceDAOWithStatus {
   import system.dispatcher
 
   override val http = Http(system)

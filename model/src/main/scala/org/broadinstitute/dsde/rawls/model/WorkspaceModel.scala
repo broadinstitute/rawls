@@ -317,12 +317,10 @@ sealed trait MethodRepository {
   val scheme: String
 }
 
-case class Agora()
 case object Agora extends MethodRepository {
   override val scheme: String = "agora"
 }
 
-case class Dockstore()
 case object Dockstore extends MethodRepository {
   override val scheme: String = "dockstore"
 }

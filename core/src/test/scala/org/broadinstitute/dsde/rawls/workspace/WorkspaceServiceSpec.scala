@@ -118,8 +118,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
-        MethodRepoConfig[Agora](mockServer.mockServerBaseUrl, ""),
-        MethodRepoConfig[Dockstore](mockServer.mockServerBaseUrl, ""),
+        MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+        MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
         workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
       execServiceBatchSize,

@@ -163,8 +163,8 @@ object Boot extends App with LazyLogging {
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
 
     val methodRepoDAO = new HttpMethodRepoDAO(
-      MethodRepoConfig[Agora](conf.getConfig("agora")),
-      MethodRepoConfig[Dockstore](conf.getConfig("dockstore")),
+      MethodRepoConfig.apply[Agora.type](conf.getConfig("agora")),
+      MethodRepoConfig.apply[Dockstore.type](conf.getConfig("dockstore")),
       metricsPrefix
     )
 

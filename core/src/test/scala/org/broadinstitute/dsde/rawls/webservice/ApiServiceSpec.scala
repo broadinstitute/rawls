@@ -145,8 +145,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     )_
 
     val methodRepoDAO = new HttpMethodRepoDAO(
-      MethodRepoConfig[Agora](mockServer.mockServerBaseUrl, ""),
-      MethodRepoConfig[Dockstore](mockServer.mockServerBaseUrl, ""),
+      MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+      MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
       workbenchMetricBaseName = workbenchMetricBaseName)
 
     val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
