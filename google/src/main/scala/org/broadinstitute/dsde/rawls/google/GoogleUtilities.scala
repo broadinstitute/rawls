@@ -26,14 +26,7 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
 
   protected def when500orGoogleError(throwable: Throwable): Boolean = {
     throwable match {
-      case t: GoogleJsonResponseException => {
-        (t.getStatusCode == 403 && t.getDetails.getErrors.head.getDomain.equalsIgnoreCase("usageLimits")) ||
-          (t.getStatusCode == 400 && t.getDetails.getErrors.head.getReason.equalsIgnoreCase("invalid")) ||
-          t.getStatusCode == 404 ||
-          t.getStatusCode == 429 ||
-          t.getStatusCode/100 == 5
-      }
-      case t: HttpResponseException => t.getStatusCode/100 == 5
+      case t: HttpResponseException => t.getStatusCode/100 == 5 || t.getStatusCode/100 == 4
       case ioe: IOException => true
       case _ => false
     }
