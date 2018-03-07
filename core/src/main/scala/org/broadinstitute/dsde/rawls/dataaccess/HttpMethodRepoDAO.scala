@@ -48,14 +48,6 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
     Seq((Slash ~ "api" ~ Slash ~ "v1").? / ("configurations" | "methods") / Segment / Segment / Segment)
   )
 
-  private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
-    retry(when500) { () =>
-      pipeline[Option[AgoraEntity]](userInfo) apply Get(url) recover {
-        case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
-      }
-    }
-  }
-
   private def postAgoraEntity( url: String, agoraEntity: AgoraEntity, userInfo: UserInfo): Future[AgoraEntity] = {
     retry(when500) { () => pipeline[AgoraEntity](userInfo) apply Post(url, agoraEntity) }
   }
@@ -69,15 +61,29 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
       case agoraMethod: AgoraMethod =>
         getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo)
       case dockstoreMethod: DockstoreMethod =>
-        getDockstoreEntity(dockstoreMethod) flatMap { response: GA4GHToolDescriptor =>
-          // TODO: re-using AgoraEntity feels sketchy to me. It seems to work without any changes, but should we create a DockstoreEntity?
-          Future(Some(AgoraEntity(payload = Some(response.descriptor), entityType = Some(AgoraEntityType.Workflow))))
+        getDockstoreMethod(dockstoreMethod) flatMap { response: Option[GA4GHTool] =>
+          response match {
+            case Some(tool) =>
+              // TODO: re-using AgoraEntity feels sketchy to me. It seems to work without any changes, but should we create a DockstoreEntity?
+              Future(Some(AgoraEntity(payload = Some(tool.descriptor), entityType = Some(AgoraEntityType.Workflow))))
+            case None => Future(None)
+          }
         }
     }
   }
 
-  private def getDockstoreEntity(method: DockstoreMethod): Future[GA4GHToolDescriptor] = {
-    httpClientUtils.executeRequestUnmarshalResponse[GA4GHToolDescriptor](http, Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)))
+  private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
+    retry(when500) { () =>
+      pipeline[Option[AgoraEntity]](userInfo) apply Get(url) recover {
+        case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
+      }
+    }
+  }
+
+  private def getDockstoreMethod(method: DockstoreMethod): Future[Option[GA4GHTool]] = {
+    pipeline[Option[GA4GHTool]] apply Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)) recover {
+      case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
+    }
   }
 
   override def postMethodConfig(namespace: String, name: String, methodConfiguration: MethodConfiguration, userInfo: UserInfo): Future[AgoraEntity] = {
