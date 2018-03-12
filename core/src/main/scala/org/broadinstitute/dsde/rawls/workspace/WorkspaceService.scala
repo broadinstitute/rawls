@@ -1581,6 +1581,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
 
+      //if the user only has read access, it doesn't matter if their pet doesn't have access because it will never be used. so we skip over it.
       resultsForPet <- if (maxAccessLevel >= WorkspaceAccessLevels.Write) {
         gcsDAO.diagnosticBucketRead(UserInfo(userInfo.userEmail, OAuth2BearerToken(accessToken), 60, userInfo.userSubjectId), workspace.bucketName)
       } else Future.successful(None)
