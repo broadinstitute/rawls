@@ -152,7 +152,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def getMaximumAccessLevel(user: RawlsUser, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadWriteAction[WorkspaceAccessLevel] = {
+  def getMaximumAccessLevel(user: RawlsUserRef, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadWriteAction[WorkspaceAccessLevel] = {
     val accessLevels = workspaceContext.workspace.authDomainACLs.map { case (accessLevel, groupRef) =>
       dataAccess.rawlsGroupQuery.loadGroupIfMember(groupRef, user).map {
         case Some(_) => accessLevel
@@ -1569,9 +1569,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def checkBucketReadAccess(workspaceName: WorkspaceName) = {
     for {
-      workspace <- dataSource.inTransaction { dataAccess =>
+      (workspace, maxAccessLevel) <- dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-          DBIO.successful(workspaceContext.workspace)
+          getMaximumAccessLevel(RawlsUserRef(userInfo.userSubjectId), workspaceContext, dataAccess).map { accessLevel =>
+            (workspaceContext.workspace, accessLevel)
+          }
         }
       }
 
@@ -1579,7 +1581,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
 
-      resultsForPet <- gcsDAO.diagnosticBucketRead(UserInfo(userInfo.userEmail, OAuth2BearerToken(accessToken), 60, userInfo.userSubjectId), workspace.bucketName)
+      resultsForPet <- if (maxAccessLevel >= WorkspaceAccessLevels.Write) {
+        gcsDAO.diagnosticBucketRead(UserInfo(userInfo.userEmail, OAuth2BearerToken(accessToken), 60, userInfo.userSubjectId), workspace.bucketName)
+      } else Future.successful(None)
       resultsForUser <- gcsDAO.diagnosticBucketRead(userInfo, workspace.bucketName)
     } yield {
       (resultsForUser, resultsForPet) match {
