@@ -152,7 +152,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def getMaximumAccessLevel(user: RawlsUserRef, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadWriteAction[WorkspaceAccessLevel] = {
+  def getMaximumAccessLevel(user: RawlsUser, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadWriteAction[WorkspaceAccessLevel] = {
     val accessLevels = workspaceContext.workspace.authDomainACLs.map { case (accessLevel, groupRef) =>
       dataAccess.rawlsGroupQuery.loadGroupIfMember(groupRef, user).map {
         case Some(_) => accessLevel
@@ -1571,7 +1571,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     for {
       (workspace, maxAccessLevel) <- dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-          getMaximumAccessLevel(RawlsUserRef(userInfo.userSubjectId), workspaceContext, dataAccess).map { accessLevel =>
+          getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess).map { accessLevel =>
             (workspaceContext.workspace, accessLevel)
           }
         }
