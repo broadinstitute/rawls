@@ -70,7 +70,7 @@ object Dependencies {
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
 
-  val cromwellWdl: ModuleID = ("org.broadinstitute" %% "cromwell-wdl" % cromwellVersion
+  val cromwellWdl: ModuleID = ("org.broadinstitute" %% "cromwell-wdl-model-draft2" % cromwellVersion
     exclude("org.typelevel", "cats_2.12")
     exclude("io.spray", "spray-json_2.12")
     exclude("io.spray", "akka-parsing_2.12")
