@@ -9,7 +9,7 @@ object Dependencies {
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
-  val cromwellVersion = "31-710c193"
+  val cromwellVersion = "31-8a54e0a"
 
   //UPDATE THIS WITH FINAL HASH
   val serviceTestV = "0.4-d072389"
