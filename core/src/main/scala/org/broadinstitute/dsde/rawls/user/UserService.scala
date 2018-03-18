@@ -58,7 +58,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def GetUserGroup(groupRef: RawlsGroupRef) = getUserGroup(groupRef)
 
   def ListBillingProjects = listBillingProjects
-  def AdminDeleteBillingProject(projectName: RawlsBillingProjectName) = asFCAdmin { deleteBillingProject(projectName) }
+  def AdminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { deleteBillingProject(projectName, ownerInfo) }
   def AdminRegisterBillingProject(xfer: RawlsBillingProjectTransfer) = asFCAdmin { registerBillingProject(xfer) }
   def AdminUnregisterBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { unregisterBillingProject(projectName, ownerInfo) }
 
@@ -264,9 +264,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-    // delete actual project in google
-    gcsDAO.deleteProject(projectName).map(_ => RequestComplete(StatusCodes.OK))
+  def deleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
+    // unregister then delete actual project in google
+    for {
+      _ <- unregisterBillingProject(projectName, ownerInfo)
+      _ <- gcsDAO.deleteProject(projectName)
+    } yield RequestComplete(StatusCodes.NoContent)
   }
 
   //very sad: have to pass the new owner's token in the POST body (oh no!)

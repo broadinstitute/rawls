@@ -36,7 +36,11 @@ trait AdminApiService extends UserInfoDirectives {
   val adminRoutes: server.Route = requireUserInfo() { userInfo =>
     path("admin" / "billing" / Segment) { (projectId) =>
       delete {
-        complete { userServiceConstructor(userInfo).AdminDeleteBillingProject(RawlsBillingProjectName(projectId)) }
+        entity(as[Map[String, String]]) { ownerInfo =>
+          complete {
+            userServiceConstructor(userInfo).AdminDeleteBillingProject(RawlsBillingProjectName(projectId), ownerInfo)
+          }
+        }
       }
     } ~
     path("admin" / "project" / "registration") {
