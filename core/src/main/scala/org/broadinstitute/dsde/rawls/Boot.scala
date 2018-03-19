@@ -116,7 +116,8 @@ object Boot extends App with LazyLogging {
       gcsConfig.getString("pathToBillingPem"),
       gcsConfig.getString("billingEmail"),
       gcsConfig.getInt("bucketLogsMaxAge"),
-      workbenchMetricBaseName = metricsPrefix
+      workbenchMetricBaseName = metricsPrefix,
+      proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", "PROXY_")
     )
 
     val pubSubDAO = new HttpGooglePubSubDAO(
