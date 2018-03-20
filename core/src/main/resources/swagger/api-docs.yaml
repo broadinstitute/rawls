@@ -1035,17 +1035,27 @@ paths:
       operationId: admin_statistics_get
       parameters:
         - in: query
-          description: start date (YYYY-MM-DD)
+          description: start date (YYYY-MM-DD, or any string valid for Java's DateTime.parse())
           name: startDate
           required: true
           type: string
           format: date
         - in: query
-          description: end date (YYYY-MM-DD)
+          description: end date (YYYY-MM-DD, or any string valid for Java's DateTime.parse())
           name: endDate
           required: true
           type: string
           format: date
+        - in: query
+          description: namespace to query when calculating entity statistics; leave blank for all
+          name: workspaceNamespace
+          required: false
+          type: string
+        - in: query
+          description: name to query when calculating entity statistics; leave blank for all
+          name: workspaceName
+          required: false
+          type: string
       security:
         - authorization:
             - openid

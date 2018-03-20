@@ -185,8 +185,8 @@ trait AdminApiService extends UserInfoDirectives {
     } ~
     path("admin" / "statistics") {
       get {
-        parameters('startDate, 'endDate) { (startDate, endDate) =>
-          complete { statisticsServiceConstructor(userInfo).GetStatistics(startDate, endDate) }
+        parameters('startDate, 'endDate, 'workspaceNamespace.?, 'workspaceName.?) { (startDate, endDate, workspaceNamespace, workspaceName) =>
+          complete { statisticsServiceConstructor(userInfo).GetStatistics(startDate, endDate, workspaceNamespace, workspaceName) }
         }
       }
     }
