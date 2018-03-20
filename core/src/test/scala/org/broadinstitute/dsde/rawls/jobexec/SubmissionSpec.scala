@@ -189,6 +189,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
       val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")
 
+      val marthaDAO = new HttpMarthaDAO()
+
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
@@ -217,6 +219,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         gcsDAO,
         samDAO,
         notificationDAO,
+        marthaDAO,
         userServiceConstructor,
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,

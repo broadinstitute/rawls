@@ -6,14 +6,17 @@ import org.broadinstitute.dsde.rawls.model._
 import scala.collection.immutable.Map
 import org.scalatest.{Matchers, WordSpecLike}
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.dataaccess.{MarthaDAO, SlickWorkspaceContext}
 import java.util.UUID
 
 import spray.json.JsArray
-import wom.callable.Callable.{InputDefinition, OptionalInputDefinition, InputDefinitionWithDefault, RequiredInputDefinition}
-import wom.types.{WomArrayType, WomIntegerType, WomOptionalType}
+import wdl.{FullyQualifiedName, WdlWorkflow}
+import wom.callable.Callable.{InputDefinition, OptionalInputDefinition, RequiredInputDefinition}
+import wom.graph.LocalName
+import wom.types.{WomArrayType, WomFileType, WomIntegerType, WomOptionalType}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDriverComponent {
 
@@ -193,6 +196,9 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     withCustomTestDatabaseInternal(configData)(testCode)
   }
 
+  // Simple passthrough MarthaDAO
+  val marthaDAO: MarthaDAO = (v) => Future.successful(v)
+
   //Test harness to call resolveInputsForEntities without having to go via the WorkspaceService
   def testResolveInputs(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, dataAccess: DataAccess)
                        (implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
@@ -201,7 +207,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         case scala.util.Failure(exception) =>
           DBIO.failed(exception)
         case scala.util.Success(methodInputs) =>
-          MethodConfigResolver.evaluateInputExpressions(workspaceContext, methodInputs, entityRecs, dataAccess)
+          MethodConfigResolver.evaluateInputExpressions(workspaceContext, methodInputs, entityRecs, dataAccess, marthaDAO)
       }
     }
   }
@@ -368,6 +374,37 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       assert(badTemplate.isFailure)
       intercept[RawlsException] {
         badTemplate.get
+      }
+    }
+
+    "resolve dos:// attributes and leave others alone" in {
+      val marthaDAO: MarthaDAO = (v) => Future.successful(s"gs://$v")
+      val values = Seq(AttributeString("dos://foo"), AttributeString("gs://bar"))
+      Await.result(MethodConfigResolver.mapDosToGs(values, marthaDAO), Duration.Inf) shouldBe Seq(AttributeString("gs://dos://foo"), AttributeString("gs://bar"))
+    }
+
+    "resolve dos:// URIs when evaluating input expressions" in {
+      val entity = Entity("sample1", "Sample",
+        Map(AttributeName.withDefaultNS("fooFile") -> AttributeString("dos://foo")))
+      val fileArgName = "fooFileArg"
+      val fileArgExpression = "this.fooFile"
+      val config = MethodConfiguration("config_namespace", "config1", "Sample",
+        Map.empty, Map(fileArgName -> AttributeString(fileArgExpression)), Map.empty, dummyMethod)
+
+      withWorkspaceContext(workspace) { workspaceContext =>
+        withCustomTestDatabase(() => DBIO.seq(
+          workspaceQuery.save(workspace),
+          entityQuery.save(workspaceContext, entity),
+          methodConfigurationQuery.create(workspaceContext, config)
+        )) { ds =>
+          val dataAccess = ds.dataAccess
+          val methodInputs = Seq(MethodConfigResolver.MethodInput(RequiredInputDefinition(LocalName(fileArgName), WomFileType), fileArgExpression))
+
+          val inputExpressions = runAndWait(dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceId, entity.entityType, entity.name).result flatMap { entityRecs =>
+            MethodConfigResolver.evaluateInputExpressions(workspaceContext, methodInputs, entityRecs, dataAccess, (v) => Future.successful(s"gs://$v"))
+          })
+          inputExpressions shouldBe Map(entity.name -> Seq(SubmissionValidationValue(Some(AttributeString("gs://dos://foo")), None, fileArgName)))
+        }
       }
     }
   }
