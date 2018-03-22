@@ -435,7 +435,7 @@ trait WorkflowComponent {
     }
 
     def findWorkflowsForAbort(submissionId: UUID): WorkflowQueryType = {
-      val statuses: Traversable[String] = WorkflowStatuses.runningStatuses map(_.toString)
+      val statuses: Traversable[String] = WorkflowStatuses.abortableStatuses map(_.toString)
       filter(wf => wf.submissionId === submissionId && wf.externalId.isDefined && wf.status.inSetBind(statuses) )
     }
 
