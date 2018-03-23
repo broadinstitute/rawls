@@ -5,15 +5,18 @@ val compileAndTest = "compile->compile;test->test"
 
 lazy val workbenchUtil = project.in(file("util"))
   .settings(utilSettings:_*)
+  .disablePlugins(RevolverPlugin)
   .withTestSettings
 
 lazy val rawlsModel = project.in(file("model"))
   .settings(modelSettings:_*)
+  .disablePlugins(RevolverPlugin)
   .withTestSettings
 
 lazy val workbenchMetrics = project.in(file("metrics"))
   .settings(metricsSettings:_*)
   .dependsOn(workbenchUtil % compileAndTest)
+  .disablePlugins(RevolverPlugin)
   .withTestSettings
 
 lazy val workbenchGoogle = project.in(file("google"))
@@ -21,6 +24,7 @@ lazy val workbenchGoogle = project.in(file("google"))
   .dependsOn(rawlsModel)
   .dependsOn(workbenchUtil % compileAndTest)
   .dependsOn(workbenchMetrics % compileAndTest)
+  .disablePlugins(RevolverPlugin)
   .withTestSettings
 
 lazy val rawlsCore = project.in(file("core"))
@@ -29,6 +33,7 @@ lazy val rawlsCore = project.in(file("core"))
   .dependsOn(rawlsModel)
   .dependsOn(workbenchGoogle)
   .dependsOn(workbenchMetrics % compileAndTest)
+  .disablePlugins(RevolverPlugin)
   .withTestSettings
 
 lazy val rawls = project.in(file("."))
@@ -45,6 +50,8 @@ lazy val rawls = project.in(file("."))
 // This appears to do some magic to configure itself. It consistently fails in some environments
 // unless it is loaded after the settings definitions above.
 Revolver.settings
+
+mainClass in reStart := Some("org.broadinstitute.dsde.rawls.Boot")
 
 Revolver.enableDebugging(port = 5050, suspend = false)
 

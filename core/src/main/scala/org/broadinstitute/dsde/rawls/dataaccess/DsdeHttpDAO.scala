@@ -27,6 +27,10 @@ trait DsdeHttpDAO extends LazyLogging {
   protected def authHeader(userInfo: UserInfo): HttpHeader = authHeader(userInfo.accessToken)
   protected def authHeader(accessToken: OAuth2BearerToken): HttpHeader = Authorization(accessToken)
 
+  protected def executeRequest[T](httpRequest: HttpRequest)(implicit um: Unmarshaller[ResponseEntity, T]): Future[T] = {
+    httpClientUtils.executeRequestUnmarshalResponse[T](http, httpRequest)
+  }
+
   protected def executeRequestAsUser[T](userInfo: UserInfo)(httpRequest: HttpRequest)(implicit um: Unmarshaller[ResponseEntity, T]): Future[T] = {
     httpClientUtils.executeRequestUnmarshalResponse[T](http, httpClientUtils.addHeader(httpRequest, authHeader(userInfo)))
   }
@@ -36,6 +40,8 @@ trait DsdeHttpDAO extends LazyLogging {
   }
 
   protected def pipeline[A](userInfo: UserInfo)(implicit um: Unmarshaller[ResponseEntity, A]) = executeRequestAsUser[A](userInfo) _
+
+  protected def pipeline[A](implicit um: Unmarshaller[ResponseEntity, A]) = executeRequest[A] _
 
   protected def when500(throwable: Throwable ): Boolean = {
     throwable match {

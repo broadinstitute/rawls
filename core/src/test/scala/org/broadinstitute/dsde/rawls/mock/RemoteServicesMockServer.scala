@@ -200,6 +200,22 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
           .withStatusCode(StatusCodes.NotFound.intValue)
       )
 
+    // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
+    val dockstoreResponse =
+      s"""{"type":"WDL","descriptor":"${threeStepWDL.replace("three_step", "three_step_dockstore").replace("\n","\\n")}","url":"bogus"}"""
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        // Apparently the mock server url-decodes paths before comparing
+        .withPath("/ga4gh/v1/tools/#workflow/dockstore-method-path/versions/dockstore-method-version/WDL/descriptor")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(dockstoreResponse)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
     // Saving invalid WDL as a Method Repo Method is allowed
 
     val badSyntaxWDL = threeStepWDL.replace("workflow", "not-a-workflow")
@@ -239,6 +255,20 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       response()
         .withHeaders(jsonHeader)
         .withBody(noInputMethod.toJson.prettyPrint)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    val noInputMethodDockstoreResponse =
+      s"""{"type":"WDL","descriptor":"${noInputWdl.replace("t1", "t1_dockstore").replace("\"", "\\\"").replace("\n","\\n")}","url":"bogus"}"""
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/ga4gh/v1/tools/#workflow/dockstore-no-input-path/versions/dockstore-no-input-version/WDL/descriptor")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(noInputMethodDockstoreResponse)
         .withStatusCode(StatusCodes.OK.intValue)
     )
 

@@ -24,6 +24,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
+import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import spray.json._
 
 import scala.concurrent.Await
@@ -211,7 +212,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val maxActiveWorkflowsPerUser = 2
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
-        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+        new HttpMethodRepoDAO(
+          MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+          MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
+          workbenchMetricBaseName = workbenchMetricBaseName),
         execServiceCluster,
         execServiceBatchSize,
         gcsDAO,
