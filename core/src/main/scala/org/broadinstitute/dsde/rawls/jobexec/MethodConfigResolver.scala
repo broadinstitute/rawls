@@ -1,5 +1,5 @@
 package org.broadinstitute.dsde.rawls.jobexec
-import org.broadinstitute.dsde.rawls.dataaccess.{MarthaDAO, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.model._
@@ -8,12 +8,11 @@ import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
 import wdl4s.parser.WdlParser.SyntaxError
 import wom.callable.Callable.InputDefinition
-import wom.types.{WomArrayType, WomOptionalType}
+import wom.types.{WomType, WomArrayType, WomOptionalType}
 import wdl.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow}
 import wdl.WdlNamespace.httpResolver
 
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 
 object MethodConfigResolver {
@@ -21,47 +20,36 @@ object MethodConfigResolver {
   val multipleResultError  = "Expected single value for workflow input, but evaluated result set had multiple values"
   val missingMandatoryValueError  = "Mandatory workflow input is not specified in method config"
 
-  def mapDosToGs(value: AttributeValue, marthaDAO: MarthaDAO)(implicit executionContext: ExecutionContext): Future[AttributeValue] = {
-    value match {
-      case s: AttributeString if s.value.matches(marthaDAO.dosUriPattern) => marthaDAO.dosToGs(s.value) map { AttributeString }
-      case v: AttributeValue => Future.successful[AttributeValue](v)
-    }
-  }
-
-  def mapDosToGs(values: Iterable[AttributeValue], marthaDAO: MarthaDAO)(implicit executionContext: ExecutionContext): Future[Seq[AttributeValue]] = {
-    Future.traverse(values.toSeq) { mapDosToGs(_, marthaDAO) }
-  }
-
-  private def getSingleResult(inputName: String, seq: Iterable[AttributeValue], optional: Boolean, marthaDAO: MarthaDAO)(implicit executionContext: ExecutionContext): Future[SubmissionValidationValue] = {
+  private def getSingleResult(inputName: String, seq: Iterable[AttributeValue], optional: Boolean): SubmissionValidationValue = {
     def handleEmpty = if (optional) None else Some(emptyResultError)
     seq match {
-      case Seq() => Future.successful(SubmissionValidationValue(None, handleEmpty, inputName))
-      case Seq(null) => Future.successful(SubmissionValidationValue(None, handleEmpty, inputName))
-      case Seq(AttributeNull) => Future.successful(SubmissionValidationValue(None, handleEmpty, inputName))
-      case Seq(singleValue) => mapDosToGs(singleValue, marthaDAO) map { v => SubmissionValidationValue(Some(v), None, inputName) }
-      case multipleValues => mapDosToGs(multipleValues, marthaDAO) map { vs => SubmissionValidationValue(Some(AttributeValueList(vs)), Some(multipleResultError), inputName) }
+      case Seq() => SubmissionValidationValue(None, handleEmpty, inputName)
+      case Seq(null) => SubmissionValidationValue(None, handleEmpty, inputName)
+      case Seq(AttributeNull) => SubmissionValidationValue(None, handleEmpty, inputName)
+      case Seq(singleValue) => SubmissionValidationValue(Some(singleValue), None, inputName)
+      case multipleValues => SubmissionValidationValue(Some(AttributeValueList(multipleValues.toSeq)), Some(multipleResultError), inputName)
     }
   }
 
-  private def getArrayResult(inputName: String, seq: Iterable[AttributeValue], marthaDAO: MarthaDAO)(implicit executionContext: ExecutionContext): Future[SubmissionValidationValue] = {
+  private def getArrayResult(inputName: String, seq: Iterable[AttributeValue]): SubmissionValidationValue = {
     val notNull: Seq[AttributeValue] = seq.filter(v => v != null && v != AttributeNull).toSeq
     val attr = notNull match {
-      case Nil => Future.successful(Option(AttributeValueEmptyList))
+      case Nil => Option(AttributeValueEmptyList)
       //GAWB-2509: don't pack single-elem RawJson array results into another layer of array
       //NOTE: This works, except for the following situation: a participant with a RawJson double-array attribute, in a single-element participant set.
       // Evaluating this.participants.raw_json on the pset will incorrectly hit this case and return a 2D array when it should return a 3D array.
       // The true fix for this is to look into why the slick expression evaluator wraps deserialized AttributeValues in a Seq, and instead
       // return the proper result type, removing the need to infer whether it's a scalar or array type from the WDL input.
-      case AttributeValueRawJson(JsArray(_)) +: Seq() => Future.successful(Option(notNull.head))
-      case _ => mapDosToGs(notNull, marthaDAO) map { v => Option(AttributeValueList(v)) }
+      case AttributeValueRawJson(JsArray(_)) +: Seq() => Option(notNull.head)
+      case _ => Option(AttributeValueList(notNull))
     }
-    attr map { a => SubmissionValidationValue(a, None, inputName) }
+    SubmissionValidationValue(attr, None, inputName)
   }
 
-  private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: InputDefinition, marthaDAO: MarthaDAO)(implicit executionContext: ExecutionContext): Future[SubmissionValidationValue] = wfInput.womType match {
-    case arrayType: WomArrayType => getArrayResult(wfInput.localName.value, mcSequence, marthaDAO)
-    case WomOptionalType(_:WomArrayType) => getArrayResult(wfInput.localName.value, mcSequence, marthaDAO) //send optional-arrays down the same codepath as arrays
-    case _ => getSingleResult(wfInput.localName.value, mcSequence, wfInput.optional, marthaDAO)
+  private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: InputDefinition): SubmissionValidationValue = wfInput.womType match {
+    case arrayType: WomArrayType => getArrayResult(wfInput.localName.value, mcSequence)
+    case WomOptionalType(_:WomArrayType) => getArrayResult(wfInput.localName.value, mcSequence) //send optional-arrays down the same codepath as arrays
+    case _ => getSingleResult(wfInput.localName.value, mcSequence, wfInput.optional)
   }
 
   def parseWDL(wdl: String): Try[WdlWorkflow] = {
@@ -98,7 +86,7 @@ object MethodConfigResolver {
     for ((name, expression) <- methodConfig.inputs.toSeq) yield MethodInput(agoraInputs(name), expression.value)
   }
 
-  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess, marthaDAO: MarthaDAO)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
+  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
     if( inputs.isEmpty ) {
@@ -116,7 +104,7 @@ object MethodConfigResolver {
               case Success(attributeMap) =>
                 //The expression was evaluated, but that doesn't mean we got results...
                 attributeMap.map {
-                  case (key, Success(attrSeq)) => key -> Await.result(unpackResult(attrSeq.toSeq, input.workflowInput, marthaDAO), Duration.Inf)
+                  case (key, Success(attrSeq)) => key -> unpackResult(attrSeq.toSeq, input.workflowInput)
                   case (key, Failure(regret)) => key -> SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.localName.value)
                 }.toSeq
             }

@@ -172,7 +172,7 @@ object Boot extends App with LazyLogging {
     if(conf.getBooleanOption("backRawls").getOrElse(false)) {
       logger.info("This instance has been marked as BACK. Booting monitors...")
       BootMonitors.bootMonitors(
-        system, conf, slickDataSource, gcsDAO, samDAO, pubSubDAO, methodRepoDAO, shardedExecutionServiceCluster,
+        system, conf, slickDataSource, gcsDAO, samDAO, pubSubDAO, methodRepoDAO, marthaDAO, shardedExecutionServiceCluster,
         maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, userServiceConstructor, projectTemplate, metricsPrefix
       )
     } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")
@@ -205,7 +205,6 @@ object Boot extends App with LazyLogging {
         gcsDAO,
         samDAO,
         notificationDAO,
-        marthaDAO,
         userServiceConstructor,
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,

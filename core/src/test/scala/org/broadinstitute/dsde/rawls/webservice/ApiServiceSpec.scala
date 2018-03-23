@@ -122,7 +122,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
 
-    val marthaDAO = new HttpMarthaDAO()
+    val marthaDAO = new HttpMarthaDAO() // TODO: configure as a mock
 
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
@@ -166,7 +166,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       gcsDAO,
       samDAO,
       notificationDAO,
-      marthaDAO,
       userServiceConstructor,
       genomicsServiceConstructor,
       maxActiveWorkflowsTotal,

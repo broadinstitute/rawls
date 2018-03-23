@@ -27,6 +27,7 @@ object WorkflowSubmissionActor {
             methodRepoDAO: MethodRepoDAO,
             googleServicesDAO: GoogleServicesDAO,
             samDAO: SamDAO,
+            marthaDAO: MarthaDAO,
             executionServiceCluster: ExecutionServiceCluster,
             batchSize: Int,
             credential: Credential,
@@ -36,7 +37,7 @@ object WorkflowSubmissionActor {
             maxActiveWorkflowsPerUser: Int,
             runtimeOptions: Option[JsValue],
             workbenchMetricBaseName: String): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, workbenchMetricBaseName))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, marthaDAO, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, workbenchMetricBaseName))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -53,6 +54,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val methodRepoDAO: MethodRepoDAO,
                               val googleServicesDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
+                              val marthaDAO: MarthaDAO,
                               val executionServiceCluster: ExecutionServiceCluster,
                               val batchSize: Int,
                               val credential: Credential,
@@ -98,6 +100,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val methodRepoDAO: MethodRepoDAO
   val googleServicesDAO: GoogleServicesDAO
   val samDAO: SamDAO
+  val marthaDAO: MarthaDAO
   val executionServiceCluster: ExecutionServiceCluster
   val batchSize: Int
   val credential: Credential
@@ -212,6 +215,19 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     })
   }
 
+  def resolveDosUris(workflowBatch: Seq[Workflow])(implicit executionContext: ExecutionContext): DBIOAction[Seq[Workflow], NoStream, Effect] = {
+    val eventualWorkflows: Seq[Future[Workflow]] = workflowBatch map { workflow =>
+      val svvs: Future[Seq[SubmissionValidationValue]] = Future.sequence(workflow.inputResolutions map {
+        case svv@SubmissionValidationValue(attribute, _, _) => attribute match {
+          case Some(s: AttributeString) if s.value.matches(marthaDAO.dosUriPattern) => marthaDAO.dosToGs(s.value) map { v => svv.copy(value = Option(AttributeString(v))) }
+          case _ => Future.successful(svv)
+        }
+      })
+      svvs map { x => workflow.copy(inputResolutions = x) }
+    }
+    DBIO.from(Future.sequence(eventualWorkflows))
+  }
+
   //submit the batch of workflows with the given ids
   def submitWorkflowBatch(batch: WorkflowBatch)(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
 
@@ -224,7 +240,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         //Load a bunch of things we'll need to reconstruct information:
         //The list of workflows in this submission
         wfRecs <- getWorkflowRecordBatch(workflowIds, dataAccess)
-        workflowBatch <- reifyWorkflowRecords(wfRecs, dataAccess)
+        workflowBatchRaw <- reifyWorkflowRecords(wfRecs, dataAccess)
+        workflowBatch <- resolveDosUris(workflowBatchRaw)
 
         //The workspace's billing project
         billingProject <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRec.namespace)).map(_.get)

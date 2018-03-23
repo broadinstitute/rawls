@@ -6,7 +6,7 @@ import akka.actor.{ActorSystem, PoisonPill}
 import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{SubmissionRecord, TestDriverComponent, WorkflowRecord, WorkspaceRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch, WorkflowBatch}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
@@ -23,7 +23,7 @@ import akka.stream.ActorMaterializer
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-import scala.concurrent.Await
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.{FiniteDuration, _}
 
 /**
@@ -37,7 +37,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   val mockServer = RemoteServicesMockServer()
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
   val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, mockGoogleServicesDAO.getPreparedMockGoogleCredential())
+  val mockMarthaDAO: MarthaDAO = (v: String) => Future.successful(v.replaceFirst("dos://", "gs://"))
 
+  /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
+    */
   class TestWorkflowSubmission(
     val dataSource: SlickDataSource,
     val batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
@@ -54,6 +57,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val executionServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), dataSource)
     val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName)
     val samDAO = mockSamDAO
+    val marthaDAO = mockMarthaDAO
   }
 
   class TestWorkflowSubmissionWithMockExecSvc(
@@ -228,6 +232,38 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     }
   }
 
+  it should "resolve DOS URIs when submitting workflows" in withDefaultTestDatabase {
+    val data = testData
+    // Set up system under test
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
+      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
+    }
+
+    withWorkspaceContext(data.workspace) { ctx =>
+      // Create test submission data
+      val sample = Entity("sample", "Sample", Map())
+      val sampleSet = Entity("sampleset", "sample_set",
+        Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference))))
+      val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("dos://foo/bar")), None, "test_input_dos"))
+      val submissionDos = createTestSubmission(data.workspace, data.methodConfig, sampleSet, data.userOwner,
+        Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
+
+      runAndWait(entityQuery.save(ctx, sample))
+      runAndWait(entityQuery.save(ctx, sampleSet))
+      runAndWait(submissionQuery.create(ctx, submissionDos))
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDos, data.workspace)
+
+      // Submit workflow!
+      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+
+      // Verify
+      assertResult(workflowRecs.map(_ => s"""{"test_input_dos":"gs://foo/bar"}""")) {
+        mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
+      }
+    }
+  }
+
   it should "match workflows to entities they run on in the right order" in withDefaultTestDatabase {
     val workflowSubmission = new TestWorkflowSubmissionWithMockExecSvc(slickDataSource)
 
@@ -304,6 +340,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
         mockSamDAO,
+        mockMarthaDAO,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
         3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
       )
@@ -335,6 +372,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
         mockSamDAO,
+        mockMarthaDAO,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
         batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
       )
