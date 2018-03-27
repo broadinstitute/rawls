@@ -677,9 +677,16 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.Groups
     val directory = getGroupDirectory
     val groups = directory.groups
-    val deleter = groups.delete(group.groupEmail.value)
-    retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(deleter) }) {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // if the group is already gone, don't fail
+
+    // first empty the group then delete the group
+    listGroupMembersInternal(group.groupEmail.value).flatMap {
+      case Some(users) => Future.traverse(users) { user => removeEmailFromGoogleGroup(group.groupEmail.value, user) }
+      case None => Future.successful()
+    } flatMap { _ =>
+      val deleter = groups.delete(group.groupEmail.value)
+      retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(deleter) }) {
+        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // if the group is already gone, don't fail
+      }
     }
   }
 
