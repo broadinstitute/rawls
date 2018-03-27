@@ -9,7 +9,7 @@ object Dependencies {
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
-  val cromwellVersion = "30-9a7de06"
+  val cromwellVersion = "31-39223b8"
 
   //UPDATE THIS WITH FINAL HASH
   val serviceTestV = "0.4-d072389"
@@ -70,7 +70,7 @@ object Dependencies {
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
 
-  val cromwellWdl: ModuleID = ("org.broadinstitute" %% "cromwell-wdl" % cromwellVersion
+  val cromwellWdl: ModuleID = ("org.broadinstitute" %% "cromwell-wdl-model-draft2" % cromwellVersion
     exclude("org.typelevel", "cats_2.12")
     exclude("io.spray", "spray-json_2.12")
     exclude("io.spray", "akka-parsing_2.12")
