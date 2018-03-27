@@ -27,7 +27,7 @@ object WorkflowSubmissionActor {
             methodRepoDAO: MethodRepoDAO,
             googleServicesDAO: GoogleServicesDAO,
             samDAO: SamDAO,
-            marthaDAO: MarthaDAO,
+            dosResolver: DosResolver,
             executionServiceCluster: ExecutionServiceCluster,
             batchSize: Int,
             credential: Credential,
@@ -37,7 +37,7 @@ object WorkflowSubmissionActor {
             maxActiveWorkflowsPerUser: Int,
             runtimeOptions: Option[JsValue],
             workbenchMetricBaseName: String): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, marthaDAO, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, workbenchMetricBaseName))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, workbenchMetricBaseName))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -54,7 +54,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val methodRepoDAO: MethodRepoDAO,
                               val googleServicesDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
-                              val marthaDAO: MarthaDAO,
+                              val dosResolver: DosResolver,
                               val executionServiceCluster: ExecutionServiceCluster,
                               val batchSize: Int,
                               val credential: Credential,
@@ -100,7 +100,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val methodRepoDAO: MethodRepoDAO
   val googleServicesDAO: GoogleServicesDAO
   val samDAO: SamDAO
-  val marthaDAO: MarthaDAO
+  val dosResolver: DosResolver
   val executionServiceCluster: ExecutionServiceCluster
   val batchSize: Int
   val credential: Credential
@@ -219,7 +219,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     val eventualWorkflows: Seq[Future[Workflow]] = workflowBatch map { workflow =>
       val svvs: Future[Seq[SubmissionValidationValue]] = Future.sequence(workflow.inputResolutions map {
         case svv@SubmissionValidationValue(attribute, _, _) => attribute match {
-          case Some(s: AttributeString) if s.value.matches(marthaDAO.dosUriPattern) => marthaDAO.dosToGs(s.value) map { v => svv.copy(value = Option(AttributeString(v))) }
+          case Some(s: AttributeString) if s.value.matches(dosResolver.dosUriPattern) => dosResolver.dosToGs(s.value) map { v => svv.copy(value = Option(AttributeString(v))) }
           case _ => Future.successful(svv)
         }
       })

@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class HttpMarthaDAO(url: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends MarthaDAO with DsdeHttpDAO with Retry {
+class MarthaDosResolver(url: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends DosResolver with DsdeHttpDAO with Retry {
 
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()

@@ -37,7 +37,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   val mockServer = RemoteServicesMockServer()
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
   val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, mockGoogleServicesDAO.getPreparedMockGoogleCredential())
-  val mockMarthaDAO: MarthaDAO = (v: String) => Future.successful(v.replaceFirst("dos://", "gs://"))
+  val mockDosResolver: DosResolver = (v: String) => Future.successful(v.replaceFirst("dos://", "gs://"))
 
   /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
     */
@@ -57,7 +57,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val executionServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), dataSource)
     val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName)
     val samDAO = mockSamDAO
-    val marthaDAO = mockMarthaDAO
+    val dosResolver = mockDosResolver
   }
 
   class TestWorkflowSubmissionWithMockExecSvc(
@@ -340,7 +340,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
         mockSamDAO,
-        mockMarthaDAO,
+        mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
         3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
       )
@@ -372,7 +372,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
         mockSamDAO,
-        mockMarthaDAO,
+        mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
         batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, "test")
       )

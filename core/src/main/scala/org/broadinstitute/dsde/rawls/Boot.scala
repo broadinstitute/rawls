@@ -158,7 +158,7 @@ object Boot extends App with LazyLogging {
     val notificationDAO = new PubSubNotificationDAO(pubSubDAO, gcsConfig.getString("notifications.topicName"))
 
     val marthaConfig = conf.getConfig("martha")
-    val marthaDAO = new HttpMarthaDAO(marthaConfig.getString("baseUrl"))
+    val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl"))
 
     val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO, samDAO, projectOwnerGrantableRoles)
 
@@ -173,7 +173,7 @@ object Boot extends App with LazyLogging {
     if(conf.getBooleanOption("backRawls").getOrElse(false)) {
       logger.info("This instance has been marked as BACK. Booting monitors...")
       BootMonitors.bootMonitors(
-        system, conf, slickDataSource, gcsDAO, samDAO, pubSubDAO, methodRepoDAO, marthaDAO, shardedExecutionServiceCluster,
+        system, conf, slickDataSource, gcsDAO, samDAO, pubSubDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster,
         maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, userServiceConstructor, projectTemplate, metricsPrefix
       )
     } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")
