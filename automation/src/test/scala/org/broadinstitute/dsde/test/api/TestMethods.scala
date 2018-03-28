@@ -178,10 +178,11 @@ trait TestMethods {
 
   object SubWorkflowConfig {
     val bucket = GcsBucketName("workbench-test-bucket-do-not-delete")
+    val testFolder = "rawls-subworkflow-metadata"
 
     // Construct a GCS Path, convert to URI, and string-escape
     def objectPathToInputExpression(path: String): String = {
-      val uri = GcsPath(bucket, GcsObjectName(path)).toUri
+      val uri = GcsPath(bucket, GcsObjectName(s"$testFolder/$path")).toUri
       '"' + uri + '"'
     }
 
