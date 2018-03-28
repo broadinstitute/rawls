@@ -19,9 +19,10 @@ import scala.util.Try
 // handles monitors which need to be started at boot time
 object BootMonitors extends LazyLogging {
 
-  def bootMonitors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO,
-                   pubSubDAO: GooglePubSubDAO, methodRepoDAO: MethodRepoDAO, shardedExecutionServiceCluster: ExecutionServiceCluster,
-                   maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, userServiceConstructor: (UserInfo) => UserService,
+  def bootMonitors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO,
+                   samDAO: SamDAO, pubSubDAO: GooglePubSubDAO, methodRepoDAO: MethodRepoDAO, dosResolver: DosResolver,
+                   shardedExecutionServiceCluster: ExecutionServiceCluster, maxActiveWorkflowsTotal: Int,
+                   maxActiveWorkflowsPerUser: Int, userServiceConstructor: (UserInfo) => UserService,
                    projectTemplate: ProjectTemplate, metricsPrefix: String): Unit = {
     //Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
@@ -38,7 +39,7 @@ object BootMonitors extends LazyLogging {
     startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
 
     //Boot workflow submission actors
-    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix)
+    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix)
 
     //Boot bucket deletion monitor
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
@@ -70,13 +71,14 @@ object BootMonitors extends LazyLogging {
     ), "rawls-submission-supervisor")
   }
 
-  private def startWorkflowSubmissionActors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, methodRepoDAO: MethodRepoDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, metricsPrefix: String) = {
+  private def startWorkflowSubmissionActors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, methodRepoDAO: MethodRepoDAO, dosResolver: DosResolver, shardedExecutionServiceCluster: ExecutionServiceCluster, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, metricsPrefix: String) = {
     for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
       system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
         methodRepoDAO,
         gcsDAO,
         samDAO,
+        dosResolver,
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO.getBucketServiceAccountCredential,
