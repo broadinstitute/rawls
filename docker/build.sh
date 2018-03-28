@@ -53,7 +53,7 @@ function docker_cmd()
             GIT_SHA=$(git rev-parse origin/${BRANCH})
             echo GIT_SHA=$GIT_SHA > env.properties
             DOCKER_TAG=${GIT_SHA:0:12}
-            DOCKER_TAG_TESTS=${ENV}
+            DOCKER_TAG_TESTS=${GIT_SHA:0:12}
         fi
         echo "building $PROJECT-tests docker image..."
         docker build -t $REPO:${DOCKER_TAG} .
