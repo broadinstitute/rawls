@@ -72,7 +72,8 @@ class HttpGoogleServicesDAO(
   val billingEmail: String,
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
-  override val workbenchMetricBaseName: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+  override val workbenchMetricBaseName: String,
+  proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
   val API_SERVICE_MANAGEMENT = "ServiceManagement"
@@ -554,8 +555,8 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  val proxyPattern = s"PROXY_(.+)@${appsDomain}".toLowerCase.r
-  val groupPattern = s"GROUP_(.+)@${appsDomain}".toLowerCase.r
+  val proxyPattern = s"${proxyNamePrefix}PROXY_(.+)@${appsDomain}".toLowerCase.r
+  val groupPattern = s"${proxyNamePrefix}GROUP_(.+)@${appsDomain}".toLowerCase.r
 
   override def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]] = {
     listGroupMembersInternal(group.groupEmail.value) map { membersOption =>
@@ -1189,12 +1190,12 @@ class HttpGoogleServicesDAO(
 
   def toProxyFromUser(rawlsUser: RawlsUser): String = toProxyFromUser(rawlsUser.userSubjectId)
   def toProxyFromUser(userInfo: UserInfo): String = toProxyFromUser(userInfo.userSubjectId)
-  def toProxyFromUser(subjectId: RawlsUserSubjectId): String = s"PROXY_${subjectId.value}@${appsDomain}"
+  def toProxyFromUser(subjectId: RawlsUserSubjectId): String = s"${proxyNamePrefix}PROXY_${subjectId.value}@${appsDomain}"
   def toUserFromProxy(proxy: String): String = {
     implicit val service = GoogleInstrumentedService.Groups
     executeGoogleRequest(getGroupDirectory.groups().get(proxy)).getName
   }
-  def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
+  def toGoogleGroupName(groupName: RawlsGroupName) = s"${proxyNamePrefix}GROUP_${groupName.value}@${appsDomain}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
   def curatorGroupName = s"${groupsPrefix}-CURATORS@${appsDomain}"

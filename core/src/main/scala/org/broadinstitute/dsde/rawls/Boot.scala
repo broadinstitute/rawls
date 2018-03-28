@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, UserInfo}
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -116,7 +116,8 @@ object Boot extends App with LazyLogging {
       gcsConfig.getString("pathToBillingPem"),
       gcsConfig.getString("billingEmail"),
       gcsConfig.getInt("bucketLogsMaxAge"),
-      workbenchMetricBaseName = metricsPrefix
+      workbenchMetricBaseName = metricsPrefix,
+      proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", "")
     )
 
     val pubSubDAO = new HttpGooglePubSubDAO(
@@ -164,8 +165,12 @@ object Boot extends App with LazyLogging {
 
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
-    val agoraConfig = conf.getConfig("methodrepo")
-    val methodRepoDAO = new HttpMethodRepoDAO(agoraConfig.getString("server"), agoraConfig.getString("path"), metricsPrefix)
+
+    val methodRepoDAO = new HttpMethodRepoDAO(
+      MethodRepoConfig.apply[Agora.type](conf.getConfig("agora")),
+      MethodRepoConfig.apply[Dockstore.type](conf.getConfig("dockstore")),
+      metricsPrefix
+    )
 
     val maxActiveWorkflowsTotal = conf.getInt("executionservice.maxActiveWorkflowsPerServer") * executionServiceServers.size
     val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt("executionservice.activeWorkflowHogFactor")

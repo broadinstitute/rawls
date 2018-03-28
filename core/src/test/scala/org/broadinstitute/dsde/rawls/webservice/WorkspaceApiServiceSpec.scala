@@ -649,8 +649,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // check that length of result is > 0:
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.methodConfig.namespace,
-          testData.methodConfig.name).length.result) > 0
+        runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace,
+          testData.agoraMethodConfig.name).length.result) > 0
       }
     }
     // delete the workspace
@@ -664,8 +664,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // now you should have no method configs listed
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.methodConfig.namespace,
-          testData.methodConfig.name).length.result) == 0
+        runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace,
+          testData.agoraMethodConfig.name).length.result) == 0
       }
     }
   }
@@ -876,7 +876,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     // contains no references in/out, safe to hide
     val entToDelete = testData.sample8
-    val mcToDelete = testData.methodConfig.toShort
+    val mcToDelete = testData.agoraMethodConfig.toShort
     withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
       assert {
         runAndWait(entityQuery.listActiveEntities(sourceWorkspaceContext)).toSeq.contains(entToDelete)
@@ -2554,10 +2554,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
     withApiServices(dataSource, testData.userReader.userEmail.value) { services =>
       val wsName = testData.wsName
-      val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-      val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+      val agoraMethodConf = MethodConfiguration("no_input", "dsde", "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+      val dockstoreMethodConf =
+        MethodConfiguration("no_input_dockstore", "dsde", "Sample", Map.empty, Map.empty, Map.empty, DockstoreMethod("dockstore-no-input-path", "dockstore-no-input-version"))
 
-      createSubmission(wsName, methodConf, testData.sample1, None, services, exectedStatus)
+      List(agoraMethodConf, dockstoreMethodConf).foreach(createSubmission(wsName, _, testData.sample1, None, services, exectedStatus))
     }
   }
 

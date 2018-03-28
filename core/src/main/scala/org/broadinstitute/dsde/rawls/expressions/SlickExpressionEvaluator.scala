@@ -35,7 +35,7 @@ private[expressions] object SlickExpressionEvaluator {
     //Sanity check that we've only got one, and then pass upwards
     dbRootEntityRec flatMap { rootEntityRec =>
       if(rootEntityRec.size != 1) {
-        DBIO.failed(new RawlsException(s"Found != 1 root entity when searching for ${rootType}/$rootName"))
+        DBIO.failed(new RawlsException(s"Expected 1 root entity type, found ${rootEntityRec.size} when searching for $rootType/$rootName"))
       } else {
         withNewExpressionEvaluator(parser, rootEntityRec)(op)
       }

@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceId, SlickWorkspaceContext}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
-import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Aborting, Running, Submitted, WorkflowStatus}
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import slick.dbio.Effect.Write
@@ -435,7 +435,7 @@ trait WorkflowComponent {
     }
 
     def findWorkflowsForAbort(submissionId: UUID): WorkflowQueryType = {
-      val statuses: Traversable[String] = WorkflowStatuses.runningStatuses map(_.toString)
+      val statuses: Traversable[String] = WorkflowStatuses.abortableStatuses map(_.toString)
       filter(wf => wf.submissionId === submissionId && wf.externalId.isDefined && wf.status.inSetBind(statuses) )
     }
 

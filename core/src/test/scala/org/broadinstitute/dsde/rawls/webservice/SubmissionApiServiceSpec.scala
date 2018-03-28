@@ -204,13 +204,16 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   it should "return 201 Created when creating and monitoring a submission with no expression" in withTestDataApiServices { services =>
     val wsName = testData.wsName
-    val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val agoraMethodConf = MethodConfiguration("no_input", "dsde", "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val dockstoreMethodConf =
+      MethodConfiguration("no_input_dockstore", "dsde", "Sample", Map.empty, Map.empty, Map.empty, DockstoreMethod("dockstore-no-input-path", "dockstore-no-input-version"))
 
-    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services)
+    List(agoraMethodConf, dockstoreMethodConf) foreach { conf =>
+      val submission = createAndMonitorSubmission(wsName, conf, testData.sample1, None, services)
 
-    assertResult(1) {
-      submission.workflows.size
+      assertResult(1) {
+        submission.workflows.size
+      }
     }
   }
   it should "return 201 Created when creating and monitoring a submission with valid expression" in withTestDataApiServices { services =>
@@ -461,7 +464,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Queued, DateTime.now, ent.toReference, testData.inputResolutions)
       }
 
-      val sub = createTestSubmission(testData.workspace, testData.methodConfig, testData.indiv1, user, Seq.empty, Map.empty, Seq.empty, Map.empty).copy(workflows = workflows)
+      val sub = createTestSubmission(testData.workspace, testData.agoraMethodConfig, testData.indiv1, user, Seq.empty, Map.empty, Seq.empty, Map.empty).copy(workflows = workflows)
       runAndWait(submissionQuery.create(context, sub))
     }
   }
@@ -591,7 +594,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, testData.indiv1.toReference, Seq.empty)
     )
 
-    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.methodConfig.namespace, testData.methodConfig.name, testData.indiv1.toReference, workflows, SubmissionStatuses.Done, false)
+    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, testData.indiv1.toReference, workflows, SubmissionStatuses.Done, false)
 
     runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))

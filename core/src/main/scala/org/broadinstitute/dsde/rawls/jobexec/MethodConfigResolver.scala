@@ -6,11 +6,11 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
-import wdl4s.parser.WdlParser.SyntaxError
+import wdl.draft2.parser.WdlParser.SyntaxError
 import wom.callable.Callable.InputDefinition
 import wom.types.{WomType, WomArrayType, WomOptionalType}
-import wdl.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow}
-import wdl.WdlNamespace.httpResolver
+import wdl.draft2.model.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow}
+import wdl.draft2.model.WdlNamespace.httpResolver
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}

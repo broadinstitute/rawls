@@ -26,8 +26,9 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUt
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
-import akka.http.scaladsl.model.{ StatusCode, StatusCodes}
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 
 import scala.concurrent.duration.{Duration, FiniteDuration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -116,7 +117,10 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
-      new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+      new HttpMethodRepoDAO(
+        MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+        MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
+        workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
       execServiceBatchSize,
       gcsDAO,
@@ -253,7 +257,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "pull entity records for a single entity given no expression" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
-      val subRq = SubmissionRequest(testData.methodConfig.namespace, testData.methodConfig.name, "Sample", "sample1", None, false)
+      val subRq = SubmissionRequest(testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, "Sample", "sample1", None, false)
 
       //Lookup succeeds
       runAndWait(
@@ -293,7 +297,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "pull multiple entity records given an entity expression" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
-      val subRq = SubmissionRequest(testData.methodConfig.namespace, testData.methodConfig.name, "SampleSet", "sset1", Some("this.samples"), false)
+      val subRq = SubmissionRequest(testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, "SampleSet", "sset1", Some("this.samples"), false)
 
       //Lookup succeeds
       runAndWait(

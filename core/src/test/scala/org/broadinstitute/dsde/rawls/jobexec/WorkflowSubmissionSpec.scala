@@ -20,6 +20,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
+import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -55,7 +56,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     val googleServicesDAO = mockGoogleServicesDAO
     val executionServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), dataSource)
-    val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName)
+    val methodRepoDAO = new HttpMethodRepoDAO(
+      MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+      MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
+      workbenchMetricBaseName = workbenchMetricBaseName)
     val samDAO = mockSamDAO
     val dosResolver = mockDosResolver
   }
@@ -337,7 +341,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       val workflowSubmissionActor = system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
-        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+        new HttpMethodRepoDAO(
+          MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+          MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
+          workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
         mockSamDAO,
         mockDosResolver,
@@ -369,7 +376,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       val workflowSubmissionActor = system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
-        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+        new HttpMethodRepoDAO(
+          MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
+          MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
+          workbenchMetricBaseName = workbenchMetricBaseName),
         mockGoogleServicesDAO,
         mockSamDAO,
         mockDosResolver,
