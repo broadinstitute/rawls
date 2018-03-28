@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthToke
 import org.broadinstitute.dsde.workbench.config.{Config, Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google.googleIamDAO
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.broadinstitute.dsde.workbench.model.google.{GoogleProject, ServiceAccount}
 import org.scalatest.{FreeSpec, Matchers}
@@ -24,9 +25,8 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
   val owner: Credentials = UserPool.chooseProjectOwner
   val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
-  def findPetInGoogle(project: String, userInfo: UserStatusDetails): Option[ServiceAccount] = {
-
-    val find = googleIamDAO.findServiceAccount(GoogleProject(project), Sam.petName(userInfo))
+  def findPetInGoogle(project: String, petEmail: WorkbenchEmail): Option[ServiceAccount] = {
+    val find = googleIamDAO.findServiceAccount(GoogleProject(project), petEmail)
     Await.result(find, 1.minute)
   }
 
@@ -54,13 +54,14 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
 
           //Remove the pet SA for a clean test environment
           val userAStatus = Sam.user.status()(studentAToken).get
+          val petEmail = Sam.user.petServiceAccountEmail(projectName)(studentAToken)
           Sam.removePet(projectName, userAStatus.userInfo)
-          findPetInGoogle(projectName, userAStatus.userInfo) shouldBe None
+          findPetInGoogle(projectName, petEmail) shouldBe None
 
           //Validate that the pet SA has been created
           val petAccountEmail = Sam.user.petServiceAccountEmail(projectName)(studentAToken)
           petAccountEmail.value should not be userAStatus.userInfo.userEmail
-          findPetInGoogle(projectName, userAStatus.userInfo).map(_.email) shouldBe Some(petAccountEmail)
+          findPetInGoogle(projectName, petEmail).map(_.email) shouldBe Some(petAccountEmail)
 
           val petAuthToken = ServiceAccountAuthTokenFromJson(Sam.user.petServiceAccountKey(projectName)(studentAToken))
 
@@ -77,7 +78,6 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
           userBWorkspace should include(workspaceNameB)
 
           Sam.removePet(projectName, userAStatus.userInfo)
-          findPetInGoogle(projectName, userAStatus.userInfo) shouldBe None
         }
       }
     }
