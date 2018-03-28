@@ -250,7 +250,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val sampleSet = Entity("sampleset", "sample_set",
         Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference))))
       val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("dos://foo/bar")), None, "test_input_dos"))
-      val submissionDos = createTestSubmission(data.workspace, data.methodConfig, sampleSet, data.userOwner,
+      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, data.userOwner,
         Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
 
       runAndWait(entityQuery.save(ctx, sample))
