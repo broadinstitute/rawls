@@ -43,22 +43,6 @@ And when you're done, spin down mysql and opendj (it is also fine to leave them 
 ./docker/run-opendj.sh stop
 ```
 
-## Integration Testing with MySQL in Docker
-Running the Integration Test requires the above setup plus a few support files in the */etc* folder.
-These can be softlinks to existing files in your Rawls Config folder.  If you have set that up correctly
-via the procedure described in the firecloud-develop repo, run these commands:
-```
-cd /etc
-sudo ln -s <path_to_rawls_src>/config/rawls.conf
-sudo ln -s <path_to_rawls_src>/config/rawls-account.pem
-sudo ln -s <path_to_rawls_src>/config/billing-account.pem
-```
-Run tests using mysql similarly to unit tests.
-```
-export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310 -Ddirectory.url=ldap://localhost:3389 -Ddirectory.password=testtesttest -Dcom.sun.jndi.ldap.connect.pool.maxsize=100"
-sbt clean compile it:test
-```
-
 ## Build Rawls docker image
 Build Rawls jar
 ```
