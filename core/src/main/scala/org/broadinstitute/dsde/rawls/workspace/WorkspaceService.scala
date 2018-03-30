@@ -1569,9 +1569,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def checkBucketReadAccess(workspaceName: WorkspaceName) = {
     for {
-      workspace <- dataSource.inTransaction { dataAccess =>
+      (workspace, maxAccessLevel) <- dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-          DBIO.successful(workspaceContext.workspace)
+          getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess).map { accessLevel =>
+            (workspaceContext.workspace, accessLevel)
+          }
         }
       }
 
@@ -1579,7 +1581,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
 
-      resultsForPet <- gcsDAO.diagnosticBucketRead(UserInfo(userInfo.userEmail, OAuth2BearerToken(accessToken), 60, userInfo.userSubjectId), workspace.bucketName)
+      //if the user only has read access, it doesn't matter if their pet doesn't have access because it will never be used. so we skip over it.
+      resultsForPet <- if (maxAccessLevel >= WorkspaceAccessLevels.Write) {
+        gcsDAO.diagnosticBucketRead(UserInfo(userInfo.userEmail, OAuth2BearerToken(accessToken), 60, userInfo.userSubjectId), workspace.bucketName)
+      } else Future.successful(None)
       resultsForUser <- gcsDAO.diagnosticBucketRead(userInfo, workspace.bucketName)
     } yield {
       (resultsForUser, resultsForPet) match {
