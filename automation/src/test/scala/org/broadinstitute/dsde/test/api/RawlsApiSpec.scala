@@ -1,22 +1,24 @@
-package org.broadinstitute.dsde.firecloud.test.api.rawls
+package org.broadinstitute.dsde.test.api
 
 import java.util.UUID
 
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, Sam}
-import org.broadinstitute.dsde.workbench.service.Sam.user.UserStatusDetails
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
-import org.broadinstitute.dsde.workbench.config.{Config, Credentials, UserPool}
+import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google.googleIamDAO
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.service.test.CleanUp
+import org.broadinstitute.dsde.workbench.fixture._
+import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.model.google.{GoogleProject, ServiceAccount}
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.{Minutes, Seconds, Span}
 import org.scalatest.{FreeSpec, Matchers}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtures {
+class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtures with WorkspaceFixtures with RandomUtil with Eventually with TestMethods {
   // We only want to see the users' workspaces so we can't be Project Owners
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
   val studentAToken: AuthToken = studentA.makeAuthToken()
@@ -28,6 +30,10 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
   def findPetInGoogle(project: String, petEmail: WorkbenchEmail): Option[ServiceAccount] = {
     val find = googleIamDAO.findServiceAccount(GoogleProject(project), petEmail)
     Await.result(find, 1.minute)
+  }
+
+  def makeMethodPublic(method: Method)(implicit token: AuthToken): Unit = {
+    Orchestration.methods.setMethodPermissions(method.methodNamespace, method.methodName, method.snapshotId, "public", "READER")
   }
 
   "Rawls" - {
@@ -78,6 +84,84 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
           userBWorkspace should include(workspaceNameB)
 
           Sam.removePet(projectName, userAStatus.userInfo)
+        }
+      }
+    }
+
+    "should request sub-workflow metadata from Cromwell" in {
+      implicit val token: AuthToken = studentAToken
+
+      val testNamespace = makeRandomId()
+
+      val childMethod = SubWorkflowChildMethod.copy(methodNamespace = testNamespace)
+      val parentMethod = subWorkflowParentMethod(childMethod).copy(methodNamespace = testNamespace)
+
+      val config = SubWorkflowConfig
+
+      Orchestration.methods.createMethod(childMethod.creationAttributes)
+      register cleanUp Orchestration.methods.redact(childMethod)
+
+      makeMethodPublic(childMethod)
+
+      Orchestration.methods.createMethod(parentMethod.creationAttributes)
+      register cleanUp Orchestration.methods.redact(parentMethod)
+
+      withCleanBillingProject(studentA) { projectName =>
+        withWorkspace(projectName, "rawls-subworkflow") { workspaceName =>
+          Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+            projectName, workspaceName,
+            parentMethod,
+            config.configNamespace, config.configName, config.snapshotId,
+            config.inputs, config.outputs, config.rootEntityType)
+
+          Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
+
+          // it currently takes ~ 5 min for google bucket read permissions to propagate.
+          // We can't launch a workflow until this happens.
+          // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
+
+          Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+
+          val submissionId = Rawls.submissions.launchWorkflow(
+            projectName, workspaceName,
+            config.configNamespace, config.configName,
+            "participant", SingleParticipant.entityId, "this", useCallCache = false)
+
+          // wait for the first available queryable workflow ID
+
+          val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+          implicit val patienceConfig: PatienceConfig = submissionPatience
+
+          val workflowId = eventually {
+            val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+
+            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
+              status shouldBe "Submitted"
+              workflows should not be (empty)
+              workflows.head
+            }
+          }
+
+          // wait for Cromwell to start processing sub-workflows
+
+          eventually {
+            val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, workflowId)
+            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$workflowId: ") {
+              cromwellMetadata should include("subWorkflowMetadata")
+            }
+          }
+
+          // clean up: Abort and wait for Aborted
+
+          Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+
+          eventually {
+            val (status, _) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+
+            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
+              status shouldBe "Aborted"
+            }
+          }
         }
       }
     }

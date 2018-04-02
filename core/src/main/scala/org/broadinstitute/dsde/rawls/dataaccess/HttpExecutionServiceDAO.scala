@@ -59,7 +59,7 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
   }
 
   override def callLevelMetadata(id: String, userInfo: UserInfo): Future[JsObject] = {
-    val url = executionServiceURL + s"/api/workflows/v1/${id}/metadata"
+    val url = executionServiceURL + s"/api/workflows/v1/${id}/metadata?expandSubWorkflows=true"
     retry(when500) { () => pipeline[JsObject](userInfo) apply Get(url) }
   }
 
