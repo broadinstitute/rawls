@@ -220,6 +220,11 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       val svvs: Future[Seq[SubmissionValidationValue]] = Future.sequence(workflow.inputResolutions map {
         case svv@SubmissionValidationValue(attribute, _, _) => attribute match {
           case Some(s: AttributeString) if s.value.matches(dosResolver.dosUriPattern) => dosResolver.dosToGs(s.value) map { v => svv.copy(value = Option(AttributeString(v))) }
+          case Some(valueList: AttributeValueList) =>
+            Future.sequence(valueList.list map {
+              case AttributeString(s) if s.value.matches(dosResolver.dosUriPattern) => dosResolver.dosToGs(s.value) map { v => AttributeString(v) }
+              case a => Future.successful(a)
+            }) map { v => svv.copy(value = Option(AttributeValueList(v))) }
           case _ => Future.successful(svv)
         }
       })
