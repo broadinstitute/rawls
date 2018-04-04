@@ -117,7 +117,7 @@ trait WorkflowComponent {
         val entityRecsMap = entityRecs.map(e => e.toReference -> e.id).toMap
         val recsToInsert = workflows.map(workflow => marshalNewWorkflow(submissionId, workflow, entityRecsMap(workflow.workflowEntity)))
 
-        val insertedRecQuery = for {
+        def insertedRecQuery = for {
           workflowRec <- findWorkflowsBySubmissionId(submissionId)
           workflowEntityRec <- entityQuery if workflowEntityRec.id === workflowRec.workflowEntityId
         } yield (workflowRec, workflowEntityRec)
@@ -139,7 +139,7 @@ trait WorkflowComponent {
           marshalInputResolution(inputResolution, workflowRecsByEntity(workflow.workflowEntity).id)
         }
 
-        val insertedRecQuery = for {
+        def insertedRecQuery = for {
           workflowRec <- findWorkflowsBySubmissionId(submissionId)
           workflowEntityRec <- entityQuery if workflowEntityRec.id === workflowRec.workflowEntityId
           insertedInputResolutionRec <- submissionValidationQuery if insertedInputResolutionRec.workflowId === workflowRec.id
