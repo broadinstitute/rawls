@@ -342,6 +342,10 @@ trait SubmissionComponent {
       idOp.map(id => id.getOrElse(throw new RawlsException(s"$entityRef not found")))
     }
 
+    def loadSubmissionValidationsAndReferences(submissionId: UUID): ReadAction[Seq[(AttributeEntityReference, SubmissionValidationRecord)]] = {
+      EntityRefAndInputResolutionRawSqlQuery.action(submissionId) map ( _ map { p => (p.entityReference, p.submissionValidationRec) } )
+    }
+
     def getMethodConfigOutputExpressions(submissionId: UUID): ReadAction[Map[String, String]] = {
       val query = for {
         submission <- submissionQuery if submission.id === submissionId
@@ -449,6 +453,26 @@ trait SubmissionComponent {
         left outer join SUBMISSION_VALIDATION sv on sv.workflow_id = w.id
         left outer join SUBMISSION_ATTRIBUTE sa on sa.owner_id = sv.id
         where w.submission_id = ${submissionId}""".as[WorkflowInputResolutionListResult]
+      }
+    }
+
+    private object EntityRefAndInputResolutionRawSqlQuery extends RawSqlQuery {
+      val driver: JdbcDriver = SubmissionComponent.this.driver
+      case class EntityRefInputResolutionListResult(entityReference: AttributeEntityReference, submissionValidationRec: SubmissionValidationRecord)
+
+      implicit val getEntityRefInputResolutionListResult = GetResult { r =>
+        val entityReference = AttributeEntityReference(r.<<, r.<<)
+        val submissionValidationRec = SubmissionValidationRecord(r.<<, r.<<, r.<<, r.<<)
+        EntityRefInputResolutionListResult(entityReference, submissionValidationRec)
+      }
+
+      def action(submissionId: UUID) = {
+        sql"""select e.entity_type, e.name,
+              sv.id, sv.WORKFLOW_ID, sv.ERROR_TEXT, sv.INPUT_NAME
+        from ENTITY e, SUBMISSION_VALIDATION sv, WORKFLOW w
+        where w.SUBMISSION_ID = ${submissionId}
+          and e.id = w.ENTITY_ID
+          and sv.WORKFLOW_ID = w.ID""".as[EntityRefInputResolutionListResult]
       }
     }
 
