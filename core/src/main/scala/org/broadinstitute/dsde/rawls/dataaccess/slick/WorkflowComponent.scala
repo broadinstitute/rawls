@@ -139,10 +139,8 @@ trait WorkflowComponent {
           marshalInputResolution(inputResolution, workflowRecsByEntity(workflow.workflowEntity).id)
         }
 
-        val insertedRecQuery = submissionQuery.loadSubmissionValidationsAndReferences(submissionId)
-
         insertInBatches(submissionValidationQuery, inputResolutionRecs) andThen
-        insertedRecQuery.map(_.map { case (ref, insertedInputResolutionRec) =>
+        submissionQuery.loadSubmissionValidationsAndReferences(submissionId).map(_.map { case (ref, insertedInputResolutionRec) =>
           val name = insertedInputResolutionRec.inputName
           (ref, name) -> insertedInputResolutionRec
         }.toMap)
