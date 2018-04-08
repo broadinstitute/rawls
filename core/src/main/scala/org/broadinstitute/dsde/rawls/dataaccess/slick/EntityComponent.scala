@@ -83,12 +83,15 @@ trait EntityComponent {
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
 
+    // understands how to translate EntityRecordLiteLifted into EntityRecord
     implicit object EntityRecordLightShape
       extends CaseClassShape(EntityRecordLiteLifted.tupled, EntityRecordBuilder.toEntityRecord)
 
-    def withoutAllAttributeValues = {
+    // use as a replacement for entityQuery. This query never selects the all_attribute_values column and therefore
+    // will always return an EntityRecord where .allAttributeValues is None.
+    // anywhere this query is used, Slick needs the the EntityRecordLightShape object in implicit scope.
+    def withoutAllAttributeValues =
       map(e => EntityRecordLiteLifted(e.id, e.name, e.entityType, e.workspaceId, e.version, e.deleted, e.deletedDate))
-    }
 
     // Raw queries - used when querying for multiple AttributeEntityReferences
 

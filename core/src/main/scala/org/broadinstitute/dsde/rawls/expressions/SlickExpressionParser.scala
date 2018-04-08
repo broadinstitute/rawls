@@ -20,6 +20,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
     with WorkspaceComponent
     with AttributeComponent =>
   import driver.api._
+  import entityQuery.EntityRecordLightShape
 
   // A parsed expression will result in a PipelineQuery. Each step in a query traverses from entity to
   // entity following references. The final step takes the last entity, producing a result dependent on the query
@@ -166,9 +167,6 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
   // the root function starts the pipeline at some root entity type in the workspace
   private def entityRootFunc(context: SlickExpressionContext): PipeType = {
-    implicit object EntityRecordLightShape
-      extends CaseClassShape(EntityRecordLiteLifted.tupled, EntityRecordBuilder.toEntityRecord)
-
     for {
       rootEntities <- exprEvalQuery if rootEntities.transactionId === context.transactionId
       entity <- entityQuery.withoutAllAttributeValues if rootEntities.id === entity.id
@@ -199,10 +197,6 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
   // root func that gets an entity reference off a workspace
   private def workspaceEntityRefRootFunc(attrName: AttributeName)(context: SlickExpressionContext): PipeType = {
-
-    implicit object EntityRecordLightShape
-      extends CaseClassShape(EntityRecordLiteLifted.tupled, EntityRecordBuilder.toEntityRecord)
-
     for {
       rootEntity <- exprEvalQuery if rootEntity.transactionId === context.transactionId
       workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
@@ -213,10 +207,6 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
   // add pipe to an entity referenced by the current entity
   private def entityNameAttributePipeFunc(attrName: AttributeName)(context: SlickExpressionContext, queryPipeline: PipeType): PipeType = {
-
-    implicit object EntityRecordLightShape
-      extends CaseClassShape(EntityRecordLiteLifted.tupled, EntityRecordBuilder.toEntityRecord)
-
     (for {
       (rootEntityName, entity) <- queryPipeline
       attribute <- entityAttributeQuery if entity.id === attribute.ownerId && attribute.name === attrName.name && attribute.namespace === attrName.namespace
