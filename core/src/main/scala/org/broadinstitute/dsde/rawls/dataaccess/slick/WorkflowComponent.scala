@@ -117,9 +117,12 @@ trait WorkflowComponent {
         val entityRecsMap = entityRecs.map(e => e.toReference -> e.id).toMap
         val recsToInsert = workflows.map(workflow => marshalNewWorkflow(submissionId, workflow, entityRecsMap(workflow.workflowEntity)))
 
+        implicit object EntityRecordLightShape
+          extends CaseClassShape(EntityRecordLiteLifted.tupled, EntityRecordBuilder.toEntityRecord)
+
         val insertedRecQuery = for {
           workflowRec <- findWorkflowsBySubmissionId(submissionId)
-          workflowEntityRec <- entityQuery if workflowEntityRec.id === workflowRec.workflowEntityId
+          workflowEntityRec <- entityQuery.withoutAllAttributeValues if workflowEntityRec.id === workflowRec.workflowEntityId
         } yield (workflowRec, workflowEntityRec)
 
         insertInBatches(workflowQuery, recsToInsert).map { rows =>
@@ -139,9 +142,12 @@ trait WorkflowComponent {
           marshalInputResolution(inputResolution, workflowRecsByEntity(workflow.workflowEntity).id)
         }
 
+        implicit object EntityRecordLightShape
+          extends CaseClassShape(EntityRecordLiteLifted.tupled, EntityRecordBuilder.toEntityRecord)
+
         val insertedRecQuery = for {
           workflowRec <- findWorkflowsBySubmissionId(submissionId)
-          workflowEntityRec <- entityQuery if workflowEntityRec.id === workflowRec.workflowEntityId
+          workflowEntityRec <- entityQuery.withoutAllAttributeValues if workflowEntityRec.id === workflowRec.workflowEntityId
           insertedInputResolutionRec <- submissionValidationQuery if insertedInputResolutionRec.workflowId === workflowRec.id
         } yield (workflowEntityRec, insertedInputResolutionRec)
 

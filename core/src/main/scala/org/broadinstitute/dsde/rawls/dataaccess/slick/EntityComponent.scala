@@ -28,6 +28,28 @@ case class EntityRecord(id: Long,
   def toReference = AttributeEntityReference(entityType, name)
 }
 
+case class EntityRecordLiteLifted(id: slick.lifted.Rep[Long],
+                                  name: slick.lifted.Rep[String],
+                                  entityType: slick.lifted.Rep[String],
+                                  workspaceId: slick.lifted.Rep[UUID],
+                                  recordVersion: slick.lifted.Rep[Long],
+                                  deleted: slick.lifted.Rep[Boolean],
+                                  deletedDate: slick.lifted.Rep[Option[Timestamp]])
+
+// Translate tuples <> EntityRecord. Created as a separate object because additional apply methods
+// on an EntityRecord object confuse Slick.
+object EntityRecordBuilder {
+  def toEntityRecord(tuple: (Long, String, String, UUID, Long, Boolean, Option[Timestamp])): EntityRecord = {
+    tuple match {
+      case (id, name, entityType, workspaceId, recordVersion, deleted, deletedDate) =>
+        new EntityRecord(id, name, entityType, workspaceId, recordVersion, None, deleted, deletedDate)
+    }
+  }
+
+  def fromEntityRecord(rec: EntityRecord): Option[(Long, String, String, UUID, Long, Boolean, Option[Timestamp])] =
+    Some(rec.id, rec.name, rec.entityType, rec.workspaceId, rec.recordVersion, rec.deleted, rec.deletedDate)
+}
+
 object EntityComponent {
   //the length of the all_attribute_values column, which is TEXT, -1 becaue i'm nervous
   val allAttributeValuesColumnSize = 65534
@@ -60,6 +82,13 @@ trait EntityComponent {
 
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
+
+    implicit object EntityRecordLightShape
+      extends CaseClassShape(EntityRecordLiteLifted.tupled, EntityRecordBuilder.toEntityRecord)
+
+    def withoutAllAttributeValues = {
+      map(e => EntityRecordLiteLifted(e.id, e.name, e.entityType, e.workspaceId, e.version, e.deleted, e.deletedDate))
+    }
 
     // Raw queries - used when querying for multiple AttributeEntityReferences
 
