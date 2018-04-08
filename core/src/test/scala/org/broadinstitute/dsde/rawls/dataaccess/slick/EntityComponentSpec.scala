@@ -936,12 +936,12 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         .filter(e => e.name === "entityWithAttrs" && e.entityType === "Pair")
         .result.headOption)
 
-      assert(recWithoutAttrs.isDefined, "entityQueryLight should find the record")
+      assert(recWithoutAttrs.isDefined, "entityQuery.withoutAllAttributeValues should find the record")
       assertResult(Some(None), "entityQueryLight should not return allAttributeValues") {
         recWithoutAttrs.map(_.allAttributeValues)
       }
 
-      assertResult(recWithoutAttrs, "entityQuery and entityQueryLight should return the same record otherwise") {
+      assertResult(recWithoutAttrs, "entityQuery and entityQuery.withoutAllAttributeValues should return the same record otherwise") {
         recWithAttrs.map(_.copy(allAttributeValues = None))
       }
     }

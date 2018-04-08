@@ -28,6 +28,9 @@ case class EntityRecord(id: Long,
   def toReference = AttributeEntityReference(entityType, name)
 }
 
+// used in conjunction with entityQuery.withoutAllAttributes and EntityRecordLightShape.
+// Slick usually magically creates these shapes but this one is necessary because withoutAllAttributes
+// omits a column, and the magically-created shapes want that column.
 case class EntityRecordLiteLifted(id: slick.lifted.Rep[Long],
                                   name: slick.lifted.Rep[String],
                                   entityType: slick.lifted.Rep[String],

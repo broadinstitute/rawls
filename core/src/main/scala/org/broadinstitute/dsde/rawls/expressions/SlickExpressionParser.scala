@@ -328,9 +328,6 @@ trait SlickExpressionParser extends JavaTokenParsers {
   private def workspaceEntityFinalFunc(attrName: AttributeName)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): ReadAction[Map[String,Iterable[EntityRecord]]] = {
     assert(shouldBeNone.isEmpty)
 
-    implicit object EntityRecordLightShape
-      extends CaseClassShape(EntityRecordLiteLifted.tupled, EntityRecordBuilder.toEntityRecord)
-
     val query = for {
       workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
       attribute <- workspaceAttributeQuery if attribute.ownerId === workspace.id && attribute.name === attrName.name && attribute.namespace === attrName.namespace
