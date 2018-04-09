@@ -45,7 +45,7 @@ object EntityRecordBuilder {
   def toEntityRecord(tuple: (Long, String, String, UUID, Long, Boolean, Option[Timestamp])): EntityRecord = {
     tuple match {
       case (id, name, entityType, workspaceId, recordVersion, deleted, deletedDate) =>
-        new EntityRecord(id, name, entityType, workspaceId, recordVersion, None, deleted, deletedDate)
+        new EntityRecord(id, name, entityType, workspaceId, recordVersion, allAttributeValues = None, deleted, deletedDate)
     }
   }
 
