@@ -910,4 +910,41 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  it should "not select the all_attribute_values column when using entityQuery.withoutAllAttributes" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+
+      val hasAttrs = Entity("entityWithAttrs", "Pair", Map(
+        AttributeName.withDefaultNS("attrOne") -> AttributeString("one"),
+        AttributeName.withDefaultNS("attrTwo") -> AttributeString("two"),
+        AttributeName.withDefaultNS("attrThree") -> AttributeString("three"),
+        AttributeName.withDefaultNS("attrFour") -> AttributeString("four")
+      ))
+
+      runAndWait(entityQuery.save(context, hasAttrs))
+
+      val recWithAttrs = runAndWait(entityQuery
+        .filter(e => e.name === "entityWithAttrs" && e.entityType === "Pair")
+          .result.headOption)
+
+      assert(recWithAttrs.isDefined, "entityQuery should find the record")
+      assertResult(Some(Some("entitywithattrs one two three four")), "entityQuery should return allAttributeValues") {
+        recWithAttrs.map(_.allAttributeValues)
+      }
+      import entityQuery.EntityRecordLightShape
+
+      val recWithoutAttrs = runAndWait(entityQuery.withoutAllAttributeValues
+        .filter(e => e.name === "entityWithAttrs" && e.entityType === "Pair")
+        .result.headOption)
+
+      assert(recWithoutAttrs.isDefined, "entityQuery.withoutAllAttributeValues should find the record")
+      assertResult(Some(None), "entityQueryLight should not return allAttributeValues") {
+        recWithoutAttrs.map(_.allAttributeValues)
+      }
+
+      assertResult(recWithoutAttrs, "entityQuery and entityQuery.withoutAllAttributeValues should return the same record otherwise") {
+        recWithAttrs.map(_.copy(allAttributeValues = None))
+      }
+    }
+  }
+
 }

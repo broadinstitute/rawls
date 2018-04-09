@@ -47,6 +47,7 @@ trait WorkflowComponent {
     with JndiDirectoryDAO =>
 
   import driver.api._
+  import entityQuery.EntityRecordLightShape
 
   class WorkflowTable(tag: Tag) extends Table[WorkflowRecord](tag, "WORKFLOW") {
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
@@ -119,7 +120,7 @@ trait WorkflowComponent {
 
         val insertedRecQuery = for {
           workflowRec <- findWorkflowsBySubmissionId(submissionId)
-          workflowEntityRec <- entityQuery if workflowEntityRec.id === workflowRec.workflowEntityId
+          workflowEntityRec <- entityQuery.withoutAllAttributeValues if workflowEntityRec.id === workflowRec.workflowEntityId
         } yield (workflowRec, workflowEntityRec)
 
         insertInBatches(workflowQuery, recsToInsert).map { rows =>
@@ -141,7 +142,7 @@ trait WorkflowComponent {
 
         val insertedRecQuery = for {
           workflowRec <- findWorkflowsBySubmissionId(submissionId)
-          workflowEntityRec <- entityQuery if workflowEntityRec.id === workflowRec.workflowEntityId
+          workflowEntityRec <- entityQuery.withoutAllAttributeValues if workflowEntityRec.id === workflowRec.workflowEntityId
           insertedInputResolutionRec <- submissionValidationQuery if insertedInputResolutionRec.workflowId === workflowRec.id
         } yield (workflowEntityRec, insertedInputResolutionRec)
 
