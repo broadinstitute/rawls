@@ -24,22 +24,23 @@ object StatisticsService {
     new StatisticsService(userInfo, dataSource, googleServicesDAO)
 
   sealed trait StatisticsServiceMessage
-  case class GetStatistics(startDate: String, endDate: String) extends StatisticsServiceMessage
+  case class GetStatistics(startDate: String, endDate: String, workspaceNamespace: Option[String] = None, workspaceName: Option[String] = None) extends StatisticsServiceMessage
 }
 
 class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths {
 
   import dataSource.dataAccess.driver.api._
 
-  def GetStatistics(startDate: String, endDate: String) = asFCAdmin {getStatistics(startDate, endDate)}
+  def GetStatistics(startDate: String, endDate: String, workspaceNamespace: Option[String], workspaceName: Option[String]) = asFCAdmin {getStatistics(startDate, endDate, workspaceNamespace, workspaceName)}
 
-  def getStatistics(startDate: String, endDate: String): Future[PerRequestMessage] = {
+  def getStatistics(startDate: String, endDate: String, workspaceNamespace: Option[String] = None, workspaceName: Option[String] = None): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       if(DateTime.parse(startDate).getMillis >= DateTime.parse(endDate).getMillis)
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Invalid date range"))
 
       val submissionStatistics = dataAccess.submissionQuery.SubmissionStatisticsQueries
       val workflowStatistics = dataAccess.workflowQuery.WorkflowStatisticsQueries
+      val entityStatistics = dataAccess.entityQuery.EntityStatisticsQueries
 
       val statistics = Map[String, (String, String) => ReadAction[Statistic]](
         "submissionsDuringWindow" ->  submissionStatistics.countSubmissionsInWindow,
@@ -50,6 +51,7 @@ class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickD
         "workflowsPerSubmission" -> workflowStatistics.countWorkflowsPerSubmission,
         "submissionRunTime" -> submissionStatistics.submissionRunTimeQuery,
         "workflowRunTime" -> workflowStatistics.workflowRunTimeQuery
+
       )
 
       val actions = statistics.map { case (name,func) =>
@@ -57,9 +59,11 @@ class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickD
       }
 
       DBIO.sequence(actions).flatMap { results =>
-        dataAccess.rawlsUserQuery.countUsers() map { numUsers =>
-          val allResults = (results.toMap + ("currentTotalUsers" -> numUsers))
-          RequestComplete(StatusCodes.OK, StatisticsReport(startDate, endDate, allResults))
+        dataAccess.rawlsUserQuery.countUsers() flatMap { numUsers =>
+          entityStatistics.countEntitiesofTypeInNamespace(workspaceNamespace, workspaceName) map { entityStats =>
+            val allResults = results.toMap + ("currentTotalUsers" -> numUsers) + ("currentEntityStatistics" -> EntityStatistics(workspaceNamespace, workspaceName, entityStats))
+            RequestComplete(StatusCodes.OK, StatisticsReport(startDate, endDate, allResults))
+          }
         }
       }
     }
