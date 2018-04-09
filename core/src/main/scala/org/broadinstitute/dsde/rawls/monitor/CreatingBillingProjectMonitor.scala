@@ -121,6 +121,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
           case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, Some(error), _)) =>
             // create project operation finished with an error
+            logger.debug(s"project ${project.projectName} creation finished with errors: $error")
             Future.successful(project.copy(status = CreationStatuses.Error, message = Option(error)))
 
           case operations: Seq[RawlsBillingProjectOperationRecord] if operations.forall(rec => rec.done && rec.errorMessage.isEmpty) =>
@@ -144,7 +145,9 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
             val messages = operations.collect {
               case RawlsBillingProjectOperationRecord(_, operationName, _, true, Some(error), _) => s"Failure enabling api $operationName: ${error}"
             }
-            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(messages.mkString("[", "], [", "]"))))
+            val errorMessage = messages.mkString("[", "], [", "]")
+            logger.debug(s"errors enabling apis for project ${project.projectName}: $errorMessage")
+            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(errorMessage)))
 
           case _ =>
             // still running
