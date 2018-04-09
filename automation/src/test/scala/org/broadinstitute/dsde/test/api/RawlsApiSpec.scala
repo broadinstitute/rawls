@@ -88,7 +88,10 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
       }
     }
 
-    "should request sub-workflow metadata from Cromwell" in {
+    // note: added by GAWB-3293 but this was returning too much data.
+    // Ignoring temporarily until we have a better solution in GAWB-3378
+
+    "should request sub-workflow metadata from Cromwell" ignore {
       implicit val token: AuthToken = studentAToken
 
       val testNamespace = makeRandomId()
