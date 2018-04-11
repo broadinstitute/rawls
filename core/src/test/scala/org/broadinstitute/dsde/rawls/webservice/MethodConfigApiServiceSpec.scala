@@ -128,11 +128,13 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "on creation of a method configuration, replace empty mc outputs with a default value based on the name of the output" in withTestDataApiServices { services =>
-    val outputs = Map("empty_output" -> AttributeString(""), "filled_output" -> AttributeString("this.im_full"), "test.workflow_name.result" -> AttributeString(""))
-    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map(), outputs,
+    val inputs =  Map("input1" -> AttributeString(""))
+    val outputs = Map("empty_output" -> AttributeString(""), "filled_output" -> AttributeString("this.im_full"))
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
       AgoraMethod(testData.wsName.namespace, "method-a", 1))
 
-    val expectedSuccessOutputs = Seq("empty_output", "filled_output", "test.workflow_name.result")
+    val expectedSuccessInputs = Seq("input1")
+    val expectedSuccessOutputs = Seq("empty_output", "filled_output")
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -141,9 +143,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           status
         }
         val validated = responseAs[ValidatedMethodConfiguration]
-        val defaultOutputs = Map("empty_output" -> AttributeString("this.empty_ouput"), "filled_output" -> AttributeString("this.im_full"), "test.workflow_name.result" -> AttributeString("this.result"))
+        val defaultOutputs = Map("empty_output" -> AttributeString("this.empty_ouput"), "filled_output" -> AttributeString("this.im_full"))
         assertResult(newMethodConfig.copy(outputs = defaultOutputs)) { validated.methodConfiguration }
-        assert(validated.validInputs.isEmpty)
+        assertSameElements(expectedSuccessInputs, validated.validInputs)
         assert(validated.invalidInputs.isEmpty)
         assertSameElements(expectedSuccessOutputs, validated.validOutputs)
         assert(validated.invalidOutputs.isEmpty)
