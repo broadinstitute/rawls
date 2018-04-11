@@ -92,6 +92,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+
   it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
     val inputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
     val outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
@@ -121,6 +122,34 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
         }
         for ((key, value) <- outputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
+        }
+      }
+  }
+
+  it should "on creation of a method configuration, replace empty mc outputs with a default value based on the name of the output" in withTestDataApiServices { services =>
+    val outputs = Map("empty_output" -> AttributeString(""), "filled_output" -> AttributeString("this.im_full"), "test.workflow_name.result" -> AttributeString(""))
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map(), outputs,
+      AgoraMethod(testData.wsName.namespace, "method-a", 1))
+
+    val expectedSuccessOutputs = Seq("empty_output", "filled_output", "test.workflow_name.result")
+
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        val validated = responseAs[ValidatedMethodConfiguration]
+        val defaultOutputs = Map("empty_output" -> AttributeString("this.empty_ouput"), "filled_output" -> AttributeString("this.im_full"), "test.workflow_name.result" -> AttributeString("this.result"))
+        assertResult(newMethodConfig.copy(outputs = defaultOutputs)) { validated.methodConfiguration }
+        assert(validated.validInputs.isEmpty)
+        assert(validated.invalidInputs.isEmpty)
+        assertSameElements(expectedSuccessOutputs, validated.validOutputs)
+        assert(validated.invalidOutputs.isEmpty)
+
+        // all inputs and outputs are saved, regardless of parsing errors
+        for ((key, value) <- defaultOutputs) assertResult(Option(value)) {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
         }
       }
@@ -459,6 +488,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   it should "update the workspace last modified date on post method configuration" in {
     checkLastModified(Post)
   }
+
 
   def checkValidAttributeSyntax(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
