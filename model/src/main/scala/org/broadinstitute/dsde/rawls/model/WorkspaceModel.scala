@@ -360,7 +360,7 @@ case class MethodConfiguration(
   def addDefaultOutputs(): MethodConfiguration = {
     val newOutputs = outputs map {
       case (name: String, value: AttributeString) => {
-        if (value == AttributeString("")) (name, AttributeString("this." + name)) else (name, value)
+        if (value == AttributeString("")) (name, AttributeString("this." + name.split(".").last)) else (name, value)
       }
     }
     copy(outputs = newOutputs)
