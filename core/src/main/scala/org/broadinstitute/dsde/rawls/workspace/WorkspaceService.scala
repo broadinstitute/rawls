@@ -1611,27 +1611,27 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def hasAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          dataAccess.rawlsGroupQuery.load(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read)) map { readerGroup =>
-            readerGroup match {
-              case Some(group) =>
-                if (group.subGroups.contains(UserService.allUsersGroupRef)) {
-                  RequestComplete(StatusCodes.NoContent)
-                } else {
-                  RequestComplete(StatusCodes.NotFound)
-                }
-              case None =>
-                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, "allUsersGroup not found"))
-            }
-          }
-        }
-      }
-    }
-  }
-
+//  def hasAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+//    asFCAdmin {
+//      dataSource.inTransaction { dataAccess =>
+//        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+//          dataAccess.rawlsGroupQuery.load(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read)) map { readerGroup =>
+//            readerGroup match {
+//              case Some(group) =>
+//                if (group.subGroups.contains(UserService.allUsersGroupRef)) {
+//                  RequestComplete(StatusCodes.NoContent)
+//                } else {
+//                  RequestComplete(StatusCodes.NotFound)
+//                }
+//              case None =>
+//                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, "allUsersGroup not found"))
+//            }
+//          }
+//        }
+//      }
+//    }
+//  }
+//
 //  def grantAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
 //    asFCAdmin {
 //      dataSource.inTransaction { dataAccess =>

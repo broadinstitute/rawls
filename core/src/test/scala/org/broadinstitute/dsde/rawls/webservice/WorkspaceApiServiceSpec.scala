@@ -1170,7 +1170,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
-    runAndWait(rawlsGroupQuery.addGroupMember(realmGroup.membersGroup.groupName, testData.userOwner.userSubjectId))
+//    runAndWait(rawlsGroupQuery.addGroupMember(realmGroup.membersGroup.groupName, testData.userOwner.userSubjectId))
+
+    runAndWait(DBIO.from(services.userServiceConstructor(userInfo).UpdateGroupMembers(realmGroup.membersGroup, addMemberList = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value))))))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -1202,8 +1204,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
 
     //add userWriter to realm
-    runAndWait(rawlsGroupQuery.addGroupMember(realmGroup.membersGroup.groupName, testData.userWriter.userSubjectId))
-
+    runAndWait(DBIO.from(services.userServiceConstructor(userInfo).UpdateGroupMembers(realmGroup.membersGroup, addMemberList = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value))))))
 
     //assert userWriter is a part of realm writer ACLs and userOwner is a part of realm owner ACLs
     val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
@@ -1216,7 +1217,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
 
     //remove userWriter from realm
-    runAndWait(rawlsGroupQuery.removeGroupMember(realmGroup.membersGroup.groupName, testData.userWriter.userSubjectId))
+    runAndWait(DBIO.from(services.userServiceConstructor(userInfo).UpdateGroupMembers(realmGroup.membersGroup, removeMemberList = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value))))))
 
     //assert userWriter is not a part of realm writer ACLs
     val ws3 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
