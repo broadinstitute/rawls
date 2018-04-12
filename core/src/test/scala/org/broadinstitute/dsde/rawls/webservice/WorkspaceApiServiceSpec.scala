@@ -386,55 +386,55 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "let a user access a shared workspace once they are added to all auth domain groups" in withTestDataApiServices { services =>
-    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner, testData.userWriter))
-    val realmGroup2 = createAndSaveManagedGroup("realm-for-testing2", Set(testData.userOwner))
-    val workspaceWithRealm = WorkspaceRequest(
-      namespace = testData.wsName.namespace,
-      name = "newWorkspace2",
-      authorizationDomain = Option(Set(realmGroup, realmGroup2)),
-      attributes = Map.empty
-    )
-
-    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-
-    //add userWriter to writer ACLs
-    Patch(s"${workspaceWithRealm.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-      }
-
-    Get(s"${workspaceWithRealm.path}") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        val ws = responseAs[WorkspaceResponse]
-        assert(!runAndWait(rawlsGroupQuery.isGroupMember(ws.workspace.authDomainACLs(WorkspaceAccessLevels.Write), testData.userWriter)))
-      }
-
-    services.gcsDAO.adminList += testData.userOwner.userEmail.value
-
-    Post(s"/admin/groups/${realmGroup2.membersGroup.groupName.value}/members", RawlsGroupMemberList(userEmails = Some(Seq("writer-access")))) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
-
-    Get(s"${workspaceWithRealm.path}") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        val ws = responseAs[WorkspaceResponse]
-        assert(runAndWait(rawlsGroupQuery.isGroupMember(ws.workspace.authDomainACLs(WorkspaceAccessLevels.Write), testData.userWriter)))
-      }
-  }
+//  it should "let a user access a shared workspace once they are added to all auth domain groups" in withTestDataApiServices { services =>
+//    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner, testData.userWriter))
+//    val realmGroup2 = createAndSaveManagedGroup("realm-for-testing2", Set(testData.userOwner))
+//    val workspaceWithRealm = WorkspaceRequest(
+//      namespace = testData.wsName.namespace,
+//      name = "newWorkspace2",
+//      authorizationDomain = Option(Set(realmGroup, realmGroup2)),
+//      attributes = Map.empty
+//    )
+//
+//    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.Created) {
+//          status
+//        }
+//      }
+//
+//    //add userWriter to writer ACLs
+//    Patch(s"${workspaceWithRealm.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.OK) { status }
+//      }
+//
+//    Get(s"${workspaceWithRealm.path}") ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        val ws = responseAs[WorkspaceResponse]
+//        assert(!runAndWait(rawlsGroupQuery.isGroupMember(ws.workspace.authDomainACLs(WorkspaceAccessLevels.Write), testData.userWriter)))
+//      }
+//
+//    services.gcsDAO.adminList += testData.userOwner.userEmail.value
+//
+//    Post(s"/admin/groups/${realmGroup2.membersGroup.groupName.value}/members", RawlsGroupMemberList(userEmails = Some(Seq("writer-access")))) ~>
+//      sealRoute(services.adminRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.NoContent) {
+//          status
+//        }
+//      }
+//
+//    Get(s"${workspaceWithRealm.path}") ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        val ws = responseAs[WorkspaceResponse]
+//        assert(runAndWait(rawlsGroupQuery.isGroupMember(ws.workspace.authDomainACLs(WorkspaceAccessLevels.Write), testData.userWriter)))
+//      }
+//  }
 
   it should "clone a workspace if the source has a multi-group auth domain and user is in all groups" in withTestDataApiServices { services =>
     val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set(testData.userOwner))
@@ -1146,21 +1146,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
-    Post(s"/admin/groups", realmGroup) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-
-    Post(s"/admin/groups/${realmGroup.groupName.value}/members", RawlsGroupMemberList(userEmails = Some(Seq("owner-access")))) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
+    runAndWait(rawlsGroupQuery.save(realmGroup))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -1184,14 +1170,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
-    val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(ownerAdd)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
+    runAndWait(rawlsGroupQuery.addGroupMember(realmGroup.membersGroup.groupName, testData.userOwner.userSubjectId))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -1208,8 +1187,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-
-
     //add userWriter to writer ACLs + add userOwner to owner ACLs
     Patch(s"${workspaceWithRealm.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None), WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -1225,14 +1202,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
 
     //add userWriter to realm
-    val groupAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(groupAdd)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
+    runAndWait(rawlsGroupQuery.addGroupMember(realmGroup.membersGroup.groupName, testData.userWriter.userSubjectId))
+
 
     //assert userWriter is a part of realm writer ACLs and userOwner is a part of realm owner ACLs
     val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
@@ -1245,14 +1216,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
 
     //remove userWriter from realm
-    val groupRemove = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Delete(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(groupRemove)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
+    runAndWait(rawlsGroupQuery.removeGroupMember(realmGroup.membersGroup.groupName, testData.userWriter.userSubjectId))
 
     //assert userWriter is not a part of realm writer ACLs
     val ws3 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get

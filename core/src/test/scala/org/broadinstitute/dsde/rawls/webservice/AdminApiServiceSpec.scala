@@ -195,56 +195,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NotFound) { status }
       }
   }
-  
-  it should "return 201 when creating a new group" in withTestDataApiServices { services =>
-    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
-
-    Post(s"/admin/groups", httpJson(group)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
-      }
-  }
-
-  it should "return 409 when trying to create a group that already exists" in withTestDataApiServices { services =>
-    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
-
-    Post(s"/admin/groups", httpJson(group)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
-      }
-    Post(s"/admin/groups", httpJson(group)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Conflict) { status }
-      }
-  }
-
-  it should "return 200 when deleting a group that exists" in withTestDataApiServices { services =>
-    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
-
-    Post(s"/admin/groups", httpJson(group)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
-      }
-    Delete(s"/admin/groups/${group.groupName.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-      }
-  }
-
-  it should "return 404 when trying to delete a group that does not exist" in withTestDataApiServices { services =>
-    val group = new RawlsGroupRef(RawlsGroupName("dbgap"))
-
-    Delete(s"/admin/groups/${group.groupName.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) { status }
-      }
-  }
 
   it should "return 200 when adding a library curator" in withTestDataApiServices { services =>
     val testUser = "foo@bar.com"
@@ -269,98 +219,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return a list of members only one level down in the group hierarchy" in withTestDataApiServices { services =>
-    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
-    val subGroup = new RawlsGroupRef(RawlsGroupName("test_subGroup"))
-    val subSubGroup = new RawlsGroupRef(RawlsGroupName("test_subSubGroup"))
-
-    Post(s"/admin/groups", httpJson(group)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
-      }
-    Post(s"/admin/groups", httpJson(subGroup)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
-      }
-    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(subGroupEmails = Option(Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))))) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-    Get(s"/admin/groups/${group.groupName.value}/members") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(UserList(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))) {
-          responseAs[UserList]
-        }
-      }
-  }
-
   val userNoBilling = RawlsUser(RawlsUserSubjectId("4637649"), RawlsUserEmail("no-billing-projects@example.com"))
   val testDataUsers = Seq(testData.userProjectOwner, testData.userOwner, testData.userWriter, testData.userReader, testData.userReaderViaGroup, userNoBilling)
-
-  it should "return 404 when adding a member that doesn't exist" in withTestDataApiServices { services =>
-    val group = RawlsGroupRef(RawlsGroupName("test_group"))
-
-    Post(s"/admin/groups", httpJson(group)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
-      }
-    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(subGroupEmails = Option(Seq(s"GROUP_blahhh@dev.firecloud.org"))))) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) { status }
-      }
-  }
-
-  it should "return 204 when removing a member from a group" in withTestDataApiServices { services =>
-    val group = RawlsGroupRef(RawlsGroupName("test_group"))
-    val subGroup = RawlsGroupRef(RawlsGroupName("test_subGroup"))
-
-    //make main group
-    Post(s"/admin/groups", httpJson(group)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
-      }
-    //make subgroup
-    Post(s"/admin/groups", httpJson(subGroup)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
-      }
-    //put subgroup into main group
-    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(subGroupEmails = Option(Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))))) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-    //verify subgroup was put into main group
-    Get(s"/admin/groups/${group.groupName.value}/members") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(UserList(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))) {
-          responseAs[UserList]
-        }
-      }
-    //remove subgroup from main group
-    Delete(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(subGroupEmails = Option(Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))))) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-    //verify that subgroup was removed from main group
-    Get(s"/admin/groups/${group.groupName.value}/members") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(UserList(List.empty)) {
-          responseAs[UserList]
-        }
-      }
-  }
 
   it should "return 204 when overwriting group membership" in withTestDataApiServices { services =>
     val user1 = RawlsUser(RawlsUserSubjectId(UUID.randomUUID().toString), RawlsUserEmail(s"${UUID.randomUUID().toString}@foo.com"))
@@ -403,57 +263,57 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     assertResult(Option(testGroup)) { runAndWait(rawlsGroupQuery.load(testGroup)) }
   }
 
-  it should "get, grant, revoke all user read access to workspace" in withTestDataApiServices { services =>
-    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
-
-    testData.workspace.accessLevels.values.foreach(services.gcsDAO.createGoogleGroup)
-
-    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) { status }
-      }
-
-    services.gpsDAO.messageLog.clear()
-    Put(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-
-    val group = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
-    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 1))
-
-    Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
-      }
-
-    Delete(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) { status }
-      }
-    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 2))
-
-    Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
-      }
-
-  }
+//  it should "get, grant, revoke all user read access to workspace" in withTestDataApiServices { services =>
+//    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
+//
+//    testData.workspace.accessLevels.values.foreach(services.gcsDAO.createGoogleGroup)
+//
+//    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+//      sealRoute(services.adminRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.NotFound) { status }
+//      }
+//
+//    services.gpsDAO.messageLog.clear()
+//    Put(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+//      sealRoute(services.adminRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.NoContent) { status }
+//      }
+//    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+//      sealRoute(services.adminRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.NoContent) { status }
+//      }
+//
+//    val group = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
+//    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 1))
+//
+//    Get(testData.workspace.path) ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+//      }
+//
+//    Delete(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+//      sealRoute(services.adminRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.NoContent) { status }
+//      }
+//    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+//      sealRoute(services.adminRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.NotFound) { status }
+//      }
+//    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 2))
+//
+//    Get(testData.workspace.path) ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+//      }
+//
+//  }
 
   it should "sync group membership" in withTestDataApiServices { services =>
     val inGoogleGroup = RawlsGroup(
