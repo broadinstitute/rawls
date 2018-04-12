@@ -145,7 +145,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
 
           assertResult(responseAs[List[RawlsBillingProjectMembership]].head)(RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.User, CreationStatuses.Ready))
-          assertResult(responseAs[List[RawlsBillingProjectMembership]].tail.head)(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready))
+          assertResult(responseAs[List[RawlsBillingProjectMembership]].last)(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready))
         }
     }
 
