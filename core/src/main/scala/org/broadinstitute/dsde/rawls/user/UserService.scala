@@ -66,8 +66,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
   def ListBillingAccounts = listBillingAccounts()
 
-  def AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { overwriteGroupMembers(groupRef, memberList) }
-
   def SetManagedGroupAccessInstructions(groupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions) = asFCAdmin { setManagedGroupAccessInstructions(groupRef, instructions) }
 
   def CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) = startBillingProjectCreation(projectName, billingAccount)
@@ -363,45 +361,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def listGroupMembers(groupRef: RawlsGroupRef): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
-        case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Group ${groupRef.groupName.value} does not exist")))
-        case Some(group) =>
-          dataAccess.rawlsGroupQuery.loadMemberEmails(group).map(memberEmails => RequestComplete(StatusCodes.OK, UserList(memberEmails)))
-      }
-    }
-  }
-
-  def createGroup(groupRef: RawlsGroupRef) = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
-        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
-        case None =>
-          createGroupInternal(groupRef, dataAccess) map { _ => RequestComplete(StatusCodes.Created) }
-      }
-    }
-  }
-
-  private def createGroupInternal(groupRef: RawlsGroupRef, dataAccess: DataAccess): ReadWriteAction[RawlsGroup] = {
-    DBIO.from(gcsDAO.createGoogleGroup(groupRef)).flatMap { rawlsGroup =>
-      dataAccess.rawlsGroupQuery.save(rawlsGroup)
-    }
-  }
-
-  def deleteGroup(groupRef: RawlsGroupRef) = {
-    for {
-      group <- dataSource.inTransaction { dataAccess =>
-        withGroup(groupRef, dataAccess) { group =>
-          dataAccess.rawlsGroupQuery.delete(groupRef) map { _ => group }
-        }
-      }
-      _ <- gcsDAO.deleteGoogleGroup(group)
-    } yield {
-      RequestComplete(StatusCodes.OK)
-    }
-  }
-
   def overwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
     for {
       (users, groups) <- dataSource.inTransaction({ dataAccess =>
@@ -409,9 +368,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           loadMemberUsersAndGroups(memberList, dataAccess)
         }
       }, TransactionIsolation.ReadCommitted) // read committed required to reduce db locks and allow concurrency
-
-      _ <- overwriteGroupMembership(groupRef, users.map(RawlsUser.toRef), groups.map(RawlsGroup.toRef))
+     _ <- overwriteGroupMembership(groupRef, users.map(RawlsUser.toRef), groups.map(RawlsGroup.toRef))
     } yield RequestComplete(StatusCodes.NoContent)
+  }
+
+  /** completely overwrites all group members */
+  def overwriteGroupMembership(groupRef: RawlsGroupRef, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): Future[RawlsGroup] = {
+    updateGroupMembershipInternal(groupRef) { group =>
+      group.copy(users = users, subGroups = subGroups)
+    }
   }
 
   def updateGroupMembership(groupRef: RawlsGroupRef, addUsers: Set[RawlsUserRef] = Set.empty, removeUsers: Set[RawlsUserRef] = Set.empty, addSubGroups: Set[RawlsGroupRef] = Set.empty, removeSubGroups: Set[RawlsGroupRef] = Set.empty): Future[RawlsGroup] = {
@@ -425,13 +390,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         users = group.users ++ addUsers -- removeUsers,
         subGroups = group.subGroups ++ addSubGroups -- removeSubGroups
       )
-    }
-  }
-
-  /** completely overwrites all group members */
-  def overwriteGroupMembership(groupRef: RawlsGroupRef, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): Future[RawlsGroup] = {
-    updateGroupMembershipInternal(groupRef) { group =>
-      group.copy(users = users, subGroups = subGroups)
     }
   }
 
@@ -466,13 +424,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case 0 => RequestComplete(StatusCodes.InternalServerError, "We were unable to update the access instructions")
         case _ => RequestComplete(StatusCodes.NoContent)
       }
-    }
-  }
-
-  private def rawlsGroupForRole(role: ManagedRole, managedGroup: ManagedGroup): RawlsGroup = {
-    role match {
-      case ManagedRoles.Admin => managedGroup.adminsGroup
-      case ManagedRoles.Member => managedGroup.membersGroup
     }
   }
 

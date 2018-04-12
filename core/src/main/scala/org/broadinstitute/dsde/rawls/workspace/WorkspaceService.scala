@@ -118,7 +118,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def AdminDeleteWorkspace(workspaceName: WorkspaceName) = adminDeleteWorkspace(workspaceName)
   def AdminWorkflowQueueStatusByUser = adminWorkflowQueueStatusByUser()
 
-  def HasAllUserReadAccess(workspaceName: WorkspaceName) = hasAllUserReadAccess(workspaceName)
+//  def HasAllUserReadAccess(workspaceName: WorkspaceName) = hasAllUserReadAccess(workspaceName)
 //  def GrantAllUserReadAccess(workspaceName: WorkspaceName) = grantAllUserReadAccess(workspaceName)
 //  def RevokeAllUserReadAccess(workspaceName: WorkspaceName) = revokeAllUserReadAccess(workspaceName)
 
