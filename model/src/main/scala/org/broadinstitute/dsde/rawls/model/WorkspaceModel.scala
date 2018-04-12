@@ -356,6 +356,24 @@ case class MethodConfiguration(
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ): String = workspaceName.path+s"/methodconfigs/${namespace}/${name}"
   def path( workspace: Workspace ): String = path(workspace.toWorkspaceName)
+
+//  def addDefaultOutputs(): MethodConfiguration = {
+//    LazyLogging.logger.info("ANUU: outputs " + outputs.toString)
+//    val newOutputs = outputs map {
+//      case (name: String, value: AttributeString) => {
+//        logger.info("ANUU: case name " + name + " value " + value.value)
+//        if (value == AttributeString("")) {
+//          logger.info("ANUU: empty name " + name + " value " + value.value)
+//          logger.info("ANUU: empty repl name " + name + " value " + "this." + name.split(".").toString)
+//          (name, AttributeString("this." + name.split(".").last))
+//        } else {
+//          logger.info("ANUU: not empty name " + name + " value " + value.value)
+//          (name, value)}
+//      }
+//    }
+//    logger.info("ANUU: " + newOutputs.toString)
+//    copy(outputs = newOutputs)
+//  }
 }
 
 case class MethodConfigurationShort(

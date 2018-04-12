@@ -1147,9 +1147,30 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  def addDefaultOutputs(mc: MethodConfiguration): MethodConfiguration = {
+    logger.info("ANUU: outputs " + mc.outputs.toString)
+    def newOutputs = mc.outputs map {
+      case (name: String, value: AttributeString) => {
+        logger.info("ANUU: case name " + name + " value " + value.value)
+        if (value == AttributeString("")) {
+          logger.info("ANUU: empty name " + name + " value " + value.value)
+          logger.info("ANUU: empty repl name " + name + " value " + "this." + (if (name.contains(".")) name.split(".").toList.last else name))
+          (name, AttributeString("this." + (if (name.contains(".")) name.split(".").toList.last else name)))
+        } else {
+          logger.info("ANUU: not empty name " + name + " value " + value.value)
+          (name, value)}
+      }
+    }
+    logger.info("ANUU: " + newOutputs.toString)
+    mc.copy(outputs = newOutputs)
+  }
+
   def createMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
-    dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration) map { _ =>
-      ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, dataAccess)
+    logger.info("ANU: " + methodConfiguration.outputs.toString)
+    val newMethodConfiguration = addDefaultOutputs(methodConfiguration)
+    logger.info("ANU:" + newMethodConfiguration)
+    dataAccess.methodConfigurationQuery.create(workspaceContext, newMethodConfiguration) map { _ =>
+      ExpressionValidator.validateAndParseMCExpressions(newMethodConfiguration, dataAccess)
     }
   }
 
@@ -1173,6 +1194,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     withAttributeNamespaceCheck(methodConfiguration) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+          logger.info("ANU WAZ HERE")
           dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
             case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")))
             case None => createMCAndValidateExpressions(workspaceContext, methodConfiguration, dataAccess)
