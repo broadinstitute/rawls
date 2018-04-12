@@ -1147,9 +1147,23 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+//  private def addDefaultOutputs[T](methodConfiguration: MethodConfiguration)(op: (MethodConfiguration) => ReadWriteAction[T]): MethodConfiguration = {
+//    methodConfiguration.addDefaultOutputs
+//    op
+//  }
+
+//  def createMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
+//    addDefaultOutputs(methodConfiguration) { newMethodConfiguration =>
+//      dataAccess.methodConfigurationQuery.create(workspaceContext, newMethodConfiguration) map { _ =>
+//        ExpressionValidator.validateAndParseMCExpressions(newMethodConfiguration, dataAccess)
+//      }
+//    }
+//  }
+
   def createMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
-    dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration) map { _ =>
-      ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, dataAccess)
+    val newMethodConfiguration = methodConfiguration.addDefaultOutputs
+    dataAccess.methodConfigurationQuery.create(workspaceContext, newMethodConfiguration) map { _ =>
+      ExpressionValidator.validateAndParseMCExpressions(newMethodConfiguration, dataAccess)
     }
   }
 
