@@ -93,33 +93,35 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "on creation of a method configuration, replace empty mc outputs with a default value based on the name of the output" in withTestDataApiServices { services =>
-    val inputs =  Map("good_in" -> AttributeString("this.foo"))
-    val outputs = Map("empty_output" -> AttributeString(""), "filled_output" -> AttributeString("this.imfull"))
+    val inputs = Map("good_in" -> AttributeString("this.foo"))
+    val outputs = Map("empty_output" -> AttributeString(""), "test.empty.output" -> AttributeString(""), "filled_output" -> AttributeString("this.im_full"))
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
-        AgoraMethod(testData.wsName.namespace, "method-a", 1))
+      AgoraMethod(testData.wsName.namespace, "method-a", 1))
 
-      val expectedSuccessInputs = Seq("input1")
-      val expectedSuccessOutputs = Seq("empty_output", "filled_output")
+    val expectedSuccessInputs = Seq("good_in")
+    val expectedSuccessOutputs = Seq("empty_output", "test.empty.output", "filled_output")
 
-      Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-        sealRoute(services.methodConfigRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) {
-              status
-          }
-          val validated = responseAs[ValidatedMethodConfiguration]
-          val defaultOutputs = Map("empty_output" -> AttributeString("this.empty_ouput"), "filled_output" -> AttributeString("this.im_full"))
-          assertResult(newMethodConfig.copy(outputs = defaultOutputs)) { validated.methodConfiguration }
-          assertSameElements(expectedSuccessInputs, validated.validInputs)
-          assert(validated.invalidInputs.isEmpty)
-          assertSameElements(expectedSuccessOutputs, validated.validOutputs)
-          assert(validated.invalidOutputs.isEmpty)
-
-          // all inputs and outputs are saved, regardless of parsing errors
-          for ((key, value) <- defaultOutputs) assertResult(Option(value)) {
-              runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
-          }
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
         }
+        val validated = responseAs[ValidatedMethodConfiguration]
+        val defaultOutputs = Map("empty_output" -> AttributeString("this.empty_output"), "test.empty.output" -> AttributeString("this.output"), "filled_output" -> AttributeString("this.im_full"))
+        assertResult(newMethodConfig.copy(outputs = defaultOutputs)) {
+          validated.methodConfiguration
+        }
+        assertSameElements(expectedSuccessInputs, validated.validInputs)
+        assert(validated.invalidInputs.isEmpty)
+        assertSameElements(expectedSuccessOutputs, validated.validOutputs)
+        assert(validated.invalidOutputs.isEmpty)
+
+        // all outputs are saved
+        for ((key, value) <- defaultOutputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
+        }
+      }
   }
 
   it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
