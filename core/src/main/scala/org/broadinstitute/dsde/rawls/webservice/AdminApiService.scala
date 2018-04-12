@@ -72,49 +72,13 @@ trait AdminApiService extends UserInfoDirectives {
         complete { workspaceServiceConstructor(userInfo).AdminWorkflowQueueStatusByUser }
       }
     } ~
-    path("admin" / "groups") { //create group
-      post {
-        entity(as[RawlsGroupRef]) { groupRef =>
-          complete { userServiceConstructor(userInfo).AdminCreateGroup(groupRef) }
-        }
-      }
-    } ~
     pathPrefix("admin" / "groups" / Segment) { (groupNameRaw) =>
       val rawlsGroupRef = RawlsGroupRef(RawlsGroupName(URLDecoder.decode(groupNameRaw, "UTF-8")))
-      pathEnd {
-        delete {
-          complete { userServiceConstructor(userInfo).AdminDeleteGroup(rawlsGroupRef) }
-        }
-      } ~
       path("accessInstructions") {
         post {
           entity(as[ManagedGroupAccessInstructions]) { instructions =>
             complete { userServiceConstructor(userInfo).SetManagedGroupAccessInstructions(ManagedGroupRef(RawlsGroupName(URLDecoder.decode(groupNameRaw, "UTF-8"))), instructions) }
           }
-        }
-      } ~
-      // there are 3 methods supported to modify group membership:
-      // PUT = "set the group members to exactly this list"
-      // POST = "add these things to the list"
-      // DELETE = "remove these things from the list"
-      path("members") {
-        put {
-          entity(as[RawlsGroupMemberList]) { memberList =>
-            complete { userServiceConstructor(userInfo).AdminOverwriteGroupMembers(rawlsGroupRef, memberList) }
-          }
-        } ~
-        post {
-          entity(as[RawlsGroupMemberList]) { memberList =>
-            complete { userServiceConstructor(userInfo).AdminAddGroupMembers(rawlsGroupRef, memberList) }
-          }
-        } ~
-        delete {
-          entity(as[RawlsGroupMemberList]) { memberList =>
-            complete { userServiceConstructor(userInfo).AdminRemoveGroupMembers(rawlsGroupRef, memberList) }
-          }
-        } ~
-        get {
-          complete { userServiceConstructor(userInfo).AdminListGroupMembers(rawlsGroupRef) }
         }
       }
     } ~
@@ -132,17 +96,17 @@ trait AdminApiService extends UserInfoDirectives {
         complete { userServiceConstructor(userInfo).AdminRemoveLibraryCurator(RawlsUserEmail(userEmail)) }
       }
     } ~
-    path("admin" / "allUserReadAccess" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
-      get {
-        complete { workspaceServiceConstructor(userInfo).HasAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
-      } ~
-      put {
-        complete { workspaceServiceConstructor(userInfo).GrantAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
-      } ~
-      delete {
-        complete { workspaceServiceConstructor(userInfo).RevokeAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
-      }
-    } ~
+//    path("admin" / "allUserReadAccess" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
+//      get {
+//        complete { workspaceServiceConstructor(userInfo).HasAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
+//      } ~
+//      put {
+//        complete { workspaceServiceConstructor(userInfo).GrantAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
+//      } ~
+//      delete {
+//        complete { workspaceServiceConstructor(userInfo).RevokeAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
+//      }
+//    } ~
     path("admin" / "validate" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       get {
         parameters('userSubjectId.?) { (userSubjectId) =>

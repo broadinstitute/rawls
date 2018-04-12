@@ -119,8 +119,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def AdminWorkflowQueueStatusByUser = adminWorkflowQueueStatusByUser()
 
   def HasAllUserReadAccess(workspaceName: WorkspaceName) = hasAllUserReadAccess(workspaceName)
-  def GrantAllUserReadAccess(workspaceName: WorkspaceName) = grantAllUserReadAccess(workspaceName)
-  def RevokeAllUserReadAccess(workspaceName: WorkspaceName) = revokeAllUserReadAccess(workspaceName)
+//  def GrantAllUserReadAccess(workspaceName: WorkspaceName) = grantAllUserReadAccess(workspaceName)
+//  def RevokeAllUserReadAccess(workspaceName: WorkspaceName) = revokeAllUserReadAccess(workspaceName)
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[Workspace] =
     withAttributeNamespaceCheck(workspaceRequest) {
@@ -1632,34 +1632,34 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def grantAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          val userServiceRef = userServiceConstructor(userInfo)
-          DBIO.from(userServiceRef.AddGroupMembers(
-            workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
-            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value)))))
-        } map {
-          case RequestComplete(StatusCodes.OK) => RequestComplete(StatusCodes.Created)
-          case otherwise => otherwise
-        }
-      }
-    }
-  }
-
-  def revokeAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          val userServiceRef = userServiceConstructor(userInfo)
-          DBIO.from(userServiceRef.RemoveGroupMembers(
-            workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
-            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value)))))
-        }
-      }
-    }
-  }
+//  def grantAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+//    asFCAdmin {
+//      dataSource.inTransaction { dataAccess =>
+//        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+//          val userServiceRef = userServiceConstructor(userInfo)
+//          DBIO.from(userServiceRef.AddGroupMembers(
+//            workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
+//            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value)))))
+//        } map {
+//          case RequestComplete(StatusCodes.OK) => RequestComplete(StatusCodes.Created)
+//          case otherwise => otherwise
+//        }
+//      }
+//    }
+//  }
+//
+//  def revokeAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+//    asFCAdmin {
+//      dataSource.inTransaction { dataAccess =>
+//        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+//          val userServiceRef = userServiceConstructor(userInfo)
+//          DBIO.from(userServiceRef.RemoveGroupMembers(
+//            workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
+//            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value)))))
+//        }
+//      }
+//    }
+//  }
 
   def listAllWorkspaces() = {
     asFCAdmin {

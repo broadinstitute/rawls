@@ -71,52 +71,6 @@ trait UserApiService extends UserInfoDirectives {
         get {
           complete { userServiceConstructor(userInfo).ListBillingAccounts }
         }
-      } ~
-      path("user" / "groups") {
-        get {
-          complete { userServiceConstructor(userInfo).ListGroupsForUser(userInfo.userEmail) }
-        }
-      } ~
-      path("user" / "group" / Segment) { groupName =>
-        get {
-          complete { userServiceConstructor(userInfo).GetUserGroup(RawlsGroupRef(RawlsGroupName(groupName))) }
-        }
-      } ~
-      pathPrefix("groups") {
-        pathEnd {
-          get {
-            complete { userServiceConstructor(userInfo).ListManagedGroupsForUser }
-          }
-        } ~
-          pathPrefix(Segment) { groupName =>
-            val groupRef = ManagedGroupRef(RawlsGroupName(groupName))
-            path("requestAccess") {
-              post {
-                complete { userServiceConstructor(userInfo).RequestAccessToManagedGroup(groupRef) }
-              }
-            } ~
-              pathEnd {
-                get {
-                  complete { userServiceConstructor(userInfo).GetManagedGroup(groupRef) }
-                } ~
-                  post {
-                    complete { userServiceConstructor(userInfo).CreateManagedGroup(groupRef) }
-                  } ~
-                  delete {
-                    complete { userServiceConstructor(userInfo).DeleteManagedGroup(groupRef) }
-                  }
-              } ~
-              path(Segment / Segment) { (role, email) =>
-                put {
-                  complete { userServiceConstructor(userInfo).AddManagedGroupMembers(groupRef, ManagedRoles.withName(role), email) }
-
-                } ~
-                  delete {
-                    complete { userServiceConstructor(userInfo).RemoveManagedGroupMembers(groupRef, ManagedRoles.withName(role), email) }
-
-                  }
-              }
-          }
       }
   }
 }

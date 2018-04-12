@@ -54,8 +54,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def GetRefreshTokenDate = getRefreshTokenDate()
 
   def CreateUser = createUser()
-  def ListGroupsForUser(userEmail: RawlsUserEmail) = listGroupsForUser(userEmail)
-  def GetUserGroup(groupRef: RawlsGroupRef) = getUserGroup(groupRef)
 
   def ListBillingProjects = listBillingProjects
   def AdminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { deleteBillingProject(projectName, ownerInfo) }
@@ -68,29 +66,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
   def ListBillingAccounts = listBillingAccounts()
 
-  def AdminCreateGroup(groupRef: RawlsGroupRef) = asFCAdmin { createGroup(groupRef) }
-  def AdminListGroupMembers(groupRef: RawlsGroupRef) = asFCAdmin { listGroupMembers(groupRef) }
-  def AdminDeleteGroup(groupName: RawlsGroupRef) = asFCAdmin { deleteGroup(groupName) }
   def AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { overwriteGroupMembers(groupRef, memberList) }
 
-  def CreateManagedGroup(groupRef: ManagedGroupRef) = createManagedGroup(groupRef)
-  def GetManagedGroup(groupRef: ManagedGroupRef) = getManagedGroup(groupRef)
-  def RequestAccessToManagedGroup(groupRef: ManagedGroupRef) = requestAccessToManagedGroup(groupRef)
   def SetManagedGroupAccessInstructions(groupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions) = asFCAdmin { setManagedGroupAccessInstructions(groupRef, instructions) }
-  def ListManagedGroupsForUser = listManagedGroupsForUser
-  def AddManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) = addManagedGroupMembers(groupRef, role, email)
-  def RemoveManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) = removeManagedGroupMembers(groupRef, role, email)
-  def OverwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList) = overwriteManagedGroupMembers(groupRef, role, memberList)
-  def DeleteManagedGroup(groupRef: ManagedGroupRef) = deleteManagedGroup(groupRef)
 
   def CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) = startBillingProjectCreation(projectName, billingAccount)
   def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamResourceActions.readPolicies) { getBillingProjectMembers(projectName) }
 
   def OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = overwriteGroupMembers(groupRef, memberList)
-  def AdminAddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { updateGroupMembers(groupRef, addMemberList = memberList) }
-  def AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { updateGroupMembers(groupRef, removeMemberList = memberList) }
-  def AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = updateGroupMembers(groupRef, addMemberList = memberList)
-  def RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = updateGroupMembers(groupRef, removeMemberList = memberList)
   def AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) = asFCAdmin { synchronizeGroupMembersApi(groupRef) }
   def InternalSynchronizeGroupMembers(groupRef: RawlsGroupRef) = synchronizeGroupMembers(groupRef)
 
@@ -452,78 +435,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def createManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
-    val userDefinedRegex = "[A-z0-9_-]+".r
-    if(! userDefinedRegex.pattern.matcher(groupRef.membersGroupName.value).matches) {
-      val msg = s"Invalid input: ${groupRef.membersGroupName}. Input may only contain alphanumeric characters, underscores, and dashes."
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
-    }
-    if(groupRef.membersGroupName.value.length > 50) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: ${groupRef.membersGroupName}. Input may be a max of 50 characters.", statusCode = StatusCodes.BadRequest))
-    val usersGroupRef = groupRef.toMembersGroupRef
-    val ownersGroupRef = RawlsGroupRef(RawlsGroupName(groupRef.membersGroupName.value + "-owners"))
-    for {
-      managedGroup <- createManagedGroupInternal(usersGroupRef, ownersGroupRef)
-      _ <- updateGroupMembership(managedGroup.adminsGroup, addUsers = Set(RawlsUser(userInfo)))
-      _ <- updateGroupMembership(managedGroup.membersGroup, addSubGroups = Set(managedGroup.adminsGroup))
-    } yield {
-      RequestComplete(StatusCodes.Created, ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort, managedGroup.adminsGroup.toRawlsGroupShort, Seq(managedGroup.adminsGroup.groupEmail.value), Seq(userInfo.userEmail.value)))
-    }
-  }
-
-  private def createManagedGroupInternal(usersGroupRef: RawlsGroupRef, ownersGroupRef: RawlsGroupRef): Future[ManagedGroup] = {
-    dataSource.inTransaction { dataAccess =>
-      val existingGroups = for {
-        preexistingUsersGroup <- dataAccess.rawlsGroupQuery.load(usersGroupRef)
-        preexistingOwnersGroup <- dataAccess.rawlsGroupQuery.load(ownersGroupRef)
-      } yield {
-          (preexistingUsersGroup, preexistingOwnersGroup)
-        }
-
-      existingGroups.flatMap {
-        case (None, None) =>
-          for {
-            usersGroup <- createGroupInternal(usersGroupRef, dataAccess)
-            ownersGroup <- createGroupInternal(ownersGroupRef, dataAccess)
-            managedGroup <- dataAccess.managedGroupQuery.createManagedGroup(ManagedGroup(usersGroup, ownersGroup))
-          } yield {
-            managedGroup
-          }
-
-        case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "please choose a different name"))
-      }
-    }
-  }
-
-  def getManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        for {
-          usersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.membersGroup)
-          ownersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.adminsGroup)
-        } yield {
-          // we want to hide the fact that the users group contains the owners group because this structure is
-          // confusing to the user even though the functionality is desired
-          val userEmailsSansOwnerGroup = usersEmails.filterNot(_ == managedGroup.adminsGroup.groupEmail.value)
-          RequestComplete(ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort, managedGroup.adminsGroup.toRawlsGroupShort, userEmailsSansOwnerGroup, ownersEmails))
-        }
-      }
-    }
-  }
-
-  def listManagedGroupsForUser(): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      for {
-        groupsWithAccess <- dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUserRef(userInfo.userSubjectId))
-        emailsByGroup <- dataAccess.rawlsGroupQuery.loadEmails(groupsWithAccess.map(_.managedGroupRef.toMembersGroupRef).toSeq)
-      } yield {
-        val response = groupsWithAccess.groupBy(_.managedGroupRef).map { case (groupRef, accessEntries) =>
-          ManagedGroupAccessResponse(groupRef.membersGroupName, emailsByGroup(groupRef.toMembersGroupRef), accessEntries.map(_.role).max)
-        }
-        RequestComplete(StatusCodes.OK, response)
-      }
-    }
-  }
-
   def requestAccessToManagedGroup(groupRef: ManagedGroupRef): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       val query = for {
@@ -558,98 +469,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def addManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String): Future[PerRequestMessage] = {
-    loadRefList(email) flatMap { addMemberList => updateManagedGroupMembers(groupRef, role, addMemberList = addMemberList) }
-  }
-
-  def removeManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String): Future[PerRequestMessage] = {
-    loadRefList(email) flatMap { removeMemberList => updateManagedGroupMembers(groupRef, role, removeMemberList = removeMemberList) }
-  }
-
-  def loadRefList(email: String): Future[RawlsGroupMemberList] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsGroupQuery.loadRefsFromEmails(Seq(email)).map(_.values.headOption) map {
-        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"User or group with email $email not found"))
-        case Some(Left(userRef)) => RawlsGroupMemberList(userSubjectIds = Option(Seq(userRef.userSubjectId.value)))
-        case Some(Right(groupRef)) => RawlsGroupMemberList(subGroupNames = Option(Seq(groupRef.groupName.value)))
-      }
-    }
-  }
-
-  private def updateManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, addMemberList: RawlsGroupMemberList = RawlsGroupMemberList(), removeMemberList: RawlsGroupMemberList = RawlsGroupMemberList()): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        if (role == ManagedRoles.Admin &&
-          (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail.value) ||
-            removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId.value))) {
-
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
-        }
-
-        DBIO.successful(rawlsGroupForRole(role, managedGroup))
-      }
-    } flatMap { rawlsGroup =>
-      updateGroupMembers(rawlsGroup, addMemberList, removeMemberList)
-    }
-  }
-
   private def rawlsGroupForRole(role: ManagedRole, managedGroup: ManagedGroup): RawlsGroup = {
     role match {
       case ManagedRoles.Admin => managedGroup.adminsGroup
       case ManagedRoles.Member => managedGroup.membersGroup
     }
   }
-
-  def overwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        if (role == ManagedRoles.Admin &&
-          !memberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail.value) &&
-            !memberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId.value)) {
-
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
-        }
-
-        DBIO.successful(rawlsGroupForRole(role, managedGroup))
-      }
-    } flatMap { rawlsGroup =>
-      overwriteGroupMembers(rawlsGroup, memberList)
-    }
-  }
-
-  def deleteManagedGroup(groupRef: ManagedGroupRef) = {
-    for{
-      _ <- dataSource.inTransaction { dataAccess =>
-        for {
-          groupToCheck <- dataAccess.managedGroupQuery.load(groupRef).map(_.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Group does not exist,"))))
-          admins <- dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.adminsGroup.groupName)
-          members <- dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.membersGroup.groupName)
-        } yield {
-          if ((admins - groupToCheck.membersGroup.groupName).nonEmpty || members.nonEmpty) {
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"Cannot delete group because it is in use. Admins: ${admins} Members: ${members}"))
-          }
-        }
-      }
-      groupEmailsToDelete <- dataSource.inTransaction { dataAccess =>
-        withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-          DBIO.seq(
-            dataAccess.managedGroupQuery.deleteManagedGroup(groupRef),
-            dataAccess.rawlsGroupQuery.delete(managedGroup.membersGroup),
-            dataAccess.rawlsGroupQuery.delete(managedGroup.adminsGroup)
-          ).map(_ => Seq(managedGroup.membersGroup, managedGroup.adminsGroup))
-        }
-      }
-      _ <- Future.traverse(groupEmailsToDelete) { group =>
-        gcsDAO.deleteGoogleGroup(group).recover {
-          // log any exception but ignore
-          case t: Throwable => logger.error(s"error deleting google group $group", t)
-        }
-      }
-    } yield {
-      RequestComplete(StatusCodes.NoContent)
-    }
-  }
-
 
   /**
    * Internal function to update a group
