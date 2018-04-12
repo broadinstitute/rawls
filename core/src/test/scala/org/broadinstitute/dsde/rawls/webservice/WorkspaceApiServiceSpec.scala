@@ -1228,8 +1228,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when updating subgroup membership" in withTestDataApiServices { services =>
-
-
     val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
     val groupA = RawlsGroup(RawlsGroupName("GroupA"), RawlsGroupEmail("groupA@firecloud.org"), Set.empty, Set.empty)
     val groupB = RawlsGroup(RawlsGroupName("GroupB"), RawlsGroupEmail("groupB@firecloud.org"), Set.empty, Set(groupA))
@@ -1237,14 +1235,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
     //add the owner to the realm
-    val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(ownerAdd)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
+    runAndWait(DBIO.from(services.userServiceConstructor(userInfo).UpdateGroupMembers(realmGroup.membersGroup, addMemberList = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value))))))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -1263,51 +1254,21 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //create group A
-    Post(s"/admin/groups", groupA) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
+    createAndSaveManagedGroup("GroupA", Set.empty)
 
     //create group B
-    Post(s"/admin/groups", groupB) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
+    createAndSaveManagedGroup("GroupB", Set.empty)
 
     //add userWriter to group A
     val addWriterToA = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Post(s"/admin/groups/${groupA.groupName.value}/members", httpJson(addWriterToA)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
+    runAndWait(DBIO.from(services.userServiceConstructor(userInfo).UpdateGroupMembers(RawlsGroupRef(RawlsGroupName("GroupA")), addMemberList = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None))))
 
     //add group A to group B
     val addAtoB = RawlsGroupMemberList(None, None, None, Some(Seq(groupA.groupName.value)))
-    Post(s"/admin/groups/${groupB.groupName.value}/members", httpJson(addAtoB)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
+    runAndWait(DBIO.from(services.userServiceConstructor(userInfo).UpdateGroupMembers(RawlsGroupRef(RawlsGroupName("GroupB")), addMemberList = RawlsGroupMemberList(None, None, None, Some(Seq("GroupA"))))))
 
     val writerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(writerAdd)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
+    runAndWait(DBIO.from(services.userServiceConstructor(userInfo).UpdateGroupMembers(realmGroup.membersGroup, addMemberList = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None))))
 
     //add group B to the writer ACL + add owner to owner ACL
     val groupBEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(groupB.groupName)).value
@@ -1328,13 +1289,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //remove userWriter from group A
     val removeWriterFromA = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None)
-    Delete(s"/admin/groups/${realmGroup.membersGroupName.value}/members", httpJson(removeWriterFromA)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
+    runAndWait(DBIO.from(services.userServiceConstructor(userInfo).UpdateGroupMembers(RawlsGroupRef(RawlsGroupName("GroupA")), removeMemberList = RawlsGroupMemberList(None, None, Some(Seq(testData.userWriter.userSubjectId.value)), None))))
 
     //assert userWriter is not a part of realm writer ACLs
     val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
