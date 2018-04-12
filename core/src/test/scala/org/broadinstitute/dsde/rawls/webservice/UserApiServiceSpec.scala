@@ -129,7 +129,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "list a user's billing projects" in withTestDataApiServices { services =>
+  it should "list a user's billing projects ordered a-z" in withTestDataApiServices { services =>
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
         check {
@@ -137,9 +137,11 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
 
-          assertResult(Set(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready), RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.User, CreationStatuses.Ready))) {
+          assertResult(
+            List(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready),
+              RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.User, CreationStatuses.Ready)).sortWith((l, r) => l.projectName.value < r.projectName.value)) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+            responseAs[List[RawlsBillingProjectMembership]]
           }
         }
     }
