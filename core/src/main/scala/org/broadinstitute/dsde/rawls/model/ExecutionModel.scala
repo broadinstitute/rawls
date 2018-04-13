@@ -23,12 +23,20 @@ import scala.util.{Failure, Success, Try}
 case class SubmissionRequest(
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  entityType: String,
-  entityName: String,
+  entityType: Option[String],
+  entityName: Option[String],
   expression: Option[String],
   useCallCache: Boolean,
   workflowFailureMode: Option[String] = None
 )
+
+//GAWB-3541 makes entityType and entityName optional.
+// This lifts existing calls to create a SubmissionRequest into the new type, so I don't have to update ten million tests
+object SubmissionRequest {
+  def apply(mcNs: String, mcN: String, eType: String, eName: String, expr: Option[String], useCallCache: Boolean, wfFailureMode: Option[String] = None): SubmissionRequest = {
+    SubmissionRequest(mcNs, mcN, Some(eType), Some(eName), expr, useCallCache, wfFailureMode)
+  }
+}
 
 // Cromwell's response to workflow submission
 case class ExecutionServiceStatus(
@@ -88,7 +96,7 @@ case class Workflow(
   workflowId: Option[String],
   status: WorkflowStatus,
   statusLastChangedDate: DateTime,
-  workflowEntity: AttributeEntityReference,
+  workflowEntity: Option[AttributeEntityReference],
   inputResolutions: Seq[SubmissionValidationValue],
   messages: Seq[AttributeString] = Seq.empty,
   cost: Option[Float] = None
@@ -111,7 +119,7 @@ case class Submission(
   submitter: RawlsUserRef,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  submissionEntity: AttributeEntityReference,
+  submissionEntity: Option[AttributeEntityReference],
   workflows: Seq[Workflow],
   status: SubmissionStatus,
   useCallCache: Boolean,
@@ -169,7 +177,7 @@ case class SubmissionValidationInput(
 
 // common values for all the entities -- the entity type and the input descriptions
 case class SubmissionValidationHeader(
-  entityType: String,
+  entityType: Option[String],
   inputExpressions: Seq[SubmissionValidationInput] // size of Seq is nInputs
 )
 

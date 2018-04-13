@@ -57,10 +57,14 @@ trait MethodWiths {
     }
   }
 
-  def withValidatedMCExpressions[T](methodConfiguration: MethodConfiguration, methodInputsToProcess: Seq[MethodConfigResolver.MethodInput], emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput], parser: SlickExpressionParser)
+  def withValidatedMCExpressions[T](methodConfiguration: MethodConfiguration,
+                                    methodInputsToProcess: Seq[MethodConfigResolver.MethodInput],
+                                    emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput],
+                                    allowRootEntity: Boolean,
+                                    parser: SlickExpressionParser)
                                    (op: ValidatedMethodConfiguration => ReadWriteAction[T])
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
-    val validated = ExpressionValidator.validateExpressionsForSubmission(methodConfiguration, methodInputsToProcess, emptyOptionalMethodInputs, parser)
+    val validated = ExpressionValidator.validateExpressionsForSubmission(methodConfiguration, methodInputsToProcess, emptyOptionalMethodInputs, allowRootEntity, parser)
     DBIO.from(Future.fromTry(validated)) flatMap op
   }
 }

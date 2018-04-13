@@ -47,14 +47,16 @@ trait SlickExpressionParser extends JavaTokenParsers {
   // For now, we expect the initial entity to be the special token "this", which is bound at evaluation time to a root entity.
 
   //Parser for expressions ending in an attribute value (not an entity reference)
-  private def attributeExpression: Parser[PipelineQuery] = {
+  private def attributeExpression(allowRootEntity: Boolean): Parser[PipelineQuery] = {
+
     // the basic case: this.(ref.)*attribute
-    entityRootDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
+    val entityExpr = entityRootDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
       case root ~ Nil ~ last => PipelineQuery(Option(root), List.empty, last)
       case root ~ ref ~ last => PipelineQuery(Option(root), ref, last)
-    } |
+    }
+
     // attributes at the end of a reference chain starting at a workspace: workspace.ref.(ref.)*attribute
-    workspaceEntityRefDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
+    val workspaceExpr = workspaceEntityRefDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
       case workspace ~ Nil ~ last => PipelineQuery(Option(workspace), List.empty, last)
       case workspace ~ ref ~ last => PipelineQuery(Option(workspace), ref, last)
     } |
@@ -62,17 +64,29 @@ trait SlickExpressionParser extends JavaTokenParsers {
     workspaceAttribute ^^ {
       case workspace => PipelineQuery(None, List.empty, workspace)
     }
+
+    if(allowRootEntity) {
+      entityExpr | workspaceExpr
+    } else {
+      workspaceExpr
+    }
   }
 
   //Parser for output expressions: this.attribute or workspace.attribute (no entity references in the middle)
-  private def outputAttributeExpression: Parser[PipelineQuery] = {
+  private def outputAttributeExpression(allowRootEntity: Boolean): Parser[PipelineQuery] = {
     // this.attribute
-    entityRootDot ~ valueAttribute ^^ {
+    val entityOutput = entityRootDot ~ valueAttribute ^^ {
       case root ~ attr => PipelineQuery(Option(root), List.empty, attr)
-    } |
+    }
     // workspace.attribute
-    workspaceAttribute ^^ {
+    val workspaceOutput = workspaceAttribute ^^ {
       case workspace => PipelineQuery(None, List.empty, workspace)
+    }
+
+    if(allowRootEntity) {
+      entityOutput | workspaceOutput
+    } else {
+      workspaceOutput
     }
   }
 
@@ -144,12 +158,12 @@ trait SlickExpressionParser extends JavaTokenParsers {
         else entityAttributeFinalFunc(attrName)
     }
 
-  def parseAttributeExpr(expression: String): Try[PipelineQuery] = {
-    parse(expression, attributeExpression)
+  def parseAttributeExpr(expression: String, allowRootEntity: Boolean): Try[PipelineQuery] = {
+    parse(expression, attributeExpression(allowRootEntity))
   }
 
-  def parseOutputAttributeExpr(expression: String): Try[PipelineQuery] = {
-    parse(expression, outputAttributeExpression)
+  def parseOutputAttributeExpr(expression: String, allowRootEntity: Boolean): Try[PipelineQuery] = {
+    parse(expression, outputAttributeExpression(allowRootEntity))
   }
 
   def parseEntityExpr(expression: String): Try[PipelineQuery] = {
