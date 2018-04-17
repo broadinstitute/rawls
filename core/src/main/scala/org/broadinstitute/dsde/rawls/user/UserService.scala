@@ -236,7 +236,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
           RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
         }
-      }.toList.sortWith((l, r)=> l.projectName.value < r.projectName.value)
+      }.toList.sortBy(_.projectName.value)
     }
 
     membershipsFuture.map(RequestComplete(_))
