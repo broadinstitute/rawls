@@ -30,6 +30,7 @@ case class SubmissionRequest(
   workflowFailureMode: Option[String] = None
 )
 
+/*
 //GAWB-3541 makes entityType and entityName optional.
 // This lifts existing calls to create a SubmissionRequest into the new type, so I don't have to update ten million tests
 object SubmissionRequest {
@@ -37,6 +38,7 @@ object SubmissionRequest {
     SubmissionRequest(mcNs, mcN, Some(eType), Some(eName), expr, useCallCache, wfFailureMode)
   }
 }
+*/
 
 // Cromwell's response to workflow submission
 case class ExecutionServiceStatus(
@@ -133,7 +135,7 @@ case class SubmissionStatusResponse(
   submitter: String,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  submissionEntity: AttributeEntityReference,
+  submissionEntity: Option[AttributeEntityReference],
   workflows: Seq[Workflow],
   status: SubmissionStatus,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
@@ -160,7 +162,7 @@ case class SubmissionListResponse(
   submitter: String,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  submissionEntity: AttributeEntityReference,
+  submissionEntity: Option[AttributeEntityReference],
   status: SubmissionStatus,
   workflowStatuses: StatusCounts,
   useCallCache: Boolean,

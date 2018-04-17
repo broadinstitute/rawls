@@ -121,13 +121,12 @@ trait WorkflowComponent {
     }
 
     def createWorkflows(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflows: Seq[Workflow])(implicit wfStatusCounter: WorkflowStatus => Counter): ReadWriteAction[Seq[Workflow]] = {
-      def insertWorkflowRecs(submissionId: UUID, workflows: Seq[Workflow], entityRecs: Seq[EntityRecord]): ReadWriteAction[Map[AttributeEntityReference, WorkflowRecord]] = {
+      def insertWorkflowRecs(submissionId: UUID, workflows: Seq[Workflow], entityRecs: Seq[EntityRecord]): ReadWriteAction[Map[Option[AttributeEntityReference], WorkflowRecord]] = {
         val entityRecsMap = entityRecs.map(e => e.toReference -> e.id).toMap
         val recsToInsert = workflows.map(workflow => marshalNewWorkflow(submissionId, workflow, workflow.workflowEntity.map(entityRecsMap(_))))
 
         val insertedRecQuery = for {
-          workflowRec <- findWorkflowsBySubmissionId(submissionId)
-          workflowEntityRec <- entityQuery.withoutAllAttributeValues if workflowEntityRec.id === workflowRec.workflowEntityId
+          (workflowRec, workflowEntityRec) <- findWorkflowsBySubmissionId(submissionId) joinLeft entityQuery.withoutAllAttributeValues on (_.workflowEntityId === _.id )
         } yield (workflowRec, workflowEntityRec)
 
         insertInBatches(workflowQuery, recsToInsert).map { rows =>
@@ -135,11 +134,11 @@ trait WorkflowComponent {
           rows
         } andThen
         insertedRecQuery.result.map(_.map { case (workflowRec, workflowEntityRec) =>
-          workflowEntityRec.toReference -> workflowRec
+          workflowEntityRec.map(_.toReference) -> workflowRec
         }.toMap)
       }
 
-      def insertInputResolutionRecs(submissionId: UUID, workflows: Seq[Workflow], workflowRecsByEntity: Map[AttributeEntityReference, WorkflowRecord]): ReadWriteAction[Map[(AttributeEntityReference, String), SubmissionValidationRecord]] = {
+      def insertInputResolutionRecs(submissionId: UUID, workflows: Seq[Workflow], workflowRecsByEntity: Map[Option[AttributeEntityReference], WorkflowRecord]): ReadWriteAction[Map[(Option[AttributeEntityReference], String), SubmissionValidationRecord]] = {
         val inputResolutionRecs = for {
           workflow <- workflows
           inputResolution <- workflow.inputResolutions
@@ -148,20 +147,19 @@ trait WorkflowComponent {
         }
 
         val insertedRecQuery = for {
-          workflowRec <- findWorkflowsBySubmissionId(submissionId)
-          workflowEntityRec <- entityQuery.withoutAllAttributeValues if workflowEntityRec.id === workflowRec.workflowEntityId
+          (workflowRec, workflowEntityRec) <- findWorkflowsBySubmissionId(submissionId) joinLeft entityQuery.withoutAllAttributeValues on (_.workflowEntityId === _.id)
           insertedInputResolutionRec <- submissionValidationQuery if insertedInputResolutionRec.workflowId === workflowRec.id
         } yield (workflowEntityRec, insertedInputResolutionRec)
 
         insertInBatches(submissionValidationQuery, inputResolutionRecs) andThen
         insertedRecQuery.result.map(_.map { case (workflowEntityRec, insertedInputResolutionRec) =>
-          val ref = workflowEntityRec.toReference
+          val ref = workflowEntityRec.map(_.toReference)
           val name = insertedInputResolutionRec.inputName
           (ref, name) -> insertedInputResolutionRec
         }.toMap)
       }
 
-      def insertInputResolutionAttributes(workflows: Seq[Workflow], inputResolutionRecs: Map[(AttributeEntityReference, String), SubmissionValidationRecord]): WriteAction[Int] = {
+      def insertInputResolutionAttributes(workflows: Seq[Workflow], inputResolutionRecs: Map[(Option[AttributeEntityReference], String), SubmissionValidationRecord]): WriteAction[Int] = {
         val attributes = for {
           workflow <- workflows
           inputResolution <- workflow.inputResolutions
@@ -182,7 +180,7 @@ trait WorkflowComponent {
         submissionAttributeQuery.batchInsertAttributes(attributeRecs)
       }
 
-      def insertMessages(workflows: Seq[Workflow], workflowRecsByEntity: Map[AttributeEntityReference, WorkflowRecord]) = {
+      def insertMessages(workflows: Seq[Workflow], workflowRecsByEntity: Map[Option[AttributeEntityReference], WorkflowRecord]) = {
         val messageRecs = for {
           workflow <- workflows
           message <- workflow.messages
@@ -535,10 +533,10 @@ trait WorkflowComponent {
       )
     }
 
-    private def marshalInputResolution(value: SubmissionValidationValue, parentId: Long): SubmissionValidationRecord = {
+    private def marshalInputResolution(value: SubmissionValidationValue, workflowId: Long): SubmissionValidationRecord = {
       SubmissionValidationRecord(
         0,
-        parentId,
+        workflowId,
         value.error,
         value.inputName
       )

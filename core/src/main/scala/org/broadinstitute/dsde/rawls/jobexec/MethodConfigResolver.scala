@@ -135,7 +135,7 @@ object MethodConfigResolver {
     val nothing = AttributeString("")
     val inputs = for ((fqn: FullyQualifiedName, wfInput: InputDefinition) <- workflow.inputs) yield fqn.toString -> nothing
     val outputs = workflow.outputs map (o => o.locallyQualifiedName(workflow) -> nothing)
-    MethodConfiguration("namespace", "name", "rootEntityType", Map(), inputs.toMap, outputs.toMap, methodRepoMethod)
+    MethodConfiguration("namespace", "name", Some("rootEntityType"), Map(), inputs.toMap, outputs.toMap, methodRepoMethod)
   }
 
   def getMethodInputsOutputs(wdl: String): Try[MethodInputsOutputs] = parseWDL(wdl) map { workflow =>

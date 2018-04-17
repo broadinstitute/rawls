@@ -299,7 +299,7 @@ trait SubmissionComponent {
             // workflow and entity records are the same throughout this sequence. We can safely take the head
             // for each of them.
             val wr: WorkflowRecord = record.head.workflowRecord // first in the record
-            val er: EntityRecord = record.head.entityRecord // second in the record
+            val er: Option[EntityRecord] = record.head.entityRecord // second in the record
 
             // but, the workflow messages are all different - and may not exist (i.e. be None) due to the outer join.
             // translate any/all messages that exist into a Seq[AttributeString]
@@ -321,7 +321,7 @@ trait SubmissionComponent {
             (wr.id, Workflow(wr.externalId,
               WorkflowStatuses.withName(wr.status),
               new DateTime(wr.statusLastChangedDate.getTime),
-              Some(er.toReference),
+              er.map(_.toReference),
               workflowResolutions.sortBy(_.inputName), //enforce consistent sorting
               messages
             ))
@@ -410,11 +410,11 @@ trait SubmissionComponent {
 
     private object WorkflowAndMessagesRawSqlQuery extends RawSqlQuery {
       val driver: JdbcProfile = SubmissionComponent.this.driver
-      case class WorkflowMessagesListResult(workflowRecord: WorkflowRecord, entityRecord: EntityRecord, messageRecord: Option[WorkflowMessageRecord])
+      case class WorkflowMessagesListResult(workflowRecord: WorkflowRecord, entityRecord: Option[EntityRecord], messageRecord: Option[WorkflowMessageRecord])
 
       implicit val getWorkflowMessagesListResult = GetResult { r =>
         val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
-        val entityRec = workflowRec.workflowEntityId(EntityRecord(_, r.<<, r.<<, r.<<, r.<<, None, r.<<, r.<<))
+        val entityRec = workflowRec.workflowEntityId.map(EntityRecord(_, r.<<, r.<<, r.<<, r.<<, None, r.<<, r.<<))
 
         val messageOption: Option[String] = r.<<
 

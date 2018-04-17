@@ -59,7 +59,7 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
   }
 
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
-    parser.parseAttributeExpr(expression) match {
+    parser.parseAttributeExpr(expression, allowRootEntity = true) match {
       case Failure(regret) => DBIO.failed(new RawlsException(regret.getMessage))
       case Success(expr) =>
         runPipe(SlickExpressionContext(workspaceContext, rootEntities, transactionId), expr) map { exprResults =>
