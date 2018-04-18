@@ -2197,10 +2197,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def withSubmissionEntityRecs(submissionRequest: SubmissionRequest, workspaceContext: SlickWorkspaceContext, rootEntityType: Option[String], dataAccess: DataAccess)(op: (Seq[EntityRecord]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    if( rootEntityType.isEmpty ) {
+  def withSubmissionEntityRecs(submissionRequest: SubmissionRequest, workspaceContext: SlickWorkspaceContext, rootEntityTypeOpt: Option[String], dataAccess: DataAccess)(op: (Seq[EntityRecord]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    if( rootEntityTypeOpt.isEmpty ) {
       op(Seq.empty[EntityRecord])
     }
+
+    val rootEntityType = rootEntityTypeOpt.get
 
     //If there's an expression, evaluate it to get the list of entities to run this job on.
     //Otherwise, use the entity given in the submission.
