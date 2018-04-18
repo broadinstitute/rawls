@@ -3061,7 +3061,6 @@ paths:
             - openid
             - email
             - profile
-            - https://www.googleapis.com/auth/devstorage.full_control
     get:
       responses:
         '200':
@@ -3206,7 +3205,6 @@ paths:
             - openid
             - email
             - profile
-            - https://www.googleapis.com/auth/devstorage.full_control
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/clone':
     post:
       responses:
@@ -3267,7 +3265,6 @@ paths:
             - openid
             - email
             - profile
-            - https://www.googleapis.com/auth/devstorage.full_control
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/bucketUsage':
       get:
         responses:
@@ -3296,7 +3293,6 @@ paths:
               - openid
               - email
               - profile
-              - https://www.googleapis.com/auth/devstorage.full_control
   '/api/workspaces/tags':
       get:
         responses:
@@ -3965,7 +3961,6 @@ securityDefinitions:
       openid: open id authorization
       email: email authorization
       profile: profile authorization
-      https://www.googleapis.com/auth/devstorage.full_control: storage authorization
       https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
 definitions:
   BillingAccount:
