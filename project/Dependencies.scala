@@ -1,4 +1,3 @@
-import Dependencies.excludeAkkaActor
 import sbt._
 
 object Dependencies {
@@ -10,9 +9,6 @@ object Dependencies {
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
   val cromwellVersion = "31-39223b8"
-
-  //UPDATE THIS WITH FINAL HASH
-  val serviceTestV = "0.4-d072389"
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
@@ -79,7 +75,6 @@ object Dependencies {
 
   val workbenchModelV  = "0.10-6800f3a"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
-  val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests"
 
   val metricsDependencies = Seq(
     metricsScala,
@@ -154,7 +149,6 @@ object Dependencies {
     mockito,
     googleRpc,
     workbenchModel,
-    workbenchServiceTest,
     ficus
   )
 }
