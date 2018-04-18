@@ -129,7 +129,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "list a user's billing projects" in withTestDataApiServices { services =>
+  it should "list a user's billing projects ordered a-z" in withTestDataApiServices { services =>
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
         check {
@@ -137,10 +137,15 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
 
-          assertResult(Set(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready), RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.User, CreationStatuses.Ready))) {
-            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+          import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+          assertResult(
+            List(RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.User, CreationStatuses.Ready),
+              RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready))) {
+            responseAs[List[RawlsBillingProjectMembership]]
           }
+
+          assertResult(responseAs[List[RawlsBillingProjectMembership]].head)(RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.User, CreationStatuses.Ready))
+          assertResult(responseAs[List[RawlsBillingProjectMembership]].last)(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready))
         }
     }
 
@@ -177,9 +182,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
+          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+            responseAs[List[RawlsBillingProjectMembership]]
           }
         }
 
@@ -210,9 +215,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
+          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+            responseAs[List[RawlsBillingProjectMembership]]
           }
         }
 
@@ -228,9 +233,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Ready))) {
+          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Ready))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+            responseAs[List[RawlsBillingProjectMembership]]
           }
         }
 
@@ -280,9 +285,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
+          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+            responseAs[List[RawlsBillingProjectMembership]]
           }
         }
 
@@ -354,9 +359,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
+          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+            responseAs[List[RawlsBillingProjectMembership]]
           }
         }
 
@@ -395,9 +400,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
+          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+            responseAs[List[RawlsBillingProjectMembership]]
           }
         }
 
@@ -413,9 +418,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Error, Option(s"[Failure enabling api ${billingProjectMonitor.projectTemplate.services(1)}: this failed]")))) {
+          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Error, Option(s"[Failure enabling api ${billingProjectMonitor.projectTemplate.services(1)}: this failed]")))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+            responseAs[List[RawlsBillingProjectMembership]]
           }
         }
 
