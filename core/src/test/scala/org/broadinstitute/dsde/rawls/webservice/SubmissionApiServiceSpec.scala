@@ -103,18 +103,18 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   "SubmissionApi" should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde","not there","Pattern","pattern1", None, false))) ~>
+    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde","not there",Some("Pattern"),Some("pattern1"), None, false))) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
   it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
     val mcName = MethodConfigurationName("three_step","dsde", testData.wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map("three_step.cgrep.pattern"->AttributeString("this.input_expression")), Map.empty, AgoraMethod("dsde","three_step",1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,Some("Pattern"), Map.empty, Map("three_step.cgrep.pattern"->AttributeString("this.input_expression")), Map.empty, AgoraMethod("dsde","three_step",1))
     Post(s"${testData.wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
-    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None, false))) ~>
+    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest(mcName.namespace, mcName.name,Some("Pattern"),Some("pattern1"), None, false))) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -142,7 +142,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       }
 
     withStatsD {
-      val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression, false, workflowFailureMode)
+      val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, Some(submissionEntity.entityType), Some(submissionEntity.name), submissionExpression, false, workflowFailureMode)
       Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
         sealRoute(services.submissionRoutes) ~>
         check {
@@ -204,9 +204,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   it should "return 201 Created when creating and monitoring a submission with no expression" in withTestDataApiServices { services =>
     val wsName = testData.wsName
-    val agoraMethodConf = MethodConfiguration("no_input", "dsde", "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val agoraMethodConf = MethodConfiguration("no_input", "dsde", Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
     val dockstoreMethodConf =
-      MethodConfiguration("no_input_dockstore", "dsde", "Sample", Map.empty, Map.empty, Map.empty, DockstoreMethod("dockstore-no-input-path", "dockstore-no-input-version"))
+      MethodConfiguration("no_input_dockstore", "dsde", Some("Sample"), Map.empty, Map.empty, Map.empty, DockstoreMethod("dockstore-no-input-path", "dockstore-no-input-version"))
 
     List(agoraMethodConf, dockstoreMethodConf) foreach { conf =>
       val submission = createAndMonitorSubmission(wsName, conf, testData.sample1, None, services)
@@ -219,7 +219,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "return 201 Created when creating and monitoring a submission with valid expression" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
@@ -231,7 +231,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "update the last modified date on a workspace for submission entries" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
@@ -246,7 +246,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "return 201 Created when creating submission with a workflow_failure_mode" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
 
@@ -258,7 +258,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "return workflow_failure_mode in submission GET calls" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     // calls GET ../submissions/<sub-id> and returns the SubmissionStatusResponse
     val submissionResponseWithFailureMode = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
@@ -299,7 +299,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "abort a submission" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     // create a submission
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
@@ -316,7 +316,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "create and abort a large submission" in withLargeSubmissionApiServices { services =>
     val wsName = largeSampleTestData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     // create a submission
     val submission = createAndMonitorSubmission(wsName, methodConf, largeSampleTestData.sampleSet, Option("this.hasSamples"), services)
@@ -337,7 +337,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     withWorkflowSubmissionActor(services) { _ =>
       val wsName = largeSampleTestData.wsName
       val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-      val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+      val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
       val numIterations = 20
 
       (1 to numIterations).map { i =>
@@ -356,9 +356,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "return 400 Bad Request when passing an unknown workflow_failure_mode" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
-    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, testData.sample1.entityType, testData.sample1.name, None, false, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
+    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, Some(testData.sample1.entityType), Some(testData.sample1.name), None, false, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
     val jsonStr = submissionRq.toJson.toString.replace("ContinueWhilePossible", "Bogus")
 
     Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
@@ -462,7 +462,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
         val ent = Entity(UUID.randomUUID.toString, UUID.randomUUID.toString, Map.empty)
         runAndWait(entityQuery.save(context, ent))
-        Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Queued, DateTime.now, ent.toReference, testData.inputResolutions)
+        Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Queued, DateTime.now, Some(ent.toReference), testData.inputResolutions)
       }
 
       val sub = createTestSubmission(testData.workspace, testData.agoraMethodConfig, testData.indiv1, user, Seq.empty, Map.empty, Seq.empty, Map.empty).copy(workflows = workflows)
@@ -517,7 +517,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       newWorkflows foreach { case (status, count) =>
         val entities = for (i <- 1 to count) yield Entity(i.toString, status.toString, Map.empty)
         runAndWait(entityQuery.save(context, entities))
-        val workflows = for (i <- 1 to count) yield Workflow(Option(s"workflow${i}_of_$count"), status, testDate, AttributeEntityReference(status.toString, i.toString), testData.inputResolutions)
+        val workflows = for (i <- 1 to count) yield Workflow(Option(s"workflow${i}_of_$count"), status, testDate, Some(AttributeEntityReference(status.toString, i.toString)), testData.inputResolutions)
         runAndWait(workflowQuery.createWorkflows(context, UUID.fromString(testData.submissionUpdateEntity.submissionId), workflows))
       }
     }
@@ -592,10 +592,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val workflowId = "8afafe21-2b70-4180-a565-748cb573e10c"
     val workflows = Seq(
       // use the UUID of the workflow that has an output of array(array)
-      Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, testData.indiv1.toReference, Seq.empty)
+      Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, Some(testData.indiv1.toReference), Seq.empty)
     )
 
-    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, testData.indiv1.toReference, workflows, SubmissionStatuses.Done, false)
+    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some(testData.indiv1.toReference), workflows, SubmissionStatuses.Done, false)
 
     runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))

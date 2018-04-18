@@ -185,7 +185,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs normal" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, entityId, 0, None), outputs))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None), outputs))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz", "output3" -> "workspace.garble")
 
@@ -201,7 +201,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs with library attributes" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, entityId, 0, None), outputs))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None), outputs))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("output" -> "this.library:bar", "output2" -> "this.library:baz", "output3" -> "workspace.library:garble")
 
@@ -226,7 +226,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs only entities" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, entityId, 0, None), outputs))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None), outputs))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz")
 
@@ -242,7 +242,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs none" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, entityId, 0, None), outputs))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None), outputs))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map.empty
 
@@ -256,7 +256,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs missing expected output" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowRecord = WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, entityId, 0, None)
+    val workflowRecord = WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None)
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((workflowRecord, ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("hello world!"))))))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("missing" -> "this.bar")
@@ -298,14 +298,14 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
   }
 
   it should "handle inputs and outputs with library attributes" in withDefaultTestDatabase { dataSource: SlickDataSource =>
 
-    val mcUpdateEntityLibraryOutputs = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), Map("o1_lib" -> AttributeString("this.library:foo")), AgoraMethod("ns-config", "meth1", 1))
+    val mcUpdateEntityLibraryOutputs = MethodConfiguration("ns", "testConfig12", Some("Sample"), Map(), Map(), Map("o1_lib" -> AttributeString("this.library:foo")), AgoraMethod("ns-config", "meth1", 1))
 
     val subUpdateEntityLibraryOutputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryOutputs, testData.indiv1, testData.userOwner,
       Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
@@ -324,11 +324,11 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val expectedOut = Map(AttributeName("library", "foo") -> AttributeString("result"))
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes ++ expectedOut))) {
       subUpdateEntityLibraryOutputs.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
 
-    val mcUpdateEntityLibraryInputs = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map("i_lib" -> AttributeString("this.library:foo")), Map("o2_lib" -> AttributeString("this.library:bar")), AgoraMethod("ns-config", "meth1", 1))
+    val mcUpdateEntityLibraryInputs = MethodConfiguration("ns", "testConfig11", Some("Sample"), Map(), Map("i_lib" -> AttributeString("this.library:foo")), Map("o2_lib" -> AttributeString("this.library:bar")), AgoraMethod("ns-config", "meth1", 1))
 
     val subUpdateEntityLibraryInputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryInputs, testData.indiv1, testData.userOwner,
       Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
@@ -347,7 +347,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val expectedIn = Map(AttributeName("library", "bar") -> AttributeString("result2"))
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes ++ expectedOut ++ expectedIn))) {
       subUpdateEntityLibraryOutputs.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
 
@@ -407,7 +407,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
   }
@@ -426,7 +426,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       case _ => fail
     }
 
-    val mcUnboundExpr = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), outputExpressions, AgoraMethod("ns-config", "meth1", 1))
+    val mcUnboundExpr = MethodConfiguration("ns", "testConfig12", Some("Sample"), Map(), Map(), outputExpressions, AgoraMethod("ns-config", "meth1", 1))
 
     val subUnboundExpr = createTestSubmission(testData.workspace, mcUnboundExpr, testData.indiv1, testData.userOwner,
       Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
@@ -445,7 +445,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     // only the bound attribute was updated
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + expectedAttributeUpdate))) {
       subUnboundExpr.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
 
@@ -479,7 +479,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       "*")
 
     badExprs foreach { badExpr =>
-      val mcBadExprs = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), Map("bad1" -> AttributeString(badExpr)), AgoraMethod("ns-config", "meth1", 1))
+      val mcBadExprs = MethodConfiguration("ns", "testConfig12", Some("Sample"), Map(), Map(), Map("bad1" -> AttributeString(badExpr)), AgoraMethod("ns-config", "meth1", 1))
 
       val subBadExprs = createTestSubmission(testData.workspace, mcBadExprs, testData.indiv1, testData.userOwner,
         Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
@@ -498,7 +498,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       // the entity was not updated
       assertResult(Seq(testData.indiv1)) {
         subBadExprs.workflows.map { wf =>
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
         }
       }
 

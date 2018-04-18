@@ -41,7 +41,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
   // dummy WorkflowRecord
   val testWorkflowRecord = WorkflowRecord(
     1, Some(UUID.randomUUID().toString), submissionId, "Submitted",
-    new Timestamp(System.currentTimeMillis()), 1, 1, Some("default"))
+    new Timestamp(System.currentTimeMillis()), Some(1), 1, Some("default"))
 
   // UUIDs
   val subWithExecutionKeys = UUID.randomUUID()
@@ -58,8 +58,13 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
 
     val sample1 = Entity("sample1", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
 
+<<<<<<< 75895fcade396afbe4fdca0e41b2a20ad8275117
     val submissionWithExecutionKeys = Submission(subWithExecutionKeys.toString, testDate, testData.userOwner, "std","someMethod",sample1.toReference,
       Seq(Workflow(Some(workflowExternalIdWithExecutionKey.toString), WorkflowStatuses.Submitted, testDate, sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+=======
+    val submissionWithExecutionKeys = Submission(subWithExecutionKeys.toString, testDate, testData.userOwner, "std","someMethod", Some(sample1.toReference),
+      Seq(Workflow(Some(workflowExternalIdWithExecutionKey.toString),WorkflowStatuses.Submitted,testDate, Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+>>>>>>> tests compile now
 
     override def save() = {
       DBIO.seq(
@@ -69,7 +74,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sample1),
-            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("std", "someMethod", 1))),
+            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("std", "someMethod", 1))),
             submissionQuery.create(context, submissionWithExecutionKeys)
           )
         },

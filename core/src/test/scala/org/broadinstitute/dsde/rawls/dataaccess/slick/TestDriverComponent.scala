@@ -111,10 +111,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val workflows = workflowEntities map { ref =>
       val uuid = if(status == WorkflowStatuses.Queued) None else Option(UUID.randomUUID.toString)
-      Workflow(uuid, status, testDate, ref.toReference, inputResolutions(ref), cost = cost)
+      Workflow(uuid, status, testDate, Some(ref.toReference), inputResolutions(ref), cost = cost)
     }
 
-    Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, submissionEntity.toReference,
+    Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, Some(submissionEntity.toReference),
       workflows, SubmissionStatuses.Submitted, useCallCache, workflowFailureMode, cost)
   }
 
@@ -394,7 +394,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val agoraMethodConfig = MethodConfiguration(
       "ns",
       "testConfig1",
-      "Sample",
+      Some("Sample"),
       Map("p1" -> AttributeString("prereq")),
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
@@ -406,31 +406,31 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val dockstoreMethodConfig = MethodConfiguration(
       "dockstore-config-namespace",
       "dockstore-config-name",
-      "Sample",
+      Some("Sample"),
       Map("p1" -> AttributeString("prereq")),
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
       dockstoreMethod
     )
 
-    val methodConfigDockstore = MethodConfiguration("dsde", "DockstoreConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), DockstoreMethod("dockstore-path", "dockstore-version"))
-    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(wsName.namespace, "method-a", 1))
-    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigDockstore = MethodConfiguration("dsde", "DockstoreConfig", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), DockstoreMethod("dockstore-path", "dockstore-version"))
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(wsName.namespace, "method-a", 1))
+    val methodConfig3 = MethodConfiguration("dsde", "testConfig", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
-    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
-    val methodConfigWorkspaceLibraryUpdate = MethodConfiguration("ns", "testConfigLib", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.library:foo")), AgoraMethod("ns-config", "meth1", 1))
-    val methodConfigMissingOutputs = MethodConfiguration("ns", "testConfigMissingOutputs", "Sample", Map(), Map(), Map("some.workflow.output" -> AttributeString("this.might_not_be_here")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Sample"), Map(), Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigWorkspaceLibraryUpdate = MethodConfiguration("ns", "testConfigLib", Some("Sample"), Map(), Map(), Map("o1" -> AttributeString("workspace.library:foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigMissingOutputs = MethodConfiguration("ns", "testConfigMissingOutputs", Some("Sample"), Map(), Map(), Map("some.workflow.output" -> AttributeString("this.might_not_be_here")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigUnparseableInputs = MethodConfiguration("dsde", "UnparseableInputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigUnparseableOutputs = MethodConfiguration("dsde", "UnparseableOutputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), AgoraMethod("dsde", "three_step", 1))
-    val methodConfigUnparseableBoth = MethodConfiguration("dsde", "UnparseableBothMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..is...bad")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), AgoraMethod("dsde", "three_step", 1))
-    val methodConfigEmptyOutputs = MethodConfiguration("dsde", "EmptyOutputsMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("")), AgoraMethod("dsde", "three_step", 1))
-    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableInputs = MethodConfiguration("dsde", "UnparseableInputsMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableOutputs = MethodConfiguration("dsde", "UnparseableOutputsMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableBoth = MethodConfiguration("dsde", "UnparseableBothMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..is...bad")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), AgoraMethod("dsde", "three_step", 1))
+    val methodConfigEmptyOutputs = MethodConfiguration("dsde", "EmptyOutputsMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("")), AgoraMethod("dsde", "three_step", 1))
+    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
 
-    val methodConfigArrayType = MethodConfiguration("dsde", "ArrayMethodConfig", "SampleSet", prerequisites=Map.empty,
+    val methodConfigArrayType = MethodConfiguration("dsde", "ArrayMethodConfig", Some("SampleSet"), prerequisites=Map.empty,
       inputs=Map("aggregate_data_workflow.aggregate_data.input_array" -> AttributeString("this.samples.type")),
       outputs=Map("aggregate_data_workflow.aggregate_data.output_array" -> AttributeString("this.output_array")),
       AgoraMethod("dsde", "array_task", 1))
@@ -482,15 +482,15 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val submissionMissingOutputs = createTestSubmission(workspace, methodConfigMissingOutputs, indiv1, userOwner,
       Seq(indiv1), Map(indiv1 -> missingOutputResolutions), Seq(), Map())
 
-    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,agoraMethodConfig.namespace,agoraMethodConfig.name,indiv1.toReference,
-      Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,sample1.toReference, inputResolutions),
-        Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,sample2.toReference, inputResolutions),
-        Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,sample3.toReference, inputResolutions),
-        Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,sample4.toReference, inputResolutions)), SubmissionStatuses.Submitted, false)
+    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,agoraMethodConfig.namespace,agoraMethodConfig.name,Some(indiv1.toReference),
+      Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), inputResolutions),
+        Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,Some(sample2.toReference), inputResolutions),
+        Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,Some(sample3.toReference), inputResolutions),
+        Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,Some(sample4.toReference), inputResolutions)), SubmissionStatuses.Submitted, false)
 
     //a submission with a succeeeded workflow
-    val submissionSuccessful1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
+    val submissionSuccessful1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+      Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
 
     val submission1CostMap: Map[String, Float] = (for {
       workflow <- submission1.workflows
@@ -498,33 +498,33 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     } yield id -> 0.00f).toMap
 
     //a submission with a succeeeded workflow
-    val submissionSuccessful2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
+    val submissionSuccessful2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+      Seq(Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
 
     //a submission with a failed workflow
-    val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("worklowFailed"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
+    val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+      Seq(Workflow(Option("worklowFailed"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
 
     //a submission with a submitted workflow
-    val submissionSubmitted = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSubmitted"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Submitted, false)
+    val submissionSubmitted = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+      Seq(Workflow(Option("workflowSubmitted"), WorkflowStatuses.Submitted, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Submitted, false)
 
     //a submission with an aborted workflow
-    val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowAborted1"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted, false)
+    val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+      Seq(Workflow(Option("workflowAborted1"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Aborted, false)
 
     //a submission with an aborted workflow
-    val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowAborted2"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted, false)
+    val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+      Seq(Workflow(Option("workflowAborted2"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Aborted, false)
 
     //a submission with multiple failed and succeeded workflows
-    val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSuccessful3"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions),
-        Workflow(Option("workflowSuccessful4"), WorkflowStatuses.Succeeded, testDate, sample2.toReference, inputResolutions),
-        Workflow(Option("worklowFailed1"), WorkflowStatuses.Failed, testDate, sample3.toReference, inputResolutions),
-        Workflow(Option("workflowFailed2"), WorkflowStatuses.Failed, testDate, sample4.toReference, inputResolutions),
-        Workflow(Option("workflowSubmitted1"), WorkflowStatuses.Submitted, testDate, sample5.toReference, inputResolutions),
-        Workflow(Option("workflowSubmitted2"), WorkflowStatuses.Submitted, testDate, sample6.toReference, inputResolutions)
+    val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+      Seq(Workflow(Option("workflowSuccessful3"), WorkflowStatuses.Succeeded, testDate, Some(sample1.toReference), inputResolutions),
+        Workflow(Option("workflowSuccessful4"), WorkflowStatuses.Succeeded, testDate, Some(sample2.toReference), inputResolutions),
+        Workflow(Option("worklowFailed1"), WorkflowStatuses.Failed, testDate, Some(sample3.toReference), inputResolutions),
+        Workflow(Option("workflowFailed2"), WorkflowStatuses.Failed, testDate, Some(sample4.toReference), inputResolutions),
+        Workflow(Option("workflowSubmitted1"), WorkflowStatuses.Submitted, testDate, Some(sample5.toReference), inputResolutions),
+        Workflow(Option("workflowSubmitted2"), WorkflowStatuses.Submitted, testDate, Some(sample6.toReference), inputResolutions)
       ), SubmissionStatuses.Submitted, false)
 
     //two submissions interleaved in time
@@ -532,14 +532,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val t2 = new DateTime(2017, 1, 1, 5, 15)
     val t3 = new DateTime(2017, 1, 1, 5, 20)
     val t4 = new DateTime(2017, 1, 1, 5, 30)
-    val outerSubmission = Submission(UUID.randomUUID().toString(), t1, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, t4, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
-    val innerSubmission = Submission(UUID.randomUUID().toString(), t2, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowFailed1"), WorkflowStatuses.Failed, t3, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
+    val outerSubmission = Submission(UUID.randomUUID().toString(), t1, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+      Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, t4, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
+    val innerSubmission = Submission(UUID.randomUUID().toString(), t2, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+      Seq(Workflow(Option("workflowFailed1"), WorkflowStatuses.Failed, t3, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
 
     // a submission with a submitted workflow and a custom workflow failure mode
-    val submissionWorkflowFailureMode = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowFailureMode"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Submitted, false,
+    val submissionWorkflowFailureMode = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+      Seq(Workflow(Option("workflowFailureMode"), WorkflowStatuses.Submitted, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Submitted, false,
       Some(WorkflowFailureModes.ContinueWhilePossible))
 
     def createWorkspaceGoogleGroups(gcsDAO: GoogleServicesDAO): Unit = {
@@ -874,23 +874,23 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val methodConfig = MethodConfiguration(
       "ns",
       "testConfig1",
-      "Sample",
+      Some("Sample"),
       Map("p1" -> AttributeString("prereq")),
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
       AgoraMethod("ns-config", "meth1", 1)
     )
 
-    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(wsName.namespace, "method-a", 1))
-    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(wsName.namespace, "method-a", 1))
+    val methodConfig3 = MethodConfiguration("dsde", "testConfig", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
-    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Spample"), Map(), Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
 
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, wsName)
     val methodConfigName2 = methodConfigName.copy(name="novelName")

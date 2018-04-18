@@ -30,16 +30,6 @@ case class SubmissionRequest(
   workflowFailureMode: Option[String] = None
 )
 
-/*
-//GAWB-3541 makes entityType and entityName optional.
-// This lifts existing calls to create a SubmissionRequest into the new type, so I don't have to update ten million tests
-object SubmissionRequest {
-  def apply(mcNs: String, mcN: String, eType: String, eName: String, expr: Option[String], useCallCache: Boolean, wfFailureMode: Option[String] = None): SubmissionRequest = {
-    SubmissionRequest(mcNs, mcN, Some(eType), Some(eName), expr, useCallCache, wfFailureMode)
-  }
-}
-*/
-
 // Cromwell's response to workflow submission
 case class ExecutionServiceStatus(
   id: String,

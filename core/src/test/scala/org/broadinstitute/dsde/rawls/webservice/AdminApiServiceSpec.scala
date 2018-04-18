@@ -159,7 +159,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
         // entity name will be modified a la DriverComponent.renameForHiding
 
-        val responseEntityNames = resp.map(_.submission).map(_.submissionEntity).map(_.entityName).toSet
+        val responseEntityNames = resp.map(_.submission).map(_.submissionEntity).map(_.get.entityName).toSet
         assertResult(1)(responseEntityNames.size)
         assert(responseEntityNames.head.contains(constantData.indiv1.name + "_"))
 
@@ -172,7 +172,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
         def withNewEntityNames(in: Seq[ActiveSubmission]): Seq[ActiveSubmission] = {
           in.map { as =>
-            as.copy(submission = as.submission.copy(submissionEntity = as.submission.submissionEntity.copy(entityName = "newName")))
+            as.copy(submission = as.submission.copy(submissionEntity = Some(as.submission.submissionEntity.get.copy(entityName = "newName"))))
           }
         }
 

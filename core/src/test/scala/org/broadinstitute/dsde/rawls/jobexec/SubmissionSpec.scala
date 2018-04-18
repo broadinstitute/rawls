@@ -90,31 +90,31 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     
     
     
-    val submissionTestAbortMissingWorkflow = Submission(subMissingWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+    val submissionTestAbortMissingWorkflow = Submission(subMissingWorkflow,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+      Seq(Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestAbortMalformedWorkflow = Submission(subMalformedWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(Option("malformed_workflow"),WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+    val submissionTestAbortMalformedWorkflow = Submission(subMalformedWorkflow,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+      Seq(Workflow(Option("malformed_workflow"),WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestAbortGoodWorkflow = Submission(subGoodWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+    val submissionTestAbortGoodWorkflow = Submission(subGoodWorkflow,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+      Seq(Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestAbortTerminalWorkflow = Submission(subTerminalWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+    val submissionTestAbortTerminalWorkflow = Submission(subTerminalWorkflow,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+      Seq(Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestAbortOneMissingWorkflow = Submission(subOneMissingWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
+    val submissionTestAbortOneMissingWorkflow = Submission(subOneMissingWorkflow,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
       Seq(
-        Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions),
-        Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,sample2.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+        Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions),
+        Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample2.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestAbortTwoGoodWorkflows = Submission(subTwoGoodWorkflows,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
+    val submissionTestAbortTwoGoodWorkflows = Submission(subTwoGoodWorkflows,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
       Seq(
-        Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions),
-        Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,sample2.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+        Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions),
+        Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample2.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestCromwellBadWorkflows = Submission(subCromwellBadWorkflows, testDate, testData.userOwner, "std","someMethod",sample1.toReference,
+    val submissionTestCromwellBadWorkflows = Submission(subCromwellBadWorkflows, testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
       Seq(
-        Workflow(badLogsAndMetadataWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+        Workflow(badLogsAndMetadataWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
     val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId.get,
       Map(
@@ -151,7 +151,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
           DBIO.seq(
             entityQuery.save(context, sample1),
             entityQuery.save(context, sample2),
-            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("std", "someMethod", 1))),
+            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("std", "someMethod", 1))),
             submissionQuery.create(context, submissionTestAbortMissingWorkflow),
             submissionQuery.create(context, submissionTestAbortMalformedWorkflow),
             submissionQuery.create(context, submissionTestAbortGoodWorkflow),
@@ -272,7 +272,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   "Submission requests" should "400 when given an unparseable entity expression" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Individual", "indiv1", Some("this.is."), false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("Individual"), Some("indiv1"), Some("this.is."), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -292,7 +292,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "return a successful Submission and spawn a submission monitor actor when given an entity expression that evaluates to a single entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"), false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("Pair"), Some("pair1"), Some("this.case"), false)
     val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
     val (status, newSubmissionReport) = rqComplete.response
     assertResult(StatusCodes.Created) {
@@ -308,7 +308,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "continue to monitor a Submission on a deleted entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"), useCallCache = false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("Pair"), Some("pair1"), Some("this.case"), useCallCache = false)
     val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
     val (status, newSubmissionReport) = rqComplete.response
     assertResult(StatusCodes.Created) {
@@ -329,7 +329,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     runAndWait(entityQuery.hide(SlickWorkspaceContext(testData.workspace), Seq(testData.pair1.toReference)))
 
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"), useCallCache = false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("Pair"), Some("pair1"), Some("this.case"), useCallCache = false)
     intercept[RawlsException] {
       Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
     }
@@ -347,7 +347,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sset))
 
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", sset.entityType, sset.name, Some("this.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some(sset.entityType), Some(sset.name), Some("this.samples"), false)
     val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
 
     val (status, newSubmissionReport) = rqComplete.response
@@ -364,7 +364,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "400 when given an entity expression that evaluates to an empty set of entities" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "SampleSet", "sset_empty", Some("this.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("SampleSet"), Some("sset_empty"), Some("this.samples"), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -374,7 +374,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "400 when given a method configuration with unparseable inputs" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "UnparseableInputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "UnparseableInputsMethodConfig", Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -389,7 +389,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "400 when given a method configuration with unparseable outputs" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "UnparseableOutputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "UnparseableOutputsMethodConfig", Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -404,7 +404,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "400 when given a method configuration with unparseable inputs and outputs" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "UnparseableBothMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "UnparseableBothMethodConfig", Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -422,7 +422,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "return a successful Submission when given a method configuration with empty outputs" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "EmptyOutputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "EmptyOutputsMethodConfig", Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
     val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
     val (status, newSubmissionReport) = rqComplete.response
     assertResult(StatusCodes.Created) {
@@ -435,7 +435,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "return a successful Submission with unstarted workflows where method configuration inputs are missing on some entities" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "NotAllSamplesMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "NotAllSamplesMethodConfig", Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
     val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
     val (status, newSubmissionReport) = rqComplete.response
     assertResult(StatusCodes.Created) {
@@ -448,7 +448,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "400 when given an entity expression that evaluates to an entity of the wrong type" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "PairSet", "ps1", Some("this.pairs"), false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("PairSet"), Some("ps1"), Some("this.pairs"), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -458,7 +458,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "400 when given no entity expression and an entity of the wrong type" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "PairSet", "ps1", None, false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("PairSet"), Some("ps1"), None, false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -468,7 +468,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "fail workflows that evaluate to nonsense and put the rest in Queued" in withWorkspaceServiceMockTimeoutExecution { mockExecSvc => workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "NotAllSamplesMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "NotAllSamplesMethodConfig", Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
     val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
     val (status, newSubmissionReport) = rqComplete.response
     assertResult(StatusCodes.Created) {
@@ -489,7 +489,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Individual", "indiv1", Some("this.is."), false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("Individual"), Some("indiv1"), Some("this.is."), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -499,7 +499,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "report a validated input and runnable workflow when given an entity expression that evaluates to a single entity" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"), false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("Pair"), Some("pair1"), Some("this.case"), false)
     val vComplete = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
     val (vStatus, vData) = vComplete.response
     assertResult(StatusCodes.OK) {
@@ -511,7 +511,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "report validated inputs and runnable workflows when given an entity expression that evaluates to a set of entities" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "SampleSet", "sset1", Some("this.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("SampleSet"), Some("sset1"), Some("this.samples"), false)
     val vComplete = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
     val (vStatus, vData) = vComplete.response
     assertResult(StatusCodes.OK) {
@@ -523,7 +523,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "400 when given an entity expression that evaluates to an empty set of entities" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "SampleSet", "sset_empty", Some("this.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("SampleSet"), Some("sset_empty"), Some("this.samples"), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -533,7 +533,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "400 when given a method configuration with unparseable inputs" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "UnparseableInputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "UnparseableInputsMethodConfig", Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -548,7 +548,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "400 when given a method configuration with unparseable outputs" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "UnparseableOutputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "UnparseableOutputsMethodConfig", Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -563,7 +563,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "report a successful validation when given a method configuration with empty outputs" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "EmptyOutputsMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "EmptyOutputsMethodConfig", Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
     val rqComplete = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
     val (status, validation) = rqComplete.response
     assertResult(StatusCodes.OK) {
@@ -575,7 +575,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "report validated inputs and a mixture of started and unstarted workflows where method configuration inputs are missing on some entities" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "NotAllSamplesMethodConfig", "Individual", "indiv1", Some("this.sset.samples"), false)
+    val submissionRq = SubmissionRequest("dsde", "NotAllSamplesMethodConfig", Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
     val vComplete = Await.result(workspaceService.validateSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionValidationReport)]]
     val (vStatus, vData) = vComplete.response
     assertResult(StatusCodes.OK) {
@@ -587,7 +587,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "report errors for an entity expression that evaluates to an entity of the wrong type" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "PairSet", "ps1", Some("this.pairs"), false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("PairSet"), Some("ps1"), Some("this.pairs"), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
@@ -597,7 +597,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "report an error when given no entity expression and the entity is of the wrong type" in withWorkspaceService { workspaceService =>
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "PairSet", "ps1", None, false)
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("PairSet"), Some("ps1"), None, false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
       Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
     }
