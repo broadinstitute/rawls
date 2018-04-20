@@ -3,13 +3,12 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.workbench.service.Sam.convertScalaFuture
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{FlatSpecLike, Matchers}
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class MarthaDosResolverSpec extends TestKit(ActorSystem("MarthaDosResolverSpec")) with FlatSpecLike with Eventually with Matchers {
+class MarthaDosResolverSpec extends TestKit(ActorSystem("MarthaDosResolverSpec")) with FlatSpecLike with Eventually with ScalaFutures with Matchers {
 
   implicit val materializer = ActorMaterializer()
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
