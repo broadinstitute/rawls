@@ -866,7 +866,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
                 val managedGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get
 
                 assertResult(ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort,
-                  managedGroup.adminsGroup.toRawlsGroupShort,
                   Seq.empty,
                   Seq(usersTestData.userOwner.userEmail.value, usersTestData.userUser.userEmail.value))) {
 
@@ -961,7 +960,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           val usersGroupShort = RawlsGroupShort(RawlsGroupName(testGroupName), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(testGroupName))))
           val ownersGroupShort = RawlsGroupShort(RawlsGroupName(testGroupName + "-owners"), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(testGroupName + "-owners"))))
           import UserModelJsonSupport.ManagedGroupWithMembersFormat
-          assertResult(ManagedGroupWithMembers(usersGroupShort, ownersGroupShort, Seq(ownersGroupShort.groupEmail.value), Seq(services.userInfo.userEmail.value))) {
+          assertResult(ManagedGroupWithMembers(usersGroupShort, Seq(ownersGroupShort.groupEmail.value), Seq(services.userInfo.userEmail.value))) {
             responseAs[ManagedGroupWithMembers]
           }
         }
