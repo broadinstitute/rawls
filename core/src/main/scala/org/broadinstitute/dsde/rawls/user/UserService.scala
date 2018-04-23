@@ -563,36 +563,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def deleteManagedGroup(groupRef: ManagedGroupRef) = {
-    for{
-      _ <- dataSource.inTransaction { dataAccess =>
-        for {
-          groupToCheck <- dataAccess.managedGroupQuery.load(groupRef).map(_.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Group does not exist,"))))
-          admins <- dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.adminsGroup.groupName)
-          members <- dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.membersGroup.groupName)
-        } yield {
-          if ((admins - groupToCheck.membersGroup.groupName).nonEmpty || members.nonEmpty) {
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"Cannot delete group because it is in use. Admins: ${admins} Members: ${members}"))
-          }
-        }
-      }
-      groupEmailsToDelete <- dataSource.inTransaction { dataAccess =>
-        withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-          DBIO.seq(
-            dataAccess.managedGroupQuery.deleteManagedGroup(groupRef),
-            dataAccess.rawlsGroupQuery.delete(managedGroup.membersGroup),
-            dataAccess.rawlsGroupQuery.delete(managedGroup.adminsGroup)
-          ).map(_ => Seq(managedGroup.membersGroup, managedGroup.adminsGroup))
-        }
-      }
-      _ <- Future.traverse(groupEmailsToDelete) { group =>
-        gcsDAO.deleteGoogleGroup(group).recover {
-          // log any exception but ignore
-          case t: Throwable => logger.error(s"error deleting google group $group", t)
-        }
-      }
-    } yield {
-      RequestComplete(StatusCodes.NoContent)
-    }
+    //todo: even if a managed group isn't used as a subgroup or added directly to a workspace, it should still reject deletion if it's used on a workspace access group
+    //the todo is to verify this fact. if not, we will need to check if the managed group is used in an auth domain and reject if it is
+    samDAO.deleteGroup(WorkbenchGroupName(groupRef.membersGroupName.value), userInfo).map(_ => RequestComplete(StatusCodes.NoContent))
   }
 
 
