@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsGroupEmail, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus, WorkspaceJsonSupport}
 import org.broadinstitute.dsde.rawls.util.{HttpClientUtils, HttpClientUtilsGzipInstrumented, HttpClientUtilsStandard, Retry}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.WorkbenchEmailFormat
 import spray.json.{DefaultJsonProtocol, JsBoolean, JsValue, JsonParser, JsonPrinter, JsonReader, JsonWriter, PrettyPrinter, RootJsonReader, RootJsonWriter, jsonReader}
 import DefaultJsonProtocol._
@@ -153,6 +153,25 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     val url = samServiceURL + s"/api/google/petServiceAccount/$googleProject/${userEmail.value}"
     retry(when500) { () => asRawlsSAPipeline[String] apply RequestBuilding.Get(url) }
   }
+
+
+  //managed group apis
+
+  override def createGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = {
+    val url = samServiceURL + s"/api/group/${groupName.value}"
+    val httpRequest = RequestBuilding.Post(url)
+
+    doSuccessOrFailureRequest(httpRequest, userInfo)
+  }
+
+  override def deleteGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = {
+    val url = samServiceURL + s"/api/group/${groupName.value}"
+    val httpRequest = RequestBuilding.Delete(url)
+
+    doSuccessOrFailureRequest(httpRequest, userInfo)
+  }
+
+
 
   private def getServiceAccountAccessToken = {
     val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
