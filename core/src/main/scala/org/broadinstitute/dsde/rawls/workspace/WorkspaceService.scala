@@ -49,7 +49,21 @@ object WorkspaceService {
     new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
+class WorkspaceService(protected val userInfo: UserInfo,
+                       val dataSource: SlickDataSource,
+                       val methodRepoDAO: MethodRepoDAO,
+                       executionServiceCluster: ExecutionServiceCluster,
+                       execServiceBatchSize: Int,
+                       protected val gcsDAO: GoogleServicesDAO,
+                       samDAO: SamDAO, notificationDAO: NotificationDAO,
+                       userServiceConstructor: UserInfo => UserService,
+                       genomicsServiceConstructor: UserInfo => GenomicsService,
+                       maxActiveWorkflowsTotal: Int,
+                       maxActiveWorkflowsPerUser: Int,
+                       override val workbenchMetricBaseName: String)
+                      (implicit protected val executionContext: ExecutionContext)
+  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with SubmissionWiths {
+
   import dataSource.dataAccess.driver.api._
 
   def CreateWorkspace(workspace: WorkspaceRequest) = createWorkspace(workspace)
@@ -1460,8 +1474,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
-          withUser(submission.submitter, dataAccess) { user =>
-            DBIO.successful(RequestComplete(StatusCodes.OK, new SubmissionStatusResponse(submission, user)))
+          withSubmissionCost(submission.workflows.flatMap(_.workflowId), userInfo) { costMap =>
+              withUser(submission.submitter, dataAccess) { user =>
+                DBIO.successful(RequestComplete(StatusCodes.OK, new SubmissionStatusResponse(submission, costMap, user)))
+            }
           }
         }
       }
@@ -2085,6 +2101,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case _ =>
         dataAccess.submissionQuery.get(workspaceContext, submissionId) flatMap {
           case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext.workspace.toWorkspaceName}")))
+          // call submissioncostservice here?
           case Some(submission) => op(submission)
         }
     }

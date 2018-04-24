@@ -392,7 +392,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
-        assertResult(new SubmissionStatusResponse(testData.submission1, testData.userOwner)) {responseAs[SubmissionStatusResponse]}
+        assertResult(new SubmissionStatusResponse(testData.submission1, testData.submission1CostMap, testData.userOwner)) {responseAs[SubmissionStatusResponse]}
       }
   }
 
