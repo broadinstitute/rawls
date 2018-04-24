@@ -25,6 +25,7 @@ import org.scalatest.{FlatSpec, Matchers, Suite}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 
 import scala.concurrent.duration._
+import scala.collection.Seq
 import scala.concurrent.{Await, Future}
 
 // initialize database tables and connection pool only once
@@ -504,6 +505,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     //a submission with a succeeeded workflow
     val submissionSuccessful1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, false)
+
+    val submission1CostMap: Map[String, Float] = (for {
+      workflow <- submission1.workflows
+      id <- workflow.workflowId
+    } yield id -> 0.00f).toMap
 
     //a submission with a succeeeded workflow
     val submissionSuccessful2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, indiv1.toReference,

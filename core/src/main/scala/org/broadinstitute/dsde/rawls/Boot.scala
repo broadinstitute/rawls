@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls
 
 import java.io.StringReader
 import java.net.InetAddress
+import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
@@ -31,13 +32,16 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.config._
+import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
+import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.config._
+import org.apache.commons.io.FileUtils
 
 object Boot extends App with LazyLogging {
   private def startup(): Unit = {
@@ -128,6 +132,12 @@ object Boot extends App with LazyLogging {
       workbenchMetricBaseName = metricsPrefix
     )
 
+    val bigQueryDAO = new HttpGoogleBigQueryDAO(
+      gcsConfig.getString("appName"),
+      Json(FileUtils.readFileToString(new java.io.File(gcsConfig.getString("pathToBigQueryJson")), Charset.defaultCharset())),
+      metricsPrefix
+    )
+
     val samConfig = conf.getConfig("sam")
     val samDAO = new HttpSamDAO(samConfig.getString("server"), gcsDAO.getBucketServiceAccountCredential)
 
@@ -149,7 +159,6 @@ object Boot extends App with LazyLogging {
     }.toMap
 
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
-
     val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
     val projectEditors = gcsConfig.getStringList("projectTemplate.editors")
     val projectServices = gcsConfig.getStringList("projectTemplate.services")
@@ -157,14 +166,12 @@ object Boot extends App with LazyLogging {
     val projectTemplate = ProjectTemplate(Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices)
 
     val notificationDAO = new PubSubNotificationDAO(pubSubDAO, gcsConfig.getString("notifications.topicName"))
-
     val marthaConfig = conf.getConfig("martha")
     val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl"))
-
     val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO, samDAO, projectOwnerGrantableRoles)
-
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
+    val submissionCostService: SubmissionCostService = SubmissionCostService.constructor(gcsConfig.getString("billingExportTableName"), bigQueryDAO)
 
     val methodRepoDAO = new HttpMethodRepoDAO(
       MethodRepoConfig.apply[Agora.type](conf.getConfig("agora")),
@@ -215,7 +222,8 @@ object Boot extends App with LazyLogging {
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
-        workbenchMetricBaseName = metricsPrefix),
+        workbenchMetricBaseName = metricsPrefix,
+        submissionCostService),
       userServiceConstructor,
       genomicsServiceConstructor,
       statisticsServiceConstructor,

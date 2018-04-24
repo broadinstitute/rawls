@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="sbt: org.broadinstitute.dsde.workbench:workbench-service-test_2.11:0.8-cd592ce:tests:jar">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/org.broadinstitute.dsde.workbench/workbench-service-test_2.11/jars/workbench-service-test_2.11-0.8-cd592ce-tests.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

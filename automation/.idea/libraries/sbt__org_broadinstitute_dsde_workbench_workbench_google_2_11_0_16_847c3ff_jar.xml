@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="sbt: org.broadinstitute.dsde.workbench:workbench-google_2.11:0.16-847c3ff:jar">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/org.broadinstitute.dsde.workbench/workbench-google_2.11/jars/workbench-google_2.11-0.16-847c3ff.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/org.broadinstitute.dsde.workbench/workbench-google_2.11/srcs/workbench-google_2.11-0.16-847c3ff-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

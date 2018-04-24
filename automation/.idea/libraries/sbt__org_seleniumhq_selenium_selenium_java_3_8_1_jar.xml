@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="sbt: org.seleniumhq.selenium:selenium-java:3.8.1:jar">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/org.seleniumhq.selenium/selenium-java/jars/selenium-java-3.8.1.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.ivy2/cache/org.seleniumhq.selenium/selenium-java/srcs/selenium-java-3.8.1-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
