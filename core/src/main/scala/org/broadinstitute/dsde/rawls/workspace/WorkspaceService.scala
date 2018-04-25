@@ -2200,35 +2200,35 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def withSubmissionEntityRecs(submissionRequest: SubmissionRequest, workspaceContext: SlickWorkspaceContext, rootEntityTypeOpt: Option[String], dataAccess: DataAccess)(op: (Seq[EntityRecord]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     if( rootEntityTypeOpt.isEmpty ) {
       op(Seq.empty[EntityRecord])
-    }
+    } else {
+      val rootEntityType = rootEntityTypeOpt.get
 
-    val rootEntityType = rootEntityTypeOpt.get
-
-    //If there's an expression, evaluate it to get the list of entities to run this job on.
-    //Otherwise, use the entity given in the submission.
-    submissionRequest.expression match {
-      case None =>
-        if ( submissionRequest.entityType.getOrElse("") != rootEntityType )
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Method configuration expects an entity of type ${rootEntityType}, but you gave us an entity of type ${submissionRequest.entityType}.")))
-        else {
-          withSingleEntityRec(submissionRequest.entityType.get, submissionRequest.entityName.get, workspaceContext, dataAccess)(op)
-        }
-      case Some(expression) =>
-        ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, submissionRequest.entityType.get, submissionRequest.entityName.get) { evaluator =>
-          evaluator.evalFinalEntity(workspaceContext, expression).asTry
-        } flatMap { //gotta close out the expression evaluator to wipe the EXPREVAL_TEMP table
-          case Failure(regret) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret)))
-          case Success(entityRecords) =>
-            if (entityRecords.isEmpty) {
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "No entities eligible for submission were found.")))
-            } else {
-              val eligibleEntities = entityRecords.filter(_.entityType == rootEntityType).toSeq
-              if (eligibleEntities.isEmpty)
-                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type ${rootEntityType}.)")))
-              else
-                op(eligibleEntities)
-            }
-        }
+      //If there's an expression, evaluate it to get the list of entities to run this job on.
+      //Otherwise, use the entity given in the submission.
+      submissionRequest.expression match {
+        case None =>
+          if (submissionRequest.entityType.getOrElse("") != rootEntityType)
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Method configuration expects an entity of type ${rootEntityType}, but you gave us an entity of type ${submissionRequest.entityType}.")))
+          else {
+            withSingleEntityRec(submissionRequest.entityType.get, submissionRequest.entityName.get, workspaceContext, dataAccess)(op)
+          }
+        case Some(expression) =>
+          ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, submissionRequest.entityType.get, submissionRequest.entityName.get) { evaluator =>
+            evaluator.evalFinalEntity(workspaceContext, expression).asTry
+          } flatMap { //gotta close out the expression evaluator to wipe the EXPREVAL_TEMP table
+            case Failure(regret) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret)))
+            case Success(entityRecords) =>
+              if (entityRecords.isEmpty) {
+                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "No entities eligible for submission were found.")))
+              } else {
+                val eligibleEntities = entityRecords.filter(_.entityType == rootEntityType).toSeq
+                if (eligibleEntities.isEmpty)
+                  DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type ${rootEntityType}.)")))
+                else
+                  op(eligibleEntities)
+              }
+          }
+      }
     }
   }
 
