@@ -1471,17 +1471,27 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
 
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = {
-    dataSource.inTransaction { dataAccess =>
+    // within a Slick transaction, query for a SubmissionStatusResponse without any workflow costs
+    val submissionWithoutCosts = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
-          withSubmissionCost(submission.workflows.flatMap(_.workflowId), userInfo) { costMap =>
-              withUser(submission.submitter, dataAccess) { user =>
-                DBIO.successful(RequestComplete(StatusCodes.OK, new SubmissionStatusResponse(submission, costMap, user)))
-            }
+          withUser(submission.submitter, dataAccess) { user =>
+            // TODO: instead of returning a SubmissionStatusResponse, maybe just return the (submission, user) pair?
+            DBIO.successful(new SubmissionStatusResponse(submission, Map(), user)))
           }
         }
       }
     }
+
+    // now, annotate the SubmissionStatusResponse with workflow costs. Getting the costs requires querying BigQuery,
+    // which we want to do outside the slick transaction
+    submissionWithoutCosts.map { noCosts =>
+      val allWorkflowIds:Seq[String] = noCosts.workflows.flatMap(_.workflowId) // workflowId can be None
+      // TODO: call BigQuery to get workflow costs
+      // TODO: make a copy of the SubmissionStatusResponse, with workflow costs attached
+      // TODO: wrap in a RequestComplete
+    }
+
   }
 
   def abortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[PerRequestMessage] = {
@@ -2092,7 +2102,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  private def withSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  private def withSubmission[T](workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[T]): ReadWriteAction[T] = {
     Try {
       UUID.fromString(submissionId)
     } match {
