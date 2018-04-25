@@ -115,16 +115,3 @@ trait UserWiths {
   }
 
 }
-
-trait SubmissionWiths extends FutureSupport {
-  val dataSource: SlickDataSource
-  import dataSource.dataAccess.driver.api._
-  val costService: SubmissionCostService
-  def withSubmissionCost[T](workflowIds: Seq[String], userInfo: UserInfo)(op: Map[String, Float] => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
-    toFutureTry(costService.getCostWithUser(workflowIds, userInfo)) flatMap {
-      case Success(costMap) => op(costMap)
-      case Failure(x) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"workflow cost for [$workflowIds] not found")))
-    }
-  }
-
-}

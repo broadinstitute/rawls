@@ -62,7 +62,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        maxActiveWorkflowsPerUser: Int,
                        override val workbenchMetricBaseName: String)
                       (implicit protected val executionContext: ExecutionContext)
-  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with SubmissionWiths {
+  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
 
   import dataSource.dataAccess.driver.api._
 
@@ -1470,28 +1470,29 @@ class WorkspaceService(protected val userInfo: UserInfo,
         DBIO.successful(RequestComplete(StatusCodes.OK, SubmissionValidationReport(submissionRequest, header, succeeded, failed)))
     }
 
-  def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = {
+  def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[PerRequestMessage] = {
+
     // within a Slick transaction, query for a SubmissionStatusResponse without any workflow costs
     val submissionWithoutCosts = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
           withUser(submission.submitter, dataAccess) { user =>
-            // TODO: instead of returning a SubmissionStatusResponse, maybe just return the (submission, user) pair?
-            DBIO.successful(new SubmissionStatusResponse(submission, Map(), user)))
+            DBIO.successful(submission, user)
           }
         }
       }
     }
 
-    // now, annotate the SubmissionStatusResponse with workflow costs. Getting the costs requires querying BigQuery,
-    // which we want to do outside the slick transaction
-    submissionWithoutCosts.map { noCosts =>
-      val allWorkflowIds:Seq[String] = noCosts.workflows.flatMap(_.workflowId) // workflowId can be None
-      // TODO: call BigQuery to get workflow costs
-      // TODO: make a copy of the SubmissionStatusResponse, with workflow costs attached
-      // TODO: wrap in a RequestComplete
-    }
+    val submissionCostService = new SubmissionCostService
 
+    submissionWithoutCosts flatMap {
+      case (submission, user) => {
+        val allWorkflowIds:Seq[String] = submission.workflows.flatMap(_.workflowId) // workflowId can be None
+        submissionCostService.getWorkflowCosts(allWorkflowIds, userInfo, submission) map { costMap =>
+          RequestComplete(new SubmissionStatusResponse(submission, costMap, user))
+        }
+      }
+    }
   }
 
   def abortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[PerRequestMessage] = {
