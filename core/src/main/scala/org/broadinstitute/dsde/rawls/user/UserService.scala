@@ -455,11 +455,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def createManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
     for {
       _ <- samDAO.createGroup(WorkbenchGroupName(groupRef.membersGroupName.value), userInfo)
-      group <- listGroupMembersInternal(groupRef)
+      group <- getManagedGroupFull(groupRef)
     } yield RequestComplete(StatusCodes.Created, group)
   }
 
-  private def listGroupMembersInternal(groupRef: ManagedGroupRef): Future[ManagedGroupWithMembers] = {
+  //need to call 3 sam endpoints to construct the response
+  private def getManagedGroupFull(groupRef: ManagedGroupRef): Future[ManagedGroupWithMembers] = {
     for {
       adminsEmails <- samDAO.listGroupPolicyEmails(WorkbenchGroupName(groupRef.membersGroupName.value), ManagedRoles.Admin, userInfo)
       membersEmails <- samDAO.listGroupPolicyEmails(WorkbenchGroupName(groupRef.membersGroupName.value), ManagedRoles.Member, userInfo)
@@ -468,7 +469,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def getManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
-    listGroupMembersInternal(groupRef).map(RequestComplete(_))
+    getManagedGroupFull(groupRef).map(RequestComplete(_))
   }
 
   def listManagedGroupsForUser(): Future[PerRequestMessage] = {
@@ -518,23 +519,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case Some(Left(userRef)) => RawlsGroupMemberList(userSubjectIds = Option(Seq(userRef.userSubjectId.value)))
         case Some(Right(groupRef)) => RawlsGroupMemberList(subGroupNames = Option(Seq(groupRef.groupName.value)))
       }
-    }
-  }
-
-  private def updateManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, addMemberList: RawlsGroupMemberList = RawlsGroupMemberList(), removeMemberList: RawlsGroupMemberList = RawlsGroupMemberList()): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        if (role == ManagedRoles.Admin &&
-          (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail.value) ||
-            removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId.value))) {
-
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
-        }
-
-        DBIO.successful(rawlsGroupForRole(role, managedGroup))
-      }
-    } flatMap { rawlsGroup =>
-      updateGroupMembers(rawlsGroup, addMemberList, removeMemberList)
     }
   }
 
