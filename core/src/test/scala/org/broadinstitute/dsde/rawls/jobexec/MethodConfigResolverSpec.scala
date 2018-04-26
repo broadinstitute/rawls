@@ -201,7 +201,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         case scala.util.Failure(exception) =>
           DBIO.failed(exception)
         case scala.util.Success(methodInputs) =>
-          MethodConfigResolver.evaluateInputExpressions(workspaceContext, methodInputs, entityRecs, dataAccess)
+          MethodConfigResolver.evaluateInputExpressions(workspaceContext, methodInputs, Some(entityRecs), dataAccess)
       }
     }
   }

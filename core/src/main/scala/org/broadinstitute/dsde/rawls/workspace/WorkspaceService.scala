@@ -1013,7 +1013,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
-          ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
+          ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, Some(entities)) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity => tryValuesByEntity match {
               //parsing failure
               case Failure(regret) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
@@ -2197,9 +2197,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def withSubmissionEntityRecs(submissionRequest: SubmissionRequest, workspaceContext: SlickWorkspaceContext, rootEntityTypeOpt: Option[String], dataAccess: DataAccess)(op: (Seq[EntityRecord]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  def withSubmissionEntityRecs(submissionRequest: SubmissionRequest, workspaceContext: SlickWorkspaceContext, rootEntityTypeOpt: Option[String], dataAccess: DataAccess)(op: (Option[Seq[EntityRecord]]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     if( rootEntityTypeOpt.isEmpty ) {
-      op(Seq.empty[EntityRecord])
+      op(None)
     } else {
       val rootEntityType = rootEntityTypeOpt.get
 
@@ -2210,7 +2210,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           if (submissionRequest.entityType.getOrElse("") != rootEntityType)
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Method configuration expects an entity of type ${rootEntityType}, but you gave us an entity of type ${submissionRequest.entityType}.")))
           else {
-            withSingleEntityRec(submissionRequest.entityType.get, submissionRequest.entityName.get, workspaceContext, dataAccess)(op)
+            withSingleEntityRec(submissionRequest.entityType.get, submissionRequest.entityName.get, workspaceContext, dataAccess)(rec => op(Some(rec)))
           }
         case Some(expression) =>
           ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, submissionRequest.entityType.get, submissionRequest.entityName.get) { evaluator =>
@@ -2225,7 +2225,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 if (eligibleEntities.isEmpty)
                   DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type ${rootEntityType}.)")))
                 else
-                  op(eligibleEntities)
+                  op(Some(eligibleEntities))
               }
           }
       }

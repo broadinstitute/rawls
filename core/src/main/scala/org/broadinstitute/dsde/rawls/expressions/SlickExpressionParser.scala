@@ -11,7 +11,12 @@ import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import scala.util.Try
 import scala.util.parsing.combinator.JavaTokenParsers
 
-case class SlickExpressionContext(workspaceContext: SlickWorkspaceContext, rootEntities: Seq[EntityRecord], transactionId: String)
+case class SlickExpressionContext(workspaceContext: SlickWorkspaceContext, rootEntities: Option[Seq[EntityRecord]], transactionId: String) {
+  def rootEntityNames(): Seq[String] = rootEntities match {
+    case Some(entities) => entities.map(_.name)
+    case None => Seq("")
+  }
+}
 
 trait SlickExpressionParser extends JavaTokenParsers {
   this: DriverComponent
@@ -205,7 +210,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
       val wsExprResult = attributesOption.map { attributes => Seq(attributes.getOrElse(attrName, AttributeNull)) }.getOrElse(Seq.empty)
 
       //Return the value of the expression once for each entity we wanted to evaluate this expression against!
-      context.rootEntities.map( rec => (rec.name, wsExprResult) ).toMap
+      context.rootEntityNames().map( name => (name, wsExprResult) ).toMap
     }
   }
 
@@ -328,8 +333,9 @@ trait SlickExpressionParser extends JavaTokenParsers {
     assert(shouldBeNone.isEmpty)
 
     attributeName match {
-      case Attributable.nameReservedAttribute | Attributable.workspaceIdAttribute => DBIO.successful( context.rootEntities.map( _.name -> Seq(AttributeString(context.workspaceContext.workspace.name))).toMap )
-      case Attributable.entityTypeReservedAttribute => DBIO.successful( context.rootEntities.map( _.name -> Seq(AttributeString(Attributable.workspaceEntityType))).toMap )
+      case Attributable.nameReservedAttribute | Attributable.workspaceIdAttribute =>
+        DBIO.successful( context.rootEntityNames().map( _ -> Seq(AttributeString(context.workspaceContext.workspace.name))).toMap )
+      case Attributable.entityTypeReservedAttribute => DBIO.successful( context.rootEntityNames().map( _ -> Seq(AttributeString(Attributable.workspaceEntityType))).toMap )
     }
   }
 
@@ -351,18 +357,8 @@ trait SlickExpressionParser extends JavaTokenParsers {
     //Return the value of the expression once for each entity we wanted to evaluate this expression against!
     query.sortBy(_.name.asc).result map { resultEntities =>
       (for {
-        entity <- context.rootEntities
-      } yield (entity.name, resultEntities)).toMap
+        entityName <- context.rootEntityNames()
+      } yield (entityName, resultEntities)).toMap
     }
-  }
-
-  private def stringFunc(str: String)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): ReadAction[Map[String,Iterable[Attribute]]] = {
-    assert(shouldBeNone.isEmpty)
-    DBIO.successful( context.rootEntities.map( _.name -> Seq(AttributeString(str.drop(1).dropRight(1)))).toMap )
-  }
-
-  private def floatFunc(dec: String)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): ReadAction[Map[String,Iterable[Attribute]]] = {
-    assert(shouldBeNone.isEmpty)
-    DBIO.successful( context.rootEntities.map( _.name -> Seq(AttributeNumber(BigDecimal(dec)))).toMap )
   }
 }

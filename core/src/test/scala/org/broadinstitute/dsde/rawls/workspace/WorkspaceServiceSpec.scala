@@ -269,7 +269,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
             entityRecs.size
           }
           assertResult("sample1") {
-            entityRecs.head.name
+            entityRecs.get.head.name
           }
           DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
         })
@@ -306,7 +306,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(
         services.workspaceService.withSubmissionEntityRecs(subRq, ctx, Some("Sample"), this) { entityRecs =>
           assertResult(Set("sample1", "sample2", "sample3")) {
-            entityRecs.map(_.name).toSet
+            entityRecs.get.map(_.name).toSet
           }
           DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
         })

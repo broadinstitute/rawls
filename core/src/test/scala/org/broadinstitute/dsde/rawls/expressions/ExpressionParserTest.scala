@@ -38,7 +38,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, expression: String) = {
     entityQuery.findEntityByName(workspaceContext.workspaceId, entityType, entityName).result flatMap { entityRec =>
-      ExpressionEvaluator.withNewExpressionEvaluator(this, entityRec) { evaluator =>
+      ExpressionEvaluator.withNewExpressionEvaluator(this, Some(entityRec)) { evaluator =>
         evaluator.evalFinalAttribute(workspaceContext, expression)
       }
     }
@@ -51,7 +51,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       assertResult("sample1") {
         runAndWait(
           ExpressionEvaluator.withNewExpressionEvaluator(this, workspaceContext, "Sample", "sample1") { evaluator =>
-            DBIO.successful(evaluator.rootEntities.head.name)
+            DBIO.successful(evaluator.rootEntities.get.head.name)
         })
       }
 
@@ -59,7 +59,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       intercept[RawlsException] {
         runAndWait(
           ExpressionEvaluator.withNewExpressionEvaluator(this, workspaceContext, "Sample", "nonexistent") { evaluator =>
-            DBIO.successful(evaluator.rootEntities.head.name)
+            DBIO.successful(evaluator.rootEntities.get.head.name)
           })
       }
     }
@@ -139,7 +139,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       }
 
       val resultsByType = runAndWait(entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
-        ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
+        ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
           evaluator.evalFinalAttribute(workspaceContext, "this.library:chapter")
         }
       })
@@ -181,7 +181,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       assertResult(allTheTypes) { runAndWait(
         entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
-          ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
+          ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, "this.type")
           }
         })
@@ -199,7 +199,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       assertResult(allTheTumorTypes) { runAndWait(
         entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
-          ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
+          ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, "this.tumortype")
           }
         })

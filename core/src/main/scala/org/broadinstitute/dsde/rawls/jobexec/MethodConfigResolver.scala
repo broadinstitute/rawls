@@ -86,12 +86,21 @@ object MethodConfigResolver {
     for ((name, expression) <- methodConfig.inputs.toSeq) yield MethodInput(agoraInputs(name), expression.value)
   }
 
-  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
+  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
+
+    //FIXME: so we gotta be able to handle entityless evaluation here.
+    //right now, the "entities" parameter is empty, so the evaluator returns nothing in its map.
+    //i think we need to make the evaluator capable of returning results (for literals only, obvs) even when there are no entities.
+
+    val entityNames = entities match {
+      case Some(recs) => recs.map(_.name)
+      case None => Seq("")
+    }
 
     if( inputs.isEmpty ) {
       //no inputs to evaluate = just return an empty map back!
-      DBIO.successful(entities.map( _.name -> Seq.empty[SubmissionValidationValue] ).toMap)
+      DBIO.successful(entityNames.map( _ -> Seq.empty[SubmissionValidationValue] ).toMap)
     } else {
       ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
         //Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
@@ -100,7 +109,7 @@ object MethodConfigResolver {
             val validationValuesByEntity: Seq[(String, SubmissionValidationValue)] = tryAttribsByEntity match {
               case Failure(regret) =>
                 //The DBIOAction failed - this input expression was not evaluated. Make an error for each entity.
-                entities.map(e => (e.name, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.localName.value)))
+                entityNames.map((_, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.localName.value)))
               case Success(attributeMap) =>
                 //The expression was evaluated, but that doesn't mean we got results...
                 attributeMap.map {

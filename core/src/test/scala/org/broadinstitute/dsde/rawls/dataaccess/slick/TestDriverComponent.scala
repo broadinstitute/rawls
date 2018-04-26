@@ -435,6 +435,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       outputs=Map("aggregate_data_workflow.aggregate_data.output_array" -> AttributeString("this.output_array")),
       AgoraMethod("dsde", "array_task", 1))
 
+    val methodConfigEntityless = MethodConfiguration("ns", "Entityless", None, Map(), inputs=Map("three_step.cgrep.pattern" -> AttributeString("\"bees\"")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+
     val agoraMethodConfigName = MethodConfigurationName(agoraMethodConfig.name, agoraMethodConfig.namespace, wsName)
     val dockstoreMethodConfigName = MethodConfigurationName(dockstoreMethodConfig.name, dockstoreMethodConfig.namespace, wsName)
     val methodConfigName2 = agoraMethodConfigName.copy(name="novelName")
@@ -642,6 +644,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                 methodConfigurationQuery.create(context, methodConfigNotAllSamples),
                 methodConfigurationQuery.create(context, methodConfigAttrTypeMixup),
                 methodConfigurationQuery.create(context, methodConfigArrayType),
+                methodConfigurationQuery.create(context, methodConfigEntityless),
                 methodConfigurationQuery.create(context, methodConfigEntityUpdate),
                 methodConfigurationQuery.create(context, methodConfigWorkspaceLibraryUpdate),
                 methodConfigurationQuery.create(context, methodConfigMissingOutputs),

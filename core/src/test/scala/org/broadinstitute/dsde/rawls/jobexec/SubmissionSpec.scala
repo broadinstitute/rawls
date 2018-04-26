@@ -488,6 +488,21 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assert( submissionStatusResponse.workflows.count(_.status == WorkflowStatuses.Queued) == 2 )
   }
 
+  it should "run a submission fine with no root entity" in withWorkspaceService { workspaceService =>
+    //Entityless has (duh) no entities and only literals in its outputs
+    val submissionRq = SubmissionRequest(testData.methodConfigEntityless.namespace, testData.methodConfigEntityless.name, None, None, None, false)
+    val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+
+    val (status, newSubmissionReport) = rqComplete.response
+    assertResult(StatusCodes.Created) {
+      status
+    }
+
+    assert( newSubmissionReport.workflows.size == 1 )
+
+    checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
+  }
+
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("Individual"), Some("indiv1"), Some("this.is."), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {

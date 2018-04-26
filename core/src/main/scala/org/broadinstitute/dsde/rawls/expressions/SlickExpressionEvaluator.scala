@@ -14,7 +14,7 @@ import scala.util.{Failure, Success, Try}
 // accesible only via ExpressionEvaluator
 
 private[expressions] object SlickExpressionEvaluator {
-  def withNewExpressionEvaluator[R](parser: DataAccess, rootEntities: Seq[EntityRecord])
+  def withNewExpressionEvaluator[R](parser: DataAccess, rootEntities: Option[Seq[EntityRecord]])
                                    (op: SlickExpressionEvaluator => ReadWriteAction[R])
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
     val evaluator = new SlickExpressionEvaluator(parser, rootEntities)
@@ -37,19 +37,19 @@ private[expressions] object SlickExpressionEvaluator {
       if(rootEntityRec.size != 1) {
         DBIO.failed(new RawlsException(s"Expected 1 root entity type, found ${rootEntityRec.size} when searching for $rootType/$rootName"))
       } else {
-        withNewExpressionEvaluator(parser, rootEntityRec)(op)
+        withNewExpressionEvaluator(parser, Some(rootEntityRec))(op)
       }
     }
   }
 }
 
-private[expressions] class SlickExpressionEvaluator protected (val parser: DataAccess, val rootEntities: Seq[EntityRecord])(implicit executionContext: ExecutionContext) {
+private[expressions] class SlickExpressionEvaluator protected (val parser: DataAccess, val rootEntities: Option[Seq[EntityRecord]])(implicit executionContext: ExecutionContext) {
   import parser.driver.api._
 
   val transactionId = UUID.randomUUID().toString
 
   private def populateExprEvalScratchTable() = {
-    val exprEvalBatches = rootEntities.map( e => ExprEvalRecord(e.id, e.name, transactionId) ).grouped(parser.batchSize)
+    val exprEvalBatches = rootEntities.getOrElse(Seq.empty[EntityRecord]).map( e => ExprEvalRecord(e.id, e.name, transactionId) ).grouped(parser.batchSize)
 
     DBIO.sequence(exprEvalBatches.toSeq.map(batch => parser.exprEvalQuery ++= batch))
   }
@@ -59,7 +59,7 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
   }
 
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
-    parser.parseAttributeExpr(expression, allowRootEntity = true) match {
+    parser.parseAttributeExpr(expression, rootEntities.nonEmpty) match {
       case Failure(regret) => DBIO.failed(new RawlsException(regret.getMessage))
       case Success(expr) =>
         runPipe(SlickExpressionContext(workspaceContext, rootEntities, transactionId), expr) map { exprResults =>
@@ -84,17 +84,17 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
             }.flatten)
           }
           //add any missing entities (i.e. those missing the attribute) back into the result map
-          results ++ rootEntities.map(_.name).filterNot( results.keySet.contains ).map { missingKey => missingKey -> Success(Seq()) }
+          results ++ rootEntities.getOrElse(Seq.empty[EntityRecord]).map(_.name).filterNot( results.keySet.contains ).map { missingKey => missingKey -> Success(Seq()) }
         }
     }
   }
 
   //This is boiling away the Try associated with attempting to parse the expression. Is this OK?
   def evalFinalEntity(workspaceContext: SlickWorkspaceContext, expression:String): ReadWriteAction[Iterable[EntityRecord]] = {
-    if( rootEntities.isEmpty ) {
+    if( rootEntities.isEmpty || rootEntities.get.isEmpty ) {
       DBIO.failed(new RawlsException(s"ExpressionEvaluator has no entities passed to evalFinalEntity $expression"))
-    } else if( rootEntities.size > 1 ) {
-      DBIO.failed(new RawlsException(s"ExpressionEvaluator has been set up with ${rootEntities.size} entities for evalFinalEntity, can only accept 1."))
+    } else if( rootEntities.get.size > 1 ) {
+      DBIO.failed(new RawlsException(s"ExpressionEvaluator has been set up with ${rootEntities.get.size} entities for evalFinalEntity, can only accept 1."))
     } else {
       parser.parseEntityExpr(expression) match {
         //fail out if we couldn't parse the expression
