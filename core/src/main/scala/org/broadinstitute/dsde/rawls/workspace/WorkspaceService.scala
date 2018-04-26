@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.UUID
 
 import akka.util.Timeout
+import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -32,6 +33,7 @@ import org.joda.time.DateTime
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -45,7 +47,7 @@ import scala.util.control.NonFatal
  */
 
 object WorkspaceService {
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String)(userInfo: UserInfo)(implicit executionContext: ExecutionContext, actorSystem: ActorSystem) =
     new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName)
 }
 
@@ -61,7 +63,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        maxActiveWorkflowsTotal: Int,
                        maxActiveWorkflowsPerUser: Int,
                        override val workbenchMetricBaseName: String)
-                      (implicit protected val executionContext: ExecutionContext)
+                      (implicit protected val executionContext: ExecutionContext, implicit val actorSystem: ActorSystem)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
 
   import dataSource.dataAccess.driver.api._
@@ -1471,8 +1473,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
 
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[PerRequestMessage] = {
-
-    // within a Slick transaction, query for a SubmissionStatusResponse without any workflow costs
     val submissionWithoutCosts = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
@@ -1487,9 +1487,11 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
     submissionWithoutCosts flatMap {
       case (submission, user) => {
-        val allWorkflowIds:Seq[String] = submission.workflows.flatMap(_.workflowId) // workflowId can be None
-        submissionCostService.getWorkflowCosts(allWorkflowIds, userInfo, submission) map { costMap =>
-          RequestComplete(new SubmissionStatusResponse(submission, costMap, user))
+        val allWorkflowIds:Seq[String] = submission.workflows.flatMap(_.workflowId)
+        gcsDAO.getGoogleProject(RawlsBillingProjectName(workspaceName.name)) flatMap { project =>
+          submissionCostService.getWorkflowCosts(workspaceName.namespace, allWorkflowIds, userInfo, GoogleProject(project.getName)) map { costMap =>
+            RequestComplete(new SubmissionStatusResponse(submission, costMap, user))
+          }
         }
       }
     }
