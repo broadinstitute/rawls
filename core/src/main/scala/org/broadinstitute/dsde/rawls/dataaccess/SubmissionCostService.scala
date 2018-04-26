@@ -12,6 +12,11 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
 import scala.concurrent.{ExecutionContext, Future}
 
+object SubmissionCostService {
+  def constructor(implicit executionContext: ExecutionContext, actorSystem: ActorSystem) =
+    new SubmissionCostService
+}
+
 class SubmissionCostService(implicit val executionContext: ExecutionContext, implicit val actorSystem: ActorSystem) {
 
   def getWorkflowCosts(namespace: String,
@@ -38,17 +43,19 @@ class SubmissionCostService(implicit val executionContext: ExecutionContext, imp
 
     lazy val bigQueryDAO: HttpGoogleBigQueryDAO = new HttpGoogleBigQueryDAO(appName, Token(() => userInfo.accessToken.token), metricsPrefix)
 
+    val tableName = "broad-gcp-billing:gcp_billing_export.gcp_billing_export_v1_001AC2_2B914D_822931"
     val subqueryTemplate = workflowIds.map(id => s"labels_value LIKE $id").mkString(" OR ")
     val queryString = s"SELECT GROUP_CONCAT(labels.key) WITHIN RECORD AS labels_key," +
-                        " GROUP_CONCAT(labels.value) WITHIN RECORD labels_value," +
-                        " cost, product, resource_type" +
-                        s" FROM [$namespace:billing_export]" +
+                          " GROUP_CONCAT(labels.value) WITHIN RECORD labels_value," +
+                         // " cost, product, resource_type" + TODO these are the beta column names. V1 below
+                          " cost, service.description" + //TODO resource_type not on V1 billing table
+                        s" FROM [$tableName]" +
                         s" WHERE project.id = '$namespace' AND labels.key IN" +
-                        " (\"cromwell-workflow-id\", " +
-                        " \"cromwell-workflow-name\"," +
-                        " \"cromwell-sub-workflow-name\"," +
-                        " \"wdl-task-name\"," +
-                        " \"wdl-call-alias\")" +
+                          " (\"cromwell-workflow-id\"," +
+                          " \"cromwell-workflow-name\"," +
+                          " \"cromwell-sub-workflow-name\"," +
+                          " \"wdl-task-name\"," +
+                          " \"wdl-call-alias\")" +
                         s" HAVING $subqueryTemplate"
                         // uncomment for quick testing:
                         //+ " LIMIT 1"
