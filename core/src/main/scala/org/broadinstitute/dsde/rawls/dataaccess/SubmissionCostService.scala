@@ -44,17 +44,12 @@ class SubmissionCostService(implicit val executionContext: ExecutionContext, imp
     lazy val bigQueryDAO: HttpGoogleBigQueryDAO = new HttpGoogleBigQueryDAO(appName, Token(() => userInfo.accessToken.token), metricsPrefix)
 
     val tableName = "broad-gcp-billing:gcp_billing_export.gcp_billing_export_v1_001AC2_2B914D_822931"
-    val subqueryTemplate = workflowIds.map(id => s"labels_value LIKE $id").mkString(" OR ")
-    val queryString = s"SELECT GROUP_CONCAT(labels.key) WITHIN RECORD AS labels_key," +
-                          " GROUP_CONCAT(labels.value) WITHIN RECORD labels_value," +
-                          " cost, service.description, sku.description" +
+    val subqueryTemplate = workflowIds.map(id => s"labels_value LIKE %$id").mkString(" OR ")
+    val queryString = s"SELECT GROUP_CONCAT(labels.value) WITHIN RECORD AS labels_value," +
+                        " cost" +
                         s" FROM [$tableName]" +
-                        s" WHERE project.id = '$namespace' AND labels.key IN" +
-                          " (\"cromwell-workflow-id\"," +
-                          " \"cromwell-workflow-name\"," +
-                          " \"cromwell-sub-workflow-name\"," +
-                          " \"wdl-task-name\"," +
-                          " \"wdl-call-alias\")" +
+                        s" WHERE project.id = '$namespace'" +
+                        " AND labels.key = \"cromwell-workflow-id\"" +
                         s" HAVING $subqueryTemplate"
                         // uncomment for quick testing:
                         //+ " LIMIT 1"
