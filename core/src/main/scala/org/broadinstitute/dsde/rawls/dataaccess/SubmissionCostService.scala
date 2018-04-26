@@ -47,8 +47,7 @@ class SubmissionCostService(implicit val executionContext: ExecutionContext, imp
     val subqueryTemplate = workflowIds.map(id => s"labels_value LIKE $id").mkString(" OR ")
     val queryString = s"SELECT GROUP_CONCAT(labels.key) WITHIN RECORD AS labels_key," +
                           " GROUP_CONCAT(labels.value) WITHIN RECORD labels_value," +
-                         // " cost, product, resource_type" + TODO these are the beta column names. V1 below
-                          " cost, service.description" + //TODO resource_type not on V1 billing table
+                          " cost, service.description, sku.description" +
                         s" FROM [$tableName]" +
                         s" WHERE project.id = '$namespace' AND labels.key IN" +
                           " (\"cromwell-workflow-id\"," +
