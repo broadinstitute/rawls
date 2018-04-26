@@ -530,6 +530,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def overwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
+
+    //TODO:
+    //convert memberList into a list of emails to pass to sam. subjectIds and groupNames will need to be converted to emails
+    //update group in same based on member list
+    //call the correct implementation of overwriteGroupMembers that will update the intersection groups in ldap
+
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
         if (role == ManagedRoles.Admin &&
