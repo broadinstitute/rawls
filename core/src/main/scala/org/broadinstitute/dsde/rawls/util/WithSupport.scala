@@ -97,21 +97,4 @@ trait UserWiths {
       case Some(project) => op(project)
     }
   }
-
-  def withManagedGroupOwnerAccess[T](managedGroupRef: ManagedGroupRef, userRef: RawlsUserRef, dataAccess: DataAccess)(op: ManagedGroup => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
-    dataAccess.managedGroupQuery.load(managedGroupRef) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${managedGroupRef.membersGroupName.value}] not found")))
-      case Some(managedGroup) =>
-        dataAccess.rawlsGroupQuery.isGroupMember(managedGroup.adminsGroup, userRef) flatMap {
-          case true => op(managedGroup)
-          case false =>
-            // figure out what error to show - if they are a user show 403 otherwise 404
-            dataAccess.rawlsGroupQuery.isGroupMember(managedGroup.membersGroup, userRef) flatMap {
-              case true => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "unauthorized")))
-              case false => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${managedGroupRef.membersGroupName.value}] not found")))
-            }
-        }
-    }
-  }
-
 }

@@ -1,4 +1,4 @@
-/.idea/
+.idea/
 /project/boot/
 /project/plugins/project
 target/
@@ -17,3 +17,4 @@ test-output/
 rawlsdb/
 
 *.pid
+automation/src/test/resources/

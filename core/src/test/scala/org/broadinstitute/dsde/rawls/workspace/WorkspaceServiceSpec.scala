@@ -456,42 +456,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  it should "patch realm ACLs when the owner is also a project owner" in withTestDataServices { services =>
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    runAndWait(rawlsUserQuery.createUser(user))
-
-    //add the owner as an owner on the billing project
-    Await.result(services.userService.addUserToBillingProject(RawlsBillingProjectName(testData.controlledWorkspace.namespace), ProjectAccessUpdate("owner-access", ProjectRoles.Owner)), Duration.Inf)
-
-    //add dbGapAuthorizedUsers group to ACL
-    val aclAdd = Seq(WorkspaceACLUpdate(testData.dbGapAuthorizedUsersGroup.membersGroup.groupEmail.value, WorkspaceAccessLevels.Read, None))
-    val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.controlledWorkspace.toWorkspaceName, aclAdd, false), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromAdd = Seq(WorkspaceACLUpdateResponse(testData.dbGapAuthorizedUsersGroup.membersGroup.groupName.value, testData.dbGapAuthorizedUsersGroup.membersGroup.groupEmail.value, WorkspaceAccessLevels.Read))
-
-    assertResult(responseFromAdd, "Add ACL shouldn't error") {
-      aclAddResponse.response._2.usersUpdated
-    }
-
-    //add a member of dbGapAuthorizedUsers as a writer on the workspace
-    val aclAdd2 = Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, None))
-    val aclAddResponse2 = Await.result(services.workspaceService.updateACL(testData.controlledWorkspace.toWorkspaceName, aclAdd2, false), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromAdd2 = Seq(WorkspaceACLUpdateResponse(testData.userReader.userSubjectId.value, testData.userReader.userEmail.value, WorkspaceAccessLevels.Write))
-
-    assertResult(responseFromAdd2, "Add ACL shouldn't error") {
-      aclAddResponse2.response._2.usersUpdated
-    }
-
-    val getACLResponse = Await.result(services.workspaceService.getACL(testData.controlledWorkspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-
-    //realm ACLs should be maintained and this should return successfully
-    assertResult(StatusCodes.OK) {
-      getACLResponse.response._1
-    }
-  }
-
   it should "allow can share user to share when there are multiple project owners" in withDefaultTestDatabase { datasource: SlickDataSource =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
     runAndWait(rawlsUserQuery.createUser(user))

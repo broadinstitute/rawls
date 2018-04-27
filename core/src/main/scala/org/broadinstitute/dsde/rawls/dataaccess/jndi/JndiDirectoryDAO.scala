@@ -480,6 +480,13 @@ trait JndiDirectoryDAO extends DirectorySubjectNameSupport with JndiSupport {
       }
     } }
 
+    def loadEmails(refs: Seq[RawlsUserRef]): ReadWriteAction[Map[RawlsUserRef, Option[RawlsUserEmail]]] = {
+      load(refs).map { users =>
+        val emailMap = users.map(u => u.userSubjectId -> u.userEmail).toMap
+        refs.map(u => u -> emailMap.get(u.userSubjectId)).toMap
+      }
+    }
+
     def deleteUser(userId: RawlsUserSubjectId): ReadWriteAction[Unit] = withContext { ctx =>
       ctx.unbind(userDn(userId))
     }
