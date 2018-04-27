@@ -31,13 +31,15 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.config._
+import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Token
+import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.config._
 
 object Boot extends App with LazyLogging {
   private def startup(): Unit = {
@@ -137,6 +139,7 @@ object Boot extends App with LazyLogging {
       slickDataSource.databaseConfig.db.shutdown
     }
 
+    val bigQueryDAO = new HttpGoogleBigQueryDAO(gcsConfig.getString("appName"), Token(() => gcsDAO.getBucketServiceAccountCredential.getAccessToken), metricsPrefix)
     val executionServiceConfig = conf.getConfig("executionservice")
     val submissionTimeout = util.toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
 
@@ -162,7 +165,6 @@ object Boot extends App with LazyLogging {
     val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl"))
 
     val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO, samDAO, projectOwnerGrantableRoles)
-
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
 
@@ -213,6 +215,7 @@ object Boot extends App with LazyLogging {
         notificationDAO,
         userServiceConstructor,
         genomicsServiceConstructor,
+        bigQueryDAO,
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName = metricsPrefix),

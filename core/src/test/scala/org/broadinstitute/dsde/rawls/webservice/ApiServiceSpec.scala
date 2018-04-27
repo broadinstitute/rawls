@@ -31,6 +31,7 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.{MethodRepoConfig, SwaggerConfig}
+import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Token
 
 import scala.concurrent.duration._
 
@@ -157,7 +158,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO, executionServiceCluster.readMembers,
       Seq.empty, Seq.empty, Seq("my-favorite-bucket")))
     override val statusServiceConstructor = StatusService.constructor(healthMonitor)_
-
+    val bigQueryDAO = new MockHttpGoogleBigQueryDAO("test", Token(() => gcsDAO.getBucketServiceAccountCredential.getAccessToken), workbenchMetricBaseName)
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
@@ -171,6 +172,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       notificationDAO,
       userServiceConstructor,
       genomicsServiceConstructor,
+      bigQueryDAO,
       maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName

@@ -25,6 +25,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
+import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Token
 import spray.json._
 
 import scala.concurrent.Await
@@ -205,8 +206,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         gcsDAO
       )_
 
+      val bigQueryDAO = new MockHttpGoogleBigQueryDAO("test", Token(() => gcsDAO.getBucketServiceAccountCredential.getAccessToken), workbenchMetricBaseName)
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
-
       val execServiceBatchSize = 3
       val maxActiveWorkflowsTotal = 10
       val maxActiveWorkflowsPerUser = 2
@@ -223,6 +224,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         notificationDAO,
         userServiceConstructor,
         genomicsServiceConstructor,
+        bigQueryDAO,
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
         "test"
