@@ -945,6 +945,45 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         )
         .withStatusCode(StatusCodes.Created.intValue)
     )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/api/groups")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """[{"groupName": "dbGapAuthorizedUsers", "groupEmail": "dbGapAuthorizedUsers@example.com", "role": "member"}, {"groupName": "Test-Realm", "groupEmail": "Test-Realm@example.com", "role": "member"}, {"groupName": "Test-Realm2", "groupEmail": "Test-Realm2@example.com", "role": "member"}]""".stripMargin
+        )
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/api/group/dbGapAuthorizedUsers/member")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """["owner-access", "reader-access-via-group"]""".stripMargin
+        )
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/api/group/*/member")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """[]""".stripMargin
+        )
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
   }
 
   def stopServer = mockServer.stop()

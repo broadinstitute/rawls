@@ -204,7 +204,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
-  override def overwriteManagedGroupMembership(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmails: List[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = {
+  override def overwriteManagedGroupMembership(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmails: Seq[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/group/${groupName.value}/$role"
     val httpRequest = RequestBuilding.Put(url, memberEmails)
 
