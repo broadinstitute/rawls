@@ -23,9 +23,9 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
   "AuthDomains" should "create and access a workspace with an auth domain" in {
     val groupOwnerToken = groupOwner.makeAuthToken()
 
-    withGroup("realm-for-testing", List(projectUser.email)) { realmGroup =>
-      withGroup("realm-for-testing2", List(projectUser.email)) { realmGroup2 =>
-        withGroup("realm-for-testing3", List(projectUser.email)) { realmGroup3 =>
+    withGroup("ad", List(projectUser.email)) { realmGroup =>
+      withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
+        withGroup("ad3", List(projectUser.email)) { realmGroup3 =>
           withWorkspace(project.projectName, "AuthDomains", Set(realmGroup, realmGroup2, realmGroup3), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar")) (projectUser.makeAuthToken())
           } (projectOwner.makeAuthToken())
@@ -38,9 +38,9 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
     val groupOwnerToken = groupOwner.makeAuthToken()
 
     intercept[RestException] {
-      withGroup("realm-for-testing", List(projectOwner.email)) { realmGroup =>
-        withGroup("realm-for-testing2", List(projectOwner.email)) { realmGroup2 =>
-          withGroup("realm-for-testing3") { realmGroup3 =>
+      withGroup("ad", List(projectOwner.email)) { realmGroup =>
+        withGroup("ad2", List(projectOwner.email)) { realmGroup2 =>
+          withGroup("ad3") { realmGroup3 =>
             withWorkspace(project.projectName, "AuthDomains", Set(realmGroup, realmGroup2, realmGroup3)) { _ =>
               fail("should not have created workspace")
             }(projectOwner.makeAuthToken())
@@ -53,10 +53,10 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
   it should "do the right security when auth domain membership changes" in {
     val groupOwnerToken = groupOwner.makeAuthToken()
 
-    withGroup("realm-for-testing", List(projectUser.email, projectOwner.email)) { realmGroup =>
-      withGroup("realm-for-testing2", List(projectUser.email, projectOwner.email)) { realmGroup2 =>
+    withGroup("ad", List(projectUser.email, projectOwner.email)) { realmGroup =>
+      withGroup("ad2", List(projectUser.email, projectOwner.email)) { realmGroup2 =>
         val realmGroup2Full = Orchestration.groups.getGroup(realmGroup2)(groupOwnerToken)
-        withGroup("realm-for-testing3", List(realmGroup2Full.membersGroup.groupEmail)) { realmGroup3 =>
+        withGroup("ad3", List(realmGroup2Full.membersGroup.groupEmail)) { realmGroup3 =>
           withWorkspace(project.projectName, "AuthDomains", Set(realmGroup, realmGroup3), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             for (user <- Set(projectOwner, projectUser)) {
               val userToken = user.makeAuthToken()
@@ -79,6 +79,11 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
               intercept[RestException] {
                 Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar"))(userToken)
               }
+
+              // add users back so the cleanup part of withGroup doesn't have a fit
+              Orchestration.groups.addUserToGroup(realmGroup2, user.email, GroupRole.Member)(groupOwnerToken)
+              Orchestration.groups.addUserToGroup(realmGroup, user.email, GroupRole.Member)(groupOwnerToken)
+
             }
           }(projectOwner.makeAuthToken())
         }(groupOwnerToken)
@@ -89,7 +94,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
   it should "do the right security when access group membership changes and there is an access" in {
     val groupOwnerToken = groupOwner.makeAuthToken()
 
-    withGroup("realm-for-testing", List(projectUser.email, projectOwner.email)) { realmGroup =>
+    withGroup("ad", List(projectUser.email, projectOwner.email)) { realmGroup =>
       withGroup("nested-group", List(projectUser.email)) { nestedGroup =>
         val nestedGroupFull = Orchestration.groups.getGroup(nestedGroup)(groupOwnerToken)
         withGroup("access-group", List(nestedGroupFull.membersGroup.groupEmail)) { accessGroup =>
@@ -117,6 +122,10 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
             intercept[RestException] {
               Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar"))(userToken)
             }
+
+            // add users back so the cleanup part of withGroup doesn't have a fit
+            Orchestration.groups.addUserToGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
+
           }(workspaceOwnerToken)
         }(groupOwnerToken)
       }(groupOwnerToken)
@@ -126,9 +135,9 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
   it should "clone a workspace if the source has a multi-group auth domain and user is in all groups" in {
     val authToken = projectOwner.makeAuthToken()
 
-    withGroup("realm-for-testing", List(projectUser.email)) { realmGroup =>
-      withGroup("realm-for-testing2", List(projectUser.email)) { realmGroup2 =>
-        withGroup("realm-for-testing3", List(projectUser.email)) { realmGroup3 =>
+    withGroup("ad", List(projectUser.email)) { realmGroup =>
+      withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
+        withGroup("ad3", List(projectUser.email)) { realmGroup3 =>
           withWorkspace(project.projectName, "AuthDomains", Set(realmGroup, realmGroup2, realmGroup3), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             withClonedWorkspace(project.projectName, "AuthDomainsClone") { clone =>
               Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar")) (projectUser.makeAuthToken())
@@ -137,6 +146,10 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
               intercept[RestException] {
                 Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar")) (projectUser.makeAuthToken())
               }
+
+              // add users back so the cleanup part of withGroup doesn't have a fit
+              Orchestration.groups.addUserToGroup(realmGroup2, projectUser.email, GroupRole.Member)(authToken)
+              
             } (projectUser.makeAuthToken())
           } (authToken)
         } (authToken)
@@ -147,9 +160,9 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
   it should "clone a workspace if the user added a group to the source authorization domain" in {
     val authToken = projectOwner.makeAuthToken()
 
-    withGroup("realm-for-testing", List(projectUser.email)) { realmGroup =>
-      withGroup("realm-for-testing2", List(projectUser.email)) { realmGroup2 =>
-        withGroup("realm-for-testing3", List(projectUser.email)) { realmGroup3 =>
+    withGroup("ad", List(projectUser.email)) { realmGroup =>
+      withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
+        withGroup("ad3", List(projectUser.email)) { realmGroup3 =>
           withWorkspace(project.projectName, "AuthDomains", Set(realmGroup, realmGroup2), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             withClonedWorkspace(project.projectName, "AuthDomainsClone", Set(realmGroup, realmGroup2, realmGroup3)) { clone =>
               Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar")) (projectUser.makeAuthToken())
@@ -163,8 +176,8 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
   it should "not allow changing a workspace's Realm if it exists" in {
     val authToken = projectOwner.makeAuthToken()
 
-    withGroup("realm-for-testing", List(projectUser.email)) { realmGroup =>
-      withGroup("realm-for-testing2", List(projectUser.email)) { realmGroup2 =>
+    withGroup("ad", List(projectUser.email)) { realmGroup =>
+      withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
         withWorkspace(project.projectName, "AuthDomains", Set(realmGroup), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
           intercept[RestException] {
             withClonedWorkspace(project.projectName, "AuthDomainsClone", Set(realmGroup2)) { clone =>

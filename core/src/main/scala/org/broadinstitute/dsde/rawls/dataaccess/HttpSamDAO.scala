@@ -191,21 +191,21 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
 
   override def addUserToManagedGroup(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmail: WorkbenchEmail, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}/$role/${memberEmail.value}"
+    val url = samServiceURL + s"/api/group/${groupName.value}/${role.toString.toLowerCase}/${memberEmail.value}"
     val httpRequest = RequestBuilding.Put(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def removeUserFromManagedGroup(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmail: WorkbenchEmail, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}/$role/${memberEmail.value}"
+    val url = samServiceURL + s"/api/group/${groupName.value}/${role.toString.toLowerCase}/${memberEmail.value}"
     val httpRequest = RequestBuilding.Delete(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def overwriteManagedGroupMembership(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmails: Seq[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}/$role"
+    val url = samServiceURL + s"/api/group/${groupName.value}/${role.toString.toLowerCase}"
     val httpRequest = RequestBuilding.Put(url, memberEmails)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
