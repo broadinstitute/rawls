@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Token
 import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
+import scala.collection.JavaConverters
 import scala.concurrent.{ExecutionContext, Future}
 
 object SubmissionCostService {
@@ -54,16 +55,13 @@ class SubmissionCostService(implicit val executionContext: ExecutionContext, imp
                         // uncomment for quick testing:
                         //+ " LIMIT 1"
 
-    val rows = for {
+    for {
       jobRef <- bigQueryDAO.startQuery(googleProject, queryString)
       job <- bigQueryDAO.getQueryStatus(jobRef)
       result <- bigQueryDAO.getQueryResult(job)
-    } yield result.getRows
-
-    val result = rows.map { row =>
-      row.get(0).getF
-    }
-
-    Future(Map("wf1" -> 2.00f))
+      row <- JavaConverters.iterableAsScalaIterable(result.getRows)
+      rowKey = row.getF.get(0).getV.toString
+      rowValue = row.getF.get(1).getV.toString.toFloat
+    } yield rowKey.replace("cromwell-", "") -> rowValue
   }
 }
