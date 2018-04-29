@@ -172,7 +172,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   override def listGroupPolicyEmails(groupName: WorkbenchGroupName, policyName: ManagedRoles.ManagedRole, userInfo: UserInfo): Future[List[WorkbenchEmail]] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}/$policyName"
+    val url = samServiceURL + s"/api/group/${groupName.value}/${policyName.toString.toLowerCase}"
 
     retry(when500) { () => pipeline[List[WorkbenchEmail]](userInfo) apply RequestBuilding.Get(url) }
   }
