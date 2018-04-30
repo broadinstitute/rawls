@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.test.api
 
 import org.broadinstitute.dsde.workbench.config.UserPool
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures, WorkspaceFixtures}
+import org.broadinstitute.dsde.workbench.service.Orchestration.billing.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.Orchestration.groups.GroupRole
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Orchestration, RestException, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
@@ -14,18 +15,22 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
     val users = UserPool.chooseStudents(2)
     (users(0), users(1))
   }
-  lazy val project = claimGPAllocProject(projectOwner, List(projectUser.email))
+  lazy val project = {
+    val p = claimGPAllocProject(projectOwner)
+    Orchestration.billing.addUserToBillingProject(p.projectName, projectUser.email, BillingProjectRole.User)(projectOwner.makeAuthToken())
+    p
+  }
 
   override protected def afterAll(): Unit = {
-    project.cleanup(projectOwner, List(projectUser.email))
+    project.cleanup(projectOwner, List.empty)
   }
 
   "AuthDomains" should "create and access a workspace with an auth domain" in {
     val groupOwnerToken = groupOwner.makeAuthToken()
 
-    withGroup("ad", List(projectUser.email)) { realmGroup =>
-      withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
-        withGroup("ad3", List(projectUser.email)) { realmGroup3 =>
+    withGroup("ad", List(projectUser.email, projectOwner.email)) { realmGroup =>
+      withGroup("ad2", List(projectUser.email, projectOwner.email)) { realmGroup2 =>
+        withGroup("ad3", List(projectUser.email, projectOwner.email)) { realmGroup3 =>
           withWorkspace(project.projectName, "AuthDomains", Set(realmGroup, realmGroup2, realmGroup3), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar")) (projectUser.makeAuthToken())
           } (projectOwner.makeAuthToken())
@@ -71,7 +76,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
               }
 
               // add user back to realmGroup2 and they should have access
-              Orchestration.groups.addUserToGroup(realmGroup2, projectUser.email, GroupRole.Member)(groupOwnerToken)
+              Orchestration.groups.addUserToGroup(realmGroup2, user.email, GroupRole.Member)(groupOwnerToken)
               Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar"))(userToken)
 
               // remove user from realmGroup and they should lose access
@@ -95,38 +100,45 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
     val groupOwnerToken = groupOwner.makeAuthToken()
 
     withGroup("ad", List(projectUser.email, projectOwner.email)) { realmGroup =>
-      withGroup("nested-group", List(projectUser.email)) { nestedGroup =>
+      withGroup("ng", List(projectUser.email)) { nestedGroup =>
         val nestedGroupFull = Orchestration.groups.getGroup(nestedGroup)(groupOwnerToken)
-        withGroup("access-group", List(nestedGroupFull.membersGroup.groupEmail)) { accessGroup =>
+        withGroup("ag", List(nestedGroupFull.membersGroup.groupEmail)) { accessGroup =>
           val accessGroupFull = Orchestration.groups.getGroup(accessGroup)(groupOwnerToken)
           val workspaceOwnerToken = projectOwner.makeAuthToken()
-          withWorkspace(project.projectName, "AuthDomains", Set(realmGroup), List(AclEntry(accessGroupFull.membersGroup.groupEmail, WorkspaceAccessLevel.Writer))) { workspace =>
-            val user = projectUser
-            val userToken = user.makeAuthToken()
 
-            // user is in all the right groups, this should work
-            Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar"))(userToken)
+          // we need a test specific project here because we add one of the groups just created as a writer to the workspace
+          // which adds the group to the can-compute policy on the project. Deleting the workspace does not remove the group
+          // from the policy so the group remains in use and cannot be deleted so cleanup will fail. Using a new project which
+          // gets released removes the offending policy and allows the group to be cleaned up.
+          withCleanBillingProject(projectOwner) { localProject =>
+            withWorkspace(localProject, "AuthDomains", Set(realmGroup), List(AclEntry(accessGroupFull.membersGroup.groupEmail, WorkspaceAccessLevel.Writer))) { workspace =>
+              val user = projectUser
+              val userToken = user.makeAuthToken()
 
-            // remove user from nestedGroup and they should lose access
-            Orchestration.groups.removeUserFromGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
-            intercept[RestException] {
-              Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar"))(userToken)
-            }
+              // user is in all the right groups, this should work
+              Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
 
-            // add user back to nestedGroup and they should have access
-            Orchestration.groups.addUserToGroup(nestedGroup, projectUser.email, GroupRole.Member)(groupOwnerToken)
-            Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar"))(userToken)
+              // remove user from nestedGroup and they should lose access
+              Orchestration.groups.removeUserFromGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
+              intercept[RestException] {
+                Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
+              }
 
-            // remove accessGroup from acl and user should lose access
-            Orchestration.workspaces.updateAcl(project.projectName, workspace, accessGroupFull.membersGroup.groupEmail, WorkspaceAccessLevel.NoAccess, None, None)(workspaceOwnerToken)
-            intercept[RestException] {
-              Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar"))(userToken)
-            }
+              // add user back to nestedGroup and they should have access
+              Orchestration.groups.addUserToGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
+              Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
 
-            // add users back so the cleanup part of withGroup doesn't have a fit
-            Orchestration.groups.addUserToGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
+              // remove accessGroup from acl and user should lose access
+              Orchestration.workspaces.updateAcl(localProject, workspace, accessGroupFull.membersGroup.groupEmail, WorkspaceAccessLevel.NoAccess, None, None)(workspaceOwnerToken)
+              intercept[RestException] {
+                Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
+              }
 
-          }(workspaceOwnerToken)
+              // add users back so the cleanup part of withGroup doesn't have a fit
+              Orchestration.groups.addUserToGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
+
+            }(workspaceOwnerToken)
+          }
         }(groupOwnerToken)
       }(groupOwnerToken)
     }(groupOwnerToken)
@@ -138,19 +150,22 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
     withGroup("ad", List(projectUser.email)) { realmGroup =>
       withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
         withGroup("ad3", List(projectUser.email)) { realmGroup3 =>
-          withWorkspace(project.projectName, "AuthDomains", Set(realmGroup, realmGroup2, realmGroup3), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
-            withClonedWorkspace(project.projectName, "AuthDomainsClone") { clone =>
-              Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar")) (projectUser.makeAuthToken())
+          val authDomain = Set(realmGroup, realmGroup2, realmGroup3)
+          withWorkspace(project.projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
+            val clone = "AuthDomainsClone_" + makeRandomId()
+            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, authDomain, "", Map.empty)(projectUser.makeAuthToken())
+            withCleanUp {
+              register cleanUp Orchestration.workspaces.delete(project.projectName, clone)(projectUser.makeAuthToken())
+              Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
 
               Orchestration.groups.removeUserFromGroup(realmGroup2, projectUser.email, GroupRole.Member)(authToken)
               intercept[RestException] {
-                Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar")) (projectUser.makeAuthToken())
+                Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
               }
 
               // add users back so the cleanup part of withGroup doesn't have a fit
               Orchestration.groups.addUserToGroup(realmGroup2, projectUser.email, GroupRole.Member)(authToken)
-              
-            } (projectUser.makeAuthToken())
+            }
           } (authToken)
         } (authToken)
       } (authToken)
@@ -163,10 +178,14 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
     withGroup("ad", List(projectUser.email)) { realmGroup =>
       withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
         withGroup("ad3", List(projectUser.email)) { realmGroup3 =>
-          withWorkspace(project.projectName, "AuthDomains", Set(realmGroup, realmGroup2), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
-            withClonedWorkspace(project.projectName, "AuthDomainsClone", Set(realmGroup, realmGroup2, realmGroup3)) { clone =>
-              Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar")) (projectUser.makeAuthToken())
-            } (projectUser.makeAuthToken())
+          val authDomain = Set(realmGroup, realmGroup2)
+          withWorkspace(project.projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
+            val clone = "AuthDomainsClone_" + makeRandomId()
+            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, authDomain + realmGroup3, "", Map.empty)(projectUser.makeAuthToken())
+            withCleanUp {
+              register cleanUp Orchestration.workspaces.delete(project.projectName, clone)(projectUser.makeAuthToken())
+              Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
+            }
           } (authToken)
         } (authToken)
       } (authToken)
@@ -180,9 +199,8 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
       withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
         withWorkspace(project.projectName, "AuthDomains", Set(realmGroup), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
           intercept[RestException] {
-            withClonedWorkspace(project.projectName, "AuthDomainsClone", Set(realmGroup2)) { clone =>
-              fail("should not have cloned")
-            }(authToken)
+            val clone = "AuthDomainsClone_" + makeRandomId()
+            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, Set(realmGroup2), "", Map.empty)(authToken)
           }
         }(authToken)
       }(authToken)
