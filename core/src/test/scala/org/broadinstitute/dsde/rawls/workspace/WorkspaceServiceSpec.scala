@@ -113,6 +113,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
     val bigQueryDAO = new MockHttpGoogleBigQueryDAO("test", Token(() => gcsDAO.getBucketServiceAccountCredential.getAccessToken), workbenchMetricBaseName)
+    val submissionCostService = new MockSubmissionCostService(bigQueryDAO)
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
@@ -129,10 +130,10 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       notificationDAO,
       userServiceConstructor,
       genomicsServiceConstructor,
-      bigQueryDAO,
       maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser,
-      workbenchMetricBaseName
+      workbenchMetricBaseName,
+      submissionCostService
     )_
 
     def cleanupSupervisor = {

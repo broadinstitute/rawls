@@ -159,6 +159,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       Seq.empty, Seq.empty, Seq("my-favorite-bucket")))
     override val statusServiceConstructor = StatusService.constructor(healthMonitor)_
     val bigQueryDAO = new MockHttpGoogleBigQueryDAO("test", Token(() => gcsDAO.getBucketServiceAccountCredential.getAccessToken), workbenchMetricBaseName)
+    val submissionCostService = new MockSubmissionCostService(bigQueryDAO)
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
@@ -172,10 +173,10 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       notificationDAO,
       userServiceConstructor,
       genomicsServiceConstructor,
-      bigQueryDAO,
       maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser,
-      workbenchMetricBaseName
+      workbenchMetricBaseName,
+      submissionCostService
     )_
 
     def cleanupSupervisor = {

@@ -207,6 +207,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       )_
 
       val bigQueryDAO = new MockHttpGoogleBigQueryDAO("test", Token(() => gcsDAO.getBucketServiceAccountCredential.getAccessToken), workbenchMetricBaseName)
+      val submissionCostService = new MockSubmissionCostService(bigQueryDAO)
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
       val execServiceBatchSize = 3
       val maxActiveWorkflowsTotal = 10
@@ -224,10 +225,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         notificationDAO,
         userServiceConstructor,
         genomicsServiceConstructor,
-        bigQueryDAO,
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
-        "test"
+        workbenchMetricBaseName,
+        submissionCostService
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {
