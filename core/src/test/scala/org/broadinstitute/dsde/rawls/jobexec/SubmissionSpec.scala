@@ -259,13 +259,15 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     withDataAndService(testCode, withCustomTestDatabase[T](new SubmissionTestData))
   }
 
-  private def checkSubmissionStatus(workspaceService:WorkspaceService, submissionId:String) = {
+  private def checkSubmissionStatus(workspaceService:WorkspaceService, submissionId:String): SubmissionStatusResponse = {
     val submissionStatusRqComplete = workspaceService.getSubmissionStatus(testData.wsName, submissionId)
 
     Await.result(submissionStatusRqComplete, Duration.Inf) match {
       case RequestComplete((submissionStatus: StatusCode, submissionData: Any)) => {
         assertResult(StatusCodes.OK) { submissionStatus }
-        assertResult(submissionId) { submissionData.asInstanceOf[SubmissionStatusResponse].submissionId }
+        val submissionStatusResponse = submissionData.asInstanceOf[SubmissionStatusResponse]
+        assertResult(submissionId) { submissionStatusResponse.submissionId }
+        submissionStatusResponse
       }
       case _ => fail("Unable to get submission status")
     }
@@ -491,18 +493,22 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   it should "run a submission fine with no root entity" in withWorkspaceService { workspaceService =>
     //Entityless has (duh) no entities and only literals in its outputs
     val submissionRq = SubmissionRequest(testData.methodConfigEntityless.namespace, testData.methodConfigEntityless.name, None, None, None, false)
-    val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+    val createSub = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
 
-    val (status, newSubmissionReport) = rqComplete.response
+    val (status, newSubmissionReport) = createSub.response
     assertResult(StatusCodes.Created) {
       status
     }
-
-    //FIXME: this does what you expect: returns a map of entity name as blank string to the workflow.
-    //there's nothing to do here, just write new tests
     assert( newSubmissionReport.workflows.size == 1 )
 
-    checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
+    val submissionData = checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
+    assert(submissionData.workflows.size == 1)
+
+    val listSubs = Await.result(workspaceService.listSubmissions(testData.wsName), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, Seq[SubmissionListResponse])]]
+    val (_, subList) = listSubs.response
+
+    val oneSub = subList.filter(s => s.submissionId == newSubmissionReport.submissionId)
+    assert( oneSub.nonEmpty )
   }
 
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withWorkspaceService { workspaceService =>

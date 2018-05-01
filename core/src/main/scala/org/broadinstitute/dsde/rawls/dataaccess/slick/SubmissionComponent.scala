@@ -115,9 +115,8 @@ trait SubmissionComponent {
 
     def listWithSubmitter(workspaceContext: SlickWorkspaceContext): ReadWriteAction[Seq[SubmissionListResponse]] = {
       val query = for {
-        submissionRec <- findByWorkspaceId(workspaceContext.workspaceId)
+        (submissionRec, entityRec) <- findByWorkspaceId(workspaceContext.workspaceId) joinLeft entityQuery on(_.submissionEntityId === _.id)
         methodConfigRec <- methodConfigurationQuery if (submissionRec.methodConfigurationId === methodConfigRec.id)
-        entityRec <- entityQuery if (submissionRec.submissionEntityId === entityRec.id)
       } yield (submissionRec, methodConfigRec, entityRec)
 
       for {
@@ -133,7 +132,7 @@ trait SubmissionComponent {
           val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
           val subStatuses = states.getOrElse(submissionRec.id, Seq.empty).map(x => x.workflowStatus -> x.count).toMap
 
-          new SubmissionListResponse(unmarshalSubmission(submissionRec, config, Some(entityRec.toReference), Seq.empty), user, subStatuses)
+          new SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), user, subStatuses)
         }
       }
     }
@@ -426,7 +425,7 @@ trait SubmissionComponent {
         e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
         m.MESSAGE
         from WORKFLOW w
-        join ENTITY e on w.ENTITY_ID = e.id
+        left outer join ENTITY e on w.ENTITY_ID = e.id
         left outer join WORKFLOW_MESSAGE m on m.workflow_id = w.id
         where w.submission_id = ${submissionId}""".as[WorkflowMessagesListResult]
       }
