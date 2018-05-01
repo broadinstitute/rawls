@@ -71,6 +71,7 @@ object SamResourceTypeNames {
   case class SamResourceTypeName(value: String)
 
   val billingProject = SamResourceTypeName("billing-project")
+  val managedGroup = SamResourceTypeName("managed-group")
 }
 
 trait SamResourceRoles
