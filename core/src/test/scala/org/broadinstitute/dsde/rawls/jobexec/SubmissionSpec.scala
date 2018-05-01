@@ -498,6 +498,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       status
     }
 
+    //FIXME: this does what you expect: returns a map of entity name as blank string to the workflow.
+    //there's nothing to do here, just write new tests
     assert( newSubmissionReport.workflows.size == 1 )
 
     checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)

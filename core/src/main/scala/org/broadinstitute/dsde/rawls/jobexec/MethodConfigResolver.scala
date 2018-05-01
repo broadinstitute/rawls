@@ -89,10 +89,6 @@ object MethodConfigResolver {
   def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
-    //FIXME: so we gotta be able to handle entityless evaluation here.
-    //right now, the "entities" parameter is empty, so the evaluator returns nothing in its map.
-    //i think we need to make the evaluator capable of returning results (for literals only, obvs) even when there are no entities.
-
     val entityNames = entities match {
       case Some(recs) => recs.map(_.name)
       case None => Seq("")
