@@ -118,9 +118,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def AdminDeleteWorkspace(workspaceName: WorkspaceName) = adminDeleteWorkspace(workspaceName)
   def AdminWorkflowQueueStatusByUser = adminWorkflowQueueStatusByUser()
 
-  def HasAllUserReadAccess(workspaceName: WorkspaceName) = hasAllUserReadAccess(workspaceName)
-  def GrantAllUserReadAccess(workspaceName: WorkspaceName) = grantAllUserReadAccess(workspaceName)
-  def RevokeAllUserReadAccess(workspaceName: WorkspaceName) = revokeAllUserReadAccess(workspaceName)
+//  def HasAllUserReadAccess(workspaceName: WorkspaceName) = hasAllUserReadAccess(workspaceName)
+//  def GrantAllUserReadAccess(workspaceName: WorkspaceName) = grantAllUserReadAccess(workspaceName)
+//  def RevokeAllUserReadAccess(workspaceName: WorkspaceName) = revokeAllUserReadAccess(workspaceName)
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[Workspace] =
     withAttributeNamespaceCheck(workspaceRequest) {
@@ -1611,55 +1611,55 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def hasAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          dataAccess.rawlsGroupQuery.load(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read)) map { readerGroup =>
-            readerGroup match {
-              case Some(group) =>
-                if (group.subGroups.contains(UserService.allUsersGroupRef)) {
-                  RequestComplete(StatusCodes.NoContent)
-                } else {
-                  RequestComplete(StatusCodes.NotFound)
-                }
-              case None =>
-                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, "allUsersGroup not found"))
-            }
-          }
-        }
-      }
-    }
-  }
-
-  def grantAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          val userServiceRef = userServiceConstructor(userInfo)
-          DBIO.from(userServiceRef.AddGroupMembers(
-            workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
-            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value)))))
-        } map {
-          case RequestComplete(StatusCodes.OK) => RequestComplete(StatusCodes.Created)
-          case otherwise => otherwise
-        }
-      }
-    }
-  }
-
-  def revokeAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          val userServiceRef = userServiceConstructor(userInfo)
-          DBIO.from(userServiceRef.RemoveGroupMembers(
-            workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
-            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value)))))
-        }
-      }
-    }
-  }
+//  def hasAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+//    asFCAdmin {
+//      dataSource.inTransaction { dataAccess =>
+//        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+//          dataAccess.rawlsGroupQuery.load(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read)) map { readerGroup =>
+//            readerGroup match {
+//              case Some(group) =>
+//                if (group.subGroups.contains(UserService.allUsersGroupRef)) {
+//                  RequestComplete(StatusCodes.NoContent)
+//                } else {
+//                  RequestComplete(StatusCodes.NotFound)
+//                }
+//              case None =>
+//                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, "allUsersGroup not found"))
+//            }
+//          }
+//        }
+//      }
+//    }
+//  }
+//
+//  def grantAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+//    asFCAdmin {
+//      dataSource.inTransaction { dataAccess =>
+//        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+//          val userServiceRef = userServiceConstructor(userInfo)
+//          DBIO.from(userServiceRef.AddGroupMembers(
+//            workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
+//            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value)))))
+//        } map {
+//          case RequestComplete(StatusCodes.OK) => RequestComplete(StatusCodes.Created)
+//          case otherwise => otherwise
+//        }
+//      }
+//    }
+//  }
+//
+//  def revokeAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+//    asFCAdmin {
+//      dataSource.inTransaction { dataAccess =>
+//        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+//          val userServiceRef = userServiceConstructor(userInfo)
+//          DBIO.from(userServiceRef.RemoveGroupMembers(
+//            workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
+//            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value)))))
+//        }
+//      }
+//    }
+//  }
 
   def listAllWorkspaces() = {
     asFCAdmin {
