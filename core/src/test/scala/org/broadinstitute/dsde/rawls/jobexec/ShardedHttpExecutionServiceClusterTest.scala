@@ -5,7 +5,7 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.model._
@@ -15,13 +15,14 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
 
-class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with PrivateMethodTester {
+class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with PrivateMethodTester
+  with TestDriverComponent with RawlsTestUtils {
   import driver.api._
 
   def this() = this(ActorSystem("ExecutionServiceClusterTest"))
 
   // create a cluster of execution service DAOs
-  val instanceMap:Map[ExecutionServiceId, ExecutionServiceDAO] = ((0 to 4) map {idx =>
+  val instanceMap: Map[ExecutionServiceId, ExecutionServiceDAO] = ((0 to 4) map {idx =>
       val key = s"instance$idx"
       (ExecutionServiceId(key) -> new MockExecutionServiceDAO(identifier = key))
     }).toMap
@@ -30,8 +31,9 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
   val instanceKeyForTests = "instance3"
   val cluster = new ShardedHttpExecutionServiceCluster(instanceMap, instanceMap, slickDataSource)
 
-  // private method wrapper for testing
+  // private method wrappers for testing
   val getMember = PrivateMethod[ExecutionServiceDAO]('getMember)
+  val parseSubWorkflowIdsFromMetadata = PrivateMethod[Seq[String]]('parseSubWorkflowIdsFromMetadata)
 
   val submissionId = UUID.randomUUID()
 
@@ -88,6 +90,13 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     }
   }
 
+  it should "return the correct instance from a raw executionServiceKey" in withCustomTestDatabase(execClusterTestData) { dataSource: SlickDataSource =>
+    assertResult(instanceKeyForTests) {
+      val execInstance = cluster invokePrivate getMember(ExecutionServiceId(instanceKeyForTests))
+      execInstance.asInstanceOf[MockExecutionServiceDAO].identifier
+    }
+  }
+
   it should "throw exception on getMember when missing an external id" in {
     val wr = testWorkflowRecord.copy(externalId = None)
     intercept[RawlsException] {
@@ -106,6 +115,12 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     val wr = testWorkflowRecord.copy(externalId = None, executionServiceKey = None)
     intercept[RawlsException] {
       cluster invokePrivate getMember(wr)
+    }
+  }
+
+  it should "throw exception on getMember on an incorrect raw execution service key" in {
+    intercept[RawlsException] {
+      cluster invokePrivate getMember(ExecutionServiceId("instance5"))
     }
   }
 
@@ -202,6 +217,55 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     assertResult("25") {
       version.cromwell
     }
+  }
+
+  it should "parse SubWorkflow IDs from metadata" in {
+    val metadataJson =
+      """
+        |{
+        |  "some_key_we_dont_care_about": "a_value",
+        |  "calls": {
+        |    "calls_have_names_but_we_ignore_them": [
+        |      {
+        |        "shard": 1,
+        |        "subWorkflowId": "sub1",
+        |        "another_call_key_to_ignore": { "with": "an_object_value" }
+        |      },
+        |      {
+        |        "shard": 2,
+        |        "subWorkflowId": "sub2",
+        |        "another_call_key_to_ignore": { "with": "an_object_value" }
+        |      }
+        |    ],
+        |    "another_call": [
+        |      {
+        |        "a_call_key_to_ignore": 5,
+        |        "subWorkflowId": "sub3",
+        |        "another_call_key_to_ignore": { "with": "an_object_value" }
+        |      }
+        |    ]
+        |  }
+        |}
+      """.stripMargin
+
+    val ids = cluster invokePrivate parseSubWorkflowIdsFromMetadata(metadataJson)
+    assertSameElements(ids, Seq("sub1", "sub2", "sub3"))
+  }
+
+  it should "gracefully handle parsing metadata with no SubWorkflows" in {
+    val noSubsJson =
+      """
+        |{
+        |  "calls": {
+        |    "a_call": [ { } ]
+        |  }
+        |}
+      """.stripMargin
+
+    val emptyJson = "{}"
+
+    assert((cluster invokePrivate parseSubWorkflowIdsFromMetadata(noSubsJson)).isEmpty)
+    assert((cluster invokePrivate parseSubWorkflowIdsFromMetadata(emptyJson)).isEmpty)
   }
 
   private def batchTestWorkflows(seed: Long) = {

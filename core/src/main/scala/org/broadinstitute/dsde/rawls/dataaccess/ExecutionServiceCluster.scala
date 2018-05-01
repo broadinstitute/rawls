@@ -21,8 +21,6 @@ trait ExecutionServiceCluster extends ErrorReportable {
 
   def status(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceStatus]
 
-  def callLevelMetadata(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[JsObject]
-
   def outputs(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceOutputs]
 
   def logs(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceLogs]
@@ -31,6 +29,13 @@ trait ExecutionServiceCluster extends ErrorReportable {
 
   def version: Future[ExecutionServiceVersion]
 
+  // ====================
+
+  // this one works a little differently.  If the caller knows which execution service is handling the workflow
+  // (because it was stored in the DB at submission time) then it passes the key here.  If the caller doesn't know
+  // (e.g. it's a subworkflow, which the DB doesn't track) then it queries all execution services.
+
+  def callLevelMetadata(submissionId: String, workflowId: String, executionServiceKey: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject]
 }
 
 class ExecutionServiceId(val id: String) {
