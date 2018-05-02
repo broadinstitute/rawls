@@ -25,7 +25,7 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -455,6 +455,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def createManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
     for {
       _ <- samDAO.createGroup(WorkbenchGroupName(groupRef.membersGroupName.value), userInfo)
+      allUsersEmail <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsGroupQuery.loadEmails(Seq(allUsersGroupRef))
+      }
+      _ <- samDAO.addUserToPolicy(SamResourceTypeNames.managedGroup, groupRef.membersGroupName.value, "admin-notifier", allUsersEmail.getOrElse(allUsersGroupRef, throw new WorkbenchException("Unable to add All_Users to admin-notifier policy")).value, userInfo)
       group <- getManagedGroupFull(groupRef)
     } yield RequestComplete(StatusCodes.Created, group)
   }
