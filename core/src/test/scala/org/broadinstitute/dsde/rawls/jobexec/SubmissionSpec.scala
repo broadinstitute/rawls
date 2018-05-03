@@ -511,6 +511,29 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assert( oneSub.nonEmpty )
   }
 
+  it should "return BadRequest when running an MC with a root entity without providing one" in withWorkspaceService { workspaceService =>
+    //This method config has a root entity, but we've failed to provide one
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", None, None, None, false)
+    val rqComplete = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+    }
+    assertResult(StatusCodes.BadRequest) {
+      rqComplete.errorReport.statusCode.get
+    }
+  }
+
+  it should "return BadRequest when running against an MC with no root entity and providing one anyway" in withWorkspaceService { workspaceService =>
+    //Entityless has (duh) no entities and only literals in its outputs
+    val submissionRq = SubmissionRequest(testData.methodConfigEntityless.namespace, testData.methodConfigEntityless.name, Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
+    val rqComplete = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+    }
+
+    assertResult(StatusCodes.BadRequest) {
+      rqComplete.errorReport.statusCode.get
+    }
+  }
+
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", Some("Individual"), Some("indiv1"), Some("this.is."), false)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {

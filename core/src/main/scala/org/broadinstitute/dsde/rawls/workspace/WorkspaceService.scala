@@ -2251,6 +2251,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             if(submissionRequest.entityName.isDefined != submissionRequest.entityType.isDefined) {
               throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"You must set both entityType and entityName to run on an entity, or neither (to run with literal or workspace inputs)."))
             }
+            if(methodConfig.rootEntityType.isDefined != submissionRequest.entityName.isDefined) {
+              if(methodConfig.rootEntityType.isDefined) {
+                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Your method config defines a root entity but you haven't passed one to the submission."))
+              } else {
+                //This isn't _strictly_ necessary, since a single submission entity will create one workflow.
+                //However, passing in a submission entity + an expression doesn't make sense for two reasons:
+                // 1. you'd have to write an expression from your submission entity to an entity of "no entity necessary" type
+                // 2. even if you _could_ do this, you'd kick off a bunch of identical workflows.
+                //More likely than not, an MC with no root entity + a submission entity = you're doing something wrong. So we'll just say no here.
+                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Your method config uses no root entity, but you passed one to the submission."))
+              }
+            }
             withValidatedMCExpressions(methodConfig, inputsToProcess, emptyOptionalInputs, allowRootEntity = submissionRequest.entityName.isDefined, dataAccess) { _ =>
               withSubmissionEntityRecs(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntityRecs =>
                 withWorkflowFailureMode(submissionRequest) { workflowFailureMode =>
