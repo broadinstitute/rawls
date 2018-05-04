@@ -19,12 +19,22 @@ class ExpressionParserSpec extends FlatSpec with TestDriverComponent with Expres
     actualParseable.invalidInputs shouldBe 'empty
     actualParseable.invalidOutputs shouldBe 'empty
 
+    val actualParseableWithNoRoot = ExpressionParser.parseMCExpressions(toExpressionMap(parseableInputExpressionsWithNoRoot), toExpressionMap(parseableOutputExpressionsWithNoRoot), allowRootEntity = false, this)
+    assertSameElements(parseableInputExpressionsWithNoRoot, actualParseableWithNoRoot.validInputs)
+    assertSameElements(parseableOutputExpressionsWithNoRoot, actualParseableWithNoRoot.validOutputs)
+    actualParseableWithNoRoot.invalidInputs shouldBe 'empty
+    actualParseableWithNoRoot.invalidOutputs shouldBe 'empty
+
     val actualUnparseable = ExpressionParser.parseMCExpressions(toExpressionMap(unparseableInputExpressions), toExpressionMap(unparseableOutputExpressions), allowRootEntity = true, this)
     actualUnparseable.validInputs shouldBe 'empty
     actualUnparseable.validOutputs shouldBe 'empty
     actualUnparseable.invalidInputs should have size unparseableInputExpressions.size
     actualUnparseable.invalidOutputs should have size unparseableOutputExpressions.size
 
-    //FIXME: write some with allowRootEntity = false
+    val actualUnparseableWithNoRoot = ExpressionParser.parseMCExpressions(toExpressionMap(unparseableInputExpressionsWithNoRoot), toExpressionMap(unparseableOutputExpressionsWithNoRoot), allowRootEntity = false, this)
+    actualUnparseableWithNoRoot.validInputs shouldBe 'empty
+    actualUnparseableWithNoRoot.validOutputs shouldBe 'empty
+    actualUnparseableWithNoRoot.invalidInputs should have size unparseableInputExpressionsWithNoRoot.size
+    actualUnparseableWithNoRoot.invalidOutputs should have size unparseableOutputExpressionsWithNoRoot.size
   }
 }

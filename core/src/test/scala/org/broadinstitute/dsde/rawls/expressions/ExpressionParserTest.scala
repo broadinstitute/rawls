@@ -577,7 +577,8 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       assert(parseOutputAttributeExpr("bonk.attribute", allowRootEntity = true).isFailure, "bonk.attribute should not parse correctly" )
 
-      //FIXME: add allowRootEntity = false tests here
+      assert(parseOutputAttributeExpr("this.attribute", allowRootEntity = false).isFailure, "this.attribute should fail if root entities are not allowed" )
+      assert(parseOutputAttributeExpr("workspace.attribute", allowRootEntity = false).isSuccess, "workspace.attribute should succeed even if root entities are not allowed" )
     }
   }
 
@@ -595,7 +596,8 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       assert(parseOutputAttributeExpr("bonk.library:attribute", allowRootEntity = true).isFailure, "bonk.library:attribute should not parse correctly" )
 
-      //FIXME: add allowRootEntity = false tests here
+      assert(parseOutputAttributeExpr("this.library:attribute", allowRootEntity = false).isFailure, "this.library:attribute should fail if root entities are not allowed" )
+      assert(parseOutputAttributeExpr("workspace.library:attribute", allowRootEntity = false).isSuccess, "workspace.library:attribute should succeed even if root entities are not allowed" )
     }
   }
 
