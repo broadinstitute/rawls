@@ -469,7 +469,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       adminsEmails <- samDAO.listGroupPolicyEmails(WorkbenchGroupName(groupRef.membersGroupName.value), ManagedRoles.Admin, userInfo)
       membersEmails <- samDAO.listGroupPolicyEmails(WorkbenchGroupName(groupRef.membersGroupName.value), ManagedRoles.Member, userInfo)
       groupEmail <- samDAO.getGroupEmail(WorkbenchGroupName(groupRef.membersGroupName.value), userInfo)
-    } yield ManagedGroupWithMembers(RawlsGroupShort(groupRef.membersGroupName, RawlsGroupEmail(groupEmail.value)), adminsEmails.map(_.value), membersEmails.map(_.value))
+    } yield ManagedGroupWithMembers(RawlsGroupShort(groupRef.membersGroupName, RawlsGroupEmail(groupEmail.value)), membersEmails.map(_.value), adminsEmails.map(_.value))
   }
 
   def getManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
