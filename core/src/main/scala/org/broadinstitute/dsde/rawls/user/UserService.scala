@@ -68,10 +68,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
   def ListBillingAccounts = listBillingAccounts()
 
-  def AdminCreateGroup(groupRef: RawlsGroupRef) = asFCAdmin { createGroup(groupRef) }
-  def AdminListGroupMembers(groupRef: RawlsGroupRef) = asFCAdmin { listGroupMembers(groupRef) }
-  def AdminDeleteGroup(groupName: RawlsGroupRef) = asFCAdmin { deleteGroup(groupName) }
-  def AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { overwriteGroupMembers(groupRef, memberList) }
+  def AdminCreateGroup(groupRef: RawlsGroupRef) = createManagedGroup(ManagedGroupRef(groupRef.groupName))
+  def AdminListGroupMembers(groupRef: RawlsGroupRef) = getManagedGroup(ManagedGroupRef(groupRef.groupName))
+  def AdminDeleteGroup(groupRef: RawlsGroupRef) = deleteManagedGroup(ManagedGroupRef(groupRef.groupName))
+  def AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = overwriteManagedGroupMembers(ManagedGroupRef(groupRef.groupName), ManagedRoles.Member, memberList)
 
   def CreateManagedGroup(groupRef: ManagedGroupRef) = createManagedGroup(groupRef)
   def GetManagedGroup(groupRef: ManagedGroupRef) = getManagedGroup(groupRef)
