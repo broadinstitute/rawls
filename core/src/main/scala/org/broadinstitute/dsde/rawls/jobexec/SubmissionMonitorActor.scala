@@ -211,10 +211,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   private def execServiceStatus(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[WorkflowRecord]] = {
     workflowRec.externalId match {
-      case Some(externalId) =>     executionServiceCluster.status(workflowRec, UserInfo.buildFromTokens(credential)).map(newStatus => {
-        if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
-        else None
-      })
+      case Some(externalId) =>
+        val token = UserInfo.buildFromTokens(credential)
+        executionServiceCluster.status(workflowRec, token).map(newStatus => {
+          if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
+          else None
+        })
       case None => Future.successful(None)
     }
   }
@@ -356,15 +358,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     dataAccess.entityQuery.getEntities(entityIds).map(_.toMap)
   }
 
-  def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(WorkflowEntityUpdate, Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {
+  def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {
     //note there is only 1 workspace (may be None if it is not updated) even though it may be updated multiple times so reduce it into 1 update
     val workspaces = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
     if (workspaces.isEmpty) DBIO.successful(0)
     else dataAccess.workspaceQuery.save(workspaces.reduce((a, b) => a.copy(attributes = a.attributes ++ b.attributes)))
   }
 
-  def saveEntities(dataAccess: DataAccess, workspace: Workspace, updatedEntitiesAndWorkspace: Seq[Either[(WorkflowEntityUpdate, Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]])(implicit executionContext: ExecutionContext) = {
-    val entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((entityUpdate, _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
+  def saveEntities(dataAccess: DataAccess, workspace: Workspace, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]])(implicit executionContext: ExecutionContext) = {
+    val entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
     if(entityUpdates.isEmpty) {
        DBIO.successful(())
     }
@@ -375,7 +377,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
-  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressionMap: Map[String, String]): Seq[Either[(WorkflowEntityUpdate, Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
+  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressionMap: Map[String, String]): Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
       logger.debug(s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs}")
@@ -392,8 +394,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       if (parsedExpressions.forall(_.isSuccess)) {
         val boundExpressions = parsedExpressions.collect { case Success(boe @ BoundOutputExpression(target, name, attr)) => boe }
         val updates = updateEntityAndWorkspace(workflowRecord.workflowEntityId.map(id => Some(entitiesById(id))).getOrElse(None), workspace, boundExpressions)
-        val (entityUpdates, optWs) = updates
-        logger.debug(s"updated entityattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${entityUpdates.entityRef} ${entityUpdates.upserts.values}")
+        val (optEntityUpdates, optWs) = updates
+        logger.debug(s"updated entityattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optEntityUpdates.map(_.entityRef)} ${optEntityUpdates.map(_.upserts.values)}")
         logger.debug(s"updated wsattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optWs.map(_.attributes)}")
         Left(updates)
       } else {
@@ -402,7 +404,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
-  def updateEntityAndWorkspace(entity: Option[Entity], workspace: Workspace, workflowOutputs: Iterable[BoundOutputExpression]): (WorkflowEntityUpdate, Option[Workspace]) = {
+  def updateEntityAndWorkspace(entity: Option[Entity], workspace: Workspace, workflowOutputs: Iterable[BoundOutputExpression]): (Option[WorkflowEntityUpdate], Option[Workspace]) = {
     val entityUpsert = workflowOutputs.collect({ case BoundOutputExpression(ThisEntityTarget, attrName, attr) => (attrName, attr) })
     val workspaceAttributes = workflowOutputs.collect({ case BoundOutputExpression(WorkspaceTarget, attrName, attr) => (attrName, attr) })
 
@@ -411,7 +413,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       throw new RawlsException("how am I supposed to bind expressions to a nonexistent entity??!!")
     }
 
-    val entityAndUpsert = WorkflowEntityUpdate(entity.get.toReference, entityUpsert.toMap)
+    val entityAndUpsert = entity.map(e => WorkflowEntityUpdate(e.toReference, entityUpsert.toMap))
     val updatedWorkspace = if (workspaceAttributes.isEmpty) None else Option(workspace.copy(attributes = workspace.attributes ++ workspaceAttributes))
     
     (entityAndUpsert, updatedWorkspace)

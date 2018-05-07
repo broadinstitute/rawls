@@ -4108,6 +4108,7 @@ definitions:
         description: Method configuration name
       submissionEntity:
         $ref: '#/definitions/AttributeEntityReference'
+        description: Optional if this submission is attached to a method configuration that has no root entity
       workflows:
         type: array
         description: Status of Workflow(s)
@@ -4147,7 +4148,7 @@ definitions:
         description: Method configuration name
       submissionEntity:
         $ref: '#/definitions/AttributeEntityReference'
-        description: Status
+        description: Optional if this submission is attached to a method configuration that has no root entity
       status:
         $ref: '#/definitions/SubmissionStatus'
         description: Status
@@ -4195,6 +4196,7 @@ definitions:
         description: Status last-changed date
       workflowEntity:
         $ref: '#/definitions/AttributeEntityReference'
+        description: Optional if this workflow did not run on an entity (i.e. its method configuration has no root entity)
       inputResolutions:
         type: array
         items:
@@ -4215,12 +4217,10 @@ definitions:
         type: boolean
 
   SubmissionRequest:
-    description: ''
+    description: If the referenced method configuration takes no root entity, do not define `entityType`, `entityName` and `expression`.
     required:
       - methodConfigurationNamespace
       - methodConfigurationName
-      - entityType
-      - entityName
     properties:
       methodConfigurationNamespace:
         type: string
@@ -4230,13 +4230,13 @@ definitions:
         description: Name of the method configuration to execute.
       entityType:
         type: string
-        description: Type of root entity for expression.
+        description: Type of root entity for expression. Optional if the method configuration has no root entity.
       entityName:
         type: string
-        description: Name of root entity for expression.
+        description: Name of root entity for expression. Optional if the method configuration has no root entity.
       expression:
         type: string
-        description: Expression that resolves to one or more entities matching the entity type in the method configuration.
+        description: Expression that resolves to one or more entities matching the entity type in the method configuration. Optional if the method configuration has no root entity.
       useCallCache:
         type: boolean
         description: Whether or not to read from cache for this submission
@@ -4659,7 +4659,6 @@ definitions:
     required:
       - namespace
       - name
-      - rootEntityType
       - inputs
       - methodRepoMethod
     properties:
@@ -4671,7 +4670,7 @@ definitions:
         description: The name of the method configuration
       rootEntityType:
         type: string
-        description: The root entity type that the method will be running on
+        description: The root entity type that the method will be running on. Optional if this method config doesn't run on an entity (i.e. uses only workspace attributes and literal inputs).
       prerequisites:
         type: object
       inputs:

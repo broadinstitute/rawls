@@ -13,6 +13,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
+import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.Eventually
@@ -191,8 +193,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
-    assertResult(Seq(Left(
-      WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world."))),
+    assertResult(Seq(Left(Some(
+      WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")))),
       Option(testData.workspace.copy(attributes = testData.workspace.attributes + (AttributeName.withDefaultNS("garble") -> AttributeString("hello workspace."))))))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
     }
@@ -207,16 +209,15 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
-    val expected = Seq(Left(
-      (
+    val expected = Seq(Left(Some(
         WorkflowEntityUpdate(entity.toReference, Map(
           AttributeName("library", "bar") -> AttributeString("hello world!"),
           AttributeName("library", "baz") -> AttributeString("hello world."))
-        ),
+        )),
         Option(testData.workspace.copy(attributes = testData.workspace.attributes +
           (AttributeName("library", "garble") -> AttributeString("hello workspace."))
         ))
-      )))
+      ))
 
     assertResult(expected) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
@@ -232,9 +233,9 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
-    assertResult(Seq(Left(
-      (WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world."))),
-        None)))) {
+    assertResult(Seq(Left(Some(
+      WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")))),
+        None))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
     }
   }
@@ -248,8 +249,19 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
-    assertResult(Seq(Left((WorkflowEntityUpdate(entity.toReference, Map()), None)))) {
+    assertResult(Seq(Left(Some(WorkflowEntityUpdate(entity.toReference, Map())), None))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+    }
+  }
+
+  it should "attachOutputs with no root entity" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, None, 0, None), outputs))
+    val outputExpressions: Map[String, String] = Map("output" -> "", "output2" -> "", "output3" -> "")
+
+    val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+
+    assertResult(Seq(Left(None, None))) {
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, Map(), outputExpressions)
     }
   }
 
@@ -594,6 +606,28 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     runAndWait(submissionQuery.delete(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId))
 
     expectMsgClass(5 seconds, classOf[Terminated])
+  }
+
+  it should "complete submissions correctly even if they have no root entity" in withDefaultTestDatabase {dataSource: SlickDataSource =>
+    runAndWait {
+      withWorkspaceContext(testData.workspace) { context =>
+        DBIO.seq(
+          submissionQuery.create(context, testData.submissionNoRootEntity),
+          updateWorkflowExecutionServiceKey("unittestdefault") )
+      }
+    }
+
+    withStatsD {
+      val monitorRef = createSubmissionMonitorActor(dataSource, testData.submissionNoRootEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+      watch(monitorRef)
+      expectMsgClass(5 seconds, classOf[Terminated])
+
+      assertResult(SubmissionStatuses.Done) {
+        runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submissionNoRootEntity.submissionId)).get.status
+      }
+    } { capturedMetrics =>
+      capturedMetrics should contain (expectedSubmissionStatusMetric(testData.workspace, SubmissionStatuses.Done))
+    }
   }
 
   val manySubmissionsTestData = new ManySubmissionsTestData

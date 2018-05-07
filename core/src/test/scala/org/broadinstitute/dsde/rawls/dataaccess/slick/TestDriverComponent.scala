@@ -484,6 +484,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val submissionMissingOutputs = createTestSubmission(workspace, methodConfigMissingOutputs, indiv1, userOwner,
       Seq(indiv1), Map(indiv1 -> missingOutputResolutions), Seq(), Map())
 
+    //NOTE: This is deliberately not saved in the list of active submissions!
+    val submissionNoRootEntity = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfigValid.namespace,methodConfigValid.name,None,
+      Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted, testDate, None, inputResolutions)), SubmissionStatuses.Submitted, false)
+
     val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,agoraMethodConfig.namespace,agoraMethodConfig.name,Some(indiv1.toReference),
       Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), inputResolutions),
         Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,Some(sample2.toReference), inputResolutions),
