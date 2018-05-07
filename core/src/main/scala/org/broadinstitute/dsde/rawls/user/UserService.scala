@@ -782,7 +782,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         }.toSeq
       }
 
-      intersectionMemberships.flatMap(dataAccess.rawlsGroupQuery.overwriteGroupUsers).map(_ => groupsToIntersect.map(_.target))
+      intersectionMemberships.flatMap { groupsWithUsers =>
+        groupsWithUsers.foreach {
+          case (groupRef, users) => logger.debug(s"writing intersection group ${groupRef.groupName} with users ${users.mkString(",")}")
+        }
+        dataAccess.rawlsGroupQuery.overwriteGroupUsers(groupsWithUsers)
+      }.map(_ => groupsToIntersect.map(_.target))
     }
   }
 
