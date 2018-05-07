@@ -72,6 +72,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def AdminListGroupMembers(groupRef: RawlsGroupRef) = getManagedGroup(ManagedGroupRef(groupRef.groupName))
   def AdminDeleteGroup(groupRef: RawlsGroupRef) = deleteManagedGroup(ManagedGroupRef(groupRef.groupName))
   def AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = overwriteManagedGroupMembers(ManagedGroupRef(groupRef.groupName), ManagedRoles.Member, memberList)
+  def AdminAddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = addManagedGroupMembers(ManagedGroupRef(groupRef.groupName), ManagedRoles.Member, memberList)
+  def AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = removeManagedGroupMembers(ManagedGroupRef(groupRef.groupName), ManagedRoles.Member, memberList)
 
   def CreateManagedGroup(groupRef: ManagedGroupRef) = createManagedGroup(groupRef)
   def GetManagedGroup(groupRef: ManagedGroupRef) = getManagedGroup(groupRef)
@@ -87,8 +89,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamResourceActions.readPolicies) { getBillingProjectMembers(projectName) }
 
   def OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = overwriteGroupMembers(groupRef, memberList)
-  def AdminAddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { updateGroupMembers(groupRef, addMemberList = memberList) }
-  def AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { updateGroupMembers(groupRef, removeMemberList = memberList) }
   def AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = updateGroupMembers(groupRef, addMemberList = memberList)
   def RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = updateGroupMembers(groupRef, removeMemberList = memberList)
   def AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) = asFCAdmin { synchronizeGroupMembersApi(groupRef) }
@@ -515,6 +515,24 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def overwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
+    modifyManagedGroupMembers(groupRef, role, memberList) { emails =>
+      samDAO.overwriteManagedGroupMembership(WorkbenchGroupName(groupRef.membersGroupName.value), role, emails, userInfo)
+    }
+  }
+
+  def addManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
+    modifyManagedGroupMembers(groupRef, role, memberList) { emails =>
+      Future.traverse(emails) { email => samDAO.addUserToManagedGroup(WorkbenchGroupName(groupRef.membersGroupName.value), role, email, userInfo) }.map(_ => ())
+    }
+  }
+
+  def removeManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
+    modifyManagedGroupMembers(groupRef, role, memberList) { emails =>
+      Future.traverse(emails) { email => samDAO.removeUserFromManagedGroup(WorkbenchGroupName(groupRef.membersGroupName.value), role, email, userInfo) }.map(_ => ())
+    }
+  }
+
+  def modifyManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList)(op: Seq[WorkbenchEmail] => Future[Unit]): Future[PerRequestMessage] = {
     for {
       subGroupEmailsFromNames <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsGroupQuery.loadEmails(memberList.subGroupNames.map(_.map(name => RawlsGroupRef(RawlsGroupName(name)))).getOrElse(Seq.empty))
@@ -527,7 +545,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       allSubgroupEmails = memberList.subGroupEmails.getOrElse(Seq.empty).map(WorkbenchEmail) ++ subGroupEmailsFromNames.values.map(e => WorkbenchEmail(e.value))
       allUserEmails = memberList.userEmails.getOrElse(Seq.empty).map(WorkbenchEmail) ++ userEmailsFromIds.collect { case (_, Some(email)) => WorkbenchEmail(email.value) }
 
-      _ <- samDAO.overwriteManagedGroupMembership(WorkbenchGroupName(groupRef.membersGroupName.value), role, allSubgroupEmails ++ allUserEmails, userInfo)
+      _ <- op(allSubgroupEmails ++ allUserEmails)
       _ <- findAndUpdateIntersectionGroups(RawlsGroupRef(groupRef.membersGroupName))
     } yield RequestComplete(StatusCodes.NoContent)
   }
