@@ -181,7 +181,7 @@ class RawlsApiSpec extends FreeSpec with Matchers with Eventually
           val firstSubSubWorkflowId = eventually {
             val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubWorkflowId)
             val subSubIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
-            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
+            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstSubWorkflowId: ") {
               subSubIds should not be (empty)
               subSubIds.head
             }
@@ -189,7 +189,9 @@ class RawlsApiSpec extends FreeSpec with Matchers with Eventually
 
           // verify that Rawls can retrieve the sub-sub-workflow's metadata without throwing an exception.
 
-          Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
+          eventually {
+            Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
+          }
 
           // clean up: Abort and wait for Aborted
 
