@@ -65,7 +65,7 @@ class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId, E
 
   val SUBMISSION_ID_KEY = "workbench-submission-id"
 
-  private def parseSubWorkflowIdsFromMetadata(metadata: String): Seq[String] = {
+  private def parseSubWorkflowIdsFromMetadata(metadata: JsObject): Seq[String] = {
 
   //    Workflow metadata has this structure:
   //
@@ -84,7 +84,7 @@ class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId, E
     import spray.json.DefaultJsonProtocol._
 
     for {
-      callsObj <- JsonParser(metadata).asJsObject().getFields("calls")
+      callsObj <- metadata.getFields("calls")
       call <- callsObj.asJsObject().fields.values
       shard <- call.asInstanceOf[JsArray].elements
       id <- shard.asJsObject().getFields("subWorkflowId")
@@ -96,7 +96,7 @@ class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId, E
 
   private def labelSubWorkflowsWithSubmissionId(submissionId: String, executionServiceId: ExecutionServiceId, parentWorkflowMetadata: JsObject, userInfo: UserInfo): Future[Seq[ExecutionServiceLabelResponse]] = {
     // traverse = stop on "first" failure and propagate
-    Future.traverse(parseSubWorkflowIdsFromMetadata(parentWorkflowMetadata.compactPrint)) { subWorkflowId =>
+    Future.traverse(parseSubWorkflowIdsFromMetadata(parentWorkflowMetadata)) { subWorkflowId =>
       getMember(executionServiceId).patchLabels(subWorkflowId, userInfo, Map(SUBMISSION_ID_KEY -> submissionId))
     }
   }
