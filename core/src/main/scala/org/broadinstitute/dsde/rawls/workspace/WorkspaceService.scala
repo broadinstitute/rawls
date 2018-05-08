@@ -325,22 +325,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val query = for {
         permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
         managedGroupsForUser <- DBIO.from(samDAO.listManagedGroups(userInfo))
-        authDomainsForUser <- dataAccess.workspaceQuery.getAuthorizedAuthDomainGroups(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo))
         ownerEmails <- dataAccess.workspaceQuery.listAccessGroupMemberEmails(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), WorkspaceAccessLevels.Owner)
         publicWorkspaces <- dataAccess.workspaceQuery.listWorkspacesWithGroupAccess(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), UserService.allUsersGroupRef)
         submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
         workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
-      } yield (permissionsPairs, managedGroupsForUser, authDomainsForUser, ownerEmails, publicWorkspaces, submissionSummaryStats, workspaces)
+      } yield (permissionsPairs, managedGroupsForUser, ownerEmails, publicWorkspaces, submissionSummaryStats, workspaces)
 
-      val results = query.map { case (permissionsPairs, managedGroupsForUser, authDomainsForUser, ownerEmails, publicWorkspaces, submissionSummaryStats, workspaces) =>
+      val results = query.map { case (permissionsPairs, managedGroupsForUser, ownerEmails, publicWorkspaces, submissionSummaryStats, workspaces) =>
         val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
         permissionsPairs.map { permissionsPair =>
           val groupsForUser = managedGroupsForUser.map(group => ManagedGroupRef(group.groupName)).toSet
-
-          logger.debug(s"mysql query: ${authDomainsForUser.mkString(",")}")
-          println(s"mysql query: ${authDomainsForUser.mkString(",")}")
-          logger.debug(s"sam query: ${groupsForUser.mkString(",")}")
-          println(s"sam query: ${groupsForUser.mkString(",")}")
 
           workspacesById.get(permissionsPair.workspaceId).map { workspace =>
             def trueAccessLevel = {
