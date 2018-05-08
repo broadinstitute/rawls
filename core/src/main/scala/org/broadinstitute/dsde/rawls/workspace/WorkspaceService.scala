@@ -1539,7 +1539,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // * in practice, one shard does everything except for some older workflows on shard 2.  Revisit this if that changes!
 
     // determine which case this is, and close the DB transaction
-    val optExecKey: Future[Option[ExecutionServiceId]] = dataSource.inTransaction { dataAccess =>
+    val execIdFutOpt: Future[Option[ExecutionServiceId]] = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) { optExecKey =>
           DBIO.successful(optExecKey map (ExecutionServiceId(_)))
@@ -1548,7 +1548,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     // query the execution service(s) for the metadata
-    optExecKey flatMap {
+    execIdFutOpt flatMap {
       executionServiceCluster.callLevelMetadata(submissionId, workflowId, _, userInfo)
     } map(RequestComplete(StatusCodes.OK, _))
   }
@@ -2126,6 +2126,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // if the workflow does reference the submission, return its executionServiceKey
 
   private def withSubmissionAndWorkflowExecutionServiceKey[T](workspaceContext: SlickWorkspaceContext, submissionId: String, workflowId: String, dataAccess: DataAccess)(op: (Option[String]) => ReadWriteAction[T]): ReadWriteAction[T] = {
+
+
+    // this is way overkill: make a new query to get just what we need.
+
     withSubmission(workspaceContext, submissionId, dataAccess) { _ =>
       val execKeyQuery = dataAccess.workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(submissionId)) map (_.executionServiceKey)
 

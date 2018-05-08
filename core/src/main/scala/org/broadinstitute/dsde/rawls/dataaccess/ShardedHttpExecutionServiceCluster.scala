@@ -101,8 +101,28 @@ class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId, E
     }
   }
 
-  def callLevelMetadata(submissionId: String, workflowId: String, executionServiceKeyOpt: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject] = {
-    val executionServiceKeyFut = executionServiceKeyOpt match {
+  private def findExecService(services: Map[ExecutionServiceId, ExecutionServiceDAO], submissionId: String, workflowId: String, userInfo: UserInfo): Future[ExecutionServiceId] = {
+    val idLabelMap = services.map { case (executionServiceId, executionServiceDao) =>
+      executionServiceDao.getLabels(workflowId, userInfo) map { labelResponse =>
+        (executionServiceId, labelResponse.labels)
+      }
+    }
+
+    // find: gets "first" success, ignoring failures.  We expect a single hit.
+    // more than one hit shouldn't happen - noting here that we pick one arbitrarily if it does.
+
+    Future.find(idLabelMap) { case (_, labels) =>
+      labels.exists(_ == SUBMISSION_ID_KEY -> submissionId)
+    } map {
+      case Some((executionServiceId, _)) => executionServiceId
+      case _ =>
+        val errReport = ErrorReport(s"Could not find a Workflow with ID $workflowId with Submission $submissionId in any Execution Service", Option(StatusCodes.NotFound), Seq.empty, Seq.empty, None)
+        throw new RawlsExceptionWithErrorReport(errReport)
+    }
+  }
+
+  def callLevelMetadata(submissionId: String, workflowId: String, execId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject] = {
+    val execIdFut = execId match {
       case Some(executionServiceId) =>
         // single-workflow or top-level work case: workflow found in DB and confirmed to be a member of this submission
         // we have the execution service key from the DB, so query the correct execution service
@@ -112,29 +132,16 @@ class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId, E
         // we don't have the execution service key because the workflow is not in the DB.  It might be a subworkflow.
         // query all execution services for Workflow labels and search for a Submission match
 
-        val executionServiceLabelMap = readMembers.map { case (executionServiceId, executionServiceDao) =>
-          executionServiceDao.getLabels(workflowId, userInfo) map { labelResponse =>
-            (executionServiceId, labelResponse.labels)
-          }
-        }
+        // optimize for the Production Firecloud case: it's much more likely for the workflow to be in the single submitMember
 
-        // find: gets "first" success, ignoring failures.  We expect one hit and one miss.
-        // no hits = workflow not labeled with this submission in Execution Service
-        // two hits = more than one Execution Service has a workflow labeled with this submission.
-        // * two hits shouldn't happen - noting here that we pick one arbitrarily if it does.
-
-        Future.find(executionServiceLabelMap) { case (_, labels) =>
-          labels.exists(_ == SUBMISSION_ID_KEY -> submissionId)
-        } map {
-          case Some((executionServiceId, _)) => executionServiceId
-          case _ =>
-            val errReport = ErrorReport(s"Could not find a Workflow with ID $workflowId with Submission $submissionId in any Execution Service", Option(StatusCodes.NotFound), Seq.empty, Seq.empty, None)
-            throw new RawlsExceptionWithErrorReport(errReport)
+        findExecService(submitMembers, submissionId, workflowId, userInfo) recoverWith { case _ =>
+          // we expect readMembers to be a superset of submitMembers so don't check those again
+          findExecService(readMembers -- submitMembers.keys, submissionId, workflowId, userInfo)
         }
     }
 
     for {
-      executionServiceId <- executionServiceKeyFut
+      executionServiceId <- execIdFut
       metadata <- getMember(executionServiceId).callLevelMetadata(workflowId, userInfo)
       _ <- labelSubWorkflowsWithSubmissionId(submissionId, executionServiceId, metadata, userInfo)
     } yield metadata
