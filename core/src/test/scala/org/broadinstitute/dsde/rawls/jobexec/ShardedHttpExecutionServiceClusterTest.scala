@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{FlatSpecLike, Matchers, PrivateMethodTester}
+import spray.json.JsonParser
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -248,7 +249,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
         |}
       """.stripMargin
 
-    val ids = cluster invokePrivate parseSubWorkflowIdsFromMetadata(metadataJson)
+    val ids = cluster invokePrivate parseSubWorkflowIdsFromMetadata(JsonParser(metadataJson).asJsObject())
     assertSameElements(ids, Seq("sub1", "sub2", "sub3"))
   }
 
@@ -264,8 +265,8 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
 
     val emptyJson = "{}"
 
-    assert((cluster invokePrivate parseSubWorkflowIdsFromMetadata(noSubsJson)).isEmpty)
-    assert((cluster invokePrivate parseSubWorkflowIdsFromMetadata(emptyJson)).isEmpty)
+    assert((cluster invokePrivate parseSubWorkflowIdsFromMetadata(JsonParser(noSubsJson).asJsObject())).isEmpty)
+    assert((cluster invokePrivate parseSubWorkflowIdsFromMetadata(JsonParser(emptyJson).asJsObject())).isEmpty)
   }
 
   private def batchTestWorkflows(seed: Long) = {
