@@ -2105,6 +2105,23 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  // confirm that the Submission is a member of this workspace, but don't unmarshal it from the DB
+  private def withSubmissionId[T](workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess)(op: UUID => ReadWriteAction[T]): ReadWriteAction[T] = {
+    Try {
+      UUID.fromString(submissionId)
+    } match {
+      case Failure(t: IllegalArgumentException) =>
+        DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission id ${submissionId} is not a valid submission id")))
+      case Success(uuid) =>
+        dataAccess.submissionQuery.confirmInWorkspace(workspaceContext.workspaceId, uuid) flatMap {
+          case None =>
+            val report = ErrorReport(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext.workspace.toWorkspaceName}")
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = report))
+          case Some(_) => op(uuid)
+        }
+    }
+  }
+
   private def withWorkflow(workspaceName: WorkspaceName, submissionId: String, workflowId: String, dataAccess: DataAccess)(op: (Workflow) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     dataAccess.workflowQuery.getByExternalId(workflowId, submissionId) flatMap {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submissionId} in workspace ${workspaceName}")))
@@ -2125,19 +2142,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // require submission to be present, but don't require the workflow to reference it
   // if the workflow does reference the submission, return its executionServiceKey
 
-  private def withSubmissionAndWorkflowExecutionServiceKey[T](workspaceContext: SlickWorkspaceContext, submissionId: String, workflowId: String, dataAccess: DataAccess)(op: (Option[String]) => ReadWriteAction[T]): ReadWriteAction[T] = {
-
-
-    // this is way overkill: make a new query to get just what we need.
-
-    withSubmission(workspaceContext, submissionId, dataAccess) { _ =>
-      val execKeyQuery = dataAccess.workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(submissionId)) map (_.executionServiceKey)
-
-      execKeyQuery.result flatMap {
-        case Seq() => op(None)
-        case Seq(one) => op(one)
-        case tooMany => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"found multiple WorkflowRecords with id ${workflowId} in submission ${submissionId} in workspace ${workspaceContext.workspace.briefName}")))
-      }
+  private def withSubmissionAndWorkflowExecutionServiceKey[T](workspaceContext: SlickWorkspaceContext, submissionId: String, workflowId: String, dataAccess: DataAccess)(op: Option[String] => ReadWriteAction[T]): ReadWriteAction[T] = {
+    withSubmissionId(workspaceContext, submissionId, dataAccess) { _ =>
+      dataAccess.workflowQuery.getExecutionServiceIdByExternalId(workflowId, submissionId) flatMap op
     }
   }
 

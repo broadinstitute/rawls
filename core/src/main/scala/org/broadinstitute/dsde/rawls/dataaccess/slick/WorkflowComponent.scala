@@ -109,6 +109,10 @@ trait WorkflowComponent {
       loadWorkflow(findWorkflowByExternalIdAndSubmissionId(externalId, UUID.fromString(submissionId)))
     }
 
+    def getExecutionServiceIdByExternalId(externalId: String, submissionId: String): ReadAction[Option[String]] = {
+      uniqueResult[String](findWorkflowByExternalIdAndSubmissionId(externalId, UUID.fromString(submissionId)) map (_.executionServiceKey))
+    }
+
     def delete(id: Long): ReadWriteAction[Boolean] = {
       deleteWorkflowAction(id).map(_ > 0)
     }

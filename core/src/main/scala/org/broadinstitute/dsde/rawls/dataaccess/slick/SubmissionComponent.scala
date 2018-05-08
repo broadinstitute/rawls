@@ -238,6 +238,10 @@ trait SubmissionComponent {
       filter(rec => rec.id === submissionId)
     }
 
+    def findByWorkspaceAndId(workspaceId: UUID, submissionId: UUID): SubmissionQueryType = {
+      filter(rec => rec.workspaceId === workspaceId && rec.id === submissionId)
+    }
+
     def findBySubmitter(submitterId: String): SubmissionQueryType = {
       filter(rec => rec.submitterId === submitterId)
     }
@@ -357,6 +361,10 @@ trait SubmissionComponent {
       } yield (workflow.status)
 
       query.result.map(wfs => wfs.groupBy(identity).mapValues(_.size))
+    }
+
+    def confirmInWorkspace(workspaceId: UUID, submissionId: UUID): ReadAction[Option[Unit]] = {
+      uniqueResult[Unit](findByWorkspaceAndId(workspaceId, submissionId).map(_ => ()))
     }
 
     /*
