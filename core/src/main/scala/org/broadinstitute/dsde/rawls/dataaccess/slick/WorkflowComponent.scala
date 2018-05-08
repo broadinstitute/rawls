@@ -110,7 +110,10 @@ trait WorkflowComponent {
     }
 
     def getExecutionServiceIdByExternalId(externalId: String, submissionId: String): ReadAction[Option[String]] = {
-      uniqueResult[String](findWorkflowByExternalIdAndSubmissionId(externalId, UUID.fromString(submissionId)) map (_.executionServiceKey))
+      uniqueResult[WorkflowRecord](findWorkflowByExternalIdAndSubmissionId(externalId, UUID.fromString(submissionId))) map {
+        case Some(wr) => wr.executionServiceKey
+        case _ => None
+      }
     }
 
     def delete(id: Long): ReadWriteAction[Boolean] = {
