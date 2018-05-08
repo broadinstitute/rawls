@@ -338,7 +338,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           val groupsForUser = managedGroupsForUser.map(group => ManagedGroupRef(group.groupName)).toSet
 
           logger.debug(s"mysql query: ${authDomainsForUser.mkString(",")}")
+          println(s"mysql query: ${authDomainsForUser.mkString(",")}")
           logger.debug(s"sam query: ${groupsForUser.mkString(",")}")
+          println(s"sam query: ${groupsForUser.mkString(",")}")
 
           workspacesById.get(permissionsPair.workspaceId).map { workspace =>
             def trueAccessLevel = {
