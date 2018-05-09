@@ -523,18 +523,6 @@ trait WorkspaceComponent {
       workspaceAccessQuery.filter(_.workspaceId === workspaceId).delete
     }
 
-    def getAuthorizedAuthDomainGroups(workspaceIds: Seq[String], user: RawlsUserRef): ReadWriteAction[Set[ManagedGroupRef]] = {
-      val authDomainQuery = for {
-        authDomainRecord <- workspaceAuthDomainQuery if authDomainRecord.workspaceId.inSetBind(workspaceIds.map(UUID.fromString))
-      } yield authDomainRecord.groupName
-
-      authDomainQuery.result flatMap { allAuthDomains =>
-        rawlsGroupQuery.listGroupsForUser(user).map { allMemberships =>
-          (allAuthDomains.toSet intersect allMemberships.map(_.groupName.value)).map(name => ManagedGroupRef(RawlsGroupName(name)))
-        }
-      }
-    }
-
     /**
       * Lists all workspaces with a particular attribute name/value pair.
       *

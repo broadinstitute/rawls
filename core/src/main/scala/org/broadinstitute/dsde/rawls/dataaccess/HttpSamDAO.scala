@@ -47,7 +47,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       httpClientUtils.executeRequest(http, httpClientUtils.addHeader(request, authHeader(userInfo))).map { response =>
         response.status match {
           case s if s.isSuccess => ()
-          case f => throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.method} ${request.uri.path} failed"))
+          case f => throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.method} ${request.uri.path} failed with error ${response.entity}"))
         }
       }
     }
