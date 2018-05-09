@@ -33,7 +33,7 @@ trait ExecutionServiceCluster extends ErrorReportable {
 
   // this one works a little differently.  If the caller knows which execution service is handling the workflow
   // (because it was stored in the DB at submission time) then it passes its ID here.  If the caller doesn't know
-  // (e.g. it's a subworkflow, which the DB doesn't track) then it queries all execution services.
+  // (e.g. it's a subworkflow, which the DB doesn't track) then it queries all execution services until it finds a match.
 
   def callLevelMetadata(submissionId: String, workflowId: String, execServiceId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject]
 }
