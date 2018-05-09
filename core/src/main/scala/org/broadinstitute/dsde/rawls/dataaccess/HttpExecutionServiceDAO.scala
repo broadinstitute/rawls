@@ -2,26 +2,24 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.util.Timeout
+import akka.http.scaladsl.client.RequestBuilding._
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.marshalling.Marshal
+import akka.http.scaladsl.model.{Multipart, RequestEntity, Uri}
+import akka.http.scaladsl.server.PathMatchers.Segment
+import akka.http.scaladsl.server.directives.PathDirectives._
+import akka.stream.Materializer
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, RawlsExpansion, RawlsInstrumented}
-import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsGzipInstrumented}
-import spray.json.JsObject
-import akka.http.scaladsl.client.RequestBuilding._
-import akka.http.scaladsl.model.{Multipart, RequestEntity, Uri}
-import akka.http.scaladsl.server.directives.PathDirectives._
-import akka.http.scaladsl.server.PathMatchers.Segment
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.marshalling.Marshal
-import akka.stream.Materializer
-import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsGzipInstrumented}
+import spray.json.DefaultJsonProtocol._
+import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 /**
@@ -59,11 +57,6 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
   }
 
   override def callLevelMetadata(id: String, userInfo: UserInfo): Future[JsObject] = {
-
-    // note: updated by GAWB-3293 to
-    // val url = executionServiceURL + s"/api/workflows/v1/${id}/metadata?expandSubWorkflows=true"
-    // but this was returning too much data.  Reverting temporarily until we have a better solution in GAWB-3378
-
     val url = executionServiceURL + s"/api/workflows/v1/${id}/metadata"
     retry(when500) { () => pipeline[JsObject](userInfo) apply Get(url) }
   }
@@ -81,6 +74,16 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
   override def abort(id: String, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]] = {
     val url = executionServiceURL + s"/api/workflows/v1/${id}/abort"
     retry(when500) { () => toFutureTry(pipeline[ExecutionServiceStatus](userInfo) apply Post(url)) }
+  }
+
+  override def getLabels(id: String, userInfo: UserInfo): Future[ExecutionServiceLabelResponse] = {
+    val url = executionServiceURL + s"/api/workflows/v1/${id}/labels"
+    retry(when500) { () => pipeline[ExecutionServiceLabelResponse](userInfo) apply Get(url) }
+  }
+
+  override def patchLabels(id: String, userInfo: UserInfo, labels: Map[String, String]): Future[ExecutionServiceLabelResponse] = {
+    val url = executionServiceURL + s"/api/workflows/v1/${id}/labels"
+    retry(when500) { () => pipeline[ExecutionServiceLabelResponse](userInfo) apply Patch(url, labels) }
   }
 
   override def version: Future[ExecutionServiceVersion] = {

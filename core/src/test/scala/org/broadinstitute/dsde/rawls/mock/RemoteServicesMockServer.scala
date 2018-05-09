@@ -654,6 +654,38 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     mockServer.when(
       request()
+        .withMethod("GET")
+        .withPath(submissionPath + "/workflows/v1/.*/labels")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """
+            | { "id": "ignore this",
+            |   "labels": { "key1": "val1", "key2": "val2" }
+            | }
+          """.stripMargin)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("PATCH")
+        .withPath(submissionPath + "/workflows/v1/.*/labels")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """
+            | { "id": "ignore this",
+            |   "labels": { "key1": "val1", "key2": "val2" }
+            | }
+          """.stripMargin)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
         .withMethod("POST")
         .withPath("/api/resource/.*/.*")
       ).respond(

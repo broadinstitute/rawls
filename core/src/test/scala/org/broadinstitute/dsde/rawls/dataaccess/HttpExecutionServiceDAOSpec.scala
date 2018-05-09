@@ -107,6 +107,25 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
     }
   }
 
+  it should "get labels and patch labels" in {
+    withStatsD {
+      val labels = Map("key1" -> "val1", "key2" -> "val2")
+
+      val patchResult = test.patchLabels("8afafe21-2b70-4180-a565-748cb573e10c", userInfo, labels).futureValue
+      patchResult.labels.get("key1") shouldBe Some("val1")
+      patchResult.labels.get("key2") shouldBe Some("val2")
+
+      val getResult = test.getLabels("8afafe21-2b70-4180-a565-748cb573e10c", userInfo).futureValue
+      getResult.labels.get("key1") shouldBe Some("val1")
+      getResult.labels.get("key2") shouldBe Some("val2")
+    } { capturedMetrics =>
+      capturedMetrics should contain allElementsOf (
+        expectedHttpRequestMetrics("get", "api.workflows.v1.redacted.labels", 200, 1, Option(Subsystems.Cromwell)) ++
+        expectedHttpRequestMetrics("patch", "api.workflows.v1.redacted.labels", 200, 1, Option(Subsystems.Cromwell))
+      )
+    }
+  }
+
   it should "get the version" in {
     withStatsD {
       val result = test.version.futureValue

@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.joda.time.DateTime
 import spray.json._
 
@@ -75,6 +76,11 @@ case class ExecutionServiceWorkflowOptions(
   default_runtime_attributes: Option[JsValue],
   read_from_cache: Boolean,
   workflow_failure_mode: Option[WorkflowFailureMode] = None
+)
+
+case class ExecutionServiceLabelResponse(
+  id: String,
+  labels: Map[String, String]
 )
 
 // Status of a successfully started workflow
@@ -285,6 +291,8 @@ class ExecutionJsonSupport extends JsonSupport {
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
   implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat10(ExecutionServiceWorkflowOptions)
+
+  implicit val ExecutionServiceLabelResponseFormat = jsonFormat2(ExecutionServiceLabelResponse)
 
   implicit val TaskOutputFormat = jsonFormat2(TaskOutput)
 

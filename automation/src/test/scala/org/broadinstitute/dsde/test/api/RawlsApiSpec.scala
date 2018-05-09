@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.test.api
 
 import java.util.UUID
 
+import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, Sam}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
@@ -17,8 +19,11 @@ import org.scalatest.{FreeSpec, Matchers}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.collection.JavaConverters._
 
-class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtures with WorkspaceFixtures with RandomUtil with Eventually with TestMethods {
+class RawlsApiSpec extends FreeSpec with Matchers with Eventually
+  with CleanUp with RandomUtil
+  with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures {
   // We only want to see the users' workspaces so we can't be Project Owners
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
   val studentAToken: AuthToken = studentA.makeAuthToken()
@@ -32,12 +37,42 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
     Await.result(find, 1.minute)
   }
 
-  def makeMethodPublic(method: Method)(implicit token: AuthToken): Unit = {
-    Orchestration.methods.setMethodPermissions(method.methodNamespace, method.methodName, method.snapshotId, "public", "READER")
+  def parseSubWorkflowIdsFromMetadata(metadata: String): List[String] = {
+    /*
+    Workflow metadata has this structure:
+
+    {
+      "calls" : {
+        "foo.bar" : [
+          {
+            "subWorkflowId" : "69581e76-2eb0-4179-99b9-958d210ebc4b", ...
+          }, ...
+        ], ...
+      },  ...
+    }
+    */
+
+    val mapper = new ObjectMapper()
+    mapper.registerModule(DefaultScalaModule)
+
+    // "calls" is a top-level key of metadata, whose value is a JSON object.
+    // Get that object's values.
+    val calls: List[JsonNode] = mapper.readTree(metadata).get("calls").elements().asScala.toList
+
+    // Call values are arrays of scatter shards.
+    // Get the shards, which are JSON objects.
+    val scatterShards: List[JsonNode] = calls flatMap { c =>
+      c.elements().asScala.toList
+    }
+
+    // Return the values corresponding to each scatter shard's "subWorkflowId" key
+    scatterShards map { s =>
+      s.get("subWorkflowId").textValue()
+    }
   }
 
   "Rawls" - {
-    "pets should have same access as their owners" in {
+    "should give pets the same access as their owners" in {
       withCleanBillingProject(owner) { projectName =>
         withCleanUp {
           //Create workspaces for Students
@@ -88,34 +123,19 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
       }
     }
 
-    // note: added by GAWB-3293 but this was returning too much data.
-    // Ignoring temporarily until we have a better solution in GAWB-3378
-
-    "should request sub-workflow metadata from Cromwell" ignore {
+    "should retrieve sub-workflow metadata from Cromwell" in {
       implicit val token: AuthToken = studentAToken
 
-      val testNamespace = makeRandomId()
-
-      val childMethod = SubWorkflowChildMethod.copy(methodNamespace = testNamespace)
-      val parentMethod = subWorkflowParentMethod(childMethod).copy(methodNamespace = testNamespace)
-
-      val config = SubWorkflowConfig
-
-      Orchestration.methods.createMethod(childMethod.creationAttributes)
-      register cleanUp Orchestration.methods.redact(childMethod)
-
-      makeMethodPublic(childMethod)
-
-      Orchestration.methods.createMethod(parentMethod.creationAttributes)
-      register cleanUp Orchestration.methods.redact(parentMethod)
+      // this will run scatterCount^levels workflows, so be careful if increasing these values!
+      val topLevelMethod: Method = methodTree(levels = 3, scatterCount = 3)
 
       withCleanBillingProject(studentA) { projectName =>
-        withWorkspace(projectName, "rawls-subworkflow") { workspaceName =>
+        withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
           Orchestration.methodConfigurations.createMethodConfigInWorkspace(
             projectName, workspaceName,
-            parentMethod,
-            config.configNamespace, config.configName, config.snapshotId,
-            config.inputs, config.outputs, config.rootEntityType)
+            topLevelMethod,
+            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
+            topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
 
           Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
 
@@ -127,15 +147,15 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
 
           val submissionId = Rawls.submissions.launchWorkflow(
             projectName, workspaceName,
-            config.configNamespace, config.configName,
+            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
             "participant", SingleParticipant.entityId, "this", useCallCache = false)
 
-          // wait for the first available queryable workflow ID
+          // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
 
           val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
           implicit val patienceConfig: PatienceConfig = submissionPatience
 
-          val workflowId = eventually {
+          val firstWorkflowId = eventually {
             val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
 
             withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
@@ -145,13 +165,32 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
             }
           }
 
-          // wait for Cromwell to start processing sub-workflows
+          // retrieve the workflow's metadata.  May need to wait for a subworkflow to appear.  Take the first one we see.
+
+          val firstSubWorkflowId = eventually {
+            val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstWorkflowId)
+            val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
+            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
+              subIds should not be (empty)
+              subIds.head
+            }
+          }
+
+          // can we also retrieve the subworkflow's metadata?  Get a sub-sub-workflow ID while we're doing this.
+
+          val firstSubSubWorkflowId = eventually {
+            val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubWorkflowId)
+            val subSubIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
+            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstSubWorkflowId: ") {
+              subSubIds should not be (empty)
+              subSubIds.head
+            }
+          }
+
+          // verify that Rawls can retrieve the sub-sub-workflow's metadata without throwing an exception.
 
           eventually {
-            val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, workflowId)
-            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$workflowId: ") {
-              cromwellMetadata should include("subWorkflowMetadata")
-            }
+            Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
           }
 
           // clean up: Abort and wait for Aborted
@@ -167,6 +206,7 @@ class RawlsApiSpec extends FreeSpec with Matchers with CleanUp with BillingFixtu
           }
         }
       }
+
     }
   }
 }

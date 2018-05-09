@@ -2,9 +2,10 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 
-import akka.util.Timeout
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
 import com.typesafe.scalalogging.LazyLogging
-import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -15,30 +16,25 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionServiceValidationFormat, ExecutionServiceVersionFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
+import scala.util.{Failure, Success, Try}
 
 /**
  * Created by dvoet on 4/27/15.
@@ -1528,14 +1524,33 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def workflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
-    dataSource.inTransaction { dataAccess =>
+  def workflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String): Future[PerRequestMessage] = {
+
+    // two possibilities here:
+    //
+    // (classic case) if the workflow is a top-level workflow of a submission, it has a row in the DB and an
+    // association with a specific execution service shard.  Use the DB to verify the submission association and retrieve
+    // the execution service identifier.
+    //
+    // if it's a subworkflow (or sub-sub-workflow, etc) it's not present in the Rawls DB and we don't know which
+    // execution service shard has processed it.  Query all* execution service shards for the workflow to learn its
+    // submission association and which shard processed it.
+    //
+    // * in practice, one shard does everything except for some older workflows on shard 2.  Revisit this if that changes!
+
+    // determine which case this is, and close the DB transaction
+    val execIdFutOpt: Future[Option[ExecutionServiceId]] = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        withWorkflowRecord(workspaceName, submissionId, workflowId, dataAccess) { wr =>
-          DBIO.from(executionServiceCluster.callLevelMetadata(wr, userInfo).map(em => RequestComplete(StatusCodes.OK, em)))
+        withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) { optExecKey =>
+          DBIO.successful(optExecKey map (ExecutionServiceId(_)))
         }
       }
     }
+
+    // query the execution service(s) for the metadata
+    execIdFutOpt flatMap {
+      executionServiceCluster.callLevelMetadata(submissionId, workflowId, _, userInfo)
+    } map(RequestComplete(StatusCodes.OK, _))
   }
 
   def workflowQueueStatus() = {
@@ -2076,7 +2091,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def withSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  private def withSubmission[T](workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[T]): ReadWriteAction[T] = {
     Try {
       UUID.fromString(submissionId)
     } match {
@@ -2086,6 +2101,23 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         dataAccess.submissionQuery.get(workspaceContext, submissionId) flatMap {
           case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext.workspace.toWorkspaceName}")))
           case Some(submission) => op(submission)
+        }
+    }
+  }
+
+  // confirm that the Submission is a member of this workspace, but don't unmarshal it from the DB
+  private def withSubmissionId[T](workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess)(op: UUID => ReadWriteAction[T]): ReadWriteAction[T] = {
+    Try {
+      UUID.fromString(submissionId)
+    } match {
+      case Failure(t: IllegalArgumentException) =>
+        DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission id ${submissionId} is not a valid submission id")))
+      case Success(uuid) =>
+        dataAccess.submissionQuery.confirmInWorkspace(workspaceContext.workspaceId, uuid) flatMap {
+          case None =>
+            val report = ErrorReport(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext.workspace.toWorkspaceName}")
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = report))
+          case Some(_) => op(uuid)
         }
     }
   }
@@ -2102,6 +2134,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case Seq() => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"WorkflowRecord with id ${workflowId} not found in submission ${submissionId} in workspace ${workspaceName}")))
       case Seq(one) => op(one)
       case tooMany => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"found multiple WorkflowRecords with id ${workflowId} in submission ${submissionId} in workspace ${workspaceName}")))
+    }
+  }
+
+  // used as part of the workflow metadata permission check - more detail at workflowMetadata()
+
+  // require submission to be present, but don't require the workflow to reference it
+  // if the workflow does reference the submission, return its executionServiceKey
+
+  private def withSubmissionAndWorkflowExecutionServiceKey[T](workspaceContext: SlickWorkspaceContext, submissionId: String, workflowId: String, dataAccess: DataAccess)(op: Option[String] => ReadWriteAction[T]): ReadWriteAction[T] = {
+    withSubmissionId(workspaceContext, submissionId, dataAccess) { _ =>
+      dataAccess.workflowQuery.getExecutionServiceIdByExternalId(workflowId, submissionId) flatMap op
     }
   }
 

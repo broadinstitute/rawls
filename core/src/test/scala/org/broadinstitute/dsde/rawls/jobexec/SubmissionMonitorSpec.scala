@@ -682,6 +682,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
 class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends ExecutionServiceDAO {
   val abortedMap: scala.collection.concurrent.TrieMap[String, String] = new scala.collection.concurrent.TrieMap[String, String]()
+  var labels: Map[String, String] = Map.empty   // could make this more sophisticated: map of workflow to map[s,s]
 
   override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo) = Future.successful(Seq(Left(ExecutionServiceStatus("test_id", workflowStatus))))
 
@@ -697,6 +698,13 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
     Future.successful(Success(ExecutionServiceStatus(id, WorkflowStatuses.Aborting.toString)))
   }
   override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
+
+  override def getLabels(id: String, userInfo: UserInfo): Future[ExecutionServiceLabelResponse] = Future.successful(ExecutionServiceLabelResponse(id, labels))
+
+  override def patchLabels(id: String, userInfo: UserInfo, newLabels: Map[String, String]): Future[ExecutionServiceLabelResponse] = {
+    labels ++= newLabels
+    Future.successful(ExecutionServiceLabelResponse(id, labels))
+  }
 
   override def version = Future.successful(ExecutionServiceVersion("25"))
 

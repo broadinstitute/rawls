@@ -13,6 +13,7 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
   var submitWdl: String = null
   var submitInput: Seq[String] = null
   var submitOptions: Option[String] = None
+  var labels: Map[String, String] = Map.empty   // could make this more sophisticated: map of workflow to map[s,s]
 
   override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo)= {
     this.submitInput = inputs
@@ -46,6 +47,13 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
   override def status(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceStatus(id, "Submitted"))
 
   override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
+
+  override def getLabels(id: String, userInfo: UserInfo): Future[ExecutionServiceLabelResponse] = Future.successful(ExecutionServiceLabelResponse(id, labels))
+
+  override def patchLabels(id: String, userInfo: UserInfo, newLabels: Map[String, String]): Future[ExecutionServiceLabelResponse] = {
+    labels ++= newLabels
+    Future.successful(ExecutionServiceLabelResponse(id, labels))
+  }
 
   override def version = Future.successful(ExecutionServiceVersion("25"))
 
