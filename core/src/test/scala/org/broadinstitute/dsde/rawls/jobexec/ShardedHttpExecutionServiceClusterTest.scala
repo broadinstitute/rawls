@@ -74,7 +74,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
           )
         },
         // update exec key for all test data workflows that have been started.
-        updateWorkflowExecutionServiceKey("instance3")
+        updateWorkflowExecutionServiceKey(instanceKeyForTests)
       )
     }
   }

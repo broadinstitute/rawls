@@ -198,7 +198,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     assert(submissionRunTimes == SummaryStatistics(0.0,0.0,0.0,0.0))
   }
 
-  it should "unmarhsal submission WorkflowFailureModes correctly" in withDefaultTestDatabase {
+  it should "unmarshal submission WorkflowFailureModes correctly" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspaceWorkflowFailureMode)
 
     assertResult(Some(testData.submissionWorkflowFailureMode)) {
@@ -206,6 +206,20 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
 
     assert(runAndWait(submissionQuery.list(workspaceContext)).toSet.contains(testData.submissionWorkflowFailureMode))
+  }
+
+  it should "verify submission membership in a workspace" in  withDefaultTestDatabase {
+    val submissionId = UUID.fromString(testData.submissionSuccessful1.submissionId)
+    val yesWorkspaceId = UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)
+    val noWorkspaceId = UUID.fromString(testData.workspaceNoSubmissions.workspaceId)
+
+    assertResult(Some(())) {
+      runAndWait(submissionQuery.confirmInWorkspace(yesWorkspaceId, submissionId))
+    }
+
+    assertResult(None) {
+      runAndWait(submissionQuery.confirmInWorkspace(noWorkspaceId, submissionId))
+    }
   }
 
   "WorkflowComponent" should "update the status of a workflow and increment record version" in withDefaultTestDatabase {
@@ -232,6 +246,21 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
     assert(workflowRecsAfter.forall(_.status == WorkflowStatuses.Failed.toString))
     assert(workflowRecsAfter.forall(_.recordVersion == 1))
+  }
+
+  it should "retrieve the execution service for a workflow" in withDefaultTestDatabase {
+    val submissionId = testData.submission1.submissionId
+    val otherSubmissionId = testData.submission2.submissionId
+    val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(submissionId))) flatMap (_.externalId)
+
+    workflowIds foreach { workflowId =>
+      assertResult(Some("unittestdefault")) {
+        runAndWait(workflowQuery.getExecutionServiceIdByExternalId(workflowId, submissionId))
+      }
+      assertResult(None) {
+        runAndWait(workflowQuery.getExecutionServiceIdByExternalId(workflowId, otherSubmissionId))
+      }
+    }
   }
 
   it should "load workflows input resolutions correctly" in withDefaultTestDatabase {
