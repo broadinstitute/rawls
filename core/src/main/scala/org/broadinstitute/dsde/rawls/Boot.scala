@@ -134,7 +134,7 @@ object Boot extends App with LazyLogging {
 
     val bigQueryDAO = new HttpGoogleBigQueryDAO(
       gcsConfig.getString("appName"),
-      Json(FileUtils.readFileToString(new java.io.File(gcsConfig.getString("pathToBigQueryJson")), Charset.defaultCharset())),
+      Json(gcsConfig.getString("bigQueryJson")),
       metricsPrefix
     )
 

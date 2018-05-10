@@ -1475,8 +1475,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     submissionWithoutCosts flatMap {
       case (submission, user) => {
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-        submissionCostService.getWorkflowCosts(workspaceName.namespace, allWorkflowIds, GoogleProject(workspaceName.namespace)) map { costMap =>
-          RequestComplete((StatusCodes.OK, new SubmissionStatusResponse(submission, costMap, user)))
+        toFutureTry(submissionCostService.getWorkflowCosts(workspaceName.namespace, allWorkflowIds, GoogleProject(workspaceName.namespace))) map {
+          case Failure(_) =>
+            RequestComplete((StatusCodes.OK, new SubmissionStatusResponse(submission, user)))
+          case Success(costMap) =>
+            val costedWorkflows = submission.workflows.map { workflow =>
+              workflow.workflowId match {
+                case Some(wfId) => workflow.copy(cost = costMap.get(wfId))
+                case None => workflow
+              }
+            }
+            val costedSubmission = submission.copy(cost = Option(costMap.values.sum), workflows = costedWorkflows)
+            RequestComplete((StatusCodes.OK, new SubmissionStatusResponse(costedSubmission, user)))
         }
       }
     }

@@ -25,7 +25,6 @@ import org.scalatest.{FlatSpec, Matchers, Suite}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 
 import scala.concurrent.duration._
-import scala.collection.Seq
 import scala.concurrent.{Await, Future}
 
 // initialize database tables and connection pool only once
