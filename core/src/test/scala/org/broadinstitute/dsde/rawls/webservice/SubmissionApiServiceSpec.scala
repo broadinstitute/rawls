@@ -388,11 +388,11 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   )
 
   it should "return 200 on getting a submission" in withTestDataApiServices { services =>
-    Get(s"${testData.wsName.path}/submissions/${testData.submission1.submissionId}") ~>
+    Get(s"${testData.wsName.path}/submissions/${testData.costedSubmission1.submissionId}") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
-        assertResult(new SubmissionStatusResponse(testData.submission1, testData.submission1CostMap, testData.userOwner)) {responseAs[SubmissionStatusResponse]}
+        assertResult(new SubmissionStatusResponse(testData.costedSubmission1, testData.userOwner)) {responseAs[SubmissionStatusResponse]}
       }
   }
 
@@ -418,6 +418,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
           new SubmissionListResponse(testData.submissionTerminateTest, testData.userOwner, Map[String, Int]("Submitted" -> 4)),
           new SubmissionListResponse(testData.submissionNoWorkflows, testData.userOwner, Map[String, Int]()),
           new SubmissionListResponse(testData.submission1, testData.userOwner, Map[String, Int]("Submitted" -> 3)),
+          new SubmissionListResponse(testData.costedSubmission1, testData.userOwner, Map[String, Int]("Submitted" -> 3)),
           new SubmissionListResponse(testData.submission2, testData.userOwner, Map[String, Int]("Submitted" -> 3)),
           new SubmissionListResponse(testData.submissionUpdateEntity, testData.userOwner, Map[String, Int]("Submitted" -> 1)),
           new SubmissionListResponse(testData.submissionUpdateWorkspace, testData.userOwner, Map[String, Int]("Submitted" -> 1)))) {
@@ -433,7 +434,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Map("Submitted" -> 6)) {
+          assertResult(Map("Submitted" -> 7)) {
             responseAs[Map[String, Int]]
           }
         }
@@ -480,7 +481,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     // also insert a dummy audit record with a different workflow id to attempt to confuse the code
     runAndWait( workflowAuditStatusQuery.save( WorkflowAuditStatusRecord(0, 42, WorkflowStatuses.Queued.toString, new java.sql.Timestamp(queuedTime-6000)) ) )
 
-    val existingSubmittedWorkflowCount = 16
+    val existingSubmittedWorkflowCount = 19
     val existingWorkflowCounts = Map("Submitted" -> existingSubmittedWorkflowCount)
 
     val resp = getQueueStatus(services.submissionRoutes)

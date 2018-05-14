@@ -1484,7 +1484,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 case None => workflow
               }
             }
-            val costedSubmission = submission.copy(cost = Option(costMap.values.sum), workflows = costedWorkflows)
+            val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
             RequestComplete((StatusCodes.OK, new SubmissionStatusResponse(costedSubmission, user)))
         }
       }
