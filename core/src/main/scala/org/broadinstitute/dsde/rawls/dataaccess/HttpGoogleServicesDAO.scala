@@ -59,6 +59,7 @@ import scala.util.{Success, Try}
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
   val clientSecrets: GoogleClientSecrets,
+  clientEmail: String,
   pemFile: String,
   appsDomain: String,
   groupsPrefix: String,
@@ -92,8 +93,6 @@ class HttpGoogleServicesDAO(
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
-  val serviceAccountClientId: String = clientSecrets.getDetails.get("client_email").toString
-
   initTokenBucket()
 
   protected def initTokenBucket(): Unit = {
@@ -108,8 +107,8 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(logInserter)
         allowGoogleCloudStorageWrite(logBucket.getName)
 
-        val bucketAcls = List(new BucketAccessControl().setEntity("user-" + serviceAccountClientId).setRole("OWNER"))
-        val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + serviceAccountClientId).setRole("OWNER"))
+        val bucketAcls = List(new BucketAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
+        val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
         val bucket = new Bucket().
           setName(tokenBucketName).
           setAcl(bucketAcls).
@@ -197,7 +196,7 @@ class HttpGoogleServicesDAO(
           val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(ProjectOwner -> "WRITER", Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
           val bucketAcls =
             groupsByAccess.map { case (access, group) => newBucketAccessControl(makeGroupEntityString(group.groupEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
-              newBucketAccessControl("user-" + serviceAccountClientId, "OWNER")
+              newBucketAccessControl("user-" + clientEmail, "OWNER")
 
           // default object ACLs should be:
           //   project owner - object reader
@@ -207,7 +206,7 @@ class HttpGoogleServicesDAO(
           //   bucket service account - object owner
           val defaultObjectAcls =
             groupsByAccess.map { case (access, group) => newObjectAccessControl(makeGroupEntityString(group.groupEmail.value), "READER") }.toSeq :+
-              newObjectAccessControl("user-" + serviceAccountClientId, "OWNER")
+              newObjectAccessControl("user-" + clientEmail, "OWNER")
 
           val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
           val bucket = new Bucket().
@@ -1150,7 +1149,7 @@ class HttpGoogleServicesDAO(
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      .setServiceAccountId(serviceAccountClientId)
+      .setServiceAccountId(clientEmail)
       .setServiceAccountScopes(directoryScopes)
       .setServiceAccountUser(clientSecrets.getDetails.get("sub_email").toString)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
@@ -1161,7 +1160,7 @@ class HttpGoogleServicesDAO(
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      .setServiceAccountId(serviceAccountClientId)
+      .setServiceAccountId(clientEmail)
       .setServiceAccountScopes(storageScopes) // grant bucket-creation powers
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
@@ -1171,7 +1170,7 @@ class HttpGoogleServicesDAO(
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      .setServiceAccountId(serviceAccountClientId)
+      .setServiceAccountId(clientEmail)
       .setServiceAccountScopes(genomicsScopes)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
