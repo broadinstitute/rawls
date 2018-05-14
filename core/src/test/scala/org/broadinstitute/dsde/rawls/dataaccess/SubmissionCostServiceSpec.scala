@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import com.google.api.services.bigquery.model.{TableCell, TableRow}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Token
+import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.scalatest.FlatSpec
 
 import scala.collection.JavaConverters._
@@ -12,7 +12,7 @@ import scala.concurrent.{Await, Future}
 
 class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
   implicit val actorSystem = ActorSystem("SubmissionCostServiceSpec")
-  val bigQueryDAO: MockHttpGoogleBigQueryDAO = new MockHttpGoogleBigQueryDAO("test", Token(() => "test"), "test")
+  val bigQueryDAO = new MockGoogleBigQueryDAO
   val submissionCostService = SubmissionCostService.constructor("test", bigQueryDAO)
 
   val rows = Future(List(

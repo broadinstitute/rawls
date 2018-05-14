@@ -28,7 +28,6 @@ import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
-import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 import org.joda.time.DateTime
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
@@ -1475,7 +1474,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     submissionWithoutCosts flatMap {
       case (submission, user) => {
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-        toFutureTry(submissionCostService.getWorkflowCosts(workspaceName.namespace, allWorkflowIds, GoogleProject(workspaceName.namespace))) map {
+        toFutureTry(submissionCostService.getWorkflowCosts(allWorkflowIds, GoogleProject(workspaceName.namespace))) map {
           case Failure(_) =>
             RequestComplete((StatusCodes.OK, new SubmissionStatusResponse(submission, user)))
           case Success(costMap) =>

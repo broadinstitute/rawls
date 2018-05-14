@@ -1,26 +1,26 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util
-import com.google.api.services.bigquery.model.TableRow
+
+import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
+import com.google.api.services.bigquery.model.{QueryParameter, QueryParameterType, QueryParameterValue, TableRow}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
-import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 object SubmissionCostService {
-  def constructor(tableName: String, bigQueryDAO: HttpGoogleBigQueryDAO)(implicit executionContext: ExecutionContext) =
+  def constructor(tableName: String, bigQueryDAO: GoogleBigQueryDAO)(implicit executionContext: ExecutionContext) =
     new SubmissionCostService(tableName, bigQueryDAO)
 }
 
-class SubmissionCostService(tableName: String, bigQueryDAO: HttpGoogleBigQueryDAO)(implicit val executionContext: ExecutionContext) {
+class SubmissionCostService(tableName: String, bigQueryDAO: GoogleBigQueryDAO)(implicit val executionContext: ExecutionContext) {
 
 
-  def getWorkflowCosts(namespace: String,
-                       workflowIds: Seq[String],
+  def getWorkflowCosts(workflowIds: Seq[String],
                        googleProject: GoogleProject): Future[Map[String, Float]] = {
 
-    extractWorkflowCostResults(executeWorkflowCostsQuery(namespace, workflowIds, googleProject))
+    extractWorkflowCostResults(executeWorkflowCostsQuery(workflowIds, googleProject))
   }
 
   /*
@@ -42,23 +42,31 @@ class SubmissionCostService(tableName: String, bigQueryDAO: HttpGoogleBigQueryDA
   /*
    * Queries BigQuery for compute costs associated with the workflowIds.
    */
-  private def executeWorkflowCostsQuery(namespace: String,
-                       workflowIds: Seq[String],
+  private def executeWorkflowCostsQuery(workflowIds: Seq[String],
                        googleProject: GoogleProject): Future[util.List[TableRow]] = {
 
-    // TODO: need to protect against SQL injection. Can we use Slick? Hate to bring in Slick just for that.
-    val subqueryTemplate = workflowIds.map(id => s"""workflowId LIKE "%$id%"""").mkString(" OR ")
-    val queryString: String =
-      s"""|SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as workflowId, SUM(cost)
-        |FROM [$tableName]
-        |WHERE project.id = '$namespace'
+    val subquery = workflowIds.map(_ => s"""workflowId LIKE ?""").mkString(" OR ")
+    val querySql: String =
+      s"""|SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
+        |FROM `$tableName`, UNNEST(labels) as labels
+        |WHERE project.id = ?
         |AND labels.key LIKE "cromwell-workflow-id"
         |GROUP BY labels.key, workflowId
-        |HAVING $subqueryTemplate""".stripMargin
-    //    + " LIMIT 1"  // uncomment for quick testing
+        |HAVING $subquery""".stripMargin
+    val stringParamType = new QueryParameterType().setType("STRING")
+    val namespaceParam =
+      new QueryParameter()
+        .setParameterType(stringParamType)
+        .setParameterValue(new QueryParameterValue().setValue(googleProject.value))
+    val subqueryParams = workflowIds.toList map { workflowId =>
+      new QueryParameter()
+        .setParameterType(stringParamType)
+        .setParameterValue(new QueryParameterValue().setValue(s"%$workflowId%"))
+    }
+    val queryParameters: List[QueryParameter] = namespaceParam :: subqueryParams
 
     for {
-      jobRef <- bigQueryDAO.startQuery(googleProject, queryString)
+      jobRef <- bigQueryDAO.startParameterizedQuery(googleProject, querySql, queryParameters, "POSITIONAL")
       job <- bigQueryDAO.getQueryStatus(jobRef)
       result <- bigQueryDAO.getQueryResult(job)
     } yield result.getRows
