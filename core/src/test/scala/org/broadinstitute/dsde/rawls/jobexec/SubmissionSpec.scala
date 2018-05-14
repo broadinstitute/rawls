@@ -20,6 +20,7 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
@@ -205,8 +206,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         gcsDAO
       )_
 
+      val bigQueryDAO = new MockGoogleBigQueryDAO
+      val submissionCostService = new MockSubmissionCostService("test", bigQueryDAO)
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
-
       val execServiceBatchSize = 3
       val maxActiveWorkflowsTotal = 10
       val maxActiveWorkflowsPerUser = 2
@@ -225,7 +227,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         genomicsServiceConstructor,
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
-        "test"
+        workbenchMetricBaseName,
+        submissionCostService
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {

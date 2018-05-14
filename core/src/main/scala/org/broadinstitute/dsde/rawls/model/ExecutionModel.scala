@@ -90,7 +90,8 @@ case class Workflow(
   statusLastChangedDate: DateTime,
   workflowEntity: AttributeEntityReference,
   inputResolutions: Seq[SubmissionValidationValue],
-  messages: Seq[AttributeString] = Seq.empty
+  messages: Seq[AttributeString] = Seq.empty,
+  cost: Option[Float] = None
 )
 
 case class TaskOutput(
@@ -114,7 +115,8 @@ case class Submission(
   workflows: Seq[Workflow],
   status: SubmissionStatus,
   useCallCache: Boolean,
-  workflowFailureMode: Option[WorkflowFailureMode] = None
+  workflowFailureMode: Option[WorkflowFailureMode] = None,
+  cost: Option[Float] = None
 )
 
 case class SubmissionStatusResponse(
@@ -128,7 +130,18 @@ case class SubmissionStatusResponse(
   status: SubmissionStatus,
   workflowFailureMode: Option[WorkflowFailureMode] = None
 ) {
-  def this(submission: Submission, rawlsUser: RawlsUser) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.workflows, submission.status, submission.workflowFailureMode)
+  def this(submission: Submission, rawlsUser: RawlsUser) =
+    this(
+      submissionId = submission.submissionId,
+      submissionDate = submission.submissionDate,
+      submitter = rawlsUser.userEmail.value,
+      methodConfigurationNamespace = submission.methodConfigurationNamespace,
+      methodConfigurationName = submission.methodConfigurationName,
+      submissionEntity = submission.submissionEntity,
+      workflows = submission.workflows,
+      status = submission.status,
+      workflowFailureMode = submission.workflowFailureMode
+    )
 }
 
 case class SubmissionListResponse(
@@ -308,9 +321,9 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionValidationReportFormat = jsonFormat4(SubmissionValidationReport)
 
-  implicit val WorkflowFormat = jsonFormat6(Workflow)
+  implicit val WorkflowFormat = jsonFormat7(Workflow)
 
-  implicit val SubmissionFormat = jsonFormat10(Submission)
+  implicit val SubmissionFormat = jsonFormat11(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 

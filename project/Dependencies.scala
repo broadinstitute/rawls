@@ -75,6 +75,9 @@ object Dependencies {
 
   val workbenchModelV  = "0.10-6800f3a"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
+  val workbenchGoogleV = "0.16-0027221"
+  val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
+  val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests"
 
   val metricsDependencies = Seq(
     metricsScala,
@@ -149,6 +152,8 @@ object Dependencies {
     mockito,
     googleRpc,
     workbenchModel,
+    workbenchGoogle,
+    workbenchGoogleMocks,
     ficus
   )
 }
