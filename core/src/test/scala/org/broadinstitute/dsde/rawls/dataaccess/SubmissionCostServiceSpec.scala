@@ -13,7 +13,7 @@ import scala.concurrent.{Await, Future}
 class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
   implicit val actorSystem = ActorSystem("SubmissionCostServiceSpec")
   val bigQueryDAO = new MockGoogleBigQueryDAO
-  val submissionCostService = SubmissionCostService.constructor("test", bigQueryDAO)
+  val submissionCostService = SubmissionCostService.constructor("test", "test", bigQueryDAO)
 
   val rows = Future(List(
     new TableRow().setF(List(new TableCell().setV("wfKey"), new TableCell().setV("wf1"), new TableCell().setV(1.32f)).asJava),

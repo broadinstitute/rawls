@@ -207,7 +207,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       )_
 
       val bigQueryDAO = new MockGoogleBigQueryDAO
-      val submissionCostService = new MockSubmissionCostService("test", bigQueryDAO)
+      val submissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
       val execServiceBatchSize = 3
       val maxActiveWorkflowsTotal = 10

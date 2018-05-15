@@ -159,7 +159,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       Seq.empty, Seq.empty, Seq("my-favorite-bucket")))
     override val statusServiceConstructor = StatusService.constructor(healthMonitor)_
     val bigQueryDAO = new MockGoogleBigQueryDAO
-    val submissionCostService = new MockSubmissionCostService("test", bigQueryDAO)
+    val submissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
