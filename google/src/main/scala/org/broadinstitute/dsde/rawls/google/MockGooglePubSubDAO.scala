@@ -10,7 +10,7 @@ import com.google.api.services.pubsub.model.Topic
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 
-import scala.collection.convert.decorateAsScala._
+import scala.collection.JavaConverters._
 import scala.collection.{mutable, _}
 import scala.concurrent.{ExecutionContext, Future}
 
