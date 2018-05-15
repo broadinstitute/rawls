@@ -4297,7 +4297,7 @@ definitions:
     properties:
       entityName:
         type: string
-        description: name of entity
+        description: 'name of entity. May be empty if this submission doesn''t run on an entity'
       inputResolutions:
         type: array
         description: input resolution
