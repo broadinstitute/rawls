@@ -105,9 +105,11 @@ object Boot extends App with LazyLogging {
 
     val jsonFactory = JacksonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
+    val clientEmail = gcsConfig.getString("serviceClientEmail")
     val gcsDAO = new HttpGoogleServicesDAO(
       false,
       clientSecrets,
+      clientEmail,
       gcsConfig.getString("pathToPem"),
       gcsConfig.getString("appsDomain"),
       gcsConfig.getString("groupsPrefix"),
@@ -125,7 +127,7 @@ object Boot extends App with LazyLogging {
     )
 
     val pubSubDAO = new HttpGooglePubSubDAO(
-      clientSecrets.getDetails.get("client_email").toString,
+      clientEmail,
       gcsConfig.getString("pathToPem"),
       gcsConfig.getString("appName"),
       gcsConfig.getString("serviceProject"),

@@ -17,6 +17,7 @@ import scala.concurrent._
 
 class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   override val clientSecrets: GoogleClientSecrets,
+  clientEmail: String,
   pemFile: String,
   appsDomain: String,
   groupsPrefix: String,
@@ -33,6 +34,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   extends HttpGoogleServicesDAO(
     true,
     clientSecrets,
+    clientEmail,
     pemFile,
     appsDomain,
     groupsPrefix,
