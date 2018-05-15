@@ -18,7 +18,7 @@ import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import slick.backend.DatabaseConfig
-import slick.driver.JdbcDriver
+import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -60,7 +60,7 @@ object Boot extends App with LazyLogging {
       conf.getString("directory.baseDn")
     )
 
-    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcDriver]("slick", conf), directoryConfig)
+    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", conf), directoryConfig)
 
     val liquibaseConf = conf.getConfig("liquibase")
     val liquibaseChangeLog = liquibaseConf.getString("changelog")

@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import slick.driver.JdbcDriver
+import slick.jdbc.JdbcProfile
 
 case class MethodConfigurationRecord(id: Long,
                                      namespace: String,
@@ -190,7 +190,7 @@ trait MethodConfigurationComponent {
 
     // performs actual deletion (not hiding) of everything that depends on a method configuration
     object MethodConfigurationDependenciesDeletionQuery extends RawSqlQuery {
-      val driver: JdbcDriver = MethodConfigurationComponent.this.driver
+      val driver: JdbcProfile = MethodConfigurationComponent.this.driver
 
       def deleteAction(workspaceId: UUID): WriteAction[Seq[Int]] = {
         val tables: Seq[String] = Seq("METHOD_CONFIG_INPUT", "METHOD_CONFIG_OUTPUT", "METHOD_CONFIG_PREREQ")

@@ -7,8 +7,8 @@ import com.typesafe.config.ConfigFactory
 import nl.grons.metrics.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.{SamDataSaver, TestExecutionContext, model}
 import slick.backend.DatabaseConfig
-import slick.driver.JdbcDriver
-import slick.driver.MySQLDriver.api._
+import slick.jdbc.MySQLProfile.api._
+import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.{DirectoryConfig, DirectorySubjectNameSupport}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -34,7 +34,7 @@ object DbResource {
   private val testdb = ConfigFactory.load.getStringOr("testdb", "mysql")
   private val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
 
-  val dataConfig = DatabaseConfig.forConfig[JdbcDriver](testdb)
+  val dataConfig = DatabaseConfig.forConfig[JdbcProfile](testdb)
   val dirConfig = DirectoryConfig(
     conf.getString("directory.url"),
     conf.getString("directory.user"),
@@ -72,7 +72,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   implicit def wfStatusCounter(wfStatus: WorkflowStatus): Counter = metrics.counter(s"${wfStatus.toString}")
   implicit def subStatusCounter(subStatus: SubmissionStatus): Counter = metrics.counter(s"${subStatus.toString}")
 
-  override val driver: JdbcDriver = DbResource.dataConfig.driver
+  override val driver: JdbcProfile = DbResource.dataConfig.driver
   override val batchSize: Int = DbResource.dataConfig.config.getInt("batchSize")
   val slickDataSource = DbResource.dataSource
 

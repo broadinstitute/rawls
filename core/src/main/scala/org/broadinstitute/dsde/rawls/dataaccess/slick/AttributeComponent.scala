@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import slick.ast.{BaseTypedType, TypedType}
 import slick.dbio.Effect.Write
-import slick.driver.JdbcDriver
+import slick.jdbc.JdbcProfile
 import akka.http.scaladsl.model.StatusCodes
 
 import reflect.runtime.universe._
@@ -347,7 +347,7 @@ trait AttributeComponent {
     }
 
     object AlterAttributesUsingScratchTableQueries extends RawSqlQuery {
-      val driver: JdbcDriver = AttributeComponent.this.driver
+      val driver: JdbcProfile = AttributeComponent.this.driver
 
       //MySQL seems to handle null safe operators inefficiently. the solution to this
       //is to use ifnull and default to -2 if the list_index is null. list_index of -2
