@@ -1474,7 +1474,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     submissionWithoutCosts flatMap {
       case (submission, user) => {
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-        toFutureTry(submissionCostService.getWorkflowCosts(allWorkflowIds, GoogleProject(workspaceName.namespace))) map {
+        toFutureTry(submissionCostService.getWorkflowCosts(allWorkflowIds, workspaceName.namespace)) map {
           case Failure(ex) =>
             logger.error("Unable to get workflow costs for this submission. ", ex)
             RequestComplete((StatusCodes.OK, new SubmissionStatusResponse(submission, user)))

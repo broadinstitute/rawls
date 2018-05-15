@@ -18,9 +18,9 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
 
 
   def getWorkflowCosts(workflowIds: Seq[String],
-                       googleProject: GoogleProject): Future[Map[String, Float]] = {
+                       workspaceNamespace: String): Future[Map[String, Float]] = {
 
-    extractWorkflowCostResults(executeWorkflowCostsQuery(workflowIds, googleProject))
+    extractWorkflowCostResults(executeWorkflowCostsQuery(workflowIds, workspaceNamespace))
   }
 
   /*
@@ -43,7 +43,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
    * Queries BigQuery for compute costs associated with the workflowIds.
    */
   private def executeWorkflowCostsQuery(workflowIds: Seq[String],
-                       googleProject: GoogleProject): Future[util.List[TableRow]] = {
+                                        workspaceNamespace: String): Future[util.List[TableRow]] = {
 
     val subquery = workflowIds.map(_ => s"""workflowId LIKE ?""").mkString(" OR ")
     val querySql: String =
@@ -57,7 +57,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
     val namespaceParam =
       new QueryParameter()
         .setParameterType(stringParamType)
-        .setParameterValue(new QueryParameterValue().setValue(googleProject.value))
+        .setParameterValue(new QueryParameterValue().setValue(workspaceNamespace))
     val subqueryParams = workflowIds.toList map { workflowId =>
       new QueryParameter()
         .setParameterType(stringParamType)
