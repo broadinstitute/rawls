@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.sql.SQLTimeoutException
 import java.util.concurrent.{ExecutorService, Executors}
 
-import _root_.slick.backend.DatabaseConfig
+import _root_.slick.basic.DatabaseConfig
 import _root_.slick.jdbc.{JdbcProfile, TransactionIsolation}
 import _root_.slick.jdbc.meta.MTable
 import com.google.common.base.Throwables

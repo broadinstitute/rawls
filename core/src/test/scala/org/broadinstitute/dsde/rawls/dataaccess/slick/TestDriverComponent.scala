@@ -6,7 +6,7 @@ import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import nl.grons.metrics.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.{SamDataSaver, TestExecutionContext, model}
-import slick.backend.DatabaseConfig
+import slick.basic.DatabaseConfig
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
