@@ -6,7 +6,7 @@ import javax.naming.directory.DirContext
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionParser
 import org.broadinstitute.dsde.rawls.model.{RawlsGroupName, RawlsGroupRef}
-import slick.driver.JdbcProfile
+import slick.jdbc.JdbcProfile
 
 import scala.concurrent.Future
 import scala.util.Try

@@ -27,7 +27,7 @@ object DataSource {
 }
 
 class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile], directoryConfig: DirectoryConfig)(implicit executionContext: ExecutionContext) extends LazyLogging {
-  val dataAccess = new DataAccessComponent(databaseConfig.driver, databaseConfig.config.getInt("batchSize"), directoryConfig)
+  val dataAccess = new DataAccessComponent(databaseConfig.profile, databaseConfig.config.getInt("batchSize"), directoryConfig)
 
   val database = databaseConfig.db
 
