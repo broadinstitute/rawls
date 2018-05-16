@@ -57,6 +57,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def ListGroupsForUser(userEmail: RawlsUserEmail) = listGroupsForUser(userEmail)
   def GetUserGroup(groupRef: RawlsGroupRef) = getUserGroup(groupRef)
 
+  def GetBillingProjectMembership(projectName: RawlsBillingProjectName) = getBillingProjectMembership(projectName)
   def ListBillingProjects = listBillingProjects
   def AdminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { deleteBillingProject(projectName, ownerInfo) }
   def AdminRegisterBillingProject(xfer: RawlsBillingProjectTransfer) = asFCAdmin { registerBillingProject(xfer) }
@@ -223,6 +224,26 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def listBillingAccounts(): Future[PerRequestMessage] =
     gcsDAO.listBillingAccounts(userInfo) map(RequestComplete(_))
+
+  def getBillingProjectMembership(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    val membershipsFuture = for {
+      resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
+      projectDetailsByName <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(Set(projectName)) }
+    } yield {
+      resourceIdsWithPolicyNames.collect {
+        case SamResourceIdWithPolicyName(resourceId, "owner") => (resourceId, ProjectRoles.Owner)
+        case SamResourceIdWithPolicyName(resourceId, "workspace-creator") => (resourceId, ProjectRoles.User)
+      }.flatMap { case (resourceId, role) =>
+        projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
+          RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
+        }
+      }.toList
+    }
+    membershipsFuture.map {
+      case (head: RawlsBillingProjectMembership) :: tail => RequestComplete(head)
+      case _ => RequestComplete(StatusCodes.NotFound)
+    }
+  }
 
   def listBillingProjects(): Future[PerRequestMessage] = {
     val membershipsFuture = for {
