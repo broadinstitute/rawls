@@ -10,17 +10,17 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 object SubmissionCostService {
-  def constructor(tableName: String, bigQueryDAO: GoogleBigQueryDAO)(implicit executionContext: ExecutionContext) =
-    new SubmissionCostService(tableName, bigQueryDAO)
+  def constructor(tableName: String, serviceProject: String, bigQueryDAO: GoogleBigQueryDAO)(implicit executionContext: ExecutionContext) =
+    new SubmissionCostService(tableName, serviceProject, bigQueryDAO)
 }
 
-class SubmissionCostService(tableName: String, bigQueryDAO: GoogleBigQueryDAO)(implicit val executionContext: ExecutionContext) {
+class SubmissionCostService(tableName: String, serviceProject: String, bigQueryDAO: GoogleBigQueryDAO)(implicit val executionContext: ExecutionContext) {
 
 
   def getWorkflowCosts(workflowIds: Seq[String],
-                       googleProject: GoogleProject): Future[Map[String, Float]] = {
+                       workspaceNamespace: String): Future[Map[String, Float]] = {
 
-    extractWorkflowCostResults(executeWorkflowCostsQuery(workflowIds, googleProject))
+    extractWorkflowCostResults(executeWorkflowCostsQuery(workflowIds, workspaceNamespace))
   }
 
   /*
@@ -43,7 +43,7 @@ class SubmissionCostService(tableName: String, bigQueryDAO: GoogleBigQueryDAO)(i
    * Queries BigQuery for compute costs associated with the workflowIds.
    */
   private def executeWorkflowCostsQuery(workflowIds: Seq[String],
-                       googleProject: GoogleProject): Future[util.List[TableRow]] = {
+                                        workspaceNamespace: String): Future[util.List[TableRow]] = {
 
     val subquery = workflowIds.map(_ => s"""workflowId LIKE ?""").mkString(" OR ")
     val querySql: String =
@@ -57,7 +57,7 @@ class SubmissionCostService(tableName: String, bigQueryDAO: GoogleBigQueryDAO)(i
     val namespaceParam =
       new QueryParameter()
         .setParameterType(stringParamType)
-        .setParameterValue(new QueryParameterValue().setValue(googleProject.value))
+        .setParameterValue(new QueryParameterValue().setValue(workspaceNamespace))
     val subqueryParams = workflowIds.toList map { workflowId =>
       new QueryParameter()
         .setParameterType(stringParamType)
@@ -66,7 +66,7 @@ class SubmissionCostService(tableName: String, bigQueryDAO: GoogleBigQueryDAO)(i
     val queryParameters: List[QueryParameter] = namespaceParam :: subqueryParams
 
     for {
-      jobRef <- bigQueryDAO.startParameterizedQuery(googleProject, querySql, queryParameters, "POSITIONAL")
+      jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject(serviceProject), querySql, queryParameters, "POSITIONAL")
       job <- bigQueryDAO.getQueryStatus(jobRef)
       result <- bigQueryDAO.getQueryResult(job)
     } yield result.getRows

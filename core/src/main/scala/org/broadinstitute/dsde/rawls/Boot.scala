@@ -173,7 +173,11 @@ object Boot extends App with LazyLogging {
     val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO, samDAO, projectOwnerGrantableRoles)
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
-    val submissionCostService: SubmissionCostService = SubmissionCostService.constructor(gcsConfig.getString("billingExportTableName"), bigQueryDAO)
+    val submissionCostService: SubmissionCostService =
+      SubmissionCostService.constructor(
+        gcsConfig.getString("billingExportTableName"),
+        gcsConfig.getString("serviceProject"),
+        bigQueryDAO)
 
     val methodRepoDAO = new HttpMethodRepoDAO(
       MethodRepoConfig.apply[Agora.type](conf.getConfig("agora")),
