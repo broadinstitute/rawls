@@ -3532,6 +3532,35 @@ paths:
             - email
             - profile
 
+  '/api/user/billing/{projectName}':
+    get:
+      responses:
+        200:
+          description: OK
+          schema:
+            $ref: '#/definitions/RawlsBillingProjectMembership'
+        404:
+          description: Project Not Found
+        500:
+          description: Internal Server Error
+      parameters:
+        - name: projectName
+          description: Name of the billing project
+          required: true
+          type: string
+          in: path
+      description: named billing project for a user
+      tags:
+        - billing
+        - users
+      summary: named billing project for a user
+      operationId: billingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+
   '/api/user/billingAccounts':
     get:
       responses:
