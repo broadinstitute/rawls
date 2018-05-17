@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Aborting, Running, 
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import slick.dbio.Effect.Write
-import slick.driver.JdbcDriver
+import slick.jdbc.JdbcProfile
 
 /**
  * Created by mbemis on 2/18/16.
@@ -593,7 +593,7 @@ trait WorkflowComponent {
     }
 
     object WorkflowStatisticsQueries extends RawSqlQuery {
-      val driver: JdbcDriver = WorkflowComponent.this.driver
+      val driver: JdbcProfile = WorkflowComponent.this.driver
 
       def countWorkflowsPerUserQuery(startDate: String, endDate: String) = {
         sql"""select min(count), max(count), avg(count), stddev(count)
@@ -634,7 +634,7 @@ trait WorkflowComponent {
   }
 
   private object UpdateWorkflowStatusRawSql extends RawSqlQuery {
-    val driver: JdbcDriver = WorkflowComponent.this.driver
+    val driver: JdbcProfile = WorkflowComponent.this.driver
 
     private def update(newStatus: WorkflowStatus) = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
 
@@ -654,7 +654,7 @@ trait WorkflowComponent {
   }
 
   private object UpdateWorkflowStatusAndExecutionIdRawSql extends RawSqlQuery {
-    val driver: JdbcDriver = WorkflowComponent.this.driver
+    val driver: JdbcProfile = WorkflowComponent.this.driver
 
     private def update(newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = sql"update WORKFLOW set status = ${newStatus.toString}, exec_service_key = ${executionServiceId.id}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
 

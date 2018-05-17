@@ -12,8 +12,7 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import slick.driver.JdbcDriver
-import slick.jdbc.GetResult
+import slick.jdbc.{GetResult, JdbcProfile}
 
 /**
  * Created by mbemis on 2/18/16.
@@ -411,7 +410,7 @@ trait SubmissionComponent {
     private def unmarshalEntity(entityRec: EntityRecord): AttributeEntityReference = entityRec.toReference
 
     private object WorkflowAndMessagesRawSqlQuery extends RawSqlQuery {
-      val driver: JdbcDriver = SubmissionComponent.this.driver
+      val driver: JdbcProfile = SubmissionComponent.this.driver
       case class WorkflowMessagesListResult(workflowRecord: WorkflowRecord, entityRecord: EntityRecord, messageRecord: Option[WorkflowMessageRecord])
 
       implicit val getWorkflowMessagesListResult = GetResult { r =>
@@ -435,7 +434,7 @@ trait SubmissionComponent {
     }
 
     private object WorkflowAndInputResolutionRawSqlQuery extends RawSqlQuery {
-      val driver: JdbcDriver = SubmissionComponent.this.driver
+      val driver: JdbcProfile = SubmissionComponent.this.driver
       case class WorkflowInputResolutionListResult(workflowRecord: WorkflowRecord, submissionValidationRec: Option[SubmissionValidationRecord], submissionAttributeRec: Option[SubmissionAttributeRecord])
 
       implicit val getWorkflowInputResolutionListResult = GetResult { r =>
@@ -462,7 +461,7 @@ trait SubmissionComponent {
 
     // performs actual deletion (not hiding) of everything that depends on a submission
     object SubmissionDependenciesDeletionQuery extends RawSqlQuery {
-      val driver: JdbcDriver = SubmissionComponent.this.driver
+      val driver: JdbcProfile = SubmissionComponent.this.driver
 
       def deleteAction(workspaceId: UUID): WriteAction[Seq[Int]] = {
 
@@ -506,7 +505,7 @@ trait SubmissionComponent {
     }
 
     object SubmissionStatisticsQueries extends RawSqlQuery {
-      val driver: JdbcDriver = SubmissionComponent.this.driver
+      val driver: JdbcProfile = SubmissionComponent.this.driver
 
       def countSubmissionsPerUserQuery(startDate: String, endDate: String) = {
         sql"""select min(count), max(count), avg(count), stddev(count)
@@ -537,7 +536,7 @@ trait SubmissionComponent {
     }
 
     object GatherStatusesForWorkspaceSubmissionsQuery extends RawSqlQuery {
-      val driver: JdbcDriver = SubmissionComponent.this.driver
+      val driver: JdbcProfile = SubmissionComponent.this.driver
 
       implicit val getSubmissionWorkflowStatusResponse = GetResult { r =>
         SubmissionWorkflowStatusResponse(r.<<, r.<<, r.<<)

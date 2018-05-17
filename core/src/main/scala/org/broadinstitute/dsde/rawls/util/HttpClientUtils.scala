@@ -46,9 +46,9 @@ trait HttpClientUtils extends LazyLogging {
   }
 }
 
-case class HttpClientUtilsStandard(implicit val materializer: Materializer, val executionContext: ExecutionContext) extends HttpClientUtils
+case class HttpClientUtilsStandard()(implicit val materializer: Materializer, val executionContext: ExecutionContext) extends HttpClientUtils
 
-case class HttpClientUtilsGzip(implicit val materializer: Materializer, val executionContext: ExecutionContext) extends HttpClientUtils {
+case class HttpClientUtilsGzip()(implicit val materializer: Materializer, val executionContext: ExecutionContext) extends HttpClientUtils {
   override def executeRequest(http: HttpExt, httpRequest: HttpRequest): Future[HttpResponse] = {
     http.singleRequest(addHeader(httpRequest, `Accept-Encoding`(HttpEncodings.gzip))).map { response =>
       Gzip.decodeMessage(response)
@@ -56,7 +56,7 @@ case class HttpClientUtilsGzip(implicit val materializer: Materializer, val exec
   }
 }
 
-case class HttpClientUtilsInstrumented(implicit val materializer: Materializer, requestCounter: (HttpRequest, HttpResponse) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, val executionContext: ExecutionContext) extends HttpClientUtils {
+case class HttpClientUtilsInstrumented()(implicit val materializer: Materializer, requestCounter: (HttpRequest, HttpResponse) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, val executionContext: ExecutionContext) extends HttpClientUtils {
   override def executeRequest(http: HttpExt, httpRequest: HttpRequest): Future[HttpResponse] = {
     val start = System.currentTimeMillis()
     http.singleRequest(httpRequest) andThen {
@@ -67,7 +67,7 @@ case class HttpClientUtilsInstrumented(implicit val materializer: Materializer, 
   }
 }
 
-case class HttpClientUtilsGzipInstrumented(implicit val materializer: Materializer, requestCounter: (HttpRequest, HttpResponse) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, val executionContext: ExecutionContext) extends HttpClientUtils {
+case class HttpClientUtilsGzipInstrumented()(implicit val materializer: Materializer, requestCounter: (HttpRequest, HttpResponse) => Counter, requestTimer: (HttpRequest, HttpResponse) => Timer, actorRefFactory: ActorRefFactory, val executionContext: ExecutionContext) extends HttpClientUtils {
   override def executeRequest(http: HttpExt, httpRequest: HttpRequest): Future[HttpResponse] = {
     val start = System.currentTimeMillis()
     http.singleRequest(addHeader(httpRequest, `Accept-Encoding`(HttpEncodings.gzip))) andThen {

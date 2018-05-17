@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import akka.http.scaladsl.model.StatusCodes
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.concurrent._
 
 /**
@@ -84,7 +84,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
     Future.traverse(messages.grouped(1000)) { messageBatch =>
       retryWhen500orGoogleError(() => {
         val pubsubMessages = messageBatch.map(text => new PubsubMessage().encodeData(text.getBytes(characterEncoding)))
-        val pubsubRequest = new PublishRequest().setMessages(pubsubMessages)
+        val pubsubRequest = new PublishRequest().setMessages(pubsubMessages.asJava)
         executeGoogleRequest(getPubSubDirectory.projects().topics().publish(topicToFullPath(topicName), pubsubRequest))
       })
     }.map(_ => ())
@@ -96,7 +96,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
 
   override def acknowledgeMessagesById(subscriptionName: String, ackIds: Seq[String]) = {
     retryWhen500orGoogleError(() => {
-      val ackRequest = new AcknowledgeRequest().setAckIds(ackIds)
+      val ackRequest = new AcknowledgeRequest().setAckIds(ackIds.asJava)
       executeGoogleRequest(getPubSubDirectory.projects().subscriptions().acknowledge(subscriptionToFullPath(subscriptionName), ackRequest))
     })
   }
@@ -107,7 +107,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
       val messages = executeGoogleRequest(getPubSubDirectory.projects().subscriptions().pull(subscriptionToFullPath(subscriptionName), pullRequest)).getReceivedMessages
       if(messages == null)
         Seq.empty
-      else messages.map(message => PubSubMessage(message.getAckId, new String(message.getMessage.decodeData(), characterEncoding)))
+      else messages.asScala.map(message => PubSubMessage(message.getAckId, new String(message.getMessage.decodeData(), characterEncoding)))
     })
   }
 
@@ -123,7 +123,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(clientEmail)
-      .setServiceAccountScopes(pubSubScopes) // grant pub sub powers
+      .setServiceAccountScopes(pubSubScopes.asJava) // grant pub sub powers
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
   }
