@@ -135,13 +135,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def billingProjectFromName(name: String) = (RawlsBillingProject(RawlsBillingProjectName(name), "mockBucketUrl", CreationStatuses.Ready, None, None), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty))
 
-  def makeManagedGroup(name: String, users: Set[RawlsUserRef], subgroups: Set[RawlsGroupRef] = Set.empty, owners: Set[RawlsUserRef] = Set.empty, ownerSubgroups: Set[RawlsGroupRef] = Set.empty) = {
-    val membersGroup = makeRawlsGroup(name, users, subgroups)
-    val adminsGroup = makeRawlsGroup(name + "-owners", owners, ownerSubgroups)
-
-    ManagedGroup(membersGroup, adminsGroup)
-  }
-
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef] = Set.empty) =
     RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, groups)
 
@@ -252,7 +245,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val workspaceToTestGrantId = UUID.randomUUID()
 
     val nestedProjectGroup = makeRawlsGroup("nested_project_group", Set(userOwner))
-    val dbGapAuthorizedUsersGroup = makeManagedGroup("dbGapAuthorizedUsers", Set(userOwner, userReaderViaGroup))
+    val dbGapAuthorizedUsersGroup = ManagedGroupRef(RawlsGroupName("dbGapAuthorizedUsers"))
 
     val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner, userOwner), ProjectRoles.User -> Set.empty), Map.empty)
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
@@ -282,7 +275,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     ),Map(
       WorkspaceAccessLevels.Owner -> Set.empty,
       WorkspaceAccessLevels.Write -> Set.empty,
-      WorkspaceAccessLevels.Read -> Set(dbGapAuthorizedUsersGroup.membersGroup)
+      WorkspaceAccessLevels.Read -> Set(dbGapAuthorizedUsersGroup.toMembersGroupRef)
     ))_
 
     val wsAttrs = Map(
@@ -300,21 +293,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)), Map.empty, Map.empty)
     val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", Set.empty, UUID.randomUUID().toString, "aBucket4", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
-    val realm = makeManagedGroup(s"Test-Realm", Set.empty)
+    val realm = ManagedGroupRef(RawlsGroupName("Test-Realm"))
     val realmWsName = wsName.name + "withRealm"
 
-    val realm2 = makeManagedGroup(s"Test-Realm2", Set.empty)
+    val realm2 = ManagedGroupRef(RawlsGroupName("Test-Realm2"))
     val realmWs2Name = wsName2.name + "withRealm"
-
-    val realm3 = makeManagedGroup(s"Test-Realm3", Set.empty)
-
-    val realm4 = makeManagedGroup(s"Test-Realm4", Set.empty)
-
-    val realm5 = makeManagedGroup(s"Test-Realm5", Set.empty)
-
-    val realm6 = makeManagedGroup(s"Test-Realm6", Set.empty)
-
-    val realm7 = makeManagedGroup(s"Test-Realm7", Set.empty)
 
     val (workspaceWithRealm, workspaceWithRealmGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, realmWsName, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
@@ -576,8 +559,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         workspaceTerminatedSubmissionsGroups ++
         workspaceInterleavedSubmissionsGroups ++
         workspaceWorkflowFailureModeGroups ++
-        controlledWorkspaceGroups ++
-        Seq(realm.membersGroup, realm.adminsGroup, realm2.membersGroup, realm2.adminsGroup)
+        controlledWorkspaceGroups
 
       groups.foreach(gcsDAO.createGoogleGroup(_))
     }
@@ -611,8 +593,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         rawlsUserQuery.createUser(userReader),
         rawlsUserQuery.createUser(userReaderViaGroup),
         rawlsGroupQuery.save(nestedProjectGroup),
-        rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.membersGroup),
-        rawlsGroupQuery.save(dbGapAuthorizedUsersGroup.adminsGroup),
+        rawlsGroupQuery.save(RawlsGroup(dbGapAuthorizedUsersGroup.membersGroupName, RawlsGroupEmail("dbGapAuthorizedUsers@example.com"), Set(userOwner, userReaderViaGroup), Set.empty)),
+        rawlsGroupQuery.save(RawlsGroup(realm.membersGroupName, RawlsGroupEmail("realm@example.com"), Set.empty, Set.empty)),
+        rawlsGroupQuery.save(RawlsGroup(realm2.membersGroupName, RawlsGroupEmail("realm2@example.com"), Set.empty, Set.empty)),
         DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
         DBIO.from(samDataSaver.savePolicyGroups(testProject1Groups.values.flatten, SamResourceTypeNames.billingProject.value, testProject1.projectName.value)),
@@ -622,10 +605,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         DBIO.from(samDataSaver.savePolicyGroups(testProject3Groups.values.flatten, SamResourceTypeNames.billingProject.value, testProject3.projectName.value)),
         rawlsBillingProjectQuery.create(testProject3),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
-        rawlsGroupQuery.save(realm.membersGroup),
-        rawlsGroupQuery.save(realm.adminsGroup),
-        rawlsGroupQuery.save(realm2.membersGroup),
-        rawlsGroupQuery.save(realm2.adminsGroup),
         DBIO.sequence(workspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceWithMultiGroupADGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(controlledWorkspaceGroups.map(rawlsGroupQuery.save).toSeq),
@@ -645,7 +624,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         managedGroupQuery.createManagedGroup(dbGapAuthorizedUsersGroup),
         saveAllWorkspacesAction,
         workspaceQuery.insertUserSharePermissions(workspaceToTestGrantId, Seq(RawlsUserRef(userWriter.userSubjectId))),
-        workspaceQuery.insertGroupSharePermissions(workspaceToTestGrantId, Seq(dbGapAuthorizedUsersGroup.membersGroup)),
+        workspaceQuery.insertGroupSharePermissions(workspaceToTestGrantId, Seq(dbGapAuthorizedUsersGroup.toMembersGroupRef)),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
