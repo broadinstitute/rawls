@@ -152,13 +152,17 @@ object Boot extends App with LazyLogging {
     val executionServiceConfig = conf.getConfig("executionservice")
     val submissionTimeout = util.toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
 
-    val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = executionServiceConfig.getObject("readServers").map {
-        case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix))
-      }.toMap
+    val executionServiceServers: Set[ClusterMember] = executionServiceConfig.getObject("readServers").map {
+      case (strName, strHostname) => ClusterMember(ExecutionServiceId(strName), new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix))
+    }.toSet
 
-    val executionServiceSubmitServers: Map[ExecutionServiceId, ExecutionServiceDAO] = executionServiceConfig.getObject("submitServers").map {
-      case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix))
-    }.toMap
+    val executionServiceAbortServers: Map[String, ExecutionServiceDAO] = executionServiceConfig.getObjectOption("abortServers").map(_.map {
+      case (strName, strHostname) => (strName->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix))
+    }.toMap).getOrElse(Map.empty)
+
+    val executionServiceSubmitServers: Set[ClusterMember] = executionServiceConfig.getObject("submitServers").map {
+      case (strName, strHostname) => ClusterMember(ExecutionServiceId(strName), new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix), executionServiceAbortServers.get(strName))
+    }.toSet
 
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
     val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
@@ -203,7 +207,7 @@ object Boot extends App with LazyLogging {
         pubSubDAO,
         methodRepoDAO,
         samDAO,
-        executionServiceServers,
+        executionServiceServers.map(c => c.key->c.dao).toMap,
         groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
         topicsToCheck = Seq(gcsConfig.getString("notifications.topicName"), gcsConfig.getString("groupMonitor.topicName")),
         bucketsToCheck = Seq(gcsDAO.tokenBucketName)

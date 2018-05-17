@@ -23,17 +23,17 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
   def this() = this(ActorSystem("ExecutionServiceClusterTest"))
 
   // create a cluster of execution service DAOs
-  val instanceMap: Map[ExecutionServiceId, ExecutionServiceDAO] = ((0 to 4) map {idx =>
+  val instanceMap: Set[ClusterMember] = ((0 to 4) map {idx =>
       val key = s"instance$idx"
-      (ExecutionServiceId(key) -> new MockExecutionServiceDAO(identifier = key))
-    }).toMap
+      ClusterMember(ExecutionServiceId(key), new MockExecutionServiceDAO(identifier = key))
+    }).toSet
 
   // arbitrary choice for the instance we'll use for tests; neither first nor last instances
   val instanceKeyForTests = "instance3"
   val cluster = new ShardedHttpExecutionServiceCluster(instanceMap, instanceMap, slickDataSource)
 
   // private method wrappers for testing
-  val getMember = PrivateMethod[ExecutionServiceDAO]('getMember)
+  val getMember = PrivateMethod[ClusterMember]('getMember)
   val parseSubWorkflowIdsFromMetadata = PrivateMethod[Seq[String]]('parseSubWorkflowIdsFromMetadata)
 
   val submissionId = UUID.randomUUID()
@@ -86,7 +86,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
       case Some(rec) =>
         assertResult(instanceKeyForTests) {
           val execInstance = cluster invokePrivate getMember(rec)
-          execInstance.asInstanceOf[MockExecutionServiceDAO].identifier
+          execInstance.dao.asInstanceOf[MockExecutionServiceDAO].identifier
         }
     }
   }
@@ -94,7 +94,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
   it should "return the correct instance from a raw executionServiceKey" in withCustomTestDatabase(execClusterTestData) { dataSource: SlickDataSource =>
     assertResult(instanceKeyForTests) {
       val execInstance = cluster invokePrivate getMember(ExecutionServiceId(instanceKeyForTests))
-      execInstance.asInstanceOf[MockExecutionServiceDAO].identifier
+      execInstance.dao.asInstanceOf[MockExecutionServiceDAO].identifier
     }
   }
 
