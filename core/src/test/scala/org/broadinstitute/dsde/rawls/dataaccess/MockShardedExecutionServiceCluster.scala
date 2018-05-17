@@ -3,14 +3,14 @@ package org.broadinstitute.dsde.rawls.dataaccess
 /**
   * Created by davidan on 6/16/16.
   */
-class MockShardedExecutionServiceCluster(val readMembers: Map[ExecutionServiceId, ExecutionServiceDAO], submitMembers: Map[ExecutionServiceId, ExecutionServiceDAO], dataSource: SlickDataSource)
-  extends ShardedHttpExecutionServiceCluster(readMembers: Map[ExecutionServiceId, ExecutionServiceDAO], submitMembers: Map[ExecutionServiceId, ExecutionServiceDAO], dataSource: SlickDataSource) {
+class MockShardedExecutionServiceCluster(val readMembers: Set[ClusterMember], submitMembers: Set[ClusterMember], dataSource: SlickDataSource)
+  extends ShardedHttpExecutionServiceCluster(readMembers, submitMembers, dataSource) {
 
   // for unit tests
-  def getDefaultSubmitMember: ExecutionServiceDAO = submitMembers.values.head
+  def getDefaultSubmitMember: ExecutionServiceDAO = submitMembers.head.dao
 
 }
 
 object MockShardedExecutionServiceCluster {
-  def fromDAO(dao: ExecutionServiceDAO, dataSource: SlickDataSource) = new MockShardedExecutionServiceCluster( Map(ExecutionServiceId("unittestdefault")->dao), Map(ExecutionServiceId("unittestdefault")->dao), dataSource)
+  def fromDAO(dao: ExecutionServiceDAO, dataSource: SlickDataSource) = new MockShardedExecutionServiceCluster( Set(ClusterMember(ExecutionServiceId("unittestdefault"), dao)), Set(ClusterMember(ExecutionServiceId("unittestdefault"), dao)), dataSource)
 }
