@@ -15,7 +15,7 @@ trait StringValidationUtils {
     }
   }
 
-  private lazy val workspaceNameRegex = "[A-z0-9%_-]+".r
+  private lazy val workspaceNameRegex = "[A-z0-9 _-]+".r
   def validateWorkspaceName(s: String): Unit = {
     if(! workspaceNameRegex.pattern.matcher(s).matches) {
       val msg = s"Invalid input: $s. Input may only contain alphanumeric characters, underscores, dashes, and spaces."
