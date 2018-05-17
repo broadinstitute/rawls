@@ -199,7 +199,7 @@ trait WorkspaceComponent {
 
     def save(workspace: Workspace): ReadWriteAction[Workspace] = {
       validateUserDefinedString(workspace.namespace)
-      validateUserDefinedString(workspace.name)
+      validateWorkspaceName(workspace.name)
       workspace.attributes.keys.foreach { attrName =>
         validateUserDefinedString(attrName.name)
         validateAttributeName(attrName, Attributable.workspaceEntityType)
