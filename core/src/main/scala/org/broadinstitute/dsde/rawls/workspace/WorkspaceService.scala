@@ -2207,9 +2207,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       //Otherwise, use the entity given in the submission.
       submissionRequest.expression match {
         case None =>
-          if (submissionRequest.entityType.getOrElse("") != rootEntityType)
-            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Method configuration expects an entity of type ${rootEntityType}, but you gave us an entity of type ${submissionRequest.entityType}.")))
-          else {
+          if (submissionRequest.entityType.getOrElse("") != rootEntityType) {
+            val whatYouGaveUs = if (submissionRequest.entityType.isDefined) s"an entity of type ${submissionRequest.entityType.get}" else "no entity"
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Method configuration expects an entity of type $rootEntityType, but you gave us $whatYouGaveUs.")))
+          } else {
             withSingleEntityRec(submissionRequest.entityType.get, submissionRequest.entityName.get, workspaceContext, dataAccess)(rec => op(Some(rec)))
           }
         case Some(expression) =>
