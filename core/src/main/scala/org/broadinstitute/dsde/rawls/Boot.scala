@@ -106,6 +106,7 @@ object Boot extends App with LazyLogging {
       false,
       clientSecrets,
       clientEmail,
+      gcsConfig.getString("subEmail"),
       gcsConfig.getString("pathToPem"),
       gcsConfig.getString("appsDomain"),
       gcsConfig.getString("groupsPrefix"),
