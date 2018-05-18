@@ -9,9 +9,6 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import CustomDirectives._
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import spray.json.DefaultJsonProtocol._
-import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
 
 import scala.concurrent.ExecutionContext
 
@@ -111,9 +108,9 @@ trait UserApiService extends UserInfoDirectives {
               } ~
               path(Segment) { role =>
                 put {
-                  entity(as[List[WorkbenchEmail]]) { memberList =>
+                  entity(as[RawlsGroupMemberList]) { memberList =>
                     complete {
-                      userServiceConstructor(userInfo).OverwriteManagedGroupMembers(groupRef, ManagedRoles.withName(role), RawlsGroupMemberList(userEmails = Option(memberList.map(_.value))))
+                      userServiceConstructor(userInfo).OverwriteManagedGroupMembers(groupRef, ManagedRoles.withName(role), memberList)
                     }
                   }
                 }
