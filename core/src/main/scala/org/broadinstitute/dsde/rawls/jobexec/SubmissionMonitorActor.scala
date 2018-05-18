@@ -211,10 +211,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   private def execServiceStatus(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[WorkflowRecord]] = {
     workflowRec.externalId match {
-      case Some(externalId) =>     executionServiceCluster.status(workflowRec, UserInfo.buildFromTokens(credential)).map(newStatus => {
-        if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
-        else None
-      })
+      case Some(externalId) =>
+        val token = UserInfo.buildFromTokens(credential)
+        executionServiceCluster.status(workflowRec, token).map(newStatus => {
+          if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
+          else None
+        })
       case None => Future.successful(None)
     }
   }
@@ -345,19 +347,26 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     dataAccess.submissionQuery.getMethodConfigOutputExpressions(submissionId)
   }
 
-  def listWorkflowEntitiesById(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadAction[scala.collection.Map[Long, Entity]] = {
-    dataAccess.entityQuery.getEntities(workflowsWithOutputs.map { case (workflowRec, outputs) => workflowRec.workflowEntityId }).map(_.toMap)
+  def listWorkflowEntitiesById(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)
+                              (implicit executionContext: ExecutionContext): ReadAction[scala.collection.Map[Long, Entity]] = {
+    //Note that we can't look up entities for workflows that didn't run on entities (obviously), so they get dropped here.
+    //Those are handled in handle/attachOutputs.
+    val workflowsWithEntities = workflowsWithOutputs.filter(wwo => wwo._1.workflowEntityId.isDefined)
+
+    //yank out of Seq[(Long, Option[Entity])] and into Seq[(Long, Entity)]
+    val entityIds = workflowsWithEntities.flatMap{ case (workflowRec, outputs) => workflowRec.workflowEntityId }
+    dataAccess.entityQuery.getEntities(entityIds).map(_.toMap)
   }
 
-  def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(WorkflowEntityUpdate, Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {
+  def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {
     //note there is only 1 workspace (may be None if it is not updated) even though it may be updated multiple times so reduce it into 1 update
     val workspaces = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
     if (workspaces.isEmpty) DBIO.successful(0)
     else dataAccess.workspaceQuery.save(workspaces.reduce((a, b) => a.copy(attributes = a.attributes ++ b.attributes)))
   }
 
-  def saveEntities(dataAccess: DataAccess, workspace: Workspace, updatedEntitiesAndWorkspace: Seq[Either[(WorkflowEntityUpdate, Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]])(implicit executionContext: ExecutionContext) = {
-    val entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((entityUpdate, _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
+  def saveEntities(dataAccess: DataAccess, workspace: Workspace, updatedEntitiesAndWorkspace: Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]])(implicit executionContext: ExecutionContext) = {
+    val entityUpdates = updatedEntitiesAndWorkspace.collect { case Left((Some(entityUpdate), _)) if entityUpdate.upserts.nonEmpty => entityUpdate }
     if(entityUpdates.isEmpty) {
        DBIO.successful(())
     }
@@ -368,7 +377,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
-  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressionMap: Map[String, String]): Seq[Either[(WorkflowEntityUpdate, Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
+  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: scala.collection.Map[Long, Entity], outputExpressionMap: Map[String, String]): Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
       logger.debug(s"attaching outputs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${outputs}")
@@ -384,9 +393,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
       if (parsedExpressions.forall(_.isSuccess)) {
         val boundExpressions = parsedExpressions.collect { case Success(boe @ BoundOutputExpression(target, name, attr)) => boe }
-        val updates = updateEntityAndWorkspace(entitiesById(workflowRecord.workflowEntityId), workspace, boundExpressions)
-        val (entityUpdates, optWs) = updates
-        logger.debug(s"updated entityattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${entityUpdates.entityRef} ${entityUpdates.upserts.values}")
+        val updates = updateEntityAndWorkspace(workflowRecord.workflowEntityId.map(id => Some(entitiesById(id))).getOrElse(None), workspace, boundExpressions)
+        val (optEntityUpdates, optWs) = updates
+        logger.debug(s"updated entityattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optEntityUpdates.map(_.entityRef)} ${optEntityUpdates.map(_.upserts.values)}")
         logger.debug(s"updated wsattrs for ${submissionId.toString}/${workflowRecord.externalId.getOrElse("MISSING_WORKFLOW")}: ${optWs.map(_.attributes)}")
         Left(updates)
       } else {
@@ -395,11 +404,16 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
-  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Iterable[BoundOutputExpression]): (WorkflowEntityUpdate, Option[Workspace]) = {
+  def updateEntityAndWorkspace(entity: Option[Entity], workspace: Workspace, workflowOutputs: Iterable[BoundOutputExpression]): (Option[WorkflowEntityUpdate], Option[Workspace]) = {
     val entityUpsert = workflowOutputs.collect({ case BoundOutputExpression(ThisEntityTarget, attrName, attr) => (attrName, attr) })
     val workspaceAttributes = workflowOutputs.collect({ case BoundOutputExpression(WorkspaceTarget, attrName, attr) => (attrName, attr) })
 
-    val entityAndUpsert = WorkflowEntityUpdate(entity.toReference, entityUpsert.toMap)
+    if(entity.isEmpty && entityUpsert.nonEmpty) {
+      //TODO: we shouldn't ever run into this case, but if we somehow do, it'll make the submission actor restart forever
+      throw new RawlsException("how am I supposed to bind expressions to a nonexistent entity??!!")
+    }
+
+    val entityAndUpsert = entity.map(e => WorkflowEntityUpdate(e.toReference, entityUpsert.toMap))
     val updatedWorkspace = if (workspaceAttributes.isEmpty) None else Option(workspace.copy(attributes = workspace.attributes ++ workspaceAttributes))
     
     (entityAndUpsert, updatedWorkspace)

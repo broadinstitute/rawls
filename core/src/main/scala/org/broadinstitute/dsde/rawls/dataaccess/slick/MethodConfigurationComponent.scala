@@ -13,7 +13,7 @@ case class MethodConfigurationRecord(id: Long,
                                      namespace: String,
                                      name: String,
                                      workspaceId: UUID,
-                                     rootEntityType: String,
+                                     rootEntityType: Option[String],
                                      methodUri: String,
                                      methodConfigVersion: Int,
                                      deleted: Boolean,
@@ -35,7 +35,7 @@ trait MethodConfigurationComponent {
     def namespace = column[String]("NAMESPACE", O.Length(254))
     def name = column[String]("NAME", O.Length(254))
     def workspaceId = column[UUID]("WORKSPACE_ID")
-    def rootEntityType = column[String]("ROOT_ENTITY_TYPE", O.Length(254))
+    def rootEntityType = column[Option[String]]("ROOT_ENTITY_TYPE", O.Length(254))
     def methodUri = column[String]("METHOD_URI")
     def methodConfigVersion = column[Int]("METHOD_CONFIG_VERSION")
     def deleted = column[Boolean]("DELETED")

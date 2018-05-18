@@ -86,12 +86,17 @@ object MethodConfigResolver {
     for ((name, expression) <- methodConfig.inputs.toSeq) yield MethodInput(agoraInputs(name), expression.value)
   }
 
-  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
+  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
+
+    val entityNames = entities match {
+      case Some(recs) => recs.map(_.name)
+      case None => Seq("")
+    }
 
     if( inputs.isEmpty ) {
       //no inputs to evaluate = just return an empty map back!
-      DBIO.successful(entities.map( _.name -> Seq.empty[SubmissionValidationValue] ).toMap)
+      DBIO.successful(entityNames.map( _ -> Seq.empty[SubmissionValidationValue] ).toMap)
     } else {
       ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
         //Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
@@ -100,7 +105,7 @@ object MethodConfigResolver {
             val validationValuesByEntity: Seq[(String, SubmissionValidationValue)] = tryAttribsByEntity match {
               case Failure(regret) =>
                 //The DBIOAction failed - this input expression was not evaluated. Make an error for each entity.
-                entities.map(e => (e.name, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.localName.value)))
+                entityNames.map((_, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.localName.value)))
               case Success(attributeMap) =>
                 //The expression was evaluated, but that doesn't mean we got results...
                 attributeMap.map {
@@ -135,7 +140,7 @@ object MethodConfigResolver {
     val nothing = AttributeString("")
     val inputs = for ((fqn: FullyQualifiedName, wfInput: InputDefinition) <- workflow.inputs) yield fqn.toString -> nothing
     val outputs = workflow.outputs map (o => o.locallyQualifiedName(workflow) -> nothing)
-    MethodConfiguration("namespace", "name", "rootEntityType", Map(), inputs.toMap, outputs.toMap, methodRepoMethod)
+    MethodConfiguration("namespace", "name", Some("rootEntityType"), Map(), inputs.toMap, outputs.toMap, methodRepoMethod)
   }
 
   def getMethodInputsOutputs(wdl: String): Try[MethodInputsOutputs] = parseWDL(wdl) map { workflow =>

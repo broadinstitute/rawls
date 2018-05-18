@@ -260,16 +260,16 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "pull entity records for a single entity given no expression" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
-      val subRq = SubmissionRequest(testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, "Sample", "sample1", None, false)
+      val subRq = SubmissionRequest(testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some("Sample"), Some("sample1"), None, false)
 
       //Lookup succeeds
       runAndWait(
-        services.workspaceService.withSubmissionEntityRecs(subRq, ctx, "Sample", this) { entityRecs =>
+        services.workspaceService.withSubmissionEntityRecs(subRq, ctx, Some("Sample"), this) { entityRecs =>
           assertResult(1) {
             entityRecs.size
           }
           assertResult("sample1") {
-            entityRecs.head.name
+            entityRecs.get.head.name
           }
           DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
         })
@@ -277,7 +277,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       //Lookup fails because it's not there
       val notFoundExc = intercept[RawlsExceptionWithErrorReport] {
         runAndWait(
-          services.workspaceService.withSubmissionEntityRecs(subRq.copy(entityName = "sampel1"), ctx, "Sample", this) { entityRecs =>
+          services.workspaceService.withSubmissionEntityRecs(subRq.copy(entityName = Some("sampel1")), ctx, Some("Sample"), this) { entityRecs =>
             DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
           })
       }
@@ -288,7 +288,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       //Lookup fails because it doesn't match the method type
       val noMatchyMethodTypeExc = intercept[RawlsExceptionWithErrorReport] {
         runAndWait(
-          services.workspaceService.withSubmissionEntityRecs(subRq, ctx, "Pair", this) { entityRecs =>
+          services.workspaceService.withSubmissionEntityRecs(subRq, ctx, Some("Pair"), this) { entityRecs =>
             DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
           })
       }
@@ -300,13 +300,13 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "pull multiple entity records given an entity expression" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
-      val subRq = SubmissionRequest(testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, "SampleSet", "sset1", Some("this.samples"), false)
+      val subRq = SubmissionRequest(testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some("SampleSet"), Some("sset1"), Some("this.samples"), false)
 
       //Lookup succeeds
       runAndWait(
-        services.workspaceService.withSubmissionEntityRecs(subRq, ctx, "Sample", this) { entityRecs =>
+        services.workspaceService.withSubmissionEntityRecs(subRq, ctx, Some("Sample"), this) { entityRecs =>
           assertResult(Set("sample1", "sample2", "sample3")) {
-            entityRecs.map(_.name).toSet
+            entityRecs.get.map(_.name).toSet
           }
           DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
         })
@@ -314,7 +314,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       //Lookup fails due to parse failure
       val badExpressionExc = intercept[RawlsExceptionWithErrorReport] {
         runAndWait(
-          services.workspaceService.withSubmissionEntityRecs(subRq.copy(expression = Some("nonsense!")), ctx, "Sample", this) { entityRecs =>
+          services.workspaceService.withSubmissionEntityRecs(subRq.copy(expression = Some("nonsense!")), ctx, Some("Sample"), this) { entityRecs =>
             DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
           })
       }
@@ -325,7 +325,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       //Lookup fails due to no results
       val noResultExc = intercept[RawlsExceptionWithErrorReport] {
         runAndWait(
-          services.workspaceService.withSubmissionEntityRecs(subRq.copy(expression = Some("this.bonk")), ctx, "Sample", this) { entityRecs =>
+          services.workspaceService.withSubmissionEntityRecs(subRq.copy(expression = Some("this.bonk")), ctx, Some("Sample"), this) { entityRecs =>
             DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
           })
       }
@@ -336,7 +336,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       //Lookup fails because it doesn't match the method type
       val noMatchyMethodTypeExc = intercept[RawlsExceptionWithErrorReport] {
         runAndWait(
-          services.workspaceService.withSubmissionEntityRecs(subRq, ctx, "Pair", this) { entityRecs =>
+          services.workspaceService.withSubmissionEntityRecs(subRq, ctx, Some("Pair"), this) { entityRecs =>
             DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
           })
       }
@@ -737,8 +737,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig2","Sample",AgoraMethod("myNamespace","method-a",1),"dsde"),
-      MethodConfigurationShort("testConfig1","Sample",AgoraMethod("ns-config","meth1",1),"ns"))) {
+    assertResult(Vector(MethodConfigurationShort("testConfig2",Some("Sample"),AgoraMethod("myNamespace","method-a",1),"dsde"),
+      MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
     }
 
@@ -793,7 +793,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",AgoraMethod("ns-config","meth1",1),"ns"))) {
+    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
     }
 
@@ -849,7 +849,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",AgoraMethod("ns-config","meth1",1),"ns"))) {
+    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
     }
 
@@ -904,7 +904,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",AgoraMethod("ns-config","meth1",1),"ns"))) {
+    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
     }
 

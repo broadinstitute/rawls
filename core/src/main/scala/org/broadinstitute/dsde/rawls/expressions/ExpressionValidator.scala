@@ -12,10 +12,10 @@ object ExpressionValidator {
   // presence: inputs which are both empty and optional are pre-validated, so they are skipped here
   // absence: validate all inputs normally
 
-  private[expressions] def validateAndParse(methodConfiguration: MethodConfiguration, inputsToParse: Map[String, AttributeString], parser: SlickExpressionParser): ValidatedMethodConfiguration = {
+  private[expressions] def validateAndParse(methodConfiguration: MethodConfiguration, inputsToParse: Map[String, AttributeString], allowRootEntity: Boolean, parser: SlickExpressionParser): ValidatedMethodConfiguration = {
     val (emptyOutputs, outputsToParse) = methodConfiguration.outputs.partition { case (_, expr) => expr.value.isEmpty }
 
-    val parsed = ExpressionParser.parseMCExpressions(inputsToParse, outputsToParse, parser)
+    val parsed = ExpressionParser.parseMCExpressions(inputsToParse, outputsToParse, allowRootEntity, parser)
 
     // empty output expressions are also valid
     val validatedOutputs = emptyOutputs.keys.toSeq ++ parsed.validOutputs
@@ -24,14 +24,18 @@ object ExpressionValidator {
   }
 
   // validate a MC without retrieving the Method from the Repo: assume all inputs are required
-  def validateAndParseMCExpressions(methodConfiguration: MethodConfiguration, parser: SlickExpressionParser): ValidatedMethodConfiguration =
-    validateAndParse(methodConfiguration, methodConfiguration.inputs, parser)
+  def validateAndParseMCExpressions(methodConfiguration: MethodConfiguration, allowRootEntity: Boolean, parser: SlickExpressionParser): ValidatedMethodConfiguration =
+    validateAndParse(methodConfiguration, methodConfiguration.inputs, allowRootEntity, parser)
 
   // validate a MC, skipping optional empty inputs, and return failure when any inputs/outputs are invalid
-  def validateExpressionsForSubmission(methodConfiguration: MethodConfiguration, methodInputsToParse: Seq[MethodConfigResolver.MethodInput], emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput], parser: SlickExpressionParser): Try[ValidatedMethodConfiguration] = {
+  def validateExpressionsForSubmission(methodConfiguration: MethodConfiguration,
+                                       methodInputsToParse: Seq[MethodConfigResolver.MethodInput],
+                                       emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput],
+                                       allowRootEntity: Boolean,
+                                       parser: SlickExpressionParser): Try[ValidatedMethodConfiguration] = {
     val inputsToParse = methodInputsToParse map { mi => (mi.workflowInput.localName.value, AttributeString(mi.expression)) }
 
-    val validated = validateAndParse(methodConfiguration, inputsToParse.toMap, parser)
+    val validated = validateAndParse(methodConfiguration, inputsToParse.toMap, allowRootEntity, parser)
 
     Try {
       if (validated.invalidInputs.nonEmpty || validated.invalidOutputs.nonEmpty) {

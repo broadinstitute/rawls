@@ -10,7 +10,7 @@ import scala.util.{Failure, Success, Try}
 // a thin abstraction layer over SlickExpressionEvaluator
 
 object ExpressionEvaluator {
-  def withNewExpressionEvaluator[R](parser: DataAccess, rootEntities: Seq[EntityRecord])
+  def withNewExpressionEvaluator[R](parser: DataAccess, rootEntities: Option[Seq[EntityRecord]])
                                    (op: ExpressionEvaluator => ReadWriteAction[R])
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
 
@@ -29,15 +29,18 @@ object ExpressionEvaluator {
   }
 }
 
-class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEntities: Seq[EntityRecord]) {
+class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEntities: Option[Seq[EntityRecord]]) {
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
     import slickEvaluator.parser.driver.api._
 
     JsonExpressionEvaluator.evaluate(expression) match {
       //if the expression evals as JSON, it evaluates to the same thing for every entity, so build that map here
-      case Success(parsed) => DBIO.successful((rootEntities map { entityRec: EntityRecord =>
-        entityRec.name -> Success(parsed)
-      }).toMap)
+      case Success(parsed) => DBIO.successful(rootEntities match {
+        case Some(entities) => (entities map { entityRec: EntityRecord =>
+          entityRec.name -> Success(parsed)
+        }).toMap
+        case None => Map("" -> Success(parsed))
+      })
 
       case Failure(regret) => slickEvaluator.evalFinalAttribute(workspaceContext, expression)
     }

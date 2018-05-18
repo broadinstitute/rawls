@@ -16,7 +16,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val methodConfig2 = MethodConfiguration(
       "ns",
       "config2",
-      "sample",
+      Some("sample"),
 
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
@@ -77,7 +77,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
 
-    val changed = testData.agoraMethodConfig.copy(rootEntityType = "goober",
+    val changed = testData.agoraMethodConfig.copy(rootEntityType = Some("goober"),
       prerequisites = Map.empty,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
@@ -106,7 +106,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
 
-    val changed = testData.agoraMethodConfig.copy(rootEntityType = "goober",
+    val changed = testData.agoraMethodConfig.copy(rootEntityType = Some("goober"),
       prerequisites = Map.empty,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
@@ -136,7 +136,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val methodConfigOldName = MethodConfiguration(
       "ns",
       "oldName",
-      "sample",
+      Some("sample"),
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
@@ -167,7 +167,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val methodConfigToMove = MethodConfiguration(
       "ns",
       "oldName",
-      "sample",
+      Some("sample"),
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
@@ -177,7 +177,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val methodConfigAlreadyThere = MethodConfiguration(
       "ns",
       "newName",
-      "sample",
+      Some("sample"),
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("already.there")),
       Map("prereq.expression" -> AttributeString("already.there")),
