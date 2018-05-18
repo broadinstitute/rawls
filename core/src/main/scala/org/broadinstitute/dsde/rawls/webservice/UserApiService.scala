@@ -106,6 +106,15 @@ trait UserApiService extends UserInfoDirectives {
                     complete { userServiceConstructor(userInfo).DeleteManagedGroup(groupRef) }
                   }
               } ~
+              path(Segment) { role =>
+                put {
+                  entity(as[RawlsGroupMemberList]) { memberList =>
+                    complete {
+                      userServiceConstructor(userInfo).OverwriteManagedGroupMembers(groupRef, ManagedRoles.withName(role), memberList)
+                    }
+                  }
+                }
+              } ~
               path(Segment / Segment) { (role, email) =>
                 put {
                   complete { userServiceConstructor(userInfo).AddManagedGroupMembers(groupRef, ManagedRoles.withName(role), email) }
