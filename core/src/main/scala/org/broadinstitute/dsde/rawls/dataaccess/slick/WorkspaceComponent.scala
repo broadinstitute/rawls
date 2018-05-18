@@ -368,11 +368,11 @@ trait WorkspaceComponent {
     }
 
     def getUserSharePermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
-      workspaceUserShareQuery.filter(rec => rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId).countDistinct.result.map(rows => rows > 0) flatMap { hasSharePermission =>
+      workspaceUserShareQuery.filter(rec => rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId).exists.result flatMap { hasSharePermission =>
         if(hasSharePermission) DBIO.successful(hasSharePermission)
         else rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
           val groupNames = userGroups.map(_.groupName.value)
-          workspaceGroupShareQuery.filter(rec => (rec.workspaceId === workspaceContext.workspaceId) && rec.groupName.inSetBind(groupNames)).countDistinct.result.map(rows => rows > 0)
+          workspaceGroupShareQuery.filter(rec => (rec.workspaceId === workspaceContext.workspaceId) && rec.groupName.inSetBind(groupNames)).exists.result
         }
       }
     }
@@ -403,11 +403,11 @@ trait WorkspaceComponent {
     }
 
     def getUserComputePermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
-      workspaceUserComputeQuery.filter(rec => rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId).countDistinct.result.map(rows => rows > 0) flatMap { hasComputePermission =>
+      workspaceUserComputeQuery.filter(rec => rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId).exists.result flatMap { hasComputePermission =>
         if(hasComputePermission) DBIO.successful(hasComputePermission)
         else rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
           val groupNames = userGroups.map(_.groupName.value)
-          workspaceGroupComputeQuery.filter(rec => (rec.workspaceId === workspaceContext.workspaceId) && rec.groupName.inSetBind(groupNames)).countDistinct.result.map(rows => rows > 0)
+          workspaceGroupComputeQuery.filter(rec => (rec.workspaceId === workspaceContext.workspaceId) && rec.groupName.inSetBind(groupNames)).exists.result
         }
       }
     }
@@ -438,12 +438,11 @@ trait WorkspaceComponent {
     }
 
     def getUserCatalogPermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
-      workspaceUserCatalogQuery.filter(rec => rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId).countDistinct.result.map(
-        rows => rows > 0) flatMap { hasCatalogPermission =>
+      workspaceUserCatalogQuery.filter(rec => rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId).exists.result flatMap { hasCatalogPermission =>
         if(hasCatalogPermission) DBIO.successful(hasCatalogPermission)
         else rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
           val groupNames = userGroups.map(_.groupName.value)
-          workspaceGroupCatalogQuery.filter(rec => (rec.workspaceId === workspaceContext.workspaceId) && rec.groupName.inSetBind(groupNames)).countDistinct.result.map(rows => rows > 0)
+          workspaceGroupCatalogQuery.filter(rec => (rec.workspaceId === workspaceContext.workspaceId) && rec.groupName.inSetBind(groupNames)).exists.result
         }
       }
     }
