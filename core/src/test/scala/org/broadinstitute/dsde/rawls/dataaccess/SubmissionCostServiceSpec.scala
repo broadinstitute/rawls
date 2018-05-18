@@ -23,9 +23,15 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
 
   "SubmissionCostService" should "extract a map of workflow ID to cost" in {
     val expected = Map("wf1" -> 1.32f, "wf2" -> 3.00f, "wf3" -> 101.00f)
-    assertResult(expected){
+    assertResult(expected) {
       Await.result(submissionCostService.extractWorkflowCostResults(rows), 1 minute)
     }
   }
 
+  it should "bypass BigQuery with no workflow IDs" in {
+    val expected = Map.empty
+    assertResult(expected) {
+      Await.result(submissionCostService.getWorkflowCosts(Seq.empty, "test"), 1 minute)
+    }
+  }
 }

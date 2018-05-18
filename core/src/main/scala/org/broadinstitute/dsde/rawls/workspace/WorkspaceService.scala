@@ -1393,13 +1393,25 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def listSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
+  def listSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    val costlessSubmissionListFuture = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.submissionQuery.listWithSubmitter(workspaceContext)
-          .map(RequestComplete(StatusCodes.OK, _))
+        dataAccess.submissionQuery.listWithSubmitter(workspaceContext).flatMap(DBIO.successful)
       }
     }
+
+    costlessSubmissionListFuture flatMap { costlessSubmissionList =>
+      Future.sequence(costlessSubmissionList map { costlessSubmission =>
+        toFutureTry(submissionCostService.getWorkflowCosts(costlessSubmission.workflowIds, workspaceName.namespace)) map {
+          case Failure(ex) =>
+            logger.error(s"Unable to get cost data for submission ${costlessSubmission.submissionId}", ex)
+            costlessSubmission
+          case Success(costs) =>
+            costlessSubmission.copy(cost = Some(costs.values.sum))
+        }
+      }) map (RequestComplete(StatusCodes.OK, _))
+    }
+  }
 
   def countSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>

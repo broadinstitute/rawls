@@ -120,8 +120,8 @@ trait SubmissionComponent {
       } yield (submissionRec, methodConfigRec, entityRec)
 
       for {
-        workflowStates <- GatherStatusesForWorkspaceSubmissionsQuery.gatherWorkflowStatuses(workspaceContext.workspaceId)
-        states = workflowStates.groupBy(_.submissionId)
+        workflowStatusResponses <- GatherStatusesForWorkspaceSubmissionsQuery.gatherWorkflowIdsAndStatuses(workspaceContext.workspaceId)
+        states = workflowStatusResponses.groupBy(_.submissionId)
         recs <- query.result
         users <- rawlsUserQuery.load(recs.map { case (submissionRec, _, _) => RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId)) })
       } yield {
@@ -130,9 +130,14 @@ trait SubmissionComponent {
         recs.map { case (submissionRec, methodConfigRec, entityRec) =>
           val user = usersById(RawlsUserSubjectId(submissionRec.submitterId))
           val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
-          val subStatuses = states.getOrElse(submissionRec.id, Seq.empty).map(x => x.workflowStatus -> x.count).toMap
-
-          new SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), user, subStatuses)
+          val wfStates = states.getOrElse(submissionRec.id, Seq.empty).map(x => x.workflowStatus -> x.count).groupBy(_._1) map {
+            case (status, statusToCount) => status -> statusToCount.map(_._2)
+          }
+          val statusCounts = wfStates map {
+            case (status, count) => status -> count.sum
+          }
+          val workflowIds = states.getOrElse(submissionRec.id, Seq.empty).flatMap(_.workflowId).sorted
+          new SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), user, workflowIds, statusCounts)
         }
       }
     }
@@ -537,15 +542,15 @@ trait SubmissionComponent {
       val driver: JdbcProfile = SubmissionComponent.this.driver
 
       implicit val getSubmissionWorkflowStatusResponse = GetResult { r =>
-        SubmissionWorkflowStatusResponse(r.<<, r.<<, r.<<)
+        SubmissionWorkflowStatusResponse(r.<<, r.<< ,r.<<, r.<<)
       }
 
-      def gatherWorkflowStatuses(workspaceId: UUID) = {
-        sql"""select s.id, w.status, count(*) from SUBMISSION s
+      def gatherWorkflowIdsAndStatuses(workspaceId: UUID) = {
+        sql"""select s.id, w.external_id, w.status, count(*) from SUBMISSION s
                 join WORKFLOW w
                 on s.id = w.submission_id
                 where s.workspace_id = $workspaceId
-                group by s.id, w.status""".as[SubmissionWorkflowStatusResponse]
+                group by s.id, w.external_id, w.status""".as[SubmissionWorkflowStatusResponse]
       }
     }
   }

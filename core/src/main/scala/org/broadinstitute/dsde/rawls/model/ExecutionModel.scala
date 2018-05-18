@@ -156,9 +156,24 @@ case class SubmissionListResponse(
   status: SubmissionStatus,
   workflowStatuses: StatusCounts,
   useCallCache: Boolean,
-  workflowFailureMode: Option[WorkflowFailureMode] = None
+  workflowFailureMode: Option[WorkflowFailureMode] = None,
+  workflowIds: Seq[String],
+  cost: Option[Float] = None
 ) {
-  def this(submission: Submission, rawlsUser: RawlsUser, workflowStatuses: StatusCounts) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status, workflowStatuses, submission.useCallCache, submission.workflowFailureMode)
+  def this(submission: Submission, rawlsUser: RawlsUser, workflowIds: Seq[String], workflowStatuses: StatusCounts) =
+    this(
+      submissionId = submission.submissionId,
+      submissionDate = submission.submissionDate,
+      submitter = rawlsUser.userEmail.value,
+      methodConfigurationNamespace = submission.methodConfigurationNamespace,
+      methodConfigurationName = submission.methodConfigurationName,
+      submissionEntity = submission.submissionEntity,
+      status = submission.status,
+      workflowStatuses = workflowStatuses,
+      useCallCache = submission.useCallCache,
+      workflowFailureMode = submission.workflowFailureMode,
+      workflowIds = workflowIds,
+    )
 }
 
 // method configuration input parameter, it's name and the associated expression from the method config
@@ -251,9 +266,10 @@ case class WorkflowQueueStatusByUserResponse
 )
 
 case class SubmissionWorkflowStatusResponse(
-  submissionId: UUID,
-  workflowStatus: String,
-  count: Int)
+                                             submissionId: UUID,
+                                             workflowId: Option[String],
+                                             workflowStatus: String,
+                                             count: Int)
 
 class ExecutionJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
@@ -331,7 +347,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionStatusResponseFormat = jsonFormat10(SubmissionStatusResponse)
 
-  implicit val SubmissionListResponseFormat = jsonFormat10(SubmissionListResponse)
+  implicit val SubmissionListResponseFormat = jsonFormat12(SubmissionListResponse)
 
   implicit val CallMetadataFormat = jsonFormat14(CallMetadata)
 

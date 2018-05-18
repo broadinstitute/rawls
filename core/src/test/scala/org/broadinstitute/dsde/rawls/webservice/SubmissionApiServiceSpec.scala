@@ -276,8 +276,13 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
     def getSubmission(id: String) = runAndWait(submissionQuery.loadSubmission(UUID.fromString(id))).get
     // Build expected SubmissionListResponse objects
-    val submissionListResponseWithFailureMode = new SubmissionListResponse(getSubmission(submissionResponseWithFailureMode.submissionId), testData.userOwner, Map("Queued" -> 1))
-    val submissionListResponseWithoutFailureMode = new SubmissionListResponse(getSubmission(submissionResponseWithoutFailureMode.submissionId), testData.userOwner, Map("Queued" -> 1))
+    lazy val failedSubmission = getSubmission(submissionResponseWithFailureMode.submissionId)
+    lazy val submission = getSubmission(submissionResponseWithoutFailureMode.submissionId)
+    val submissionListResponseWithFailureMode =
+      new SubmissionListResponse(failedSubmission, testData.userOwner, failedSubmission.workflows.flatMap(_.workflowId), Map("Queued" -> 1)).copy(cost = Some(0f))
+    val submissionListResponseWithoutFailureMode =
+      new SubmissionListResponse(
+        getSubmission(submissionResponseWithoutFailureMode.submissionId), testData.userOwner, submission.workflows.flatMap(_.workflowId), Map("Queued" -> 1)).copy(cost = Some(0f))
 
     // Sanity check the workflow failure modes in the expected SubmissionListResponse objects
     submissionListResponseWithFailureMode.workflowFailureMode should equal (Some(WorkflowFailureModes.ContinueWhilePossible))
@@ -415,13 +420,13 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) {status}
         assertResult(Set(
-          new SubmissionListResponse(testData.submissionTerminateTest, testData.userOwner, Map[String, Int]("Submitted" -> 4)),
-          new SubmissionListResponse(testData.submissionNoWorkflows, testData.userOwner, Map[String, Int]()),
-          new SubmissionListResponse(testData.submission1, testData.userOwner, Map[String, Int]("Submitted" -> 3)),
-          new SubmissionListResponse(testData.costedSubmission1, testData.userOwner, Map[String, Int]("Submitted" -> 3)),
-          new SubmissionListResponse(testData.submission2, testData.userOwner, Map[String, Int]("Submitted" -> 3)),
-          new SubmissionListResponse(testData.submissionUpdateEntity, testData.userOwner, Map[String, Int]("Submitted" -> 1)),
-          new SubmissionListResponse(testData.submissionUpdateWorkspace, testData.userOwner, Map[String, Int]("Submitted" -> 1)))) {
+          new SubmissionListResponse(testData.submissionTerminateTest, testData.userOwner, testData.submissionTerminateTest.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 4)).copy(cost = Some(0f)),
+          new SubmissionListResponse(testData.submissionNoWorkflows, testData.userOwner, testData.submissionNoWorkflows.workflows.flatMap(_.workflowId).sorted, Map[String, Int]()).copy(cost = Some(0f)),
+          new SubmissionListResponse(testData.submission1, testData.userOwner, testData.submission1.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 3)).copy(cost = Some(0f)),
+          new SubmissionListResponse(testData.costedSubmission1, testData.userOwner, testData.costedSubmission1.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 3)).copy(cost = Some(0f)),
+          new SubmissionListResponse(testData.submission2, testData.userOwner, testData.submission2.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 3)).copy(cost = Some(0f)),
+          new SubmissionListResponse(testData.submissionUpdateEntity, testData.userOwner, testData.submissionUpdateEntity.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 1)).copy(cost = Some(0f)),
+          new SubmissionListResponse(testData.submissionUpdateWorkspace, testData.userOwner, testData.submissionUpdateWorkspace.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 1)).copy(cost = Some(0f)))) {
           responseAs[Seq[SubmissionListResponse]].toSet
         }
       }
