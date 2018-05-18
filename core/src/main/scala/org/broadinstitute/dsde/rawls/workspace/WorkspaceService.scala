@@ -1154,8 +1154,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def createMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
-    dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration) map { _ =>
-      ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, dataAccess)
+    val newMethodConfiguration = methodConfiguration.addDefaultOutputs
+    dataAccess.methodConfigurationQuery.create(workspaceContext, newMethodConfiguration) map { _ =>
+      ExpressionValidator.validateAndParseMCExpressions(newMethodConfiguration, dataAccess)
     }
   }
 

@@ -92,15 +92,47 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "on creation of a method configuration, replace empty mc outputs with a default value based on the name of the output" in withTestDataApiServices { services =>
+    val inputs = Map("good_in" -> AttributeString("this.foo"))
+    val outputs = Map("empty_output" -> AttributeString(""), "test.empty.output" -> AttributeString(""), "filled_output" -> AttributeString("this.im_full"))
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
+      AgoraMethod(testData.wsName.namespace, "method-a", 1))
+
+    val expectedSuccessInputs = Seq("good_in")
+    val expectedSuccessOutputs = Seq("empty_output", "test.empty.output", "filled_output")
+
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        val validated = responseAs[ValidatedMethodConfiguration]
+        val defaultOutputs = Map("empty_output" -> AttributeString("this.empty_output"), "test.empty.output" -> AttributeString("this.output"), "filled_output" -> AttributeString("this.im_full"))
+        assertResult(newMethodConfig.copy(outputs = defaultOutputs)) {
+          validated.methodConfiguration
+        }
+        assertSameElements(expectedSuccessInputs, validated.validInputs)
+        assert(validated.invalidInputs.isEmpty)
+        assertSameElements(expectedSuccessOutputs, validated.validOutputs)
+        assert(validated.invalidOutputs.isEmpty)
+
+        // all outputs are saved
+        for ((key, value) <- defaultOutputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
+        }
+      }
+  }
+
   it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
     val inputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
-    val outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
+    val outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
       AgoraMethod(testData.wsName.namespace, "method-a", 1))
 
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
-    val expectedSuccessOutputs = Seq("good_out", "empty_out")
+    val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
@@ -462,12 +494,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   def checkValidAttributeSyntax(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
-    val newOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
+    val newOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
     val modifiedMethodConfig = testData.agoraMethodConfig.copy(inputs = newInputs, outputs = newOutputs)
 
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
-    val expectedSuccessOutputs = Seq("good_out", "empty_out")
+    val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
     httpMethod(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>

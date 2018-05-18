@@ -356,6 +356,17 @@ case class MethodConfiguration(
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ): String = workspaceName.path+s"/methodconfigs/${namespace}/${name}"
   def path( workspace: Workspace ): String = path(workspace.toWorkspaceName)
+
+  def addDefaultOutputs(): MethodConfiguration = {
+    val newOutputs = outputs map {
+      case (name: String, value: AttributeString) => {
+        if (value == AttributeString(""))
+          (name, AttributeString("this." + name.split('.').last))
+        else (name, value)
+      }
+    }
+  copy(outputs = newOutputs)
+  }
 }
 
 case class MethodConfigurationShort(
