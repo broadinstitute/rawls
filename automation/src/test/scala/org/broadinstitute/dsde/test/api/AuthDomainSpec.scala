@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import org.scalatest.concurrent.Eventually
 
-class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFixtures with WorkspaceFixtures with GroupFixtures with RandomUtil with Eventually with TestMethods with BeforeAndAfterAll {
+class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFixtures with WorkspaceFixtures with GroupFixtures with RandomUtil with Eventually with BeforeAndAfterAll {
   lazy val projectOwner = UserPool.chooseProjectOwner
   lazy val (projectUser, groupOwner) = {
     val users = UserPool.chooseStudents(2)
