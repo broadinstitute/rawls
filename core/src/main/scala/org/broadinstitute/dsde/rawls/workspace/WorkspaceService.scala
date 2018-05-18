@@ -2,9 +2,6 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.TransactionIsolation
@@ -16,7 +13,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowCostFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
@@ -27,12 +24,10 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -115,6 +110,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def AbortSubmission(workspaceName: WorkspaceName, submissionId: String) = abortSubmission(workspaceName, submissionId)
   def GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = workflowOutputs(workspaceName, submissionId, workflowId)
   def GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = workflowMetadata(workspaceName, submissionId, workflowId)
+  def GetWorkflowCost(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = workflowCost(workspaceName, submissionId, workflowId)
   def WorkflowQueueStatus = workflowQueueStatus()
 
   def AdminListAllActiveSubmissions = asFCAdmin { listAllActiveSubmissions() }
@@ -1557,6 +1553,29 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  // retrieve the cost of this Workflow from BigQuery, if available
+  def workflowCost(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
+
+    // confirm: the user can Read this Workspace, the Submission is in this Workspace,
+    // and the Workflow is in the Submission
+
+    val execIdFutOpt = dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) { optExecKey =>
+          DBIO.successful(optExecKey)
+        }
+      }
+    }
+
+    for {
+      optExecId <- execIdFutOpt
+      // we don't need the Execution Service ID, but we do need to confirm the Workflow is in one for this Submission
+      // if we weren't able to do so above
+      _ <- executionServiceCluster.findExecService(submissionId, workflowId, userInfo, optExecId)
+      costs <- submissionCostService.getWorkflowCosts(Seq(workflowId), workspaceName.namespace)
+    } yield RequestComplete(StatusCodes.OK, WorkflowCost(workflowId, costs.get(workflowId)))
+  }
+
   def workflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String): Future[PerRequestMessage] = {
 
     // two possibilities here:
@@ -1575,7 +1594,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val execIdFutOpt: Future[Option[ExecutionServiceId]] = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) { optExecKey =>
-          DBIO.successful(optExecKey map (ExecutionServiceId(_)))
+          DBIO.successful(optExecKey)
         }
       }
     }
@@ -2177,9 +2196,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   // require submission to be present, but don't require the workflow to reference it
   // if the workflow does reference the submission, return its executionServiceKey
 
-  private def withSubmissionAndWorkflowExecutionServiceKey[T](workspaceContext: SlickWorkspaceContext, submissionId: String, workflowId: String, dataAccess: DataAccess)(op: Option[String] => ReadWriteAction[T]): ReadWriteAction[T] = {
+  private def withSubmissionAndWorkflowExecutionServiceKey[T](workspaceContext: SlickWorkspaceContext, submissionId: String, workflowId: String, dataAccess: DataAccess)(op: Option[ExecutionServiceId] => ReadWriteAction[T]): ReadWriteAction[T] = {
     withSubmissionId(workspaceContext, submissionId, dataAccess) { _ =>
-      dataAccess.workflowQuery.getExecutionServiceIdByExternalId(workflowId, submissionId) flatMap op
+      dataAccess.workflowQuery.getExecutionServiceIdByExternalId(workflowId, submissionId) flatMap {
+        case Some(id) => op(Option(ExecutionServiceId(id)))
+        case _ => op(None)
+      }
     }
   }
 

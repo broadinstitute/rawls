@@ -1,12 +1,9 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
-import akka.http.scaladsl.model._
-import akka.pattern.AskTimeoutException
-import akka.testkit.{TestActorRef, TestKit}
+import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -14,12 +11,12 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor}
+import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitorSupervisor
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
@@ -48,6 +45,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   val submissionSupervisorActorName = "test-subspec-submission-supervisor"
 
   val mockServer = RemoteServicesMockServer()
+
+  val bigQueryDAO = new MockGoogleBigQueryDAO
+  val mockSubmissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -87,9 +87,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val nonExistingWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c9999")
     val alreadyTerminatedWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c8778")
     val badLogsAndMetadataWorkflowId = Option("29b2e816-ecaf-11e6-b006-92361f002671")
-    
-    
-    
+
     val submissionTestAbortMissingWorkflow = Submission(subMissingWorkflow,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
       Seq(Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
@@ -206,8 +204,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         gcsDAO
       )_
 
-      val bigQueryDAO = new MockGoogleBigQueryDAO
-      val submissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
       val execServiceBatchSize = 3
       val maxActiveWorkflowsTotal = 10
@@ -228,7 +224,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName,
-        submissionCostService
+        mockSubmissionCostService
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {
@@ -259,8 +255,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     withDataAndService(testCode, withCustomTestDatabase[T](new SubmissionTestData))
   }
 
-  private def checkSubmissionStatus(workspaceService:WorkspaceService, submissionId:String): SubmissionStatusResponse = {
-    val submissionStatusRqComplete = workspaceService.getSubmissionStatus(testData.wsName, submissionId)
+  private def checkSubmissionStatus(workspaceService: WorkspaceService, submissionId: String, workspaceName: WorkspaceName = testData.wsName): SubmissionStatusResponse = {
+    val submissionStatusRqComplete = workspaceService.getSubmissionStatus(workspaceName, submissionId)
 
     Await.result(submissionStatusRqComplete, Duration.Inf) match {
       case RequestComplete((submissionStatus: StatusCode, submissionData: Any)) => {
@@ -689,7 +685,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assertResult(subTestData.extantWorkflowOutputs) {data}
   }
 
-  it should "return 404 on getting a workflow that exists, but not in this submission" in withSubmissionTestWorkspaceService { workspaceService =>
+  it should "return 404 on getting outputs for a workflow that exists, but not in this submission" in withSubmissionTestWorkspaceService { workspaceService =>
     val rqComplete = workspaceService.workflowOutputs(
       subTestData.wsName,
       subTestData.submissionTestAbortTerminalWorkflow.submissionId,
@@ -699,6 +695,36 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     assertResult(StatusCodes.NotFound) {errorReport.errorReport.statusCode.get}
+  }
+
+  "Getting a workflow cost" should "return 200 when all is well" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.workflowCost(
+      subTestData.wsName,
+      subTestData.submissionTestAbortGoodWorkflow.submissionId,
+      subTestData.existingWorkflowId.get)
+    val (status, data) = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkflowCost)]].response
+
+    assertResult(StatusCodes.OK) {status}
+    assertResult(WorkflowCost(subTestData.existingWorkflowId.get, Some(mockSubmissionCostService.fixedCost))) {data}
+  }
+
+  it should "return 404 on getting the cost for a workflow that exists, but not in this submission" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.workflowCost(
+      subTestData.wsName,
+      subTestData.submissionTestAbortTerminalWorkflow.submissionId,
+      subTestData.existingWorkflowId.get)
+    val errorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]].response
+    }
+
+    assertResult(StatusCodes.NotFound) {errorReport.errorReport.statusCode.get}
+  }
+
+  it should "calculate submission cost as the sum of workflow costs" in withSubmissionTestWorkspaceService { workspaceService =>
+    val submissionData = checkSubmissionStatus(workspaceService, subTestData.submissionTestAbortTwoGoodWorkflows.submissionId, subTestData.wsName)
+    assertResult(Option(mockSubmissionCostService.fixedCost * 2)) {
+      submissionData.cost
+    }
   }
 
   it should "return 502 on getting a workflow if Cromwell barfs" in withSubmissionTestWorkspaceService { workspaceService =>

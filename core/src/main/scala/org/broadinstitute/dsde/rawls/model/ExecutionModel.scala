@@ -104,6 +104,11 @@ case class WorkflowOutputs(
   tasks: Map[String, TaskOutput]
 )
 
+case class WorkflowCost(
+  workflowId: String,
+  cost: Option[Float]
+)
+
 // Status of a submission
 case class Submission(
   submissionId: String,
@@ -312,6 +317,8 @@ class ExecutionJsonSupport extends JsonSupport {
   implicit val TaskOutputFormat = jsonFormat2(TaskOutput)
 
   implicit val WorkflowOutputsFormat = jsonFormat2(WorkflowOutputs)
+
+  implicit val WorkflowCostFormat = jsonFormat2(WorkflowCost)
 
   implicit val SubmissionValidationInputFormat = jsonFormat2(SubmissionValidationInput)
 

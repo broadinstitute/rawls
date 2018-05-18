@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.model._
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FlatSpecLike, Matchers, PrivateMethodTester}
 import spray.json.JsonParser
 
@@ -16,7 +17,8 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
 
-class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with PrivateMethodTester
+class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike
+  with Matchers with PrivateMethodTester with ScalaFutures
   with TestDriverComponent with RawlsTestUtils {
   import driver.api._
 
@@ -119,10 +121,34 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     }
   }
 
-  it should "throw exception on getMember on an incorrect raw execution service key" in {
-    intercept[RawlsException] {
-      cluster invokePrivate getMember(ExecutionServiceId("instance5"))
+  it should "find the execution service, if present" in {
+    // shortcut the execution service cluster when supplying an Execution ID
+    val testId = ExecutionServiceId("Internal to this test")
+    assertResult(testId) {
+      Await.result(cluster.findExecService("garbage", "also garbage", userInfo, Some(testId)), 10.seconds)
     }
+
+    val subId = "my-submission"
+    val wfId = "my-workflow"
+    val testExecId = ExecutionServiceId("instance" + Random.nextInt(5))
+
+    val execInstance = cluster invokePrivate getMember(testExecId)
+    // normally the Workflow would need to already exist on this instance.  Not true for the mock version.
+    execInstance.dao.patchLabels(wfId, userInfo: UserInfo, Map(cluster.SUBMISSION_ID_KEY -> subId))
+
+    assertResult(testExecId) {
+      Await.result(cluster.findExecService(subId, wfId, userInfo, None), 10.seconds)
+    }
+
+    // confirm exception with relevant info when the instance is not found
+
+    val mapWithoutInstance = instanceMap.filterNot { case ClusterMember(id, _, _) => id == testExecId }
+    val clusterWithoutInstance = new ShardedHttpExecutionServiceCluster(mapWithoutInstance, mapWithoutInstance, slickDataSource)
+
+    val exception = clusterWithoutInstance.findExecService(subId, wfId, userInfo, None).failed.futureValue
+    exception shouldBe a[RawlsException]
+    exception.getMessage should include(subId)
+    exception.getMessage should include(wfId)
   }
 
   it should "calculate target index with 4 targets" in {

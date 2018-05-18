@@ -103,6 +103,21 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
     }
   }
 
+  // query the execution services to determine if this workflow is a member of this submission and get its execution service ID
+  def findExecService(submissionId: String, workflowId: String, userInfo: UserInfo, execId: Option[ExecutionServiceId] = None): Future[ExecutionServiceId] = execId match {
+    // this no-op case allows simpler logic in the caller
+    case Some(executionServiceId) => Future.successful(executionServiceId)
+    case _ =>
+      // we don't have the execution service key because the workflow is not in the DB.  It might be a subworkflow.
+      // query all execution services for Workflow labels and search for a Submission match
+
+      // optimize for the Production Firecloud case: it's much more likely for the workflow to be in the single submitMember
+      findExecService(submitMembersById, submissionId, workflowId, userInfo) recoverWith { case _ =>
+        // we expect readMembers to be a superset of submitMembers so don't check those again
+        findExecService(readMembersById -- submitMembersById.keys, submissionId, workflowId, userInfo)
+      }
+  }
+
   private def findExecService(services: Map[ExecutionServiceId, ClusterMember], submissionId: String, workflowId: String, userInfo: UserInfo): Future[ExecutionServiceId] = {
     val idLabelMap = services.map { case (executionServiceId, member) =>
       member.dao.getLabels(workflowId, userInfo) map { labelResponse =>
@@ -124,26 +139,8 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
   }
 
   def callLevelMetadata(submissionId: String, workflowId: String, execId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject] = {
-    val execIdFut = execId match {
-      case Some(executionServiceId) =>
-        // single-workflow or top-level work case: workflow found in DB and confirmed to be a member of this submission
-        // we have the execution service key from the DB, so query the correct execution service
-        Future.successful(executionServiceId)
-
-      case _ =>
-        // we don't have the execution service key because the workflow is not in the DB.  It might be a subworkflow.
-        // query all execution services for Workflow labels and search for a Submission match
-
-        // optimize for the Production Firecloud case: it's much more likely for the workflow to be in the single submitMember
-
-        findExecService(submitMembersById, submissionId, workflowId, userInfo) recoverWith { case _ =>
-          // we expect readMembers to be a superset of submitMembers so don't check those again
-          findExecService(readMembersById -- submitMembersById.keys, submissionId, workflowId, userInfo)
-        }
-    }
-
     for {
-      executionServiceId <- execIdFut
+      executionServiceId <- findExecService(submissionId, workflowId, userInfo, execId)
       metadata <- getMember(executionServiceId).dao.callLevelMetadata(workflowId, userInfo)
       _ <- labelSubWorkflowsWithSubmissionId(submissionId, executionServiceId, metadata, userInfo)
     } yield metadata
