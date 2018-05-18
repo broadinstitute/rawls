@@ -44,31 +44,34 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
    */
   private def executeWorkflowCostsQuery(workflowIds: Seq[String],
                                         workspaceNamespace: String): Future[util.List[TableRow]] = {
+    workflowIds match {
+      case Seq() => Future.successful(Seq.empty.asJava)
+      case ids =>
+        val subquery = ids.map(_ => s"""workflowId LIKE ?""").mkString(" OR ")
+        val querySql: String =
+          s"""|SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
+              |FROM `$tableName`, UNNEST(labels) as labels
+              |WHERE project.id = ?
+              |AND labels.key LIKE "cromwell-workflow-id"
+              |GROUP BY labels.key, workflowId
+              |HAVING $subquery""".stripMargin
+        val stringParamType = new QueryParameterType().setType("STRING")
+        val namespaceParam =
+          new QueryParameter()
+            .setParameterType(stringParamType)
+            .setParameterValue(new QueryParameterValue().setValue(workspaceNamespace))
+        val subqueryParams = workflowIds.toList map { workflowId =>
+          new QueryParameter()
+            .setParameterType(stringParamType)
+            .setParameterValue(new QueryParameterValue().setValue(s"%$workflowId%"))
+        }
+        val queryParameters: List[QueryParameter] = namespaceParam :: subqueryParams
 
-    val subquery = workflowIds.map(_ => s"""workflowId LIKE ?""").mkString(" OR ")
-    val querySql: String =
-      s"""|SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
-        |FROM `$tableName`, UNNEST(labels) as labels
-        |WHERE project.id = ?
-        |AND labels.key LIKE "cromwell-workflow-id"
-        |GROUP BY labels.key, workflowId
-        |HAVING $subquery""".stripMargin
-    val stringParamType = new QueryParameterType().setType("STRING")
-    val namespaceParam =
-      new QueryParameter()
-        .setParameterType(stringParamType)
-        .setParameterValue(new QueryParameterValue().setValue(workspaceNamespace))
-    val subqueryParams = workflowIds.toList map { workflowId =>
-      new QueryParameter()
-        .setParameterType(stringParamType)
-        .setParameterValue(new QueryParameterValue().setValue(s"%$workflowId%"))
+        for {
+          jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject(serviceProject), querySql, queryParameters, "POSITIONAL")
+          job <- bigQueryDAO.getQueryStatus(jobRef)
+          result <- bigQueryDAO.getQueryResult(job)
+        } yield result.getRows
     }
-    val queryParameters: List[QueryParameter] = namespaceParam :: subqueryParams
-
-    for {
-      jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject(serviceProject), querySql, queryParameters, "POSITIONAL")
-      job <- bigQueryDAO.getQueryStatus(jobRef)
-      result <- bigQueryDAO.getQueryResult(job)
-    } yield result.getRows
   }
 }
