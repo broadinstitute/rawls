@@ -136,7 +136,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) { status }
         import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-        assertResult(membership) { responseAs[RawlsBillingProjectMembership] }
+        assertResult(membership) { responseAs[RawlsBillingProjectStatus] }
       }
   }
 

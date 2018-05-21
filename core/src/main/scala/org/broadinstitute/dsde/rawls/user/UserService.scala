@@ -231,8 +231,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       projectDetail <- dataSource.inTransaction{ dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(Set(projectName))}
     } yield {
       resourceIdWithPolicyName.flatMap{ case SamPolicyWithName(policyName: String, _) =>
-         projectDetail.get(policyName).map{ case (projectStatus, message) =>
-           RawlsBillingProjectMembership(RawlsBillingProjectName(policyName), _, projectStatus, message)}
+         projectDetail.get(policyName).map{ case (projectStatus, _) =>
+           RawlsBillingProjectStatus(RawlsBillingProjectName(policyName), projectStatus)}
       }
     }
     membershipFuture.map(RequestComplete(_))
