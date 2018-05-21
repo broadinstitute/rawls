@@ -227,7 +227,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def getBillingProjectMembership(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     val membershipFuture = for {
-      resourceIdWithPolicyName <- samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.toString, userInfo)
+      resourceIdWithPolicyName <- samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo)
       projectDetail <- dataSource.inTransaction{ dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(Set(projectName))}
     } yield {
       resourceIdWithPolicyName.flatMap{ case SamPolicyWithName(policyName: String, _) =>
