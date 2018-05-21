@@ -130,7 +130,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "get a user's valid billing project membership" in withTestDataApiServices { services =>
-    val membership = RawlsBillingProjectMembership(testData.billingProject.projectName, CreationStatuses.Ready)
+    val membership = RawlsBillingProjectStatus(testData.billingProject.projectName, CreationStatuses.Ready)
     Get(s"/user/billing/${membership.projectName.value}") ~>
       sealRoute(services.userRoutes) ~>
       check {
