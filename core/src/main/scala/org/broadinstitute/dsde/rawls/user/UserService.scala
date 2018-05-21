@@ -228,7 +228,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def getBillingProjectMembership(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     val projectDetail = dataSource.inTransaction{ dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(Set(projectName))}
     projectDetail.map{
-      case (String, _ ) => RequestComplete(StatusCodes.OK)
+      case (String, _ ) => RequestComplete(StatusCodes.OK, (String, _))
       case _ => RequestComplete(StatusCodes.NotFound)
     }
   }
