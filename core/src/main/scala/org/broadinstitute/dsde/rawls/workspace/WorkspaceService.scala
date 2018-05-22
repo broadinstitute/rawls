@@ -1396,7 +1396,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def listSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     val costlessSubmissionListFuture = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.submissionQuery.listWithSubmitter(workspaceContext).flatMap(DBIO.successful)
+        dataAccess.submissionQuery.listWithSubmitter(workspaceContext)
       }
     }
 

@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
+import cats.implicits._
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
@@ -130,12 +131,7 @@ trait SubmissionComponent {
         recs.map { case (submissionRec, methodConfigRec, entityRec) =>
           val user = usersById(RawlsUserSubjectId(submissionRec.submitterId))
           val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
-          val wfStates = states.getOrElse(submissionRec.id, Seq.empty).map(x => x.workflowStatus -> x.count).groupBy(_._1) map {
-            case (status, statusToCount) => status -> statusToCount.map(_._2)
-          }
-          val statusCounts = wfStates map {
-            case (status, count) => status -> count.sum
-          }
+          val statusCounts = states.getOrElse(submissionRec.id, Seq.empty).map(x => Map(x.workflowStatus -> x.count)).foldLeft(Map.empty[String, Int])(_|+|_)
           val workflowIds = states.getOrElse(submissionRec.id, Seq.empty).flatMap(_.workflowId).sorted
           new SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), user, workflowIds, statusCounts)
         }
