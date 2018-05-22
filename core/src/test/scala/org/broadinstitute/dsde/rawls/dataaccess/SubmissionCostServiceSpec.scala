@@ -28,6 +28,12 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
     }
   }
 
+  /*
+    `MockGoogleBigQueryDAO` will throw an exception if the parameters passed to startParameterizedQuery
+    are not equal to the fields `testProject`, `testParamQuery`, `testParameters` and `testParameterMode`.
+    `SubmissionCostService#executeWorkflowCostQuery` passes other values to `startParameterizedQuery`, so
+    an exception will be thrown if a call is made to BigQuery in this case.
+   */
   it should "bypass BigQuery with no workflow IDs" in {
     val expected = Map.empty
     assertResult(expected) {
