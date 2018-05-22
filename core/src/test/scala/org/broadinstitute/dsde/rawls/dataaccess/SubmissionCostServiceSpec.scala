@@ -35,8 +35,7 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
     an exception will be thrown if a call is made to BigQuery in this case.
    */
   it should "bypass BigQuery with no workflow IDs" in {
-    val expected = Map.empty
-    assertResult(expected) {
+    assertResult(Map.empty) {
       Await.result(submissionCostService.getWorkflowCosts(Seq.empty, "test"), 1 minute)
     }
   }
