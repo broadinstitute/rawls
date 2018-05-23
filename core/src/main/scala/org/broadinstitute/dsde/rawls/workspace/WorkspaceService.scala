@@ -1404,16 +1404,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       submissionCostService.getWorkflowCosts(submissions.flatMap(_.workflowIds), workspaceName.namespace)
     }
 
-    toFutureTry(costMapFuture) map {
+    toFutureTry(costMapFuture) flatMap {
       case Failure(ex) =>
         logger.error("Unable to get cost data from BigQuery", ex)
-        RequestComplete(StatusCodes.OK, costlessSubmissionsFuture)
+        Future.successful(RequestComplete(StatusCodes.OK, costlessSubmissionsFuture))
       case Success(costMap) =>
-        RequestComplete(StatusCodes.OK, costlessSubmissionsFuture map { costlessSubmissions =>
-          costlessSubmissions map { costlessSubmission =>
+        costlessSubmissionsFuture map { costlessSubmissions =>
+          val costedSubmissions = costlessSubmissions map { costlessSubmission =>
             costlessSubmission.copy(cost = Some(costlessSubmission.workflowIds.map(costMap(_)).sum))
           }
-        })
+          RequestComplete(StatusCodes.OK, costedSubmissions)
+        }
     }
   }
 
