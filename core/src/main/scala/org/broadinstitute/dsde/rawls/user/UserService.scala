@@ -226,17 +226,19 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     gcsDAO.listBillingAccounts(userInfo) map(RequestComplete(_))
 
   def getBillingProjectMembership(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-    val membershipFuture = for {
-      resourceIdsWithPolicyName <- samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo)
+    val statusFuture: Future[Seq[RawlsBillingProjectStatus]] = for {
+      policies <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
       projectDetail <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) }
     } yield {
-      if (projectDetail.isDefined && resourceIdsWithPolicyName.nonEmpty) {
-        Some(RawlsBillingProjectStatus(projectDetail.get.projectName, projectDetail.get.status))
-      } else { None }
+      policies.filter { policy =>
+        policy.resourceId.equals(projectDetail.get.projectName.value)
+      }.flatMap { samResource =>
+        Some(RawlsBillingProjectStatus(RawlsBillingProjectName(samResource.resourceId), projectDetail.get.status))
+      }.toSeq
     }
-    membershipFuture.map {
-      case Some(status) => RequestComplete(StatusCodes.OK, status)
-      case None => RequestComplete(StatusCodes.NotFound)
+    statusFuture.map {
+      case x if x.nonEmpty => RequestComplete(StatusCodes.OK, x.head)
+      case _ => RequestComplete(StatusCodes.NotFound)
     }
   }
 
