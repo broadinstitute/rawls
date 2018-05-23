@@ -130,13 +130,13 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "get a user's valid billing project membership" in withTestDataApiServices { services =>
-    val membership = RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready)
+    val membership = RawlsBillingProjectStatus(testData.billingProject.projectName, CreationStatuses.Ready)
     Get(s"/user/billing/${membership.projectName.value}") ~>
       sealRoute(services.userRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-        assertResult(membership) { responseAs[RawlsBillingProjectMembership] }
+        import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectStatusFormat
+        assertResult(membership) { responseAs[RawlsBillingProjectStatus] }
       }
   }
 
