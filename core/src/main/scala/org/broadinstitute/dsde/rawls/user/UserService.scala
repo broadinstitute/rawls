@@ -231,6 +231,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       projectDetail <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) }
     } yield {
       policies.filter { policy =>
+        projectDetail.isDefined &&
         policy.resourceId.equals(projectDetail.get.projectName.value)
       }.flatMap { samResource =>
         Some(RawlsBillingProjectStatus(RawlsBillingProjectName(samResource.resourceId), projectDetail.get.status))
