@@ -60,7 +60,7 @@ trait UserApiService extends UserInfoDirectives {
         } ~
         path(Segment) { projectName =>
           get {
-            complete { userServiceConstructor(userInfo).GetBillingProjectMembership(RawlsBillingProjectName(projectName)) }
+            complete { userServiceConstructor(userInfo).GetBillingProjectStatus(RawlsBillingProjectName(projectName)) }
           }
         }
       } ~

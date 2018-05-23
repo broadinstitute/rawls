@@ -57,7 +57,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def ListGroupsForUser(userEmail: RawlsUserEmail) = listGroupsForUser(userEmail)
   def GetUserGroup(groupRef: RawlsGroupRef) = getUserGroup(groupRef)
 
-  def GetBillingProjectMembership(projectName: RawlsBillingProjectName) = getBillingProjectMembership(projectName)
+  def GetBillingProjectStatus(projectName: RawlsBillingProjectName) = getBillingProjectStatus(projectName)
   def ListBillingProjects = listBillingProjects
   def AdminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { deleteBillingProject(projectName, ownerInfo) }
   def AdminRegisterBillingProject(xfer: RawlsBillingProjectTransfer) = asFCAdmin { registerBillingProject(xfer) }
@@ -225,7 +225,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def listBillingAccounts(): Future[PerRequestMessage] =
     gcsDAO.listBillingAccounts(userInfo) map(RequestComplete(_))
 
-  def getBillingProjectMembership(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+  def getBillingProjectStatus(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     val statusFuture: Future[Seq[RawlsBillingProjectStatus]] = for {
       policies <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
       projectDetail <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) }

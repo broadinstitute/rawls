@@ -3538,7 +3538,7 @@ paths:
         200:
           description: OK
           schema:
-            $ref: '#/definitions/RawlsBillingProjectMembership'
+            $ref: '#/definitions/RawlsBillingProjectStatus'
         404:
           description: Project Not Found
         500:
@@ -3549,12 +3549,12 @@ paths:
           required: true
           type: string
           in: path
-      description: named billing project for a user
+      description: billing project status
       tags:
         - billing
         - users
-      summary: named billing project for a user
-      operationId: billingProject
+      summary: billing project status
+      operationId: billingProjectStatus
       security:
         - authorization:
             - openid
@@ -5396,6 +5396,18 @@ definitions:
       message:
         type: string
         description: informational message about the project
+  RawlsBillingProjectStatus:
+    description: a billing project status
+    required:
+      - projectName
+      - creationStatus
+    properties:
+      projectName:
+        type: string
+        description: the name of the billing project
+      creationStatus:
+        type: string
+        enum: ["Creating", "Ready", "Error"]
   RawlsBillingProjectMember:
     description: an element of a list of project users and their role
     required:
