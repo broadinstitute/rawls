@@ -12,8 +12,8 @@ import scala.concurrent.{Await, Future}
 
 class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
   implicit val actorSystem = ActorSystem("SubmissionCostServiceSpec")
-  val bigQueryDAO = new MockGoogleBigQueryDAO
-  val submissionCostService = SubmissionCostService.constructor("test", "test", bigQueryDAO)
+  val mockBigQueryDAO = new MockGoogleBigQueryDAO
+  val submissionCostService = SubmissionCostService.constructor("test", "test", mockBigQueryDAO)
 
   val rows = Future(List(
     new TableRow().setF(List(new TableCell().setV("wfKey"), new TableCell().setV("wf1"), new TableCell().setV(1.32f)).asJava),
@@ -23,9 +23,20 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
 
   "SubmissionCostService" should "extract a map of workflow ID to cost" in {
     val expected = Map("wf1" -> 1.32f, "wf2" -> 3.00f, "wf3" -> 101.00f)
-    assertResult(expected){
+    assertResult(expected) {
       Await.result(submissionCostService.extractWorkflowCostResults(rows), 1 minute)
     }
   }
 
+  /*
+    `MockGoogleBigQueryDAO` will throw an exception if the parameters passed to startParameterizedQuery
+    are not equal to the fields `testProject`, `testParamQuery`, `testParameters` and `testParameterMode`.
+    `SubmissionCostService#executeWorkflowCostQuery` passes other values to `startParameterizedQuery`, so
+    an exception will be thrown if a call is made to BigQuery in this case.
+   */
+  it should "bypass BigQuery with no workflow IDs" in {
+    assertResult(Map.empty) {
+      Await.result(submissionCostService.getWorkflowCosts(Seq.empty, "test"), 1 minute)
+    }
+  }
 }
