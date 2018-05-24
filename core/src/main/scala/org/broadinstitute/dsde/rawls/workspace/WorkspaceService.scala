@@ -1411,7 +1411,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case Success(costMap) =>
         costlessSubmissionsFuture map { costlessSubmissions =>
           val costedSubmissions = costlessSubmissions map { costlessSubmission =>
-            costlessSubmission.copy(cost = Some(costlessSubmission.workflowIds.flatMap(id => costMap.get(id).value).sum))
+            costlessSubmission.copy(cost = Some(costlessSubmission.workflowIds.flatMap(costMap.get).sum))
           }
           RequestComplete(StatusCodes.OK, costedSubmissions)
         }
