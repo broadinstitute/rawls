@@ -3532,6 +3532,35 @@ paths:
             - email
             - profile
 
+  '/api/user/billing/{projectName}':
+    get:
+      responses:
+        200:
+          description: OK
+          schema:
+            $ref: '#/definitions/RawlsBillingProjectStatus'
+        404:
+          description: Project Not Found
+        500:
+          description: Internal Server Error
+      parameters:
+        - name: projectName
+          description: Name of the billing project
+          required: true
+          type: string
+          in: path
+      description: billing project status
+      tags:
+        - billing
+        - users
+      summary: billing project status
+      operationId: billingProjectStatus
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+
   '/api/user/billingAccounts':
     get:
       responses:
@@ -5367,6 +5396,18 @@ definitions:
       message:
         type: string
         description: informational message about the project
+  RawlsBillingProjectStatus:
+    description: a billing project status
+    required:
+      - projectName
+      - creationStatus
+    properties:
+      projectName:
+        type: string
+        description: the name of the billing project
+      creationStatus:
+        type: string
+        enum: ["Creating", "Ready", "Error"]
   RawlsBillingProjectMember:
     description: an element of a list of project users and their role
     required:

@@ -57,6 +57,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def ListGroupsForUser(userEmail: RawlsUserEmail) = listGroupsForUser(userEmail)
   def GetUserGroup(groupRef: RawlsGroupRef) = getUserGroup(groupRef)
 
+  def GetBillingProjectStatus(projectName: RawlsBillingProjectName) = getBillingProjectStatus(projectName)
   def ListBillingProjects = listBillingProjects
   def AdminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { deleteBillingProject(projectName, ownerInfo) }
   def AdminRegisterBillingProject(xfer: RawlsBillingProjectTransfer) = asFCAdmin { registerBillingProject(xfer) }
@@ -223,6 +224,24 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def listBillingAccounts(): Future[PerRequestMessage] =
     gcsDAO.listBillingAccounts(userInfo) map(RequestComplete(_))
+
+  def getBillingProjectStatus(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    val statusFuture: Future[Option[RawlsBillingProjectStatus]] = for {
+      policies <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
+      projectDetail <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) }
+    } yield {
+      policies.find { policy =>
+        projectDetail.isDefined &&
+        policy.resourceId.equals(projectDetail.get.projectName.value)
+      }.flatMap { policy =>
+        Some(RawlsBillingProjectStatus(RawlsBillingProjectName(policy.resourceId), projectDetail.get.status))
+      }
+    }
+    statusFuture.map {
+      case Some(status) => RequestComplete(StatusCodes.OK, status)
+      case _ => RequestComplete(StatusCodes.NotFound)
+    }
+  }
 
   def listBillingProjects(): Future[PerRequestMessage] = {
     val membershipsFuture = for {

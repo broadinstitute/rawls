@@ -52,9 +52,16 @@ trait UserApiService extends UserInfoDirectives {
           complete { userServiceConstructor(userInfo).GetRefreshTokenDate }
         }
       } ~
-      path("user" / "billing") {
-        get {
-          complete { userServiceConstructor(userInfo).ListBillingProjects }
+      pathPrefix("user" / "billing") {
+        pathEnd {
+          get {
+            complete { userServiceConstructor(userInfo).ListBillingProjects }
+          }
+        } ~
+        path(Segment) { projectName =>
+          get {
+            complete { userServiceConstructor(userInfo).GetBillingProjectStatus(RawlsBillingProjectName(projectName)) }
+          }
         }
       } ~
       path("user" / "role" / "admin") {
