@@ -133,7 +133,7 @@ trait SubmissionComponent {
           val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
           val statusCounts = states.getOrElse(submissionRec.id, Seq.empty).map(x => Map(x.workflowStatus -> x.count)).foldLeft(Map.empty[String, Int])(_|+|_)
           val workflowIds = states.getOrElse(submissionRec.id, Seq.empty).flatMap(_.workflowId).sorted
-          new SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), user, workflowIds, statusCounts)
+          SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), user, workflowIds, statusCounts)
         }
       }
     }
