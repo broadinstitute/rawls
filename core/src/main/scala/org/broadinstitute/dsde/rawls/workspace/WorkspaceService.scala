@@ -1495,7 +1495,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         toFutureTry(submissionCostService.getWorkflowCosts(allWorkflowIds, workspaceName.namespace)) map {
           case Failure(ex) =>
             logger.error("Unable to get workflow costs for this submission. ", ex)
-            RequestComplete((StatusCodes.OK, new SubmissionStatusResponse(submission, user)))
+            RequestComplete((StatusCodes.OK, SubmissionStatusResponse(submission, user)))
           case Success(costMap) =>
             val costedWorkflows = submission.workflows.map { workflow =>
               workflow.workflowId match {
@@ -1504,7 +1504,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               }
             }
             val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
-            RequestComplete((StatusCodes.OK, new SubmissionStatusResponse(costedSubmission, user)))
+            RequestComplete((StatusCodes.OK, SubmissionStatusResponse(costedSubmission, user)))
         }
       }
     }

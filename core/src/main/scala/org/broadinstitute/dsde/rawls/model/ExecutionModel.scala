@@ -135,9 +135,10 @@ case class SubmissionStatusResponse(
   status: SubmissionStatus,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   cost: Option[Float] = None
-) {
-  def this(submission: Submission, rawlsUser: RawlsUser) =
-    this(
+)
+object SubmissionStatusResponse {
+  def apply(submission: Submission, rawlsUser: RawlsUser): SubmissionStatusResponse =
+    SubmissionStatusResponse(
       submissionId = submission.submissionId,
       submissionDate = submission.submissionDate,
       submitter = rawlsUser.userEmail.value,
@@ -164,9 +165,10 @@ case class SubmissionListResponse(
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   workflowIds: Seq[String],
   cost: Option[Float] = None
-) {
-  def this(submission: Submission, rawlsUser: RawlsUser, workflowIds: Seq[String], workflowStatuses: StatusCounts) =
-    this(
+)
+object SubmissionListResponse {
+  def apply(submission: Submission, rawlsUser: RawlsUser, workflowIds: Seq[String], workflowStatuses: StatusCounts): SubmissionListResponse =
+    SubmissionListResponse(
       submissionId = submission.submissionId,
       submissionDate = submission.submissionDate,
       submitter = rawlsUser.userEmail.value,
@@ -352,9 +354,9 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val SubmissionStatusResponseFormat = jsonFormat10(SubmissionStatusResponse)
+  implicit val SubmissionStatusResponseFormat = jsonFormat10(SubmissionStatusResponse.apply)
 
-  implicit val SubmissionListResponseFormat = jsonFormat12(SubmissionListResponse)
+  implicit val SubmissionListResponseFormat = jsonFormat12(SubmissionListResponse.apply)
 
   implicit val CallMetadataFormat = jsonFormat14(CallMetadata)
 

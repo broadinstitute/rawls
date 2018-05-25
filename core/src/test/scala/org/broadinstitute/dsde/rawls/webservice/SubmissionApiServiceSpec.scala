@@ -279,9 +279,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     lazy val failedSubmission = getSubmission(submissionResponseWithFailureMode.submissionId)
     lazy val submission = getSubmission(submissionResponseWithoutFailureMode.submissionId)
     val submissionListResponseWithFailureMode =
-      new SubmissionListResponse(failedSubmission, testData.userOwner, failedSubmission.workflows.flatMap(_.workflowId), Map("Queued" -> 1)).copy(cost = Some(0f))
+      SubmissionListResponse(failedSubmission, testData.userOwner, failedSubmission.workflows.flatMap(_.workflowId), Map("Queued" -> 1)).copy(cost = Some(0f))
     val submissionListResponseWithoutFailureMode =
-      new SubmissionListResponse(
+      SubmissionListResponse(
         getSubmission(submissionResponseWithoutFailureMode.submissionId), testData.userOwner, submission.workflows.flatMap(_.workflowId), Map("Queued" -> 1)).copy(cost = Some(0f))
 
     // Sanity check the workflow failure modes in the expected SubmissionListResponse objects
@@ -397,7 +397,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
-        assertResult(new SubmissionStatusResponse(testData.costedSubmission1, testData.userOwner)) {responseAs[SubmissionStatusResponse]}
+        assertResult(SubmissionStatusResponse(testData.costedSubmission1, testData.userOwner)) {responseAs[SubmissionStatusResponse]}
       }
   }
 
@@ -415,18 +415,28 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when listing submissions" in withTestDataApiServices { services =>
+    def expectedResponse(sub: Submission): SubmissionListResponse = {
+      val wfIds = sub.workflows.flatMap(_.workflowId).sorted
+      val wfCount = sub.workflows.length
+      val statuses: Map[String, Int] = if (wfCount > 0) Map("Submitted" -> wfCount) else Map.empty
+      val runCost = wfCount * 1.23f  // mockSubmissionCostService.fixedCost
+
+      SubmissionListResponse(sub, testData.userOwner, wfIds, statuses).copy(cost = Option(runCost))
+    }
+
+
     Get(s"${testData.wsName.path}/submissions") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
         assertResult(Set(
-          new SubmissionListResponse(testData.submissionTerminateTest, testData.userOwner, testData.submissionTerminateTest.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 4)).copy(cost = Some(0f)),
-          new SubmissionListResponse(testData.submissionNoWorkflows, testData.userOwner, testData.submissionNoWorkflows.workflows.flatMap(_.workflowId).sorted, Map[String, Int]()).copy(cost = Some(0f)),
-          new SubmissionListResponse(testData.submission1, testData.userOwner, testData.submission1.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 3)).copy(cost = Some(0f)),
-          new SubmissionListResponse(testData.costedSubmission1, testData.userOwner, testData.costedSubmission1.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 3)).copy(cost = Some(0f)),
-          new SubmissionListResponse(testData.submission2, testData.userOwner, testData.submission2.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 3)).copy(cost = Some(0f)),
-          new SubmissionListResponse(testData.submissionUpdateEntity, testData.userOwner, testData.submissionUpdateEntity.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 1)).copy(cost = Some(0f)),
-          new SubmissionListResponse(testData.submissionUpdateWorkspace, testData.userOwner, testData.submissionUpdateWorkspace.workflows.flatMap(_.workflowId).sorted, Map[String, Int]("Submitted" -> 1)).copy(cost = Some(0f)))) {
+          expectedResponse(testData.submissionTerminateTest),
+          expectedResponse(testData.submissionNoWorkflows),
+          expectedResponse(testData.submission1),
+          expectedResponse(testData.costedSubmission1),
+          expectedResponse(testData.submission2),
+          expectedResponse(testData.submissionUpdateEntity),
+          expectedResponse(testData.submissionUpdateWorkspace))) {
           responseAs[Seq[SubmissionListResponse]].toSet
         }
       }
