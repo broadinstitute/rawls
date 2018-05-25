@@ -107,15 +107,15 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                            workflowEntities: Seq[Entity], inputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
                            failedWorkflowEntities: Seq[Entity], failedInputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
                            status: WorkflowStatus = WorkflowStatuses.Submitted, useCallCache: Boolean = false,
-                           workflowFailureMode: Option[WorkflowFailureMode] = None, cost: Option[Float] = None): Submission = {
+                           workflowFailureMode: Option[WorkflowFailureMode] = None, individualWorkflowCost: Option[Float] = None): Submission = {
 
     val workflows = workflowEntities map { ref =>
       val uuid = if(status == WorkflowStatuses.Queued) None else Option(UUID.randomUUID.toString)
-      Workflow(uuid, status, testDate, Some(ref.toReference), inputResolutions(ref), cost = cost)
+      Workflow(uuid, status, testDate, Some(ref.toReference), inputResolutions(ref), cost = individualWorkflowCost)
     }
 
     Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, Some(submissionEntity.toReference),
-      workflows, SubmissionStatuses.Submitted, useCallCache, workflowFailureMode, cost)
+      workflows, SubmissionStatuses.Submitted, useCallCache, workflowFailureMode, individualWorkflowCost.map (_ * workflows.length))
   }
 
   def generateBillingGroups(projectName: RawlsBillingProjectName, users: Map[ProjectRoles.ProjectRole, Set[RawlsUserRef]], subGroups: Map[ProjectRoles.ProjectRole, Set[RawlsGroupRef]]): Map[ProjectRoles.ProjectRole, Seq[RawlsGroup]] = {
@@ -468,7 +468,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
     val costedSubmission1 = createTestSubmission(workspace, agoraMethodConfig, indiv1, userOwner,
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
-      Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2), cost = Some(0.0f))
+      Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2),
+      // the constant value we set in MockSubmissionCostService
+      individualWorkflowCost = Some(1.23f))
     val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, userOwner,
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))

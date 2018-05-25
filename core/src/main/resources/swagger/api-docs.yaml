@@ -1344,6 +1344,52 @@ paths:
             - openid
             - email
             - profile
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/cost':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkflowCost'
+        '404':
+          description: Workspace, Submission or Workflow not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Retrieve workflow cost, if available
+      tags:
+        - submissions
+      summary: Get workflow cost
+      operationId: getWorkflowCost
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Submission Id
+          name: submissionId
+          required: true
+          type: string
+        - in: path
+          description: Workflow Id
+          name: workflowId
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs':
     get:
       responses:
@@ -4426,6 +4472,16 @@ definitions:
         description: workflows initiated by this submission
         items:
           $ref: '#/definitions/SubmissionValidationEntityInputs'
+
+  WorkflowCost:
+    description: The cost of a workflow, if available
+    properties:
+      cost:
+        type: number
+        description: Workflow cost
+      workflowId:
+        type: string
+        description: The id of this workflow
 
   WorkflowOutputs:
     description: Outputs and logs from all tasks in a workflow
