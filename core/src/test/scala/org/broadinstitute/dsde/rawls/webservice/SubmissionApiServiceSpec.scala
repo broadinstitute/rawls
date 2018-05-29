@@ -279,10 +279,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     lazy val failedSubmission = getSubmission(submissionResponseWithFailureMode.submissionId)
     lazy val submission = getSubmission(submissionResponseWithoutFailureMode.submissionId)
     val submissionListResponseWithFailureMode =
-      SubmissionListResponse(failedSubmission, testData.userOwner, failedSubmission.workflows.flatMap(_.workflowId), Map("Queued" -> 1)).copy(cost = Some(0f))
+      SubmissionListResponse(failedSubmission, testData.userOwner, Seq(), Map("Queued" -> 1)).copy(cost = Some(0f))
     val submissionListResponseWithoutFailureMode =
       SubmissionListResponse(
-        getSubmission(submissionResponseWithoutFailureMode.submissionId), testData.userOwner, submission.workflows.flatMap(_.workflowId), Map("Queued" -> 1)).copy(cost = Some(0f))
+        getSubmission(submissionResponseWithoutFailureMode.submissionId), testData.userOwner, Seq(), Map("Queued" -> 1)).copy(cost = Some(0f))
 
     // Sanity check the workflow failure modes in the expected SubmissionListResponse objects
     submissionListResponseWithFailureMode.workflowFailureMode should equal (Some(WorkflowFailureModes.ContinueWhilePossible))
@@ -416,12 +416,11 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when listing submissions" in withTestDataApiServices { services =>
     def expectedResponse(sub: Submission): SubmissionListResponse = {
-      val wfIds = sub.workflows.flatMap(_.workflowId).sorted
       val wfCount = sub.workflows.length
       val statuses: Map[String, Int] = if (wfCount > 0) Map("Submitted" -> wfCount) else Map.empty
       val runCost = wfCount * 1.23f  // mockSubmissionCostService.fixedCost
 
-      SubmissionListResponse(sub, testData.userOwner, wfIds, statuses).copy(cost = Option(runCost))
+      SubmissionListResponse(sub, testData.userOwner, Seq(), statuses).copy(cost = Option(runCost))
     }
 
 

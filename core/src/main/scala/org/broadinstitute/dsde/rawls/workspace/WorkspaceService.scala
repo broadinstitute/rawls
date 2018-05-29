@@ -1400,17 +1400,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       submissionCostService.getWorkflowCosts(submissions.flatMap(_.workflowIds), workspaceName.namespace)
     }
 
-    toFutureTry(costMapFuture) flatMap {
-      case Failure(ex) =>
-        logger.error("Unable to get cost data from BigQuery", ex)
-        Future.successful(RequestComplete(StatusCodes.OK, costlessSubmissionsFuture))
-      case Success(costMap) =>
-        costlessSubmissionsFuture map { costlessSubmissions =>
-          val costedSubmissions = costlessSubmissions map { costlessSubmission =>
-            costlessSubmission.copy(cost = Some(costlessSubmission.workflowIds.flatMap(costMap.get).sum))
-          }
-          RequestComplete(StatusCodes.OK, costedSubmissions)
+    toFutureTry(costMapFuture) flatMap { costMapTry =>
+      val costMap: Map[String,Float] = costMapTry match {
+        case Failure(ex) =>
+          logger.error("Unable to get cost data from BigQuery", ex)
+          Map()
+        case Success(costs) => costs
+      }
+
+      costlessSubmissionsFuture map { costlessSubmissions =>
+        val costedSubmissions = costlessSubmissions map { costlessSubmission =>
+          // Clearing workflowIds is a quick fix to prevent SubmissionListResponse from having too much data. Will address in the near future.
+          costlessSubmission.copy(cost = Some(costlessSubmission.workflowIds.flatMap(costMap.get).sum), workflowIds = Seq())
         }
+        RequestComplete(StatusCodes.OK, costedSubmissions)
+      }
     }
   }
 
