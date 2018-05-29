@@ -4239,7 +4239,7 @@ definitions:
         type: array
         items:
           type: string
-        description: The list of workflow IDs belonging to this submission
+        description: Always empty. To be removed.
       cost:
         type: number
         format: float
