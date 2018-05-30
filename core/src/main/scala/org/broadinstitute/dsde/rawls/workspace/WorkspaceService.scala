@@ -1397,7 +1397,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     val costMapFuture = costlessSubmissionsFuture flatMap { submissions =>
-      submissionCostService.getWorkflowCosts(submissions.flatMap(_.workflowIds), workspaceName.namespace)
+      submissionCostService.getWorkflowCosts(submissions.flatMap(_.workflowIds).flatten, workspaceName.namespace)
     }
 
     toFutureTry(costMapFuture) flatMap { costMapTry =>
@@ -1410,8 +1410,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       costlessSubmissionsFuture map { costlessSubmissions =>
         val costedSubmissions = costlessSubmissions map { costlessSubmission =>
+          val summedCost = costlessSubmission.workflowIds.map { workflowIds => workflowIds.flatMap(costMap.get).sum }
           // Clearing workflowIds is a quick fix to prevent SubmissionListResponse from having too much data. Will address in the near future.
-          costlessSubmission.copy(cost = Some(costlessSubmission.workflowIds.flatMap(costMap.get).sum), workflowIds = Seq())
+          costlessSubmission.copy(cost = summedCost, workflowIds = None)
         }
         RequestComplete(StatusCodes.OK, costedSubmissions)
       }

@@ -163,11 +163,11 @@ case class SubmissionListResponse(
   workflowStatuses: StatusCounts,
   useCallCache: Boolean,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
-  workflowIds: Seq[String],
+  workflowIds: Option[Seq[String]],
   cost: Option[Float] = None
 )
 object SubmissionListResponse {
-  def apply(submission: Submission, rawlsUser: RawlsUser, workflowIds: Seq[String], workflowStatuses: StatusCounts): SubmissionListResponse =
+  def apply(submission: Submission, rawlsUser: RawlsUser, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts): SubmissionListResponse =
     SubmissionListResponse(
       submissionId = submission.submissionId,
       submissionDate = submission.submissionDate,
