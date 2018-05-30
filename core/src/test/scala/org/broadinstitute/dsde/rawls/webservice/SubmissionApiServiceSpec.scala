@@ -418,7 +418,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     def expectedResponse(sub: Submission): SubmissionListResponse = {
       val wfCount = sub.workflows.length
       val statuses: Map[String, Int] = if (wfCount > 0) Map("Submitted" -> wfCount) else Map.empty
-      val runCost = if (wfCount == 0) None else Some(wfCount * 1.23f)  // mockSubmissionCostService.fixedCost
+      // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
+      // val runCost = if (wfCount == 0) None else Some(wfCount * 1.23f)  // mockSubmissionCostService.fixedCost
+      val runCost = None
 
       SubmissionListResponse(sub, testData.userOwner, None, statuses).copy(cost = runCost)
     }
