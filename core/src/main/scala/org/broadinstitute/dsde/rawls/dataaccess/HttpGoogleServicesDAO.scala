@@ -248,6 +248,8 @@ class HttpGoogleServicesDAO(
       case None => Future.successful(None)
     }
 
+    val role = "bigquery.jobUser"
+
     val bucketInsertion = for {
       accessGroupTries <- accessGroupInserts
       accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember map { _ + (ProjectOwner -> projectOwnerGroup) }
@@ -260,7 +262,7 @@ class HttpGoogleServicesDAO(
       _ <- insertInitialStorageLog(bucketName)
     } yield GoogleWorkspaceInfo(bucketName, accessGroups, intersectionGroups)
 
-    bucketInsertion recoverWith {
+    val results = bucketInsertion recoverWith {
       case regrets =>
         val groupsToRollback = for {
           accessGroupTries <- accessGroupInserts
@@ -272,6 +274,14 @@ class HttpGoogleServicesDAO(
           }
         }
         groupsToRollback flatMap rollbackGroups flatMap (_ => Future.failed(regrets))
+    }
+    results.flatMap { workspaceInfo =>
+      val writerGroup = workspaceInfo.accessGroupsByLevel.get(WorkspaceAccessLevels.Write).head.groupEmail
+      val ownerGroup = workspaceInfo.accessGroupsByLevel.get(WorkspaceAccessLevels.Write).head.groupEmail
+
+      val groupsToGrantRole = Set(writerGroup, ownerGroup)
+
+      Future.traverse(groupsToGrantRole) { email => addRoleToGroup(project.projectName, WorkbenchEmail(email.value), "bigquery.jobUser") }.flatMap(_ => results)
     }
   }
 
