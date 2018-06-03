@@ -8,7 +8,7 @@ object Dependencies {
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
-  val cromwellVersion = "32-8ef1196"
+  val cromwellVersion = "32-fcd59f6"
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
