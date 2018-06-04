@@ -19,6 +19,8 @@ case class StatusCheckResponse(
 
 object Subsystems {
   val AllSubsystems = Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub, Sam)
+  // CriticalSubsystems are those that will trigger rawls to report down
+  val CriticalSubsystems = Set(Database, GoogleGroups, Sam)
   val GoogleSubsystems = Set(GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub)
 
   sealed trait Subsystem extends RawlsEnumeration[Subsystem] {
