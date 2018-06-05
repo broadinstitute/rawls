@@ -389,7 +389,7 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
 
       val mcJson = mcBefore.toJson
       val mcAfter = MethodConfigurationFormat.read(mcJson)
-      
+
       mcAfter shouldEqual MethodConfiguration("ns", "name", Some("sample"), Map(),
         Map("real" -> AttributeString("this.blah")),
         Map("real" -> AttributeString("this.blah")),
