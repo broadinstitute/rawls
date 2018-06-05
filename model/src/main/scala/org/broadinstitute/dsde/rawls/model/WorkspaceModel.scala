@@ -594,10 +594,26 @@ class WorkspaceJsonSupport extends JsonSupport {
           }
       }
     }
-
   }
 
-  implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
+  implicit object MethodConfigurationFormat extends RootJsonFormat[MethodConfiguration] {
+    val formatter = jsonFormat10(MethodConfiguration)
+
+    override def write(obj: MethodConfiguration) = {
+      formatter.write(obj)
+    }
+
+    override def read(json: JsValue): MethodConfiguration = {
+      val mc = formatter.read(json)
+
+      //MC inputs (and outputs) can be optional, and sometimes users send us an empty string as the value
+      //for an optional instead of removing it from the map entirely. Remove them here so we don't try to validate
+      //it as an empty string, which is never a valid expression.
+      val newInputs = mc.inputs.filter { case (k: String, v: AttributeString) => v.value != "" }
+      val newOutputs = mc.outputs.filter { case (k: String, v: AttributeString) => v.value != "" }
+      mc.copy(inputs = newInputs, outputs = newOutputs)
+    }
+  }
 
   implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
 

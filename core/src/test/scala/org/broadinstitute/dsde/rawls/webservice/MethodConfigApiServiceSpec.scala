@@ -98,9 +98,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), Map("ready" -> AttributeString("true")), inputs, outputs,
       AgoraMethod(testData.wsName.namespace, "method-a", 1))
 
+    val expectedMethodConfig = newMethodConfig.copy(outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse")))
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
-    val expectedSuccessOutputs = Seq("good_out", "empty_out")
+    val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
@@ -110,17 +111,21 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           status
         }
         val validated = responseAs[ValidatedMethodConfiguration]
-        assertResult(newMethodConfig) { validated.methodConfiguration }
+        assertResult(expectedMethodConfig) { validated.methodConfiguration }
         assertSameElements(expectedSuccessInputs, validated.validInputs)
         assertSameElements(expectedFailureInputs, validated.invalidInputs)
         assertSameElements(expectedSuccessOutputs, validated.validOutputs)
         assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
 
-        // all inputs and outputs are saved, regardless of parsing errors
-        for ((key, value) <- inputs) assertResult(Option(value)) {
+        def expr2opt(expr: AttributeString): Option[AttributeValue] = {
+          if( expr.value == "" ) None else Some(expr)
+        }
+
+        // all inputs and outputs are saved, regardless of parsing errors -- except for empty-strings, which are dropped
+        for ((key, value) <- inputs) assertResult(expr2opt(value)) {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
         }
-        for ((key, value) <- outputs) assertResult(Option(value)) {
+        for ((key, value) <- outputs) assertResult(expr2opt(value)) {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
         }
       }

@@ -4,7 +4,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.scalatest.{FreeSpec, Matchers}
 
 import spray.json._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{MethodRepoMethodFormat, MethodConfigurationFormat}
 
 class WorkspaceModelSpec extends FreeSpec with Matchers {
 
@@ -376,6 +376,25 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
           MethodRepoMethod.fromUri(badUri7)
         }
       }
+    }
+  }
+
+  "MethodConfigurations" - {
+    "should treat empty strings in inputs and outputs as unspecified" in {
+      val mcBefore = MethodConfiguration("ns", "name", Some("sample"), Map(),
+        Map("optional" -> AttributeString(""), "real" -> AttributeString("this.blah")),
+        Map("optional" -> AttributeString(""), "real" -> AttributeString("this.blah")),
+        MethodRepoMethod("path", "version")
+      )
+
+      val mcJson = mcBefore.toJson
+      val mcAfter = MethodConfigurationFormat.read(mcJson)
+
+      mcAfter shouldEqual MethodConfiguration("ns", "name", Some("sample"), Map(),
+        Map("real" -> AttributeString("this.blah")),
+        Map("real" -> AttributeString("this.blah")),
+        MethodRepoMethod("path", "version")
+      )
     }
   }
 
