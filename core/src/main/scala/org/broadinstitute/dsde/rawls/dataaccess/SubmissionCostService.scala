@@ -4,6 +4,7 @@ import java.util
 
 import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
 import com.google.api.services.bigquery.model.{QueryParameter, QueryParameterType, QueryParameterValue, TableRow}
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 
 import scala.collection.JavaConverters._
@@ -14,7 +15,7 @@ object SubmissionCostService {
     new SubmissionCostService(tableName, serviceProject, bigQueryDAO)
 }
 
-class SubmissionCostService(tableName: String, serviceProject: String, bigQueryDAO: GoogleBigQueryDAO)(implicit val executionContext: ExecutionContext) {
+class SubmissionCostService(tableName: String, serviceProject: String, bigQueryDAO: GoogleBigQueryDAO)(implicit val executionContext: ExecutionContext) extends LazyLogging {
 
 
   def getWorkflowCosts(workflowIds: Seq[String],
@@ -71,7 +72,14 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
           jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject(serviceProject), querySql, queryParameters, "POSITIONAL")
           job <- bigQueryDAO.getQueryStatus(jobRef)
           result <- bigQueryDAO.getQueryResult(job)
-        } yield result.getRows
+        } yield {
+          val idCount = ids.length
+          val rowsReturned = result.getTotalRows
+          val bytesProcessed = result.getTotalBytesProcessed
+          logger.debug(s"Queried for costs of $idCount Workflow IDs: $rowsReturned Rows Returned and $bytesProcessed Bytes Processed.")
+
+          result.getRows
+        }
     }
   }
 }
