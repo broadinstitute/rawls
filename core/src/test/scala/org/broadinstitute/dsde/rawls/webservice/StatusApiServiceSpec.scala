@@ -15,6 +15,7 @@ import org.scalatest.time.{Seconds, Span}
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import com.google.api.services.admin.directory.model.Group
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -25,6 +26,11 @@ import scala.concurrent.{ExecutionContext, Future}
 
 class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
   override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(None)
+}
+
+class MockGoogleServicesCriticalErrorDAO extends MockGoogleServicesDAO("test") {
+  override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] =
+    Future.successful(None)
 }
 
 class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
@@ -47,6 +53,13 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
   def withConstantTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
     withConstantTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+      withApiServices(dataSource, subsystemsOk, apiService)(testCode)
+    }
+  }
+
+  def withConstantCriticalErrorTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
+    withConstantTestDatabase { dataSource: SlickDataSource =>
+      val apiService = new TestApiService(dataSource, new MockGoogleServicesCriticalErrorDAO, new MockGooglePubSubDAO)
       withApiServices(dataSource, subsystemsOk, apiService)(testCode)
     }
   }
@@ -82,13 +95,36 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
     }
   }
 
-  it should "return 500 for non-ok status for any subsystem" in withConstantErrorTestDataApiServices(false) { services =>
+  it should "return 500 for non-ok status for critical subsystem" in withConstantCriticalErrorTestDataApiServices(false) { services =>
     eventually {
       withStatsD {
         Get("/status") ~>
           services.sealedInstrumentedRoutes ~>
           check {
-            assertResult(StatusCodes.InternalServerError) {
+            assertResult(StatusCodes.InternalServerError, responseAs[StatusCheckResponse]) {
+              status
+            }
+            assertResult(StatusCheckResponse(false, AllSubsystems.map {
+              case GoogleGroups => GoogleGroups -> SubsystemStatus(false, Some(List("Could not find group: my-favorite-group")))
+              case other => other -> HealthMonitor.OkStatus
+            }.toMap)) {
+              responseAs[StatusCheckResponse]
+            }
+          }
+      } { capturedMetrics =>
+        val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.InternalServerError.intValue, 1)
+        assertSubsetOf(expected, capturedMetrics)
+      }
+    }
+  }
+
+  it should "return 200 for non-ok status for any non critical subsystem" in withConstantErrorTestDataApiServices(false) { services =>
+    eventually {
+      withStatsD {
+        Get("/status") ~>
+          services.sealedInstrumentedRoutes ~>
+          check {
+            assertResult(StatusCodes.OK) {
               status
             }
             assertResult(StatusCheckResponse(false, AllSubsystems.map {
@@ -99,7 +135,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
             }
           }
       } { capturedMetrics =>
-        val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.InternalServerError.intValue, 1)
+        val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.OK.intValue, 1)
         assertSubsetOf(expected, capturedMetrics)
       }
     }
