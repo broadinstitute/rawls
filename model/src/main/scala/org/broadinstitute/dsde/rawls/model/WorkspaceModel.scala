@@ -594,10 +594,22 @@ class WorkspaceJsonSupport extends JsonSupport {
           }
       }
     }
-
   }
 
-  implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
+  implicit object MethodConfigurationFormat extends RootJsonFormat[MethodConfiguration] {
+    val formatter = jsonFormat10(MethodConfiguration)
+
+    override def write(obj: MethodConfiguration) = {
+      formatter.write(obj)
+    }
+
+    override def read(json: JsValue): MethodConfiguration = {
+      val mc = formatter.read(json)
+      val newInputs = mc.inputs.filter { case (k: String, v: AttributeString) => v.value != "" }
+      val newOutputs = mc.outputs.filter { case (k: String, v: AttributeString) => v.value != "" }
+      mc.copy(inputs = newInputs, outputs = newOutputs)
+    }
+  }
 
   implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
 
