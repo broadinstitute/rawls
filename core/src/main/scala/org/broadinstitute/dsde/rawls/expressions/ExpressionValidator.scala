@@ -23,9 +23,20 @@ object ExpressionValidator {
     ValidatedMethodConfiguration(methodConfiguration, parsed.validInputs, parsed.invalidInputs, validatedOutputs, parsed.invalidOutputs)
   }
 
-  // validate a MC without retrieving the Method from the Repo: assume all inputs are required
-  def validateAndParseMCExpressions(methodConfiguration: MethodConfiguration, allowRootEntity: Boolean, parser: SlickExpressionParser): ValidatedMethodConfiguration =
-    validateAndParse(methodConfiguration, methodConfiguration.inputs, allowRootEntity, parser)
+  // validate a MC, skipping optional empty inputs, and return a ValidatedMethodConfiguration
+  def validateAndParseMCExpressions(methodConfiguration: MethodConfiguration,
+                                       methodInputsToParse: Seq[MethodConfigResolver.MethodInput],
+                                       emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput],
+                                       allowRootEntity: Boolean,
+                                       parser: SlickExpressionParser): ValidatedMethodConfiguration = {
+    val inputsToParse = methodInputsToParse map { mi => (mi.workflowInput.localName.value, AttributeString(mi.expression)) }
+
+    val validated = validateAndParse(methodConfiguration, inputsToParse.toMap, allowRootEntity, parser)
+
+    // a MethodInput which is both optional and empty is already valid
+    val emptyOptionalInputs = emptyOptionalMethodInputs map { _.workflowInput.localName.value }
+    validated.copy(validInputs = validated.validInputs ++ emptyOptionalInputs)
+  }
 
   // validate a MC, skipping optional empty inputs, and return failure when any inputs/outputs are invalid
   def validateExpressionsForSubmission(methodConfiguration: MethodConfiguration,
@@ -33,9 +44,8 @@ object ExpressionValidator {
                                        emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput],
                                        allowRootEntity: Boolean,
                                        parser: SlickExpressionParser): Try[ValidatedMethodConfiguration] = {
-    val inputsToParse = methodInputsToParse map { mi => (mi.workflowInput.localName.value, AttributeString(mi.expression)) }
 
-    val validated = validateAndParse(methodConfiguration, inputsToParse.toMap, allowRootEntity, parser)
+    val validated = validateAndParseMCExpressions(methodConfiguration, methodInputsToParse, emptyOptionalMethodInputs, allowRootEntity, parser)
 
     Try {
       if (validated.invalidInputs.nonEmpty || validated.invalidOutputs.nonEmpty) {
@@ -44,10 +54,7 @@ object ExpressionValidator {
         val errorStr = (inputMsg ++ outputMsg) mkString " ; "
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Validation errors: $errorStr"))
       }
-
-      // a MethodInput which is both optional and empty is already valid
-      val emptyOptionalInputs = emptyOptionalMethodInputs map { _.workflowInput.localName.value }
-      validated.copy(validInputs = validated.validInputs ++ emptyOptionalInputs)
+      validated
     }
   }
 

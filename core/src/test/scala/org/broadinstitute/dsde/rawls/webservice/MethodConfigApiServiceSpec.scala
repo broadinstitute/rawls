@@ -42,36 +42,42 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  "MethodConfigApi" should "return 201 on create method configuration" in withTestDataApiServices { services =>
-    List(AgoraMethod(testData.wsName.namespace, "method-a", 1), DockstoreMethod("path", "version")) foreach { method =>
-      val newMethodConfig =
-        MethodConfiguration("dsde", s"testConfigNew-${method.repo.scheme}", Some("samples"), Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")), method)
-      withStatsD {
-        Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
-          services.sealedInstrumentedRoutes ~>
-          check {
-            assertResult(StatusCodes.Created) {
-              status
-            }
-            assertResult(newMethodConfig) {
-              runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get
-            }
-            // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-            assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
-              header("Location")
-            }
+  def testCreateMethodConfiguration(method: MethodRepoMethod, wdlName: String, services: TestApiService) = {
+    val newMethodConfig =
+      MethodConfiguration("dsde", s"testConfigNew-${method.repo.scheme}", Some("samples"), Map(), Map(s"$wdlName.cgrep.pattern" -> AttributeString("this.foo")), Map(s"$wdlName.cgrep.count" -> AttributeString("this.bar")), method)
+    withStatsD {
+      Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
           }
-      } { capturedMetrics =>
-        val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
-        val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs", StatusCodes.Created.intValue, 1)
-        assertSubsetOf(expected, capturedMetrics)
-      }
+          assertResult(newMethodConfig) {
+            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get
+          }
+          // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+          assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
+            header("Location")
+          }
+        }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.methodconfigs", StatusCodes.Created.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
     }
   }
 
+  "MethodConfigApi" should "return 201 on create method configuration in Agora" in withTestDataApiServices { services =>
+    testCreateMethodConfiguration(AgoraMethod("dsde", "three_step", 1), "three_step", services)
+  }
+
+  it should "return 201 on create method configuration in Dockstore" in withTestDataApiServices { services =>
+    testCreateMethodConfiguration(DockstoreMethod("dockstore-method-path", "dockstore-method-version"), "three_step_dockstore", services)
+  }
+
   it should "update the workspace last modified date on create method configuration" in withTestDataApiServices { services =>
-    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
-      AgoraMethod(testData.wsName.namespace, "method-a", 1))
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), Map(), Map("three_step.cgrep.pattern" -> AttributeString("this.foo")), Map("three_step.cgrep.count" -> AttributeString("this.bar")),
+      AgoraMethod("dsde", "three_step", 1))
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -95,13 +101,15 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
     val inputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
     val outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
-    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), Map("ready" -> AttributeString("true")), inputs, outputs,
-      AgoraMethod(testData.wsName.namespace, "method-a", 1))
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad", Some("samples"), Map(), inputs, outputs,
+      AgoraMethod("dsde", "good_and_bad", 1))
 
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
     val expectedSuccessOutputs = Seq("good_out", "empty_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
+
+    //FIXME: a thing i forgot: we need to return Created + a ValidatedMethodConfiguration, NOT to throw errorz
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>

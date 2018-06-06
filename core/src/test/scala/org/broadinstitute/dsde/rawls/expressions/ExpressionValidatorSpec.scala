@@ -77,6 +77,15 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
 
   it should "validateAndParseMCExpressions" in {
 
+    //FIXME: -- make this a copypaste of "should validateExpressionsForSubmission"
+    //The behaviour of validateAndParse is tested above, and we don't need to duplicate it here.
+    //We do need to test that VnPMCEs always returns a ValidatedMethodConfiguration, correctly ignoring optionals
+    //This is basically the body of "should validateExpressionsForSubmission" with the twist that it shouldn't return a Try
+
+    //NOTE: hi Thursday hussein, this is Wednesday hussein
+    //see MCApiServiceSpec line 112: fucking with MCs should return OK, not a failure if it doesn't validate
+    //so your recent work is to that end
+
     val actualValid = ExpressionValidator.validateAndParseMCExpressions(allValid,  allowRootEntity = true, this)
     assertSameElements(parseableInputExpressions, actualValid.validInputs)
     assertSameElements(parseableOutputExpressions, actualValid.validOutputs)

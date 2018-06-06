@@ -169,6 +169,28 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     val threeStepMethod = AgoraEntity(Some("dsde"),Some("three_step"),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
 
+    val goodAndBadInputsWDL =
+      """
+        |workflow goodAndBad {
+        |  call goodAndBadTask
+        |}
+        |
+        |task goodAndBadTask {
+        |  String good_in
+        |  String bad_in
+        |  command {
+        |    echo "hello world"
+        |  }
+        |  output {
+        |    String good_out = "everything is good"
+        |    String bad_out = "everything is bad"
+        |    String empty_out = "everything is empty"
+        |  }
+        |}
+      """.stripMargin
+
+    val goodAndBadMethod = AgoraEntity(Some("dsde"),Some("good_and_bad"),Some(1),None,None,None,None,Some(goodAndBadInputsWDL),None,Some(AgoraEntityType.Workflow))
+
     mockServer.when(
       request()
         .withMethod("GET")
@@ -179,6 +201,17 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
           .withBody(threeStepMethod.toJson.prettyPrint)
           .withStatusCode(StatusCodes.OK.intValue)
       )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath(methodPath + "/dsde/good_and_bad/1")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(goodAndBadMethod.toJson.prettyPrint)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
 
     mockServer.when(
       request()

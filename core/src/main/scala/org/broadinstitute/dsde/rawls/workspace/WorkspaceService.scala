@@ -1152,9 +1152,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   //validates the expressions in the method configuration, taking into account optional inputs
   private def validateMethodConfiguration(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     withMethodInputs(methodConfiguration, userInfo) { (_, inputsToProcess, emptyOptionalInputs) =>
-      withValidatedMCExpressions(methodConfiguration, inputsToProcess, emptyOptionalInputs, allowRootEntity = methodConfiguration.rootEntityType.isDefined, dataAccess) { vmc =>
-        DBIO.successful(vmc)
-      }
+      val vmc = ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, inputsToProcess, emptyOptionalInputs, allowRootEntity = methodConfiguration.rootEntityType.isDefined, dataAccess)
+      DBIO.successful(vmc)
     }
   }
 
@@ -1174,7 +1173,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
-          DBIO.successful(PerRequest.RequestComplete(StatusCodes.OK, ExpressionValidator.validateAndParseMCExpressions(methodConfig, methodConfig.rootEntityType.isDefined, dataAccess)))
+          validateMethodConfiguration(workspaceContext, methodConfig, dataAccess) map { vmc =>
+            PerRequest.RequestComplete(StatusCodes.OK, vmc)
+          }
         }
       }
     }
