@@ -376,6 +376,8 @@ case class ValidatedMethodConfiguration(
                                          methodConfiguration: MethodConfiguration,
                                          validInputs: Seq[String],
                                          invalidInputs: Map[String,String],
+                                         missingInputs: Seq[String],
+                                         extraInputs: Seq[String],
                                          validOutputs: Seq[String],
                                          invalidOutputs: Map[String,String])
 
@@ -615,7 +617,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 
-  implicit val ValidatedMethodConfigurationFormat = jsonFormat5(ValidatedMethodConfiguration)
+  implicit val ValidatedMethodConfigurationFormat = jsonFormat7(ValidatedMethodConfiguration)
 
   implicit val GA4GHToolDescriptorFormat = jsonFormat3(GA4GHTool)
 

@@ -1151,8 +1151,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   //validates the expressions in the method configuration, taking into account optional inputs
   private def validateMethodConfiguration(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
-    withMethodInputs(methodConfiguration, userInfo) { (_, inputsToProcess, emptyOptionalInputs) =>
-      val vmc = ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, inputsToProcess, emptyOptionalInputs, allowRootEntity = methodConfiguration.rootEntityType.isDefined, dataAccess)
+    withMethodInputs(methodConfiguration, userInfo) { (_, gatherInputsResult) =>
+      val vmc = ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity = methodConfiguration.rootEntityType.isDefined, dataAccess)
       DBIO.successful(vmc)
     }
   }
@@ -2305,7 +2305,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, dataAccess) { methodConfig =>
-          withMethodInputs(methodConfig, userInfo) { (wdl, inputsToProcess, emptyOptionalInputs) =>
+          withMethodInputs(methodConfig, userInfo) { (wdl, gatherInputsResult) =>
+
             //either both entityName and entityType must be defined, or neither. Error otherwise
             if(submissionRequest.entityName.isDefined != submissionRequest.entityType.isDefined) {
               throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"You must set both entityType and entityName to run on an entity, or neither (to run with literal or workspace inputs)."))
@@ -2322,16 +2323,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Your method config uses no root entity, but you passed one to the submission."))
               }
             }
-            withValidatedMCExpressions(methodConfig, inputsToProcess, emptyOptionalInputs, allowRootEntity = submissionRequest.entityName.isDefined, dataAccess) { _ =>
+            withValidatedMCExpressions(methodConfig, gatherInputsResult, allowRootEntity = submissionRequest.entityName.isDefined, dataAccess) { _ =>
               withSubmissionEntityRecs(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntityRecs =>
                 withWorkflowFailureMode(submissionRequest) { workflowFailureMode =>
                   //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-                  MethodConfigResolver.evaluateInputExpressions(workspaceContext, inputsToProcess, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
+                  MethodConfigResolver.evaluateInputExpressions(workspaceContext, gatherInputsResult.processableInputs, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
                     valuesByEntity
                       .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values) })
                       .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
                       case (succeeded, failed) =>
-                        val methodConfigInputs = inputsToProcess.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.localName.value, methodInput.expression) }
+                        val methodConfigInputs = gatherInputsResult.processableInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.localName.value, methodInput.expression) }
                         val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
                         op(dataAccess, workspaceContext, wdl, header, succeeded.toSeq, failed.toSeq, workflowFailureMode)
                     }

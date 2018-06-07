@@ -62,7 +62,9 @@ object MethodConfigResolver {
 
   case class MethodInput(workflowInput: InputDefinition, expression: String)
 
-  def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[Seq[MethodInput]] = parseWDL(wdl) map { workflow =>
+  case class GatherInputsResult(processableInputs: Seq[MethodInput], emptyOptionalInputs: Seq[MethodInput], missingInputs: Seq[FullyQualifiedName], extraInputs: Seq[String])
+
+  def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[GatherInputsResult] = parseWDL(wdl) map { workflow =>
     def isAttributeEmpty(fqn: FullyQualifiedName): Boolean = {
       methodConfig.inputs.get(fqn) match {
         case Some(AttributeString(value)) => value.isEmpty
@@ -70,20 +72,15 @@ object MethodConfigResolver {
       }
     }
     val agoraInputs = workflow.inputs
-    val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => (!methodConfig.inputs.contains(fqn) || isAttributeEmpty(fqn)) && !workflowInput.optional }.keys
-    val extraInputs = methodConfig.inputs.filter { case (name, expression) => !agoraInputs.contains(name) }.keys
-    if (missingInputs.nonEmpty || extraInputs.nonEmpty) {
-      val message =
-        if (missingInputs.nonEmpty)
-          if (extraInputs.nonEmpty)
-            "is missing definitions for these inputs: " + missingInputs.mkString(", ") + " and it has extraneous definitions for these inputs: " + extraInputs.mkString(", ")
-          else
-            "is missing definitions for these inputs: " + missingInputs.mkString(", ")
-        else
-          "has extraneous definitions for these inputs: " + extraInputs.mkString(", ")
-      throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} ${message}")
-    }
-    for ((name, expression) <- methodConfig.inputs.toSeq) yield MethodInput(agoraInputs(name), expression.value)
+    val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => (!methodConfig.inputs.contains(fqn) || isAttributeEmpty(fqn)) && !workflowInput.optional }.keys.toSeq
+    val (correctInputs, extraInputs) = methodConfig.inputs.partition { case (name, expression) => agoraInputs.contains(name) }
+
+    val methodInputs = for ((name, expression) <- correctInputs) yield MethodInput(agoraInputs(name), expression.value)
+
+    //Remove inputs that are both empty and optional
+    val (emptyOptionalInputs, processableInputs) = methodInputs.partition(input => input.workflowInput.optional && input.expression.isEmpty)
+
+    GatherInputsResult(processableInputs.toSeq, emptyOptionalInputs.toSeq, missingInputs, extraInputs.keys.toSeq)
   }
 
   def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {

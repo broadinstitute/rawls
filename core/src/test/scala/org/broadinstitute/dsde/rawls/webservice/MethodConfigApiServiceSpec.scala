@@ -134,6 +134,19 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return OK and a VMC with failures if a MC is bad" in {
+    assert(false)
+
+    /*
+    Implementation notes:
+      If the inputs don't match the method, you'll get a 400.
+        - But the MC will still be saved in the DB as-is. Is this stupid?
+        - What if: if the inputs are a superset of the method, you're OK.
+          If they're not, you get something in your VMC saying so.
+      If the inputs DO match the method, you'll get an OK, and expression errors will be in the VMC response.
+     */
+  }
+
   it should "not allow library attributes in outputs for create method configuration by curator" in withTestDataApiServices { services =>
     val inputs = Map("lib_ent_in" -> AttributeString("this.library:foo"), "lib_ws_in" -> AttributeString("workspace.library:foo"))
     val outputs = Map("lib_ent_out" -> AttributeString("this.library:bar"),"lib_ws_out" -> AttributeString("workspace.library:bar"))
@@ -169,7 +182,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(ValidatedMethodConfiguration(newMethodConfig, expectedSuccessInputs, Map(), expectedSuccessOutputs, Map())) {
+        assertResult(ValidatedMethodConfiguration(newMethodConfig, expectedSuccessInputs, Map(), Seq(), Seq(), expectedSuccessOutputs, Map())) {
           responseAs[ValidatedMethodConfiguration]
         }
         // all inputs and outputs are saved, regardless of parsing errors
@@ -219,7 +232,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.Created) {
             status
           }
-          assertResult(ValidatedMethodConfiguration(mc, Seq(), Map(), Seq(), Map())) {
+          assertResult(ValidatedMethodConfiguration(mc, Seq(), Map(), Seq(), Seq(), Seq(), Map())) {
             responseAs[ValidatedMethodConfiguration]
           }
         }

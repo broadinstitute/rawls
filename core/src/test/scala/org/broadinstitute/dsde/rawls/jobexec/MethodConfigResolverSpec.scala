@@ -9,8 +9,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import java.util.UUID
 
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import spray.json.JsArray
-import wom.callable.Callable.{InputDefinition, OptionalInputDefinition, InputDefinitionWithDefault, RequiredInputDefinition}
+import wom.callable.Callable.{InputDefinition, InputDefinitionWithDefault, OptionalInputDefinition, RequiredInputDefinition}
 import wom.types.{WomArrayType, WomIntegerType, WomOptionalType}
 
 import scala.concurrent.ExecutionContext
@@ -200,8 +201,11 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       MethodConfigResolver.gatherInputs(methodConfig, wdl) match {
         case scala.util.Failure(exception) =>
           DBIO.failed(exception)
-        case scala.util.Success(methodInputs) =>
-          MethodConfigResolver.evaluateInputExpressions(workspaceContext, methodInputs, Some(entityRecs), dataAccess)
+        case scala.util.Success(gatherInputsResult: GatherInputsResult)
+          if gatherInputsResult.extraInputs.nonEmpty || gatherInputsResult.missingInputs.nonEmpty =>
+          DBIO.failed(new RawlsException(s"gatherInputsResult has missing or extra inputs: $gatherInputsResult"))
+        case scala.util.Success(gatherInputsResult: GatherInputsResult) =>
+          MethodConfigResolver.evaluateInputExpressions(workspaceContext, gatherInputsResult.processableInputs, Some(entityRecs), dataAccess)
       }
     }
   }

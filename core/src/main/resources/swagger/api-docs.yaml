@@ -4775,7 +4775,7 @@ definitions:
         description: 'Is this config marked as deleted?'
 
   ValidatedMethodConfiguration:
-    description: ''
+    description: 'FIXME FIX FIX FIX ME NEW FIELDS'
     required:
       - methodConfiguration
       - validInputs

@@ -4,6 +4,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{AttributeString, ErrorReport, MethodConfiguration, ValidatedMethodConfiguration}
 import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 
 import scala.util.Try
 
@@ -12,46 +13,46 @@ object ExpressionValidator {
   // presence: inputs which are both empty and optional are pre-validated, so they are skipped here
   // absence: validate all inputs normally
 
-  private[expressions] def validateAndParse(methodConfiguration: MethodConfiguration, inputsToParse: Map[String, AttributeString], allowRootEntity: Boolean, parser: SlickExpressionParser): ValidatedMethodConfiguration = {
+  private[expressions] def validateAndParse(methodConfiguration: MethodConfiguration, gatherInputsResult: GatherInputsResult, allowRootEntity: Boolean, parser: SlickExpressionParser): ValidatedMethodConfiguration = {
+    val inputsToParse = gatherInputsResult.processableInputs map { mi => (mi.workflowInput.localName.value, AttributeString(mi.expression)) }
     val (emptyOutputs, outputsToParse) = methodConfiguration.outputs.partition { case (_, expr) => expr.value.isEmpty }
 
-    val parsed = ExpressionParser.parseMCExpressions(inputsToParse, outputsToParse, allowRootEntity, parser)
+    val parsed = ExpressionParser.parseMCExpressions(inputsToParse.toMap, outputsToParse, allowRootEntity, parser)
 
     // empty output expressions are also valid
     val validatedOutputs = emptyOutputs.keys.toSeq ++ parsed.validOutputs
 
-    ValidatedMethodConfiguration(methodConfiguration, parsed.validInputs, parsed.invalidInputs, validatedOutputs, parsed.invalidOutputs)
+    ValidatedMethodConfiguration(methodConfiguration, parsed.validInputs, parsed.invalidInputs, gatherInputsResult.missingInputs, gatherInputsResult.extraInputs, validatedOutputs, parsed.invalidOutputs)
   }
 
   // validate a MC, skipping optional empty inputs, and return a ValidatedMethodConfiguration
   def validateAndParseMCExpressions(methodConfiguration: MethodConfiguration,
-                                       methodInputsToParse: Seq[MethodConfigResolver.MethodInput],
-                                       emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput],
-                                       allowRootEntity: Boolean,
-                                       parser: SlickExpressionParser): ValidatedMethodConfiguration = {
-    val inputsToParse = methodInputsToParse map { mi => (mi.workflowInput.localName.value, AttributeString(mi.expression)) }
+                                    gatherInputsResult: GatherInputsResult,
+                                    allowRootEntity: Boolean,
+                                    parser: SlickExpressionParser): ValidatedMethodConfiguration = {
 
-    val validated = validateAndParse(methodConfiguration, inputsToParse.toMap, allowRootEntity, parser)
+    val validated = validateAndParse(methodConfiguration, gatherInputsResult, allowRootEntity, parser)
 
     // a MethodInput which is both optional and empty is already valid
-    val emptyOptionalInputs = emptyOptionalMethodInputs map { _.workflowInput.localName.value }
+    val emptyOptionalInputs = gatherInputsResult.emptyOptionalInputs map { _.workflowInput.localName.value }
     validated.copy(validInputs = validated.validInputs ++ emptyOptionalInputs)
   }
 
   // validate a MC, skipping optional empty inputs, and return failure when any inputs/outputs are invalid
   def validateExpressionsForSubmission(methodConfiguration: MethodConfiguration,
-                                       methodInputsToParse: Seq[MethodConfigResolver.MethodInput],
-                                       emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput],
+                                       gatherInputsResult: GatherInputsResult,
                                        allowRootEntity: Boolean,
                                        parser: SlickExpressionParser): Try[ValidatedMethodConfiguration] = {
 
-    val validated = validateAndParseMCExpressions(methodConfiguration, methodInputsToParse, emptyOptionalMethodInputs, allowRootEntity, parser)
+    val validated = validateAndParseMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity, parser)
 
     Try {
-      if (validated.invalidInputs.nonEmpty || validated.invalidOutputs.nonEmpty) {
+      if (validated.invalidInputs.nonEmpty || validated.missingInputs.nonEmpty || validated.extraInputs.nonEmpty || validated.invalidOutputs.nonEmpty) {
         val inputMsg = if (validated.invalidInputs.isEmpty) Seq() else Seq(s"Invalid inputs: ${validated.invalidInputs.mkString(",")}")
+        val missingMsg = if (validated.missingInputs.isEmpty) Seq() else Seq(s"Missing inputs: ${validated.missingInputs.mkString(",")}")
+        val extrasMsg = if (validated.extraInputs.isEmpty) Seq() else Seq(s"Extra inputs: ${validated.extraInputs.mkString(",")}")
         val outputMsg = if (validated.invalidOutputs.isEmpty) Seq() else Seq(s"Invalid outputs: ${validated.invalidOutputs.mkString(",")}")
-        val errorStr = (inputMsg ++ outputMsg) mkString " ; "
+        val errorStr = (inputMsg ++ missingMsg ++ extrasMsg ++ outputMsg) mkString " ; "
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Validation errors: $errorStr"))
       }
       validated
