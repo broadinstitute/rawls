@@ -25,7 +25,6 @@ trait SlickExpressionParser extends JavaTokenParsers {
     with WorkspaceComponent
     with AttributeComponent =>
   import driver.api._
-  import entityQuery.EntityRecordLightShape
 
   // A parsed expression will result in a PipelineQuery. Each step in a query traverses from entity to
   // entity following references. The final step takes the last entity, producing a result dependent on the query
@@ -45,7 +44,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   type FinalFunc = (SlickExpressionContext, Option[PipeType]) => ReadAction[Map[String, Iterable[Any]]]
 
   // a query that results in the root entity's name, entity records and a sort ordering
-  type PipeType = Query[(Rep[String], EntityRecordLiteLifted), (String, EntityRecord), Seq]
+  type PipeType = Query[(Rep[String], EntityTable), (String, EntityRecord), Seq]
 
   /** Parser definitions **/
   // Entity expressions take the general form entity.ref.ref.attribute.
@@ -188,7 +187,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   private def entityRootFunc(context: SlickExpressionContext): PipeType = {
     for {
       rootEntities <- exprEvalQuery if rootEntities.transactionId === context.transactionId
-      entity <- entityQuery.withoutAllAttributeValues if rootEntities.id === entity.id
+      entity <- entityQuery if rootEntities.id === entity.id
     } yield (entity.name, entity)
   }
 
@@ -220,7 +219,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
       rootEntity <- exprEvalQuery if rootEntity.transactionId === context.transactionId
       workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
       attribute <- workspaceAttributeQuery if attribute.ownerId === workspace.id && attribute.name === attrName.name && attribute.namespace === attrName.namespace
-      nextEntity <- entityQuery.withoutAllAttributeValues if attribute.valueEntityRef === nextEntity.id
+      nextEntity <- entityQuery if attribute.valueEntityRef === nextEntity.id
     } yield (rootEntity.name, nextEntity)
   }
 
@@ -229,7 +228,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
     (for {
       (rootEntityName, entity) <- queryPipeline
       attribute <- entityAttributeQuery if entity.id === attribute.ownerId && attribute.name === attrName.name && attribute.namespace === attrName.namespace
-      nextEntity <- entityQuery.withoutAllAttributeValues if attribute.valueEntityRef === nextEntity.id
+      nextEntity <- entityQuery if attribute.valueEntityRef === nextEntity.id
     } yield (rootEntityName, nextEntity)).sortBy({case (nm, ent) => ent.name })
   }
 
@@ -351,7 +350,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
     val query = for {
       workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
       attribute <- workspaceAttributeQuery if attribute.ownerId === workspace.id && attribute.name === attrName.name && attribute.namespace === attrName.namespace
-      entity <- entityQuery.withoutAllAttributeValues if attribute.valueEntityRef === entity.id
+      entity <- entityQuery if attribute.valueEntityRef === entity.id
     } yield entity
 
     //Return the value of the expression once for each entity we wanted to evaluate this expression against!

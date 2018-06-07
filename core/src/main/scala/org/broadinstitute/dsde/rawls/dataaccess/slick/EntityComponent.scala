@@ -8,49 +8,41 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
-import slick.dbio.DBIOAction
-import slick.dbio.Effect.{Read, Write}
 import slick.jdbc.{GetResult, JdbcProfile}
 import akka.http.scaladsl.model.StatusCodes
 
-/**
- * Created by dvoet on 2/4/16.
- */
+import scala.annotation.tailrec
+
+sealed trait EntityRecordBase {
+  val id: Long
+  val name: String
+  val entityType: String
+  val workspaceId: UUID
+  val recordVersion: Long
+  val deleted: Boolean
+  val deletedDate: Option[Timestamp]
+
+  def toReference = AttributeEntityReference(entityType, name)
+  def withoutAllAttributeValues = EntityRecord(id, name, entityType, workspaceId, recordVersion, deleted, deletedDate)
+  def withAllAttributeValues(allAttributeValues: Option[String]) = EntityRecordWithInlineAttributes(id, name, entityType, workspaceId, recordVersion, allAttributeValues, deleted, deletedDate)
+}
+
 case class EntityRecord(id: Long,
                         name: String,
                         entityType: String,
                         workspaceId: UUID,
                         recordVersion: Long,
-                        allAttributeValues: Option[String],
                         deleted: Boolean,
-                        deletedDate: Option[Timestamp]) {
-  def toReference = AttributeEntityReference(entityType, name)
-}
+                        deletedDate: Option[Timestamp]) extends EntityRecordBase
 
-// used in conjunction with entityQuery.withoutAllAttributes and EntityRecordLightShape.
-// Slick usually magically creates these shapes but this one is necessary because withoutAllAttributes
-// omits a column, and the magically-created shapes want that column.
-case class EntityRecordLiteLifted(id: slick.lifted.Rep[Long],
-                                  name: slick.lifted.Rep[String],
-                                  entityType: slick.lifted.Rep[String],
-                                  workspaceId: slick.lifted.Rep[UUID],
-                                  recordVersion: slick.lifted.Rep[Long],
-                                  deleted: slick.lifted.Rep[Boolean],
-                                  deletedDate: slick.lifted.Rep[Option[Timestamp]])
-
-// Translate tuples <> EntityRecord. Created as a separate object because additional apply methods
-// on an EntityRecord object confuse Slick.
-object EntityRecordBuilder {
-  def toEntityRecord(tuple: (Long, String, String, UUID, Long, Boolean, Option[Timestamp])): EntityRecord = {
-    tuple match {
-      case (id, name, entityType, workspaceId, recordVersion, deleted, deletedDate) =>
-        new EntityRecord(id, name, entityType, workspaceId, recordVersion, allAttributeValues = None, deleted, deletedDate)
-    }
-  }
-
-  def fromEntityRecord(rec: EntityRecord): Option[(Long, String, String, UUID, Long, Boolean, Option[Timestamp])] =
-    Some(rec.id, rec.name, rec.entityType, rec.workspaceId, rec.recordVersion, rec.deleted, rec.deletedDate)
-}
+case class EntityRecordWithInlineAttributes(id: Long,
+                                            name: String,
+                                            entityType: String,
+                                            workspaceId: UUID,
+                                            recordVersion: Long,
+                                            allAttributeValues: Option[String],
+                                            deleted: Boolean,
+                                            deletedDate: Option[Timestamp]) extends EntityRecordBase
 
 object EntityComponent {
   //the length of the all_attribute_values column, which is TEXT, -1 becaue i'm nervous
@@ -64,20 +56,92 @@ trait EntityComponent {
 
   import driver.api._
 
-  class EntityTable(tag: Tag) extends Table[EntityRecord](tag, "ENTITY") {
+  sealed abstract class EntityTableBase[RECORD_TYPE <: EntityRecordBase](tag: Tag) extends Table[RECORD_TYPE](tag, "ENTITY") {
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def name = column[String]("name", O.Length(254))
     def entityType = column[String]("entity_type", O.Length(254))
     def workspaceId = column[UUID]("workspace_id")
     def version = column[Long]("record_version")
-    def allAttributeValues = column[Option[String]]("all_attribute_values")
     def deleted = column[Boolean]("deleted")
     def deletedDate = column[Option[Timestamp]]("deleted_date")
 
     def workspace = foreignKey("FK_ENTITY_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def uniqueTypeName = index("idx_entity_type_name", (workspaceId, entityType, name), unique = true)
+  }
 
-    def * = (id, name, entityType, workspaceId, version, allAttributeValues, deleted, deletedDate) <> (EntityRecord.tupled, EntityRecord.unapply)
+  class EntityTable(tag: Tag) extends EntityTableBase[EntityRecord](tag) {
+    def * = (id, name, entityType, workspaceId, version, deleted, deletedDate) <> (EntityRecord.tupled, EntityRecord.unapply)
+  }
+
+  class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRecordWithInlineAttributes](tag) {
+    def allAttributeValues = column[Option[String]]("all_attribute_values")
+
+    def * = (id, name, entityType, workspaceId, version, allAttributeValues, deleted, deletedDate) <> (EntityRecordWithInlineAttributes.tupled, EntityRecordWithInlineAttributes.unapply)
+  }
+
+  object entityQueryWithInlineAttributes extends TableQuery(new EntityTableWithInlineAttributes(_)) {
+    type EntityQueryWithInlineAttributes = Query[EntityTableWithInlineAttributes, EntityRecordWithInlineAttributes, Seq]
+
+    // only used by tests
+    def findEntityByName(workspaceId: UUID, entityType: String, entityName: String): EntityQueryWithInlineAttributes = {
+      filter(entRec => entRec.name === entityName && entRec.entityType === entityType && entRec.workspaceId === workspaceId)
+    }
+
+    @tailrec
+    def collectAttributeStrings(toProcess: Iterable[Attribute], processed: List[String], charsRemaining: Int): String = {
+      if (toProcess.isEmpty || charsRemaining <= 0)
+        processed.mkString(" ")
+      else {
+        val nextAttr = AttributeStringifier(toProcess.head)
+        collectAttributeStrings(toProcess.tail, processed :+ nextAttr, charsRemaining - nextAttr.length - 1)
+      }
+    }
+
+    private def createAllAttributesString(entity: Entity): Option[String] = {
+      val maxLength = EntityComponent.allAttributeValuesColumnSize
+      Option(s"${entity.name} ${collectAttributeStrings(entity.attributes.values.filterNot(_.isInstanceOf[AttributeList[_]]), List(), maxLength)}".toLowerCase.take(maxLength))
+    }
+
+    def batchInsertEntities(workspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Seq[EntityRecord]] = {
+      def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecordWithInlineAttributes = {
+        EntityRecordWithInlineAttributes(0, entity.name, entity.entityType, workspaceId, 0, createAllAttributesString(entity), deleted = false, deletedDate = None)
+      }
+
+      if (entities.nonEmpty) {
+        val entityRecs = entities.toSeq.map(e => marshalNewEntity(e, workspaceContext.workspaceId))
+
+        workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+          insertInBatches(entityQueryWithInlineAttributes, entityRecs) andThen entityQuery.getEntityRecords(workspaceContext.workspaceId, entityRecs.map(_.toReference).toSet)
+      }
+      else {
+        DBIO.successful(Seq.empty[EntityRecord])
+      }
+    }
+
+    def insertNewEntities(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], existingEntityRefs: Seq[AttributeEntityReference]): ReadWriteAction[Seq[EntityRecord]] = {
+      val newEntities = entities.filterNot { e => existingEntityRefs.contains(e.toReference) }
+      batchInsertEntities(workspaceContext, newEntities)
+    }
+
+    def optimisticLockUpdate(entityRecs: Seq[EntityRecord], entities: Traversable[Entity]): ReadWriteAction[Seq[Int]] = {
+      def populateAllAttributeValues(entityRecsFromDb: Seq[EntityRecord], entitiesToSave: Traversable[Entity]): Seq[EntityRecordWithInlineAttributes] = {
+        val entitiesByRef = entitiesToSave.map(e => e.toReference -> e).toMap
+        entityRecsFromDb map { rec => rec.withAllAttributeValues(createAllAttributesString(entitiesByRef(rec.toReference))) }
+      }
+
+      def findEntityByIdAndVersion(id: Long, version: Long): EntityQueryWithInlineAttributes = {
+        filter(rec => rec.id === id && rec.version === version)
+      }
+
+      def optimisticLockUpdateOne(originalRec: EntityRecordWithInlineAttributes): ReadWriteAction[Int] = {
+        findEntityByIdAndVersion(originalRec.id, originalRec.recordVersion) update originalRec.copy(recordVersion = originalRec.recordVersion + 1) map {
+          case 0 => throw new RawlsConcurrentModificationException(s"could not update $originalRec because its record version has changed")
+          case success => success
+        }
+      }
+
+      DBIO.sequence(populateAllAttributeValues(entityRecs, entities) map optimisticLockUpdateOne)
+    }
   }
 
   object entityQuery extends TableQuery(new EntityTable(_)) {
@@ -85,21 +149,11 @@ trait EntityComponent {
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
 
-    // understands how to translate EntityRecordLiteLifted into EntityRecord
-    implicit object EntityRecordLightShape
-      extends CaseClassShape(EntityRecordLiteLifted.tupled, EntityRecordBuilder.toEntityRecord)
-
-    // use as a replacement for entityQuery. This query never selects the all_attribute_values column and therefore
-    // will always return an EntityRecord where .allAttributeValues is None.
-    // anywhere this query is used, Slick needs the the EntityRecordLightShape object in implicit scope.
-    def withoutAllAttributeValues =
-      map(e => EntityRecordLiteLifted(e.id, e.name, e.entityType, e.workspaceId, e.version, e.deleted, e.deletedDate))
-
     // Raw queries - used when querying for multiple AttributeEntityReferences
 
     private object EntityRecordRawSqlQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
-      implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<, r.<<) }
+      implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<) }
 
       def action(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
         if( entities.isEmpty ) {
@@ -121,7 +175,7 @@ trait EntityComponent {
       // tells slick how to convert a result row from a raw sql query to an instance of EntityAndAttributesResult
       implicit val getEntityAndAttributesResult = GetResult { r =>
         // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
-        val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<, r.<<)
+        val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
 
         val attributeIdOption: Option[Long] = r.<<
         val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
@@ -130,7 +184,7 @@ trait EntityComponent {
           attributeRec <- attributeRecOption
           refId <- attributeRec.valueEntityRef
         } yield {
-          EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<, r.<<)
+          EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         }
 
         EntityAndAttributesResult(entityRec, attributeRecOption, refEntityRecOption)
@@ -390,11 +444,11 @@ trait EntityComponent {
       entities.foreach(validateEntity)
 
       for {
-        preExistingEntityRecs <- getEntityRecords(workspaceContext.workspaceId, entities.map(_.toReference).toSet).map(populateAllAttributeValues(_, entities))
-        savingEntityRecs <- insertNewEntities(workspaceContext, entities, preExistingEntityRecs).map(_ ++ preExistingEntityRecs)
-        referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs).map(_ ++ savingEntityRecs)
+        preExistingEntityRecs <- getEntityRecords(workspaceContext.workspaceId, entities.map(_.toReference).toSet)
+        savingEntityRecs <- entityQueryWithInlineAttributes.insertNewEntities(workspaceContext, entities, preExistingEntityRecs.map(_.toReference)).map(_ ++ preExistingEntityRecs)
+        referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs.map(_.toReference)).map(_ ++ savingEntityRecs)
         _ <- rewriteAttributes(entities, savingEntityRecs.map(_.id), referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap)
-        _ <- DBIO.seq(preExistingEntityRecs map optimisticLockUpdate: _ *)
+        _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(preExistingEntityRecs, entities)
       } yield entities
     }
 
@@ -405,7 +459,7 @@ trait EntityComponent {
         val existingAttrsToRecordIds: Map[AttributeName, Long] = attrCols.map(a => AttributeName(a._1, a._2) -> a._3).toMap
         val entityRefsToLookup = upserts.valuesIterator.collect { case e: AttributeEntityReference => e }.toSet
 
-        lookupNotYetLoadedReferences(workspaceContext, entityRefsToLookup, Seq(entityRecord)) flatMap { entityRefRecs =>
+        lookupNotYetLoadedReferences(workspaceContext, entityRefsToLookup, Seq(entityRecord.toReference)) flatMap { entityRefRecs =>
           val allTheEntityRefs = entityRefRecs ++ Seq(entityRecord) //re-add the current entity
           val refsToIds = allTheEntityRefs.map(e => e.toReference -> e.id).toMap
           val existingAttributes = existingAttrsToRecordIds.keys.toSeq
@@ -454,14 +508,13 @@ trait EntityComponent {
           for {
             _ <- applyEntityPatch(workspaceContext, entityRecord, upserts, deletes)
             updatedEntities <- entityQuery.getEntities(Seq(entityRecord.id))
-            newRecord = populateAllAttributeValues(entityRecs, updatedEntities.map(elem => elem._2)).head
-            _ <- optimisticLockUpdate(newRecord)
+            _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(entityRecs, updatedEntities.map(elem => elem._2))
           } yield {}
         }
       }
     }
 
-    private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], alreadyLoadedEntityRecs: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
+    private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], alreadyLoadedEntityRefs: Seq[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
       val allRefAttributes = (for {
         entity <- entities
         (_, attribute) <- entity.attributes
@@ -472,11 +525,11 @@ trait EntityComponent {
         }
       } yield ref).toSet
 
-      lookupNotYetLoadedReferences(workspaceContext, allRefAttributes, alreadyLoadedEntityRecs)
+      lookupNotYetLoadedReferences(workspaceContext, allRefAttributes, alreadyLoadedEntityRefs)
     }
 
-    private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, attrReferences: Set[AttributeEntityReference], alreadyLoadedEntityRecs: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
-      val notYetLoadedEntityRecs = attrReferences -- alreadyLoadedEntityRecs.map(_.toReference)
+    private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, attrReferences: Set[AttributeEntityReference], alreadyLoadedEntityRefs: Seq[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
+      val notYetLoadedEntityRecs = attrReferences -- alreadyLoadedEntityRefs
 
       getEntityRecords(workspaceContext.workspaceId, notYetLoadedEntityRecs) map { foundEntities =>
         if (foundEntities.size != notYetLoadedEntityRecs.size) {
@@ -490,13 +543,6 @@ trait EntityComponent {
       }
     }
 
-    private def optimisticLockUpdate(originalRec: EntityRecord): ReadWriteAction[Int] = {
-      findEntityByIdAndVersion(originalRec.id, originalRec.recordVersion) update originalRec.copy(recordVersion = originalRec.recordVersion + 1) map {
-        case 0 => throw new RawlsConcurrentModificationException(s"could not update $originalRec because its record version has changed")
-        case success => success
-      }
-    }
-
     private def rewriteAttributes(entitiesToSave: Traversable[Entity], entityIds: Seq[Long], entityIdsByRef: Map[AttributeEntityReference, Long]): ReadWriteAction[Int] = {
       val attributesToSave = for {
         entity <- entitiesToSave
@@ -506,24 +552,6 @@ trait EntityComponent {
 
       entityAttributeQuery.findByOwnerQuery(entityIds).result flatMap { existingAttributes =>
         entityAttributeQuery.rewriteAttrsAction(attributesToSave, existingAttributes, entityAttributeScratchQuery.insertScratchAttributes)
-      }
-    }
-
-    private def insertNewEntities(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], preExistingEntityRecs: Seq[EntityRecord]): ReadWriteAction[Seq[EntityRecord]] = {
-      val existingEntityRefs = preExistingEntityRecs.map(_.toReference)
-      val newEntities = entities.filterNot { e => existingEntityRefs.contains(e.toReference) }
-
-      val newEntityRecs = newEntities.map(e => marshalNewEntity(e, workspaceContext.workspaceId))
-      batchInsertEntities(workspaceContext, newEntityRecs.toSeq)
-    }
-
-    private def batchInsertEntities(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadWriteAction[Seq[EntityRecord]] = {
-      if(entities.nonEmpty) {
-        workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-          insertInBatches(entityQuery, entities) andThen getEntityRecords(workspaceContext.workspaceId, entities.map(_.toReference).toSet)
-      }
-      else {
-        DBIO.successful(Seq.empty[EntityRecord])
       }
     }
 
@@ -629,7 +657,7 @@ trait EntityComponent {
     }
 
     private def copyEntities(destWorkspaceContext: SlickWorkspaceContext, entitiesToCopy: TraversableOnce[Entity], entitiesToReference: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
-      batchInsertEntities(destWorkspaceContext, entitiesToCopy.toSeq.map(marshalNewEntity(_, destWorkspaceContext.workspaceId))) flatMap { insertedRecs =>
+      entityQueryWithInlineAttributes.batchInsertEntities(destWorkspaceContext, entitiesToCopy) flatMap { insertedRecs =>
         getEntityRecords(destWorkspaceContext.workspaceId, entitiesToReference.toSet) flatMap { toReferenceRecs =>
           val idsByRef = (insertedRecs ++ toReferenceRecs).map { rec => rec.toReference -> rec.id }.toMap
           val entityIdAndEntity = entitiesToCopy map { ent => idsByRef(ent.toReference) -> ent }
@@ -725,18 +753,6 @@ trait EntityComponent {
 
     // Utility methods
 
-    private def createAllAttributesString(entity: Entity): Option[String] = {
-      val trimToSize = EntityComponent.allAttributeValuesColumnSize
-      Option(s"${entity.name} ${entity.attributes.values.filterNot(_.isInstanceOf[AttributeList[_]]).map(AttributeStringifier(_)).mkString(" ")}".toLowerCase.take(trimToSize))
-    }
-
-    private def populateAllAttributeValues(entityRecsFromDb: Seq[EntityRecord], entitiesToSave: Traversable[Entity]): Seq[EntityRecord] = {
-      val entitiesByRef = entitiesToSave.map(e => e.toReference -> e).toMap
-      entityRecsFromDb.map { rec =>
-        rec.copy(allAttributeValues = createAllAttributesString(entitiesByRef(rec.toReference)))
-      }
-    }
-
     private def validateEntity(entity: Entity): Unit = {
       if (entity.entityType.equalsIgnoreCase(Attributable.workspaceEntityType)) {
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Entity type ${Attributable.workspaceEntityType} is reserved", statusCode = StatusCodes.BadRequest))
@@ -749,11 +765,9 @@ trait EntityComponent {
       }
     }
 
-    // Marshal/Unmarshal methods
+    // Unmarshal methods
 
-    private def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecord = {
-      EntityRecord(0, entity.name, entity.entityType, workspaceId, 0, createAllAttributesString(entity), deleted = false, deletedDate = None)
-    }
+    // NOTE: marshalNewEntity is in entityQueryWithInlineAttributes because it helps save the inline attributes to DB
 
     private def unmarshalEntity(entityRecord: EntityRecord, attributes: AttributeMap): Entity = {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
