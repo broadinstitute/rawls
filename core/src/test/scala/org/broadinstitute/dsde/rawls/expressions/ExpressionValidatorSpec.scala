@@ -76,45 +76,35 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
   }
 
   it should "validateAndParseMCExpressions" in {
-
-    //FIXME: -- make this a copypaste of "should validateExpressionsForSubmission"
     //The behaviour of validateAndParse is tested above, and we don't need to duplicate it here.
     //We do need to test that VnPMCEs always returns a ValidatedMethodConfiguration, correctly ignoring optionals
     //This is basically the body of "should validateExpressionsForSubmission" with the twist that it shouldn't return a Try
-
-    //NOTE: hi Thursday hussein, this is Wednesday hussein
-    //see MCApiServiceSpec line 112: fucking with MCs should return OK, not a failure if it doesn't validate
-    //so your recent work is to that end
-
-    val actualValid = ExpressionValidator.validateAndParseMCExpressions(allValid,  allowRootEntity = true, this)
+    
+    val actualValid = ExpressionValidator.validateAndParseMCExpressions(allValid, toMethodInputs(allValid), Seq.empty, allowRootEntity = true, this)
     assertSameElements(parseableInputExpressions, actualValid.validInputs)
     assertSameElements(parseableOutputExpressions, actualValid.validOutputs)
     actualValid.invalidInputs shouldBe 'empty
     actualValid.invalidOutputs shouldBe 'empty
 
-    val actualValidNoRoot = ExpressionValidator.validateAndParseMCExpressions(allValidNoRootMC,  allowRootEntity = false, this)
+    val actualValidNoRoot = ExpressionValidator.validateAndParseMCExpressions(allValidNoRootMC, toMethodInputs(allValidNoRootMC), Seq.empty, allowRootEntity = false, this)
     assertSameElements(parseableInputExpressionsWithNoRoot, actualValidNoRoot.validInputs)
     assertSameElements(parseableOutputExpressionsWithNoRoot, actualValidNoRoot.validOutputs)
     actualValidNoRoot.invalidInputs shouldBe 'empty
     actualValidNoRoot.invalidOutputs shouldBe 'empty
 
-    val actualInvalid = ExpressionValidator.validateAndParseMCExpressions(allInvalid, allowRootEntity = true, this)
-    actualInvalid.validInputs shouldBe 'empty
-    actualInvalid.validOutputs shouldBe 'empty
-    actualInvalid.invalidInputs should have size unparseableInputExpressions.size
-    actualInvalid.invalidOutputs should have size unparseableOutputExpressions.size
+    // validation should have failures when given an empty non-optional input
+    val actualOneEmpty = ExpressionValidator.validateAndParseMCExpressions(oneEmpty, toMethodInputs(oneEmpty), Seq.empty, allowRootEntity = true, this)
+    actualOneEmpty.invalidInputs.size shouldBe 1
 
-    val actualInvalidNoRoot = ExpressionValidator.validateAndParseMCExpressions(allInvalidNoRootMC, allowRootEntity = false, this)
-    actualInvalidNoRoot.validInputs shouldBe 'empty
-    actualInvalidNoRoot.validOutputs shouldBe 'empty
-    actualInvalidNoRoot.invalidInputs should have size unparseableInputExpressionsWithNoRoot.size
-    actualInvalidNoRoot.invalidOutputs should have size unparseableOutputExpressionsWithNoRoot.size
+    // succeed if the empty input is optional
+    val emptyOptionalInput = toMethodInput(emptyExpr)
+    val inputsToProcess = toMethodInputs(oneEmpty).toSet - emptyOptionalInput
 
-    val actualOneEmpty = ExpressionValidator.validateAndParseMCExpressions(oneEmpty, allowRootEntity = true, this)
-    assertSameElements(parseableInputExpressions, actualOneEmpty.validInputs)
-    assertSameElements(parseableOutputExpressions, actualOneEmpty.validOutputs)
-    assertSameElements(Seq("this.empty"), actualOneEmpty.invalidInputs.keys)
-    actualOneEmpty.invalidOutputs shouldBe 'empty
+    val actualOptionalEmpty = ExpressionValidator.validateAndParseMCExpressions(oneEmpty, inputsToProcess.toSeq, Seq(emptyOptionalInput), allowRootEntity = true, this)
+    assertSameElements(oneEmpty.inputs.keys, actualOptionalEmpty.validInputs)
+    assertSameElements(oneEmpty.outputs.keys, actualOptionalEmpty.validOutputs)
+    actualOptionalEmpty.invalidInputs shouldBe 'empty
+    actualOptionalEmpty.invalidOutputs shouldBe 'empty
   }
 
   it should "validateExpressionsForSubmission" in {
