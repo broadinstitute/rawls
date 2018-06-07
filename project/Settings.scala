@@ -36,7 +36,12 @@ object Settings {
 
   //sbt assembly settings for rawls proper needs to include a main class to launch the jar
   val rawlsAssemblySettings = Seq(
-    mainClass in assembly := Some("org.broadinstitute.dsde.rawls.Boot")
+    mainClass in assembly := Some("org.broadinstitute.dsde.rawls.Boot"),
+    // we never want guava-jdk5
+    assemblyExcludedJars in assembly := {
+      val cp = (fullClasspath in assembly).value
+      cp filter {_.data.getName.startsWith("guava-jdk5")}
+    }
   )
 
   //common settings for all sbt subprojects

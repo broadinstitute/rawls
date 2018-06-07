@@ -10,7 +10,7 @@ import wdl.draft2.parser.WdlParser.SyntaxError
 import wom.callable.Callable.InputDefinition
 import wom.types.{WomType, WomArrayType, WomOptionalType}
 import wdl.draft2.model.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow}
-import wdl.draft2.model.WdlNamespace.httpResolver
+import languages.wdl.draft2.WdlDraft2LanguageFactory.httpResolver
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
