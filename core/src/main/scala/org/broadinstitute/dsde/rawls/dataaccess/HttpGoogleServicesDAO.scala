@@ -275,10 +275,13 @@ class HttpGoogleServicesDAO(
     }
     results.flatMap { workspaceInfo =>
       val accessLevels = Set(WorkspaceAccessLevels.Owner, WorkspaceAccessLevels.Write)
-      val groupEmails = accessLevels.map { workspaceInfo.accessGroupsByLevel.get(_).head.groupEmail }
-
-      Future.traverse(groupEmails) { email => addRoleToGroup(project.projectName, WorkbenchEmail(email.value), "bigquery.jobUser") }.flatMap(_ => results)
-    }
+      val groupEmails =
+        accessLevels.map { workspaceInfo.accessGroupsByLevel.get(_).head.groupEmail }
+      addPolicyBindings(
+        project.projectName,
+        Map("roles/bigquery.jobUser" -> groupEmails.map { _.value }.toList)
+      )
+    }.flatMap { _ => results }
   }
 
   def workspaceAccessGroupName(workspaceId: String, accessLevel: WorkspaceAccessLevel) = s"${workspaceId}-${accessLevel.toString}"
