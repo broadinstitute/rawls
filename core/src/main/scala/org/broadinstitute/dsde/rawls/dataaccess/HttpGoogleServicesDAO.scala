@@ -279,7 +279,7 @@ class HttpGoogleServicesDAO(
         accessLevels.map { workspaceInfo.accessGroupsByLevel.get(_).head.groupEmail }
       addPolicyBindings(
         project.projectName,
-        Map("roles/bigquery.jobUser" -> groupEmails.map { s"group:${_.value}" }.toList)
+        Map("roles/bigquery.jobUser" -> groupEmails.map { e => s"group:${e.value}" }.toList)
       )
     }.flatMap { _ => results }
   }
