@@ -1453,7 +1453,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               status = WorkflowStatuses.Queued,
               statusLastChangedDate = DateTime.now,
               workflowEntity = workflowEntityOpt,
-              inputResolutions = entityInputs.inputResolutions
+              inputResolutions = entityInputs.inputResolutions.toSeq
             )
           }
 
@@ -1463,8 +1463,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               status = WorkflowStatuses.Failed,
               statusLastChangedDate = DateTime.now,
               workflowEntity = workflowEntityOpt,
-              inputResolutions = entityInputs.inputResolutions,
-              messages = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.inputName + " - " + entityValue.error.get))
+              inputResolutions = entityInputs.inputResolutions.toSeq,
+              messages = (for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield AttributeString(entityValue.inputName + " - " + entityValue.error.get)).toSeq
             )
           }
 
@@ -2329,7 +2329,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                   //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
                   MethodConfigResolver.evaluateInputExpressions(workspaceContext, gatherInputsResult.processableInputs, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
                     valuesByEntity
-                      .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values) })
+                      .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values.toSet) })
                       .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
                       case (succeeded, failed) =>
                         val methodConfigInputs = gatherInputsResult.processableInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.localName.value, methodInput.expression) }

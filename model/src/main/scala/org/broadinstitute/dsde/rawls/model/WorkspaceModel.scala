@@ -374,17 +374,17 @@ case class AgoraMethodConfiguration(namespace: String,
 
 case class ValidatedMethodConfiguration(
                                          methodConfiguration: MethodConfiguration,
-                                         validInputs: Seq[String],
+                                         validInputs: Set[String],
                                          invalidInputs: Map[String,String],
-                                         missingInputs: Seq[String],
-                                         extraInputs: Seq[String],
-                                         validOutputs: Seq[String],
+                                         missingInputs: Set[String],
+                                         extraInputs: Set[String],
+                                         validOutputs: Set[String],
                                          invalidOutputs: Map[String,String])
 
 case class ParsedMCExpressions(
-                                         validInputs: Seq[String],
+                                         validInputs: Set[String],
                                          invalidInputs: Map[String,String],
-                                         validOutputs: Seq[String],
+                                         validOutputs: Set[String],
                                          invalidOutputs: Map[String,String])
 
 case class MethodRepoConfigurationImport(

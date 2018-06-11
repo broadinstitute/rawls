@@ -62,7 +62,7 @@ object MethodConfigResolver {
 
   case class MethodInput(workflowInput: InputDefinition, expression: String)
 
-  case class GatherInputsResult(processableInputs: Seq[MethodInput], emptyOptionalInputs: Seq[MethodInput], missingInputs: Seq[FullyQualifiedName], extraInputs: Seq[String])
+  case class GatherInputsResult(processableInputs: Set[MethodInput], emptyOptionalInputs: Set[MethodInput], missingInputs: Set[FullyQualifiedName], extraInputs: Set[String])
 
   def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[GatherInputsResult] = parseWDL(wdl) map { workflow =>
     def isAttributeEmpty(fqn: FullyQualifiedName): Boolean = {
@@ -72,7 +72,7 @@ object MethodConfigResolver {
       }
     }
     val agoraInputs = workflow.inputs
-    val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => (!methodConfig.inputs.contains(fqn) || isAttributeEmpty(fqn)) && !workflowInput.optional }.keys.toSeq
+    val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => (!methodConfig.inputs.contains(fqn) || isAttributeEmpty(fqn)) && !workflowInput.optional }.keys.toSet
     val (correctInputs, extraInputs) = methodConfig.inputs.partition { case (name, expression) => agoraInputs.contains(name) }
 
     val methodInputs = for ((name, expression) <- correctInputs) yield MethodInput(agoraInputs(name), expression.value)
@@ -80,10 +80,10 @@ object MethodConfigResolver {
     //Remove inputs that are both empty and optional
     val (emptyOptionalInputs, processableInputs) = methodInputs.partition(input => input.workflowInput.optional && input.expression.isEmpty)
 
-    GatherInputsResult(processableInputs.toSeq, emptyOptionalInputs.toSeq, missingInputs, extraInputs.keys.toSeq)
+    GatherInputsResult(processableInputs.toSet, emptyOptionalInputs.toSet, missingInputs, extraInputs.keys.toSet)
   }
 
-  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
+  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Set[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
     val entityNames = entities match {
@@ -97,7 +97,7 @@ object MethodConfigResolver {
     } else {
       ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
         //Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
-        val resultsByInput = inputs.map { input =>
+        val resultsByInput = inputs.toSeq.map { input =>
           evaluator.evalFinalAttribute(workspaceContext, input.expression).asTry.map { tryAttribsByEntity =>
             val validationValuesByEntity: Seq[(String, SubmissionValidationValue)] = tryAttribsByEntity match {
               case Failure(regret) =>

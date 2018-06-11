@@ -20,7 +20,7 @@ object ExpressionValidator {
     val parsed = ExpressionParser.parseMCExpressions(inputsToParse.toMap, outputsToParse, allowRootEntity, parser)
 
     // empty output expressions are also valid
-    val validatedOutputs = emptyOutputs.keys.toSeq ++ parsed.validOutputs
+    val validatedOutputs = emptyOutputs.keys.toSet ++ parsed.validOutputs
 
     ValidatedMethodConfiguration(methodConfiguration, parsed.validInputs, parsed.invalidInputs, gatherInputsResult.missingInputs, gatherInputsResult.extraInputs, validatedOutputs, parsed.invalidOutputs)
   }

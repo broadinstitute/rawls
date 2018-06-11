@@ -23,7 +23,7 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
 
   def toGatherInputs(exprs: Map[String, AttributeString]): GatherInputsResult = {
     val methodInputs = exprs.map(toMethodInput)
-    GatherInputsResult(methodInputs.toSeq, Seq(), Seq(), Seq())
+    GatherInputsResult(methodInputs.toSet, Set(), Set(), Set())
   }
 
   val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", Some("Sample"), prerequisites=Map.empty,
@@ -103,8 +103,8 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
 
     // succeed if the empty input is optional
     val methodInputs = oneEmpty.inputs.map(toMethodInput)
-    val emptyOptionalInput = Seq(toMethodInput(emptyExpr))
-    val optionalGatherInputs = GatherInputsResult(methodInputs.toSeq diff emptyOptionalInput, emptyOptionalInput, Seq(), Seq())
+    val emptyOptionalInput = Set(toMethodInput(emptyExpr))
+    val optionalGatherInputs = GatherInputsResult(methodInputs.toSet diff emptyOptionalInput, emptyOptionalInput, Set(), Set())
 
     val actualOptionalEmpty = ExpressionValidator.validateAndParseMCExpressions(oneEmpty, optionalGatherInputs, allowRootEntity = true, this)
     assertSameElements(oneEmpty.inputs.keys, actualOptionalEmpty.validInputs)
@@ -134,8 +134,8 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
 
     // succeed if the empty input is optional
     val methodInputs = oneEmpty.inputs.map(toMethodInput)
-    val emptyOptionalInput = Seq(toMethodInput(emptyExpr))
-    val optionalGatherInputs = GatherInputsResult(methodInputs.toSeq diff emptyOptionalInput, emptyOptionalInput, Seq(), Seq())
+    val emptyOptionalInput = Set(toMethodInput(emptyExpr))
+    val optionalGatherInputs = GatherInputsResult(methodInputs.toSet diff emptyOptionalInput, emptyOptionalInput, Set(), Set())
 
     val actualOptionalEmpty = ExpressionValidator.validateExpressionsForSubmission(oneEmpty, optionalGatherInputs, allowRootEntity = true, this).get
     assertSameElements(oneEmpty.inputs.keys, actualOptionalEmpty.validInputs)

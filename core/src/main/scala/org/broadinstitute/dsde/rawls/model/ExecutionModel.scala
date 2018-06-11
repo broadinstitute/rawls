@@ -194,7 +194,7 @@ case class SubmissionValidationInput(
 // common values for all the entities -- the entity type and the input descriptions
 case class SubmissionValidationHeader(
   entityType: Option[String],
-  inputExpressions: Seq[SubmissionValidationInput] // size of Seq is nInputs
+  inputExpressions: Set[SubmissionValidationInput] // size of Set is nInputs
 )
 
 // result of an expression parse
@@ -207,7 +207,7 @@ case class SubmissionValidationValue(
 // the results of parsing each of the inputs for one entity
 case class SubmissionValidationEntityInputs(
   entityName: String,
-  inputResolutions: Seq[SubmissionValidationValue] // size of Seq is nInputs
+  inputResolutions: Set[SubmissionValidationValue] // size of Seq is nInputs
 )
 
 // the results of parsing each input for each entity

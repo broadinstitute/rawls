@@ -99,15 +99,15 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
-    val inputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
-    val outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
+    val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse"))
+    val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
     val newMethodConfig = MethodConfiguration("dsde", "good_and_bad", Some("samples"), Map(), inputs, outputs,
       AgoraMethod("dsde", "good_and_bad", 1))
 
-    val expectedSuccessInputs = Seq("good_in")
-    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
-    val expectedSuccessOutputs = Seq("good_out", "empty_out")
-    val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
+    val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
+    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
+    val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
+    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
     //FIXME: a thing i forgot: we need to return Created + a ValidatedMethodConfiguration, NOT to throw errorz
 
@@ -166,13 +166,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow library attributes in input for create method configuration by non-curator" in withTestDataApiServices { services =>
-    val inputs = Map("lib_ent_in" -> AttributeString("this.library:foo"), "lib_ws_in" -> AttributeString("workspace.library:foo"))
-    val outputs = Map("lib_ent_out" -> AttributeString("this.bar"),"lib_ws_out" -> AttributeString("workspace.bar"))
-    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), Map("ready" -> AttributeString("true")), inputs, outputs,
-      AgoraMethod(testData.wsName.namespace, "method-a", 1))
+    val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.library:foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("workspace.library:foo"))
+    val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"),"goodAndBad.goodAndBadTask.bad_out" -> AttributeString("workspace.bar"))
 
-    val expectedSuccessInputs = Seq("lib_ent_in", "lib_ws_in")
-    val expectedSuccessOutputs = Seq("lib_ent_out", "lib_ws_out")
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad", Some("samples"), Map(), inputs, outputs,
+      AgoraMethod("dsde", "good_and_bad", 1))
+
+    val expectedSuccessInputs = Set("goodAndBad.goodAndBadTask.good_in", "goodAndBad.goodAndBadTask.bad_in")
+    val expectedSuccessOutputs = Set("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.bad_out")
 
     revokeCuratorRole(services)
 
@@ -182,7 +183,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(ValidatedMethodConfiguration(newMethodConfig, expectedSuccessInputs, Map(), Seq(), Seq(), expectedSuccessOutputs, Map())) {
+        assertResult(ValidatedMethodConfiguration(newMethodConfig, expectedSuccessInputs, Map(), Set(), Set(), expectedSuccessOutputs, Map())) {
           responseAs[ValidatedMethodConfiguration]
         }
         // all inputs and outputs are saved, regardless of parsing errors
@@ -217,8 +218,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   // DSDEEPB-1433
   it should "successfully create two method configs with the same name but different namespaces" in withTestDataApiServices { services =>
-    val mc1 = MethodConfiguration("ws1", "testConfig", Some("samples"), Map(), Map(), Map(), AgoraMethod(testData.wsName.namespace, "method-a", 1))
-    val mc2 = MethodConfiguration("ws2", "testConfig", Some("samples"), Map(), Map(), Map(), AgoraMethod(testData.wsName.namespace, "method-a", 1))
+    val mc1 = MethodConfiguration("ws1", "testConfig", Some("samples"), Map(), Map(), Map(), AgoraMethod("dsde", "good_and_bad", 1))
+    val mc2 = MethodConfiguration("ws2", "testConfig", Some("samples"), Map(), Map(), Map(), AgoraMethod("dsde", "good_and_bad", 1))
 
     create(mc1)
     create(mc2)
@@ -232,7 +233,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.Created) {
             status
           }
-          assertResult(ValidatedMethodConfiguration(mc, Seq(), Map(), Seq(), Seq(), Seq(), Map())) {
+          assertResult(ValidatedMethodConfiguration(mc, Set(), Map(), Set("goodAndBad.goodAndBadTask.bad_in", "goodAndBad.goodAndBadTask.good_in"), Set(), Set(), Map())) {
             responseAs[ValidatedMethodConfiguration]
           }
         }
