@@ -191,6 +191,25 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     val goodAndBadMethod = AgoraEntity(Some("dsde"),Some("good_and_bad"),Some(1),None,None,None,None,Some(goodAndBadInputsWDL),None,Some(AgoraEntityType.Workflow))
 
+    val meth1WDL =
+      """
+        |workflow meth1 {
+        |  call method1
+        |}
+        |
+        |task method1 {
+        |  String i1
+        |  command {
+        |    echo "hello world"
+        |  }
+        |  output {
+        |    String o1 = "output one"
+        |  }
+        |}
+      """.stripMargin
+
+    val meth1Method = AgoraEntity(Some("dsde"),Some("meth1"),Some(1),None,None,None,None,Some(meth1WDL),None,Some(AgoraEntityType.Workflow))
+
     mockServer.when(
       request()
         .withMethod("GET")
@@ -220,7 +239,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     ).respond(
       response()
         .withHeaders(jsonHeader)
-        .withBody(goodResult.toJson.prettyPrint)
+        .withBody(meth1Method.toJson.prettyPrint)
         .withStatusCode(StatusCodes.OK.intValue)
     )
 

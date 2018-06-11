@@ -347,6 +347,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   /*
    * test disabled until we decide what to do with submissions that reference deleted configs
    */
+  /*
   ignore should "*DISABLED* return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(testData.agoraMethodConfig.path(testData.workspace)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -359,6 +360,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
+  */
 
   it should "return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(testData.methodConfig3.path(testData.workspace)) ~>
@@ -430,6 +432,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         sealRoute(services.methodConfigRoutes) ~>
         check {
           assertResult(StatusCodes.OK) {
+            println(original)
             status
           }
           assertResult(edited) {
@@ -482,33 +485,29 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   def checkValidAttributeSyntax(httpMethod: RequestBuilder) = withTestDataApiServices { services =>
-    val newInputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
-    val newOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
-    val modifiedMethodConfig = testData.agoraMethodConfig.copy(inputs = newInputs, outputs = newOutputs)
+    val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
+    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
+    val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
+    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
-    val expectedSuccessInputs = Seq("good_in")
-    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
-    val expectedSuccessOutputs = Seq("good_out", "empty_out")
-    val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
-
-    httpMethod(testData.agoraMethodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
+    httpMethod(testData.goodAndBadMethodConfig.path(testData.workspace), httpJson(testData.goodAndBadMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
         val validated = responseAs[ValidatedMethodConfiguration]
-        assertResult(modifiedMethodConfig) { validated.methodConfiguration }
+        assertResult(testData.goodAndBadMethodConfig) { validated.methodConfiguration }
         assertSameElements(expectedSuccessInputs, validated.validInputs)
         assertSameElements(expectedFailureInputs, validated.invalidInputs)
         assertSameElements(expectedSuccessOutputs, validated.validOutputs)
         assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
         // all inputs and outputs are saved, regardless of parsing errors
-        for ((key, value) <- newInputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).get.inputs.get(key)
+        for ((key, value) <- testData.goodAndBadMethodConfig.inputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.goodAndBadMethodConfig.namespace, testData.goodAndBadMethodConfig.name)).get.inputs.get(key)
         }
-        for ((key, value) <- newOutputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name)).get.outputs.get(key)
+        for ((key, value) <- testData.goodAndBadMethodConfig.outputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.goodAndBadMethodConfig.namespace, testData.goodAndBadMethodConfig.name)).get.outputs.get(key)
         }
       }
   }
