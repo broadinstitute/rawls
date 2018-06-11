@@ -645,6 +645,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
                 methodConfigurationQuery.create(context, agoraMethodConfig),
                 methodConfigurationQuery.create(context, dockstoreMethodConfig),
+                methodConfigurationQuery.create(context, goodAndBadMethodConfig),
                 methodConfigurationQuery.create(context, methodConfig2),
                 methodConfigurationQuery.create(context, methodConfig3),
                 methodConfigurationQuery.create(context, methodConfigValid),
