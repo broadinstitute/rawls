@@ -99,6 +99,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
+    //This tests that invalid MC expressions still return 201 and a ValidatedMethodConfiguration with validation results in it
     val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse"))
     val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
     val newMethodConfig = MethodConfiguration("dsde", "good_and_bad", Some("samples"), Map(), inputs, outputs,
@@ -108,8 +109,6 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
     val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
-
-    //FIXME: a thing i forgot: we need to return Created + a ValidatedMethodConfiguration, NOT to throw errorz
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -134,17 +133,17 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return OK and a VMC with failures if a MC is bad" in {
-    assert(false)
+  it should "return 404 if you try to create a method configuration that points to an unknown method" in withTestDataApiServices { services =>
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad", Some("samples"), Map(), Map(), Map(),
+      AgoraMethod("dsde", "method_doesnt_exist", 1))
 
-    /*
-    Implementation notes:
-      If the inputs don't match the method, you'll get a 400.
-        - But the MC will still be saved in the DB as-is. Is this stupid?
-        - What if: if the inputs are a superset of the method, you're OK.
-          If they're not, you get something in your VMC saying so.
-      If the inputs DO match the method, you'll get an OK, and expression errors will be in the VMC response.
-     */
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
   }
 
   it should "not allow library attributes in outputs for create method configuration by curator" in withTestDataApiServices { services =>
