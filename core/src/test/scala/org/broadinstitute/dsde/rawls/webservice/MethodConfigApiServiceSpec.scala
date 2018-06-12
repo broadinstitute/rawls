@@ -102,7 +102,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     //This tests that invalid MC expressions still return 201 and a ValidatedMethodConfiguration with validation results in it
     val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse"))
     val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
-    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad", Some("samples"), Map(), inputs, outputs,
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), Map(), inputs, outputs,
       AgoraMethod("dsde", "good_and_bad", 1))
 
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
@@ -134,7 +134,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 if you try to create a method configuration that points to an unknown method" in withTestDataApiServices { services =>
-    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad", Some("samples"), Map(), Map(), Map(),
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), Map(), Map(), Map(),
       AgoraMethod("dsde", "method_doesnt_exist", 1))
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
@@ -168,7 +168,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.library:foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("workspace.library:foo"))
     val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"),"goodAndBad.goodAndBadTask.bad_out" -> AttributeString("workspace.bar"))
 
-    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad", Some("samples"), Map(), inputs, outputs,
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), Map(), inputs, outputs,
       AgoraMethod("dsde", "good_and_bad", 1))
 
     val expectedSuccessInputs = Set("goodAndBad.goodAndBadTask.good_in", "goodAndBad.goodAndBadTask.bad_in")
@@ -599,15 +599,15 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "get syntax validation information for a method configuration" in withTestDataApiServices { services =>
-    val theInputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
-    val theOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
+    val theInputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse"))
+    val theOutputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "goodAndBad.goodAndBadTask.empty_out" -> AttributeString(""))
 
-    val expectedSuccessInputs = Seq("good_in")
-    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
-    val expectedSuccessOutputs = Seq("good_out", "empty_out")
-    val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
+    val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
+    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
+    val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.empty_out")
+    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
-    val mc = testData.agoraMethodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
+    val mc = testData.goodAndBadMethodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
 
     runAndWait(methodConfigurationQuery.create(SlickWorkspaceContext(testData.workspace), mc))
 
