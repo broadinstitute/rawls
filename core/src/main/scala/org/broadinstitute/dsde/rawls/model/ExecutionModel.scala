@@ -134,7 +134,8 @@ case class SubmissionStatusResponse(
   workflows: Seq[Workflow],
   status: SubmissionStatus,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
-  cost: Option[Float] = None
+  cost: Option[Float] = None,
+  useCallCache: Boolean = false
 )
 object SubmissionStatusResponse {
   def apply(submission: Submission, rawlsUser: RawlsUser): SubmissionStatusResponse =
@@ -148,7 +149,8 @@ object SubmissionStatusResponse {
       workflows = submission.workflows,
       status = submission.status,
       workflowFailureMode = submission.workflowFailureMode,
-      cost = submission.cost
+      cost = submission.cost,
+      useCallCache = submission.useCallCache
     )
 }
 
@@ -354,7 +356,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val SubmissionStatusResponseFormat = jsonFormat10(SubmissionStatusResponse.apply)
+  implicit val SubmissionStatusResponseFormat = jsonFormat11(SubmissionStatusResponse.apply)
 
   implicit val SubmissionListResponseFormat = jsonFormat12(SubmissionListResponse.apply)
 
