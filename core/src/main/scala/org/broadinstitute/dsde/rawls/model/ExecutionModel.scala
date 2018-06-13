@@ -135,7 +135,7 @@ case class SubmissionStatusResponse(
   status: SubmissionStatus,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   cost: Option[Float] = None,
-  useCallCache: Boolean = false
+  useCallCache: Boolean
 )
 object SubmissionStatusResponse {
   def apply(submission: Submission, rawlsUser: RawlsUser): SubmissionStatusResponse =
