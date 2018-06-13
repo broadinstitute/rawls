@@ -4235,10 +4235,6 @@ definitions:
         description: What happens after a task fails. Choose from ContinueWhilePossible and NoNewCalls. Defaults to NoNewCalls if not specified. See Cromwell docs for more information.
         default: NoNewCalls
         enum: ["NoNewCalls", "ContinueWhilePossible"]
-      cost:
-        type: number
-        format: float
-        description: The run cost of this submission
 
   ActiveSubmission:
     description: a submission that's still a going concern
@@ -4254,11 +4250,9 @@ definitions:
         description: the submission itself
 
   SubmissionStatus:
-    description: ''
-    properties:
-      name:
-        type: string
-        description: submission status
+    type: string
+    description: submission status
+    enum: ["Accepted", "Evaluating", "Submitting", "Submitted", "Aborting", "Aborted", "Done"]
 
   Workflow:
     description: ''
@@ -4290,10 +4284,11 @@ definitions:
         type: number
         format: float
         description: The run cost of this workflow
+
   WorkflowStatus:
-    properties:
-      done:
-        type: boolean
+    type: string
+    description: workflow status
+    enum: ["Queued", "Launching", "Submitted", "Running", "Failed", "Succeeded", "Aborting", "Aborted", "Unknown"]
 
   SubmissionRequest:
     description: If the referenced method configuration takes no root entity, do not define `entityType`, `entityName` and `expression`.
