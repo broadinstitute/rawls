@@ -133,9 +133,9 @@ case class SubmissionStatusResponse(
   submissionEntity: Option[AttributeEntityReference],
   workflows: Seq[Workflow],
   status: SubmissionStatus,
+  useCallCache: Boolean,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
-  cost: Option[Float] = None,
-  useCallCache: Boolean
+  cost: Option[Float] = None
 )
 object SubmissionStatusResponse {
   def apply(submission: Submission, rawlsUser: RawlsUser): SubmissionStatusResponse =
@@ -148,9 +148,9 @@ object SubmissionStatusResponse {
       submissionEntity = submission.submissionEntity,
       workflows = submission.workflows,
       status = submission.status,
+      useCallCache = submission.useCallCache,
       workflowFailureMode = submission.workflowFailureMode,
-      cost = submission.cost,
-      useCallCache = submission.useCallCache
+      cost = submission.cost
     )
 }
 
