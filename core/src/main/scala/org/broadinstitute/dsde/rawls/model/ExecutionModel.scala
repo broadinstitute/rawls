@@ -133,6 +133,7 @@ case class SubmissionStatusResponse(
   submissionEntity: Option[AttributeEntityReference],
   workflows: Seq[Workflow],
   status: SubmissionStatus,
+  useCallCache: Boolean,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   cost: Option[Float] = None
 )
@@ -147,6 +148,7 @@ object SubmissionStatusResponse {
       submissionEntity = submission.submissionEntity,
       workflows = submission.workflows,
       status = submission.status,
+      useCallCache = submission.useCallCache,
       workflowFailureMode = submission.workflowFailureMode,
       cost = submission.cost
     )
@@ -354,7 +356,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val SubmissionStatusResponseFormat = jsonFormat10(SubmissionStatusResponse.apply)
+  implicit val SubmissionStatusResponseFormat = jsonFormat11(SubmissionStatusResponse.apply)
 
   implicit val SubmissionListResponseFormat = jsonFormat12(SubmissionListResponse.apply)
 
