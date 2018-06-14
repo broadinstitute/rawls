@@ -22,7 +22,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
   }
 
   override protected def afterAll(): Unit = {
-    project.cleanup(projectOwner, List.empty)
+    project.cleanup(projectOwner)
   }
 
   "AuthDomains" should "create and access a workspace with an auth domain" in {
