@@ -78,6 +78,7 @@ object MethodConfigResolver {
     val methodInputs = for ((name, expression) <- correctInputs) yield MethodInput(agoraInputs(name), expression.value)
 
     //Remove inputs that are both empty and optional
+    //FIXME: processableInputs contains inputs that are missing, which it shouldn't
     val (emptyOptionalInputs, processableInputs) = methodInputs.partition(input => input.workflowInput.optional && input.expression.isEmpty)
 
     GatherInputsResult(processableInputs.toSet, emptyOptionalInputs.toSet, missingInputs, extraInputs.keys.toSet)
