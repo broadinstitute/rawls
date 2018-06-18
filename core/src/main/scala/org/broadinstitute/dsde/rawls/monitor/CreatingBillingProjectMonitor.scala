@@ -99,13 +99,12 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
           case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, None, _)) =>
             // create project operation finished successfully
             for {
-              ownerGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
-              computeUserGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, UserService.canComputeUserPolicyName).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
+              ownerGroupEmail <- UserService.getGoogleProjectOwnerGroupEmail(samDAO, project)
+              computeUserGroupEmail <- UserService.getComputeUserGroupEmail(samDAO, project)
 
-              updatedTemplate = projectTemplate.copy(policies = projectTemplate.policies ++ Map(
-                "roles/viewer" -> Seq(s"group:${ownerGroupEmail.value}"),
-                "roles/billing.projectManager" -> Seq(s"group:${ownerGroupEmail.value}"),
-                "roles/genomics.pipelinesRunner" -> Seq(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")))
+              updatedTemplate = projectTemplate.copy(
+                policies = projectTemplate.policies ++
+                  UserService.getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail))
 
               updatedProject <- gcsDAO.beginProjectSetup(project, updatedTemplate).flatMap {
                 case util.Failure(t) =>
@@ -127,9 +126,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
           case operations: Seq[RawlsBillingProjectOperationRecord] if operations.forall(rec => rec.done && rec.errorMessage.isEmpty) =>
             // all operations completed successfully
             for {
-              ownerGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
-              computeUserGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, UserService.canComputeUserPolicyName).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
-
+              ownerGroupEmail <- UserService.getGoogleProjectOwnerGroupEmail(samDAO, project)
+              computeUserGroupEmail <- UserService.getComputeUserGroupEmail(samDAO, project)
               updatedProject <- gcsDAO.completeProjectSetup(project, Set(ownerGroupEmail, computeUserGroupEmail)) map {
                 case util.Failure(t) =>
                   logger.info(s"Failure completing project for $project", t)
