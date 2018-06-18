@@ -239,6 +239,14 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       }
     }
 
+    "remove missing inputs from processable inputs in GatherInputsResult" in withConfigData {
+      val gatheredInputs = MethodConfigResolver.gatherInputs(configMissingExpr, littleWdl)
+      gatheredInputs shouldBe 'success
+      gatheredInputs.get.processableInputs shouldBe 'empty
+      gatheredInputs.get.missingInputs shouldBe Set(intArgName)
+      gatheredInputs.get.emptyOptionalInputs.map(_.workflowInput.name) shouldBe Set(intOptName)
+    }
+
     "resolve empty lists into AttributeEmptyLists" in withConfigData {
       val context = SlickWorkspaceContext(workspace)
 

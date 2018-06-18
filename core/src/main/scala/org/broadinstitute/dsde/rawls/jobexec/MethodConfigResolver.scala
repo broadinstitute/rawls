@@ -71,17 +71,25 @@ object MethodConfigResolver {
         case _ => throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} input ${fqn} value is unavailable")
       }
     }
-    val agoraInputs = workflow.inputs
-    val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => (!methodConfig.inputs.contains(fqn) || isAttributeEmpty(fqn)) && !workflowInput.optional }.keys.toSet
-    val (correctInputs, extraInputs) = methodConfig.inputs.partition { case (name, expression) => agoraInputs.contains(name) }
+    val wdlInputs = workflow.inputs
 
-    val methodInputs = for ((name, expression) <- correctInputs) yield MethodInput(agoraInputs(name), expression.value)
+    /* ok, so there are:
+        - inputs that the WDL requires and the MC defines: ok - definedInputs
+        - inputs that the WDL says are optional but the MC defines anyway: ok - contained in definedInputs
 
-    //Remove inputs that are both empty and optional
-    //FIXME: processableInputs contains inputs that are missing, which it shouldn't
-    val (emptyOptionalInputs, processableInputs) = methodInputs.partition(input => input.workflowInput.optional && input.expression.isEmpty)
+        - inputs that the WDL requires and the MC does not define: bad - missingRequired
+        - inputs that the WDL says are optional and the MC doesn't define: ok - emptyOptionals
+        - inputs that the WDL has no idea about but the MC defines anyway: bad - extraInputs
+     */
+    val (definedInputs, undefinedInputs) = wdlInputs.partition { case (fqn, workflowInput) => methodConfig.inputs.contains(fqn) && !isAttributeEmpty(fqn) }
+    val (emptyOptionals, missingRequired) = undefinedInputs.partition { case (fqn, workflowInput) => workflowInput.optional }
+    val extraInputs = methodConfig.inputs.filterNot { case (name, expression) => wdlInputs.contains(name) }
 
-    GatherInputsResult(processableInputs.toSet, emptyOptionalInputs.toSet, missingInputs, extraInputs.keys.toSet)
+    GatherInputsResult(
+      definedInputs.map  { case (fqn, inputDef) => MethodInput(inputDef, methodConfig.inputs(fqn).value) }.toSet,
+      emptyOptionals.map { case (fqn, inputDef) => MethodInput(inputDef, methodConfig.inputs.getOrElse(fqn, AttributeString("")).value ) }.toSet,
+      missingRequired.keys.toSet,
+      extraInputs.keys.toSet)
   }
 
   def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Set[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
