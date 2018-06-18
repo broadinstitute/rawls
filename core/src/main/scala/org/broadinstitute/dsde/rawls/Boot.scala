@@ -152,13 +152,13 @@ object Boot extends App with LazyLogging {
     val executionServiceConfig = conf.getConfig("executionservice")
     val submissionTimeout = util.toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
 
-    val executionServiceServers: Set[ClusterMember] = executionServiceConfig.getObject("readServers").map {
-      case (strName, strHostname) => ClusterMember(ExecutionServiceId(strName), new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix))
-    }.toSet
-
     val executionServiceAbortServers: Map[String, ExecutionServiceDAO] = executionServiceConfig.getObjectOption("abortServers").map(_.map {
       case (strName, strHostname) => (strName->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix))
     }.toMap).getOrElse(Map.empty)
+
+    val executionServiceServers: Set[ClusterMember] = executionServiceConfig.getObject("readServers").map {
+      case (strName, strHostname) => ClusterMember(ExecutionServiceId(strName), new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix), executionServiceAbortServers.get(strName))
+    }.toSet
 
     val executionServiceSubmitServers: Set[ClusterMember] = executionServiceConfig.getObject("submitServers").map {
       case (strName, strHostname) => ClusterMember(ExecutionServiceId(strName), new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix), executionServiceAbortServers.get(strName))
