@@ -260,7 +260,7 @@ class HttpGoogleServicesDAO(
       _ <- insertInitialStorageLog(bucketName)
     } yield GoogleWorkspaceInfo(bucketName, accessGroups, intersectionGroups)
 
-    val results = bucketInsertion recoverWith {
+    bucketInsertion recoverWith {
       case regrets =>
         val groupsToRollback = for {
           accessGroupTries <- accessGroupInserts
@@ -273,15 +273,6 @@ class HttpGoogleServicesDAO(
         }
         groupsToRollback flatMap rollbackGroups flatMap (_ => Future.failed(regrets))
     }
-    results.flatMap { workspaceInfo =>
-      val accessLevels = Set(WorkspaceAccessLevels.Owner, WorkspaceAccessLevels.Write)
-      val groupEmails =
-        accessLevels.map { workspaceInfo.accessGroupsByLevel.get(_).head.groupEmail }
-      addPolicyBindings(
-        project.projectName,
-        Map("roles/bigquery.jobUser" -> groupEmails.map { e => s"group:${e.value}" }.toList)
-      )
-    }.flatMap { _ => results }
   }
 
   def workspaceAccessGroupName(workspaceId: String, accessLevel: WorkspaceAccessLevel) = s"${workspaceId}-${accessLevel.toString}"
