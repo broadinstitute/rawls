@@ -47,43 +47,7 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
     outputs = toExpressionMap(parseableOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
 
-  "ExpressionValidator" should "validateAndParse" in {
-
-    val actualValid = ExpressionValidator.validateAndParse(allValid, toGatherInputs(allValid.inputs), allowRootEntity = true, this)
-    assertSameElements(parseableInputExpressions, actualValid.validInputs)
-    assertSameElements(parseableOutputExpressions, actualValid.validOutputs)
-    actualValid.invalidInputs shouldBe 'empty
-    actualValid.invalidOutputs shouldBe 'empty
-
-    val actualValidNoRoot = ExpressionValidator.validateAndParse(allValidNoRootMC, toGatherInputs(allValidNoRootMC.inputs), allowRootEntity = false, this)
-    assertSameElements(parseableInputExpressionsWithNoRoot, actualValidNoRoot.validInputs)
-    assertSameElements(parseableOutputExpressionsWithNoRoot, actualValidNoRoot.validOutputs)
-    actualValidNoRoot.invalidInputs shouldBe 'empty
-    actualValidNoRoot.invalidOutputs shouldBe 'empty
-
-    val actualInvalid = ExpressionValidator.validateAndParse(allInvalid, toGatherInputs(allInvalid.inputs), allowRootEntity = true, this)
-    actualInvalid.validInputs shouldBe 'empty
-    actualInvalid.validOutputs shouldBe 'empty
-    actualInvalid.invalidInputs should have size unparseableInputExpressions.size
-    actualInvalid.invalidOutputs should have size unparseableOutputExpressions.size
-
-    val actualInvalidNoRoot = ExpressionValidator.validateAndParse(allInvalidNoRootMC, toGatherInputs(allInvalidNoRootMC.inputs), allowRootEntity = false, this)
-    actualInvalidNoRoot.validInputs shouldBe 'empty
-    actualInvalidNoRoot.validOutputs shouldBe 'empty
-    actualInvalidNoRoot.invalidInputs should have size unparseableInputExpressionsWithNoRoot.size
-    actualInvalidNoRoot.invalidOutputs should have size unparseableOutputExpressionsWithNoRoot.size
-
-    val actualOneEmpty = ExpressionValidator.validateAndParse(oneEmpty, toGatherInputs(oneEmpty.inputs), allowRootEntity = true, this)
-    assertSameElements(parseableInputExpressions, actualOneEmpty.validInputs)
-    assertSameElements(parseableOutputExpressions, actualOneEmpty.validOutputs)
-    assertSameElements(Seq("this.empty"), actualOneEmpty.invalidInputs.keys)
-    actualOneEmpty.invalidOutputs shouldBe 'empty
-  }
-
   it should "validateAndParseMCExpressions" in {
-    //The behaviour of validateAndParse is tested above, and we don't need to duplicate it here.
-    //We do need to test that VnPMCEs always returns a ValidatedMethodConfiguration, correctly ignoring optionals
-    //This is basically the body of "should validateExpressionsForSubmission" with the twist that it shouldn't return a Try
 
     val actualValid = ExpressionValidator.validateAndParseMCExpressions(allValid, toGatherInputs(allValid.inputs), allowRootEntity = true, this)
     assertSameElements(parseableInputExpressions, actualValid.validInputs)
@@ -97,8 +61,23 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
     actualValidNoRoot.invalidInputs shouldBe 'empty
     actualValidNoRoot.invalidOutputs shouldBe 'empty
 
-    // validation should have failures when given an empty non-optional input
+    val actualInvalid = ExpressionValidator.validateAndParseMCExpressions(allInvalid, toGatherInputs(allInvalid.inputs), allowRootEntity = true, this)
+    actualInvalid.validInputs shouldBe 'empty
+    actualInvalid.validOutputs shouldBe 'empty
+    actualInvalid.invalidInputs should have size unparseableInputExpressions.size
+    actualInvalid.invalidOutputs should have size unparseableOutputExpressions.size
+
+    val actualInvalidNoRoot = ExpressionValidator.validateAndParseMCExpressions(allInvalidNoRootMC, toGatherInputs(allInvalidNoRootMC.inputs), allowRootEntity = false, this)
+    actualInvalidNoRoot.validInputs shouldBe 'empty
+    actualInvalidNoRoot.validOutputs shouldBe 'empty
+    actualInvalidNoRoot.invalidInputs should have size unparseableInputExpressionsWithNoRoot.size
+    actualInvalidNoRoot.invalidOutputs should have size unparseableOutputExpressionsWithNoRoot.size
+
     val actualOneEmpty = ExpressionValidator.validateAndParseMCExpressions(oneEmpty, toGatherInputs(oneEmpty.inputs), allowRootEntity = true, this)
+    assertSameElements(parseableInputExpressions, actualOneEmpty.validInputs)
+    assertSameElements(parseableOutputExpressions, actualOneEmpty.validOutputs)
+    assertSameElements(Seq("this.empty"), actualOneEmpty.invalidInputs.keys)
+    actualOneEmpty.invalidOutputs shouldBe 'empty
     actualOneEmpty.invalidInputs.size shouldBe 1
 
     // succeed if the empty input is optional

@@ -1150,7 +1150,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   //validates the expressions in the method configuration, taking into account optional inputs
-  private def validateMethodConfiguration(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
+  private def validateMethodConfiguration(methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     withMethodInputs(methodConfiguration, userInfo) { (_, gatherInputsResult) =>
       val vmc = ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity = methodConfiguration.rootEntityType.isDefined, dataAccess)
       DBIO.successful(vmc)
@@ -1159,13 +1159,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration) flatMap { _ =>
-      validateMethodConfiguration(workspaceContext, methodConfiguration, dataAccess)
+      validateMethodConfiguration(methodConfiguration, dataAccess)
     }
   }
 
   def updateMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration) flatMap { _ =>
-      validateMethodConfiguration(workspaceContext, methodConfiguration, dataAccess)
+      validateMethodConfiguration(methodConfiguration, dataAccess)
     }
   }
 
@@ -1173,7 +1173,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
-          validateMethodConfiguration(workspaceContext, methodConfig, dataAccess) map { vmc =>
+          validateMethodConfiguration(methodConfig, dataAccess) map { vmc =>
             PerRequest.RequestComplete(StatusCodes.OK, vmc)
           }
         }

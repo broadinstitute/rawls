@@ -13,6 +13,7 @@ object ExpressionValidator {
   // presence: inputs which are both empty and optional are pre-validated, so they are skipped here
   // absence: validate all inputs normally
 
+  /*
   private[expressions] def validateAndParse(methodConfiguration: MethodConfiguration, gatherInputsResult: GatherInputsResult, allowRootEntity: Boolean, parser: SlickExpressionParser): ValidatedMethodConfiguration = {
     val inputsToParse = gatherInputsResult.processableInputs map { mi => (mi.workflowInput.localName.value, AttributeString(mi.expression)) }
     val (emptyOutputs, outputsToParse) = methodConfiguration.outputs.partition { case (_, expr) => expr.value.isEmpty }
@@ -24,6 +25,7 @@ object ExpressionValidator {
 
     ValidatedMethodConfiguration(methodConfiguration, parsed.validInputs, parsed.invalidInputs, gatherInputsResult.missingInputs, gatherInputsResult.extraInputs, validatedOutputs, parsed.invalidOutputs)
   }
+  */
 
   // validate a MC, skipping optional empty inputs, and return a ValidatedMethodConfiguration
   def validateAndParseMCExpressions(methodConfiguration: MethodConfiguration,
@@ -31,11 +33,18 @@ object ExpressionValidator {
                                     allowRootEntity: Boolean,
                                     parser: SlickExpressionParser): ValidatedMethodConfiguration = {
 
-    val validated = validateAndParse(methodConfiguration, gatherInputsResult, allowRootEntity, parser)
+    val inputsToParse = gatherInputsResult.processableInputs map { mi => (mi.workflowInput.localName.value, AttributeString(mi.expression)) }
+    val (emptyOutputs, outputsToParse) = methodConfiguration.outputs.partition { case (_, expr) => expr.value.isEmpty }
+
+    val parsed = ExpressionParser.parseMCExpressions(inputsToParse.toMap, outputsToParse, allowRootEntity, parser)
+
+    // empty output expressions are also valid
+    val validatedOutputs = emptyOutputs.keys.toSet ++ parsed.validOutputs
 
     // a MethodInput which is both optional and empty is already valid
     val emptyOptionalInputs = gatherInputsResult.emptyOptionalInputs map { _.workflowInput.localName.value }
-    validated.copy(validInputs = validated.validInputs ++ emptyOptionalInputs)
+
+    ValidatedMethodConfiguration(methodConfiguration, parsed.validInputs ++ emptyOptionalInputs, parsed.invalidInputs, gatherInputsResult.missingInputs, gatherInputsResult.extraInputs, validatedOutputs, parsed.invalidOutputs)
   }
 
   // validate a MC, skipping optional empty inputs, and return failure when any inputs/outputs are invalid
