@@ -43,6 +43,27 @@ object UserService {
     new UserService(userInfo, dataSource, googleServicesDAO, gpsDAO, gpsGroupSyncTopic, notificationDAO, samDAO, projectOwnerGrantableRoles)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
+
+  def getGoogleProjectOwnerGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[RawlsGroupEmail] = {
+    samDAO
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamProjectRoles.owner)
+      .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
+  }
+
+  def getComputeUserGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[RawlsGroupEmail] = {
+    samDAO
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, UserService.canComputeUserPolicyName)
+      .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
+  }
+
+  def getDefaultGoogleProjectPolicies(ownerGroupEmail: RawlsGroupEmail, computeUserGroupEmail: RawlsGroupEmail) = {
+    Map(
+      "roles/viewer" -> List(s"group:${ownerGroupEmail.value}"),
+      "roles/billing.projectManager" -> List(s"group:${ownerGroupEmail.value}"),
+      "roles/genomics.pipelinesRunner" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
+      "roles/bigquery.jobUser" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
+    )
+  }
 }
 
 class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with DirectorySubjectNameSupport {
@@ -306,13 +327,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- samDAO.createResource(SamResourceTypeNames.billingProject, billingProjectName.value, ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), ownerUserInfo)
-      ownerGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
-      computeUserGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, UserService.canComputeUserPolicyName).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
+      ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, project)
+      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project)
 
-      policiesToAdd = Map(
-        "roles/viewer" -> List(s"group:${ownerGroupEmail.value}"),
-        "roles/billing.projectManager" -> List(s"group:${ownerGroupEmail.value}"),
-        "roles/genomics.pipelinesRunner" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"))
+      policiesToAdd = getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail)
 
       _ <- gcsDAO.addPolicyBindings(billingProjectName, policiesToAdd)
       _ <- gcsDAO.grantReadAccess(billingProjectName, xfer.bucket, Set(ownerGroupEmail, computeUserGroupEmail))
