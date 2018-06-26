@@ -21,9 +21,9 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.collection.JavaConverters._
 
-class RawlsApiSpec extends FreeSpec with Matchers with Eventually
-  with CleanUp with RandomUtil
+class RawlsApiSpec extends FreeSpec with Matchers with Eventually with CleanUp with RandomUtil
   with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures {
+
   // We only want to see the users' workspaces so we can't be Project Owners
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
   val studentAToken: AuthToken = studentA.makeAuthToken()
@@ -31,6 +31,7 @@ class RawlsApiSpec extends FreeSpec with Matchers with Eventually
 
   val owner: Credentials = UserPool.chooseProjectOwner
   val ownerAuthToken: AuthToken = owner.makeAuthToken()
+
 
   def findPetInGoogle(project: String, petEmail: WorkbenchEmail): Option[ServiceAccount] = {
     val find = googleIamDAO.findServiceAccount(GoogleProject(project), petEmail)
@@ -76,7 +77,6 @@ class RawlsApiSpec extends FreeSpec with Matchers with Eventually
       withCleanBillingProject(owner) { projectName =>
         withCleanUp {
           //Create workspaces for Students
-
           Orchestration.billing.addUserToBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
           register cleanUp Orchestration.billing.removeUserFromBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
 
@@ -97,6 +97,7 @@ class RawlsApiSpec extends FreeSpec with Matchers with Eventually
           val userAStatus = Sam.user.status()(studentAToken).get
           val petEmail = Sam.user.petServiceAccountEmail(projectName)(studentAToken)
           Sam.removePet(projectName, userAStatus.userInfo)
+          implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(5, Seconds)))
           eventually(findPetInGoogle(projectName, petEmail) shouldBe None)
 
           //Validate that the pet SA has been created
