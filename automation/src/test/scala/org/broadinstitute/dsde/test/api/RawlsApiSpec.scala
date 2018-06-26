@@ -97,7 +97,7 @@ class RawlsApiSpec extends FreeSpec with Matchers with Eventually
           val userAStatus = Sam.user.status()(studentAToken).get
           val petEmail = Sam.user.petServiceAccountEmail(projectName)(studentAToken)
           Sam.removePet(projectName, userAStatus.userInfo)
-          findPetInGoogle(projectName, petEmail) shouldBe None
+          eventually(findPetInGoogle(projectName, petEmail) shouldBe None)
 
           //Validate that the pet SA has been created
           val petAccountEmail = Sam.user.petServiceAccountEmail(projectName)(studentAToken)
