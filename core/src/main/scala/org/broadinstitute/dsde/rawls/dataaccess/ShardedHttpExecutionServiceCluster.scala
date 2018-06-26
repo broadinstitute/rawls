@@ -96,9 +96,9 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
   // parse subworkflow IDs from the parent workflow's metadata and label each of them with the Submission ID
   // so they can be found by future workflow metadata queries
 
-  private def labelSubWorkflowsWithSubmissionId(submissionId: String, executionServiceId: ExecutionServiceId, parentWorkflowMetadata: JsObject, userInfo: UserInfo): Future[Seq[ExecutionServiceLabelResponse]] = {
-    // traverse = stop on "first" failure and propagate
-    Future.traverse(parseSubWorkflowIdsFromMetadata(parentWorkflowMetadata)) { subWorkflowId =>
+  private def labelSubWorkflowsWithSubmissionId(submissionId: String, executionServiceId: ExecutionServiceId, parentWorkflowMetadata: JsObject, userInfo: UserInfo): Unit = {
+    // execute but don't wait for completion
+    val labelFutureToIgnore = Future.traverse(parseSubWorkflowIdsFromMetadata(parentWorkflowMetadata)) { subWorkflowId =>
       getMember(executionServiceId).dao.patchLabels(subWorkflowId, userInfo, Map(SUBMISSION_ID_KEY -> submissionId))
     }
   }
@@ -142,8 +142,10 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
     for {
       executionServiceId <- findExecService(submissionId, workflowId, userInfo, execId)
       metadata <- getMember(executionServiceId).dao.callLevelMetadata(workflowId, userInfo)
-      _ <- labelSubWorkflowsWithSubmissionId(submissionId, executionServiceId, metadata, userInfo)
-    } yield metadata
+    } yield {
+      labelSubWorkflowsWithSubmissionId(submissionId, executionServiceId, metadata, userInfo)
+      metadata
+    }
   }
 
   // ====================

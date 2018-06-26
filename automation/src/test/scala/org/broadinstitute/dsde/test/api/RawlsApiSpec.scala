@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.test.api
 
 import java.util.UUID
 
+import akka.actor.ActorSystem
+import akka.testkit.TestKit
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, Sam}
@@ -13,15 +15,19 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.model.google.{GoogleProject, ServiceAccount}
-import org.scalatest.concurrent.Eventually
+import org.broadinstitute.dsde.workbench.util.Retry
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.time.{Minutes, Seconds, Span}
-import org.scalatest.{FreeSpec, Matchers}
+import org.scalatest.{FreeSpecLike, Matchers}
 
-import scala.concurrent.Await
+import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
 import scala.collection.JavaConverters._
+import scala.util.Random
 
-class RawlsApiSpec extends FreeSpec with Matchers with Eventually with CleanUp with RandomUtil
+class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures
+  with CleanUp with RandomUtil with Retry
   with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures {
 
   // We only want to see the users' workspaces so we can't be Project Owners
@@ -205,6 +211,98 @@ class RawlsApiSpec extends FreeSpec with Matchers with Eventually with CleanUp w
               status shouldBe "Aborted"
             }
           }
+        }
+      }
+
+    }
+
+    "should retrieve metadata with widely scattered sub-workflows in a short time" in {
+      implicit val token: AuthToken = studentAToken
+
+      val scatterWidth = 300
+
+      // this will run scatterCount^levels workflows, so be careful if increasing these values!
+      val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
+
+      withCleanBillingProject(studentA) { projectName =>
+        withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
+          Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+            projectName, workspaceName,
+            topLevelMethod,
+            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
+            topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
+
+          Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
+
+          // it currently takes ~ 5 min for google bucket read permissions to propagate.
+          // We can't launch a workflow until this happens.
+          // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
+
+          Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+
+          val submissionId = Rawls.submissions.launchWorkflow(
+            projectName, workspaceName,
+            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
+            "participant", SingleParticipant.entityId, "this", useCallCache = false)
+
+          // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
+
+          val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+          implicit val patienceConfig: PatienceConfig = submissionPatience
+
+          val firstWorkflowId = eventually {
+            val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+
+            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
+              status shouldBe "Submitted"
+              workflows should not be (empty)
+              workflows.head
+            }
+          }
+
+          // retrieve the workflow's metadata.
+          // Orchestration times out in 1 minute, so we want to be well below that
+
+          // we also need to check that it returns at all in 30sec
+          // `eventually` won't cover this if the call itself is slow and synchronous
+
+          val myTimeout = Timeout(scaled(Span(30, Seconds)))
+          val myInterval = Interval(scaled(Span(5, Seconds)))
+
+          implicit val ec: ExecutionContextExecutor = system.dispatcher
+
+          def cromwellMetadata(wfId: String) = Future {
+            Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, wfId)
+          }.futureValue(timeout = myTimeout)
+
+          val subworkflowIds = eventually(myTimeout, myInterval) {
+            val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata(firstWorkflowId))
+            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
+              subIds.size shouldBe scatterWidth
+            }
+            subIds
+          }
+
+          // can we also quickly retrieve metadata for a few of the subworkflows?
+
+          // NOT YET.  Known issue in this iteration of firecloud-app#97
+          // TODO: uncomment when the real solution is in place
+          //Random.shuffle(subworkflowIds.take(4)).foreach { cromwellMetadata(_) }
+
+          // clean up: Abort and wait for one minute or Aborted, whichever comes first
+          // Timeout is OK here: just make a best effort
+
+          Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+
+          val abortOrGiveUp = retryUntilSuccessOrTimeout()(timeout = 1.minute, interval = 10.seconds) { () =>
+            Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId) match {
+              case (status, _) if status == "Aborted" => Future.successful(())
+              case (status, _) => Future.failed(new Exception(s"Expected Aborted, saw $status"))
+            }
+          }
+
+          // wait on the future's execution
+          abortOrGiveUp.futureValue
         }
       }
 
