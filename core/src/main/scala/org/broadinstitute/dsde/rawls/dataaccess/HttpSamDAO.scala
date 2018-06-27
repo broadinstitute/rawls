@@ -42,8 +42,16 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
   private def asRawlsSAPipeline[A](implicit um: Unmarshaller[ResponseEntity, A]) = executeRequestWithToken[A](OAuth2BearerToken(getServiceAccountAccessToken)) _
 
+  protected def when401or500(throwable: Throwable): Boolean = {
+    throwable match {
+      case t: RawlsExceptionWithErrorReport =>
+        t.errorReport.statusCode.exists(status => (status.intValue/100 == 5) || status.intValue == 401)
+      case _ => false
+    }
+  }
+
   private def doSuccessOrFailureRequest(request: HttpRequest, userInfo: UserInfo) = {
-    retry(when500) { () =>
+    retry(when401or500) { () =>
       httpClientUtils.executeRequest(http, httpClientUtils.addHeader(request, authHeader(userInfo))).map { response =>
         response.status match {
           case s if s.isSuccess => ()
