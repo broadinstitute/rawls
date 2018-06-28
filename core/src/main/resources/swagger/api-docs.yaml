@@ -1344,6 +1344,52 @@ paths:
             - openid
             - email
             - profile
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/cost':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkflowCost'
+        '404':
+          description: Workspace, Submission or Workflow not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Retrieve workflow cost, if available
+      tags:
+        - submissions
+      summary: Get workflow cost
+      operationId: getWorkflowCost
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Submission Id
+          name: submissionId
+          required: true
+          type: string
+        - in: path
+          description: Workflow Id
+          name: workflowId
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs':
     get:
       responses:
@@ -3532,6 +3578,35 @@ paths:
             - email
             - profile
 
+  '/api/user/billing/{projectName}':
+    get:
+      responses:
+        200:
+          description: OK
+          schema:
+            $ref: '#/definitions/RawlsBillingProjectStatus'
+        404:
+          description: Project Not Found
+        500:
+          description: Internal Server Error
+      parameters:
+        - name: projectName
+          description: Name of the billing project
+          required: true
+          type: string
+          in: path
+      description: billing project status
+      tags:
+        - billing
+        - users
+      summary: billing project status
+      operationId: billingProjectStatus
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+
   '/api/user/billingAccounts':
     get:
       responses:
@@ -4108,6 +4183,7 @@ definitions:
         description: Method configuration name
       submissionEntity:
         $ref: '#/definitions/AttributeEntityReference'
+        description: Optional if this submission is attached to a method configuration that has no root entity
       workflows:
         type: array
         description: Status of Workflow(s)
@@ -4116,6 +4192,13 @@ definitions:
       status:
         $ref: '#/definitions/SubmissionStatus'
         description: Status
+      cost:
+        type: number
+        format: float
+        description: The compute cost of this submission
+      useCallCache:
+        type: boolean
+        description: Whether or not to read from cache for this submission
       workflowFailureMode:
         type: string
         description: What happens after a task fails. Choose from ContinueWhilePossible and NoNewCalls. Defaults to NoNewCalls if not specified. See Cromwell docs for more information.
@@ -4143,7 +4226,7 @@ definitions:
         description: Method configuration name
       submissionEntity:
         $ref: '#/definitions/AttributeEntityReference'
-        description: Status
+        description: Optional if this submission is attached to a method configuration that has no root entity
       status:
         $ref: '#/definitions/SubmissionStatus'
         description: Status
@@ -4170,11 +4253,9 @@ definitions:
         description: the submission itself
 
   SubmissionStatus:
-    description: ''
-    properties:
-      name:
-        type: string
-        description: submission status
+    type: string
+    description: submission status
+    enum: ["Accepted", "Evaluating", "Submitting", "Submitted", "Aborting", "Aborted", "Done"]
 
   Workflow:
     description: ''
@@ -4191,6 +4272,7 @@ definitions:
         description: Status last-changed date
       workflowEntity:
         $ref: '#/definitions/AttributeEntityReference'
+        description: Optional if this workflow did not run on an entity (i.e. its method configuration has no root entity)
       inputResolutions:
         type: array
         items:
@@ -4201,18 +4283,21 @@ definitions:
         description: List of messages about this workflow
         items:
           type: string
+      cost:
+        type: number
+        format: float
+        description: The run cost of this workflow
+
   WorkflowStatus:
-    properties:
-      done:
-        type: boolean
+    type: string
+    description: workflow status
+    enum: ["Queued", "Launching", "Submitted", "Running", "Failed", "Succeeded", "Aborting", "Aborted", "Unknown"]
 
   SubmissionRequest:
-    description: ''
+    description: If the referenced method configuration takes no root entity, do not define `entityType`, `entityName` and `expression`.
     required:
       - methodConfigurationNamespace
       - methodConfigurationName
-      - entityType
-      - entityName
     properties:
       methodConfigurationNamespace:
         type: string
@@ -4222,13 +4307,13 @@ definitions:
         description: Name of the method configuration to execute.
       entityType:
         type: string
-        description: Type of root entity for expression.
+        description: Type of root entity for expression. Optional if the method configuration has no root entity.
       entityName:
         type: string
-        description: Name of root entity for expression.
+        description: Name of root entity for expression. Optional if the method configuration has no root entity.
       expression:
         type: string
-        description: Expression that resolves to one or more entities matching the entity type in the method configuration.
+        description: Expression that resolves to one or more entities matching the entity type in the method configuration. Optional if the method configuration has no root entity.
       useCallCache:
         type: boolean
         description: Whether or not to read from cache for this submission
@@ -4289,7 +4374,7 @@ definitions:
     properties:
       entityName:
         type: string
-        description: name of entity
+        description: 'name of entity. May be empty if this submission doesn''t run on an entity'
       inputResolutions:
         type: array
         description: input resolution
@@ -4380,6 +4465,16 @@ definitions:
         description: workflows initiated by this submission
         items:
           $ref: '#/definitions/SubmissionValidationEntityInputs'
+
+  WorkflowCost:
+    description: The cost of a workflow, if available
+    properties:
+      cost:
+        type: number
+        description: Workflow cost
+      workflowId:
+        type: string
+        description: The id of this workflow
 
   WorkflowOutputs:
     description: Outputs and logs from all tasks in a workflow
@@ -4651,7 +4746,6 @@ definitions:
     required:
       - namespace
       - name
-      - rootEntityType
       - inputs
       - methodRepoMethod
     properties:
@@ -4663,7 +4757,7 @@ definitions:
         description: The name of the method configuration
       rootEntityType:
         type: string
-        description: The root entity type that the method will be running on
+        description: The root entity type that the method will be running on. Optional if this method config doesn't run on an entity (i.e. uses only workspace attributes and literal inputs).
       prerequisites:
         type: object
       inputs:
@@ -5360,6 +5454,18 @@ definitions:
       message:
         type: string
         description: informational message about the project
+  RawlsBillingProjectStatus:
+    description: a billing project status
+    required:
+      - projectName
+      - creationStatus
+    properties:
+      projectName:
+        type: string
+        description: the name of the billing project
+      creationStatus:
+        type: string
+        enum: ["Creating", "Ready", "Error"]
   RawlsBillingProjectMember:
     description: an element of a list of project users and their role
     required:

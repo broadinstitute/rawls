@@ -52,9 +52,16 @@ trait UserApiService extends UserInfoDirectives {
           complete { userServiceConstructor(userInfo).GetRefreshTokenDate }
         }
       } ~
-      path("user" / "billing") {
-        get {
-          complete { userServiceConstructor(userInfo).ListBillingProjects }
+      pathPrefix("user" / "billing") {
+        pathEnd {
+          get {
+            complete { userServiceConstructor(userInfo).ListBillingProjects }
+          }
+        } ~
+        path(Segment) { projectName =>
+          get {
+            complete { userServiceConstructor(userInfo).GetBillingProjectStatus(RawlsBillingProjectName(projectName)) }
+          }
         }
       } ~
       path("user" / "role" / "admin") {
@@ -105,6 +112,15 @@ trait UserApiService extends UserInfoDirectives {
                   delete {
                     complete { userServiceConstructor(userInfo).DeleteManagedGroup(groupRef) }
                   }
+              } ~
+              path(Segment) { role =>
+                put {
+                  entity(as[RawlsGroupMemberList]) { memberList =>
+                    complete {
+                      userServiceConstructor(userInfo).OverwriteManagedGroupMembers(groupRef, ManagedRoles.withName(role), memberList)
+                    }
+                  }
+                }
               } ~
               path(Segment / Segment) { (role, email) =>
                 put {

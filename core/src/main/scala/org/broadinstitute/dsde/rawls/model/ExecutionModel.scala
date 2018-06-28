@@ -23,8 +23,8 @@ import scala.util.{Failure, Success, Try}
 case class SubmissionRequest(
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  entityType: String,
-  entityName: String,
+  entityType: Option[String],
+  entityName: Option[String],
   expression: Option[String],
   useCallCache: Boolean,
   workflowFailureMode: Option[String] = None
@@ -88,9 +88,10 @@ case class Workflow(
   workflowId: Option[String],
   status: WorkflowStatus,
   statusLastChangedDate: DateTime,
-  workflowEntity: AttributeEntityReference,
+  workflowEntity: Option[AttributeEntityReference],
   inputResolutions: Seq[SubmissionValidationValue],
-  messages: Seq[AttributeString] = Seq.empty
+  messages: Seq[AttributeString] = Seq.empty,
+  cost: Option[Float] = None
 )
 
 case class TaskOutput(
@@ -103,6 +104,11 @@ case class WorkflowOutputs(
   tasks: Map[String, TaskOutput]
 )
 
+case class WorkflowCost(
+  workflowId: String,
+  cost: Option[Float]
+)
+
 // Status of a submission
 case class Submission(
   submissionId: String,
@@ -110,11 +116,12 @@ case class Submission(
   submitter: RawlsUserRef,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  submissionEntity: AttributeEntityReference,
+  submissionEntity: Option[AttributeEntityReference],
   workflows: Seq[Workflow],
   status: SubmissionStatus,
   useCallCache: Boolean,
-  workflowFailureMode: Option[WorkflowFailureMode] = None
+  workflowFailureMode: Option[WorkflowFailureMode] = None,
+  cost: Option[Float] = None
 )
 
 case class SubmissionStatusResponse(
@@ -123,12 +130,28 @@ case class SubmissionStatusResponse(
   submitter: String,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  submissionEntity: AttributeEntityReference,
+  submissionEntity: Option[AttributeEntityReference],
   workflows: Seq[Workflow],
   status: SubmissionStatus,
-  workflowFailureMode: Option[WorkflowFailureMode] = None
-) {
-  def this(submission: Submission, rawlsUser: RawlsUser) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.workflows, submission.status, submission.workflowFailureMode)
+  useCallCache: Boolean,
+  workflowFailureMode: Option[WorkflowFailureMode] = None,
+  cost: Option[Float] = None
+)
+object SubmissionStatusResponse {
+  def apply(submission: Submission, rawlsUser: RawlsUser): SubmissionStatusResponse =
+    SubmissionStatusResponse(
+      submissionId = submission.submissionId,
+      submissionDate = submission.submissionDate,
+      submitter = rawlsUser.userEmail.value,
+      methodConfigurationNamespace = submission.methodConfigurationNamespace,
+      methodConfigurationName = submission.methodConfigurationName,
+      submissionEntity = submission.submissionEntity,
+      workflows = submission.workflows,
+      status = submission.status,
+      useCallCache = submission.useCallCache,
+      workflowFailureMode = submission.workflowFailureMode,
+      cost = submission.cost
+    )
 }
 
 case class SubmissionListResponse(
@@ -137,13 +160,29 @@ case class SubmissionListResponse(
   submitter: String,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  submissionEntity: AttributeEntityReference,
+  submissionEntity: Option[AttributeEntityReference],
   status: SubmissionStatus,
   workflowStatuses: StatusCounts,
   useCallCache: Boolean,
-  workflowFailureMode: Option[WorkflowFailureMode] = None
-) {
-  def this(submission: Submission, rawlsUser: RawlsUser, workflowStatuses: StatusCounts) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status, workflowStatuses, submission.useCallCache, submission.workflowFailureMode)
+  workflowFailureMode: Option[WorkflowFailureMode] = None,
+  workflowIds: Option[Seq[String]],
+  cost: Option[Float] = None
+)
+object SubmissionListResponse {
+  def apply(submission: Submission, rawlsUser: RawlsUser, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts): SubmissionListResponse =
+    SubmissionListResponse(
+      submissionId = submission.submissionId,
+      submissionDate = submission.submissionDate,
+      submitter = rawlsUser.userEmail.value,
+      methodConfigurationNamespace = submission.methodConfigurationNamespace,
+      methodConfigurationName = submission.methodConfigurationName,
+      submissionEntity = submission.submissionEntity,
+      status = submission.status,
+      workflowStatuses = workflowStatuses,
+      useCallCache = submission.useCallCache,
+      workflowFailureMode = submission.workflowFailureMode,
+      workflowIds = workflowIds,
+    )
 }
 
 // method configuration input parameter, it's name and the associated expression from the method config
@@ -154,7 +193,7 @@ case class SubmissionValidationInput(
 
 // common values for all the entities -- the entity type and the input descriptions
 case class SubmissionValidationHeader(
-  entityType: String,
+  entityType: Option[String],
   inputExpressions: Seq[SubmissionValidationInput] // size of Seq is nInputs
 )
 
@@ -236,9 +275,10 @@ case class WorkflowQueueStatusByUserResponse
 )
 
 case class SubmissionWorkflowStatusResponse(
-  submissionId: UUID,
-  workflowStatus: String,
-  count: Int)
+                                             submissionId: UUID,
+                                             workflowId: Option[String],
+                                             workflowStatus: String,
+                                             count: Int)
 
 class ExecutionJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
@@ -298,6 +338,8 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowOutputsFormat = jsonFormat2(WorkflowOutputs)
 
+  implicit val WorkflowCostFormat = jsonFormat2(WorkflowCost)
+
   implicit val SubmissionValidationInputFormat = jsonFormat2(SubmissionValidationInput)
 
   implicit val SubmissionValidationHeaderFormat = jsonFormat2(SubmissionValidationHeader)
@@ -308,15 +350,15 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionValidationReportFormat = jsonFormat4(SubmissionValidationReport)
 
-  implicit val WorkflowFormat = jsonFormat6(Workflow)
+  implicit val WorkflowFormat = jsonFormat7(Workflow)
 
-  implicit val SubmissionFormat = jsonFormat10(Submission)
+  implicit val SubmissionFormat = jsonFormat11(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val SubmissionStatusResponseFormat = jsonFormat9(SubmissionStatusResponse)
+  implicit val SubmissionStatusResponseFormat = jsonFormat11(SubmissionStatusResponse.apply)
 
-  implicit val SubmissionListResponseFormat = jsonFormat10(SubmissionListResponse)
+  implicit val SubmissionListResponseFormat = jsonFormat12(SubmissionListResponse.apply)
 
   implicit val CallMetadataFormat = jsonFormat14(CallMetadata)
 

@@ -38,7 +38,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, expression: String) = {
     entityQuery.findEntityByName(workspaceContext.workspaceId, entityType, entityName).result flatMap { entityRec =>
-      ExpressionEvaluator.withNewExpressionEvaluator(this, entityRec) { evaluator =>
+      ExpressionEvaluator.withNewExpressionEvaluator(this, Some(entityRec)) { evaluator =>
         evaluator.evalFinalAttribute(workspaceContext, expression)
       }
     }
@@ -51,7 +51,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       assertResult("sample1") {
         runAndWait(
           ExpressionEvaluator.withNewExpressionEvaluator(this, workspaceContext, "Sample", "sample1") { evaluator =>
-            DBIO.successful(evaluator.rootEntities.head.name)
+            DBIO.successful(evaluator.rootEntities.get.head.name)
         })
       }
 
@@ -59,7 +59,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       intercept[RawlsException] {
         runAndWait(
           ExpressionEvaluator.withNewExpressionEvaluator(this, workspaceContext, "Sample", "nonexistent") { evaluator =>
-            DBIO.successful(evaluator.rootEntities.head.name)
+            DBIO.successful(evaluator.rootEntities.get.head.name)
           })
       }
     }
@@ -139,7 +139,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       }
 
       val resultsByType = runAndWait(entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
-        ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
+        ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
           evaluator.evalFinalAttribute(workspaceContext, "this.library:chapter")
         }
       })
@@ -181,7 +181,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       assertResult(allTheTypes) { runAndWait(
         entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
-          ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
+          ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, "this.type")
           }
         })
@@ -199,7 +199,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       assertResult(allTheTumorTypes) { runAndWait(
         entityQuery.findActiveEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
-          ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
+          ExpressionEvaluator.withNewExpressionEvaluator(this, Some(ents)) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, "this.tumortype")
           }
         })
@@ -567,31 +567,37 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
   test("output expressions") {
     withTestWorkspace { workspaceContext =>
-      assert(parseOutputAttributeExpr("this.attribute").isSuccess, "this.attribute should parse correctly" )
-      assert(parseOutputAttributeExpr("this..attribute").isFailure, "this..attribute should not parse correctly" )
-      assert(parseOutputAttributeExpr("this.chained.expression").isFailure, "this.chained.expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("this.attribute", allowRootEntity = true).isSuccess, "this.attribute should parse correctly" )
+      assert(parseOutputAttributeExpr("this..attribute", allowRootEntity = true).isFailure, "this..attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("this.chained.expression", allowRootEntity = true).isFailure, "this.chained.expression should not parse correctly" )
 
-      assert(parseOutputAttributeExpr("workspace.attribute").isSuccess, "workspace.attribute should parse correctly" )
-      assert(parseOutputAttributeExpr("workspace..attribute").isFailure, "workspace..attribute should not parse correctly" )
-      assert(parseOutputAttributeExpr("workspace.chained.expression").isFailure, "workspace.chained.expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("workspace.attribute", allowRootEntity = true).isSuccess, "workspace.attribute should parse correctly" )
+      assert(parseOutputAttributeExpr("workspace..attribute", allowRootEntity = true).isFailure, "workspace..attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("workspace.chained.expression", allowRootEntity = true).isFailure, "workspace.chained.expression should not parse correctly" )
 
-      assert(parseOutputAttributeExpr("bonk.attribute").isFailure, "bonk.attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("bonk.attribute", allowRootEntity = true).isFailure, "bonk.attribute should not parse correctly" )
+
+      assert(parseOutputAttributeExpr("this.attribute", allowRootEntity = false).isFailure, "this.attribute should fail if root entities are not allowed" )
+      assert(parseOutputAttributeExpr("workspace.attribute", allowRootEntity = false).isSuccess, "workspace.attribute should succeed even if root entities are not allowed" )
     }
   }
 
   test("library output expressions") {
     withTestWorkspace { workspaceContext =>
-      assert(parseOutputAttributeExpr("this.library:attribute").isSuccess, "this.library:attribute should parse correctly" )
-      assert(parseOutputAttributeExpr("this..library:attribute").isFailure, "this..library:attribute should not parse correctly" )
-      assert(parseOutputAttributeExpr("this.library:chained.expression").isFailure, "this.library:chained.expression should not parse correctly" )
-      assert(parseOutputAttributeExpr("this.chained.library:expression").isFailure, "this.chained.library:expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("this.library:attribute", allowRootEntity = true).isSuccess, "this.library:attribute should parse correctly" )
+      assert(parseOutputAttributeExpr("this..library:attribute", allowRootEntity = true).isFailure, "this..library:attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("this.library:chained.expression", allowRootEntity = true).isFailure, "this.library:chained.expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("this.chained.library:expression", allowRootEntity = true).isFailure, "this.chained.library:expression should not parse correctly" )
 
-      assert(parseOutputAttributeExpr("workspace.library:attribute").isSuccess, "workspace.library:attribute should parse correctly" )
-      assert(parseOutputAttributeExpr("workspace..library:attribute").isFailure, "workspace..library:attribute should not parse correctly" )
-      assert(parseOutputAttributeExpr("workspace.library:chained.expression").isFailure, "workspace.library:chained.expression should not parse correctly" )
-      assert(parseOutputAttributeExpr("workspace.chained.library:expression").isFailure, "workspace.chained.library:expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("workspace.library:attribute", allowRootEntity = true).isSuccess, "workspace.library:attribute should parse correctly" )
+      assert(parseOutputAttributeExpr("workspace..library:attribute", allowRootEntity = true).isFailure, "workspace..library:attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("workspace.library:chained.expression", allowRootEntity = true).isFailure, "workspace.library:chained.expression should not parse correctly" )
+      assert(parseOutputAttributeExpr("workspace.chained.library:expression", allowRootEntity = true).isFailure, "workspace.chained.library:expression should not parse correctly" )
 
-      assert(parseOutputAttributeExpr("bonk.library:attribute").isFailure, "bonk.library:attribute should not parse correctly" )
+      assert(parseOutputAttributeExpr("bonk.library:attribute", allowRootEntity = true).isFailure, "bonk.library:attribute should not parse correctly" )
+
+      assert(parseOutputAttributeExpr("this.library:attribute", allowRootEntity = false).isFailure, "this.library:attribute should fail if root entities are not allowed" )
+      assert(parseOutputAttributeExpr("workspace.library:attribute", allowRootEntity = false).isSuccess, "workspace.library:attribute should succeed even if root entities are not allowed" )
     }
   }
 

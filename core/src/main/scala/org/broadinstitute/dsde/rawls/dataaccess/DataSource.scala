@@ -3,9 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.sql.SQLTimeoutException
 import java.util.concurrent.{ExecutorService, Executors}
 
-import _root_.slick.backend.DatabaseConfig
-import _root_.slick.driver.JdbcDriver
-import _root_.slick.jdbc.TransactionIsolation
+import _root_.slick.basic.DatabaseConfig
+import _root_.slick.jdbc.{JdbcProfile, TransactionIsolation}
 import _root_.slick.jdbc.meta.MTable
 import com.google.common.base.Throwables
 import com.typesafe.config.ConfigValueFactory
@@ -22,13 +21,13 @@ import liquibase.resource.{ClassLoaderResourceAccessor, ResourceAccessor}
 import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 
 object DataSource {
-  def apply(databaseConfig: DatabaseConfig[JdbcDriver], directoryConfig: DirectoryConfig)(implicit executionContext: ExecutionContext): SlickDataSource = {
+  def apply(databaseConfig: DatabaseConfig[JdbcProfile], directoryConfig: DirectoryConfig)(implicit executionContext: ExecutionContext): SlickDataSource = {
     new SlickDataSource(databaseConfig, directoryConfig)
   }
 }
 
-class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver], directoryConfig: DirectoryConfig)(implicit executionContext: ExecutionContext) extends LazyLogging {
-  val dataAccess = new DataAccessComponent(databaseConfig.driver, databaseConfig.config.getInt("batchSize"), directoryConfig)
+class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile], directoryConfig: DirectoryConfig)(implicit executionContext: ExecutionContext) extends LazyLogging {
+  val dataAccess = new DataAccessComponent(databaseConfig.profile, databaseConfig.config.getInt("batchSize"), directoryConfig)
 
   val database = databaseConfig.db
 

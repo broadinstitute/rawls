@@ -61,4 +61,5 @@
     <include file="changesets/20180131_method_uri.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20180221_drop_project_group_table.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20180409_index_audit_workflow_status.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20180425_optional_root_entity.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

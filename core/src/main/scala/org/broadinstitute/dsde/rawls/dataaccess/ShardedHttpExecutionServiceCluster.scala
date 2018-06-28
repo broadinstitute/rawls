@@ -12,14 +12,15 @@ import scala.concurrent.Future
 import scala.util.{Random, Try}
 
 
-class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId, ExecutionServiceDAO], submitMembers: Map[ExecutionServiceId, ExecutionServiceDAO], dataSource: SlickDataSource) extends ExecutionServiceCluster {
+class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submitMembers: Set[ClusterMember], dataSource: SlickDataSource) extends ExecutionServiceCluster {
 
   // make a copy of the members map as an array for easy reads; routing algorithm will return an index in this array.
   // ensure we sort the array by key for determinism/easy understanding
-  private val readMemberArray:Array[ClusterMember] = (readMembers map {case (id, dao) => ClusterMember(id, dao)})
-      .toList.sortBy(_.key.id).toArray
-  private val submitMemberArray:Array[ClusterMember] = (submitMembers map {case (id, dao) => ClusterMember(id, dao)})
-      .toList.sortBy(_.key.id).toArray
+  private val readMemberArray:Array[ClusterMember] = readMembers.toList.sortBy(_.key.id).toArray
+  private val submitMemberArray:Array[ClusterMember] = submitMembers.toList.sortBy(_.key.id).toArray
+
+  private val readMembersById = readMembers.map(m => m.key -> m).toMap
+  private val submitMembersById = submitMembers.map(m => m.key -> m).toMap
 
   // ====================
   // facade methods
@@ -39,19 +40,20 @@ class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId, E
   // therefore, we want to use the cromwell instance that has been persisted
   // onto that workflow.
   def status(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceStatus] =
-    getMember(workflowRec).status(workflowRec.externalId.get, userInfo)
+    getMember(workflowRec).dao.status(workflowRec.externalId.get, userInfo)
 
   def outputs(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceOutputs] =
-    getMember(workflowRec).outputs(workflowRec.externalId.get, userInfo)
+    getMember(workflowRec).dao.outputs(workflowRec.externalId.get, userInfo)
 
   def logs(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceLogs] =
-    getMember(workflowRec).logs(workflowRec.externalId.get, userInfo)
+    getMember(workflowRec).dao.logs(workflowRec.externalId.get, userInfo)
 
   def abort(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]] =
-    getMember(workflowRec).abort(workflowRec.externalId.get, userInfo)
+    // the abort operation is special, it needs to go to a specific cromwell
+    getMember(workflowRec).effectiveAbortDao.abort(workflowRec.externalId.get, userInfo)
 
   def version: Future[ExecutionServiceVersion] =
-    getRandomReadMember.version
+    getRandomReadMember.dao.version
 
   // two possibilities here:
   //
@@ -97,13 +99,28 @@ class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId, E
   private def labelSubWorkflowsWithSubmissionId(submissionId: String, executionServiceId: ExecutionServiceId, parentWorkflowMetadata: JsObject, userInfo: UserInfo): Future[Seq[ExecutionServiceLabelResponse]] = {
     // traverse = stop on "first" failure and propagate
     Future.traverse(parseSubWorkflowIdsFromMetadata(parentWorkflowMetadata)) { subWorkflowId =>
-      getMember(executionServiceId).patchLabels(subWorkflowId, userInfo, Map(SUBMISSION_ID_KEY -> submissionId))
+      getMember(executionServiceId).dao.patchLabels(subWorkflowId, userInfo, Map(SUBMISSION_ID_KEY -> submissionId))
     }
   }
 
-  private def findExecService(services: Map[ExecutionServiceId, ExecutionServiceDAO], submissionId: String, workflowId: String, userInfo: UserInfo): Future[ExecutionServiceId] = {
-    val idLabelMap = services.map { case (executionServiceId, executionServiceDao) =>
-      executionServiceDao.getLabels(workflowId, userInfo) map { labelResponse =>
+  // query the execution services to determine if this workflow is a member of this submission and get its execution service ID
+  def findExecService(submissionId: String, workflowId: String, userInfo: UserInfo, execId: Option[ExecutionServiceId] = None): Future[ExecutionServiceId] = execId match {
+    // this no-op case allows simpler logic in the caller
+    case Some(executionServiceId) => Future.successful(executionServiceId)
+    case _ =>
+      // we don't have the execution service key because the workflow is not in the DB.  It might be a subworkflow.
+      // query all execution services for Workflow labels and search for a Submission match
+
+      // optimize for the Production Firecloud case: it's much more likely for the workflow to be in the single submitMember
+      findExecService(submitMembersById, submissionId, workflowId, userInfo) recoverWith { case _ =>
+        // we expect readMembers to be a superset of submitMembers so don't check those again
+        findExecService(readMembersById -- submitMembersById.keys, submissionId, workflowId, userInfo)
+      }
+  }
+
+  private def findExecService(services: Map[ExecutionServiceId, ClusterMember], submissionId: String, workflowId: String, userInfo: UserInfo): Future[ExecutionServiceId] = {
+    val idLabelMap = services.map { case (executionServiceId, member) =>
+      member.dao.getLabels(workflowId, userInfo) map { labelResponse =>
         (executionServiceId, labelResponse.labels)
       }
     }
@@ -122,27 +139,9 @@ class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId, E
   }
 
   def callLevelMetadata(submissionId: String, workflowId: String, execId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject] = {
-    val execIdFut = execId match {
-      case Some(executionServiceId) =>
-        // single-workflow or top-level work case: workflow found in DB and confirmed to be a member of this submission
-        // we have the execution service key from the DB, so query the correct execution service
-        Future.successful(executionServiceId)
-
-      case _ =>
-        // we don't have the execution service key because the workflow is not in the DB.  It might be a subworkflow.
-        // query all execution services for Workflow labels and search for a Submission match
-
-        // optimize for the Production Firecloud case: it's much more likely for the workflow to be in the single submitMember
-
-        findExecService(submitMembers, submissionId, workflowId, userInfo) recoverWith { case _ =>
-          // we expect readMembers to be a superset of submitMembers so don't check those again
-          findExecService(readMembers -- submitMembers.keys, submissionId, workflowId, userInfo)
-        }
-    }
-
     for {
-      executionServiceId <- execIdFut
-      metadata <- getMember(executionServiceId).callLevelMetadata(workflowId, userInfo)
+      executionServiceId <- findExecService(submissionId, workflowId, userInfo, execId)
+      metadata <- getMember(executionServiceId).dao.callLevelMetadata(workflowId, userInfo)
       _ <- labelSubWorkflowsWithSubmissionId(submissionId, executionServiceId, metadata, userInfo)
     } yield metadata
   }
@@ -151,19 +150,19 @@ class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId, E
   // facade-to-cluster entry points
   // ====================
   // for an already-submitted workflow, get the instance to which it was submitted
-  private def getMember(workflowRec: WorkflowRecord): ExecutionServiceDAO = {
+  private def getMember(workflowRec: WorkflowRecord): ClusterMember = {
     (workflowRec.externalId, workflowRec.executionServiceKey) match {
       case (Some(extId), Some(execKey)) => getMember(ExecutionServiceId(execKey))
       case _ => throw new RawlsException(s"can only process WorkflowRecord objects with an external id and an execution service key: ${workflowRec.toString}")
     }
   }
 
-  private def getMember(execKey: ExecutionServiceId): ExecutionServiceDAO = {
-    readMembers.getOrElse(execKey, throw new RawlsException(s"member with key ${execKey.id} does not exist"))
+  private def getMember(execKey: ExecutionServiceId): ClusterMember = {
+    readMembersById.getOrElse(execKey, throw new RawlsException(s"member with key ${execKey.id} does not exist"))
   }
 
-  private def getRandomReadMember: ExecutionServiceDAO = {
-    readMemberArray(Random.nextInt(readMemberArray.length)).dao
+  private def getRandomReadMember: ClusterMember = {
+    readMemberArray(Random.nextInt(readMemberArray.length))
   }
 
   // for unsubmitted workflows, get the best instance to which we should submit
@@ -186,8 +185,9 @@ class ShardedHttpExecutionServiceCluster (readMembers: Map[ExecutionServiceId, E
 
 case class ClusterMember(
   key: ExecutionServiceId,
-  dao: ExecutionServiceDAO
-)
-
-
+  dao: ExecutionServiceDAO,
+  abortDao: Option[ExecutionServiceDAO] = None
+) {
+  val effectiveAbortDao = abortDao.getOrElse(dao)
+}
 

@@ -21,38 +21,54 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
     methodConfiguration.inputs.map(toMethodInput).toSeq
   }
 
-  val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", "Sample", prerequisites=Map.empty,
+  val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", Some("Sample"), prerequisites=Map.empty,
     inputs = toExpressionMap(parseableInputExpressions),
     outputs = toExpressionMap(parseableOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
 
-  val allInvalid = MethodConfiguration("dsde", "methodConfigInvalidExprs", "Sample", prerequisites=Map.empty,
+  val allValidNoRootMC = allValid.copy(inputs = toExpressionMap(parseableInputExpressionsWithNoRoot), outputs = toExpressionMap(parseableOutputExpressionsWithNoRoot), rootEntityType = None)
+
+  val allInvalid = MethodConfiguration("dsde", "methodConfigInvalidExprs", Some("Sample"), prerequisites=Map.empty,
     inputs = toExpressionMap(unparseableInputExpressions),
     outputs = toExpressionMap(unparseableOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
 
+  val allInvalidNoRootMC = allInvalid.copy(inputs = toExpressionMap(unparseableInputExpressionsWithNoRoot), outputs = toExpressionMap(unparseableOutputExpressionsWithNoRoot), rootEntityType = None)
+
   val emptyExpr = "this.empty" -> AttributeString("")
 
-  val oneEmpty = MethodConfiguration("dsde", "methodConfigEmptyExpr", "Sample", prerequisites=Map.empty,
+  val oneEmpty = MethodConfiguration("dsde", "methodConfigEmptyExpr", Some("Sample"), prerequisites=Map.empty,
     inputs = toExpressionMap(parseableInputExpressions) + emptyExpr,
     outputs = toExpressionMap(parseableOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
 
   "ExpressionValidator" should "validateAndParse" in {
 
-    val actualValid = ExpressionValidator.validateAndParse(allValid, allValid.inputs, this)
+    val actualValid = ExpressionValidator.validateAndParse(allValid, allValid.inputs, allowRootEntity = true, this)
     assertSameElements(parseableInputExpressions, actualValid.validInputs)
     assertSameElements(parseableOutputExpressions, actualValid.validOutputs)
     actualValid.invalidInputs shouldBe 'empty
     actualValid.invalidOutputs shouldBe 'empty
 
-    val actualInvalid = ExpressionValidator.validateAndParse(allInvalid, allInvalid.inputs, this)
+    val actualValidNoRoot = ExpressionValidator.validateAndParse(allValidNoRootMC, allValidNoRootMC.inputs, allowRootEntity = false, this)
+    assertSameElements(parseableInputExpressionsWithNoRoot, actualValidNoRoot.validInputs)
+    assertSameElements(parseableOutputExpressionsWithNoRoot, actualValidNoRoot.validOutputs)
+    actualValidNoRoot.invalidInputs shouldBe 'empty
+    actualValidNoRoot.invalidOutputs shouldBe 'empty
+
+    val actualInvalid = ExpressionValidator.validateAndParse(allInvalid, allInvalid.inputs, allowRootEntity = true, this)
     actualInvalid.validInputs shouldBe 'empty
     actualInvalid.validOutputs shouldBe 'empty
     actualInvalid.invalidInputs should have size unparseableInputExpressions.size
     actualInvalid.invalidOutputs should have size unparseableOutputExpressions.size
 
-    val actualOneEmpty = ExpressionValidator.validateAndParse(oneEmpty, oneEmpty.inputs, this)
+    val actualInvalidNoRoot = ExpressionValidator.validateAndParse(allInvalidNoRootMC, allInvalidNoRootMC.inputs, allowRootEntity = false, this)
+    actualInvalidNoRoot.validInputs shouldBe 'empty
+    actualInvalidNoRoot.validOutputs shouldBe 'empty
+    actualInvalidNoRoot.invalidInputs should have size unparseableInputExpressionsWithNoRoot.size
+    actualInvalidNoRoot.invalidOutputs should have size unparseableOutputExpressionsWithNoRoot.size
+
+    val actualOneEmpty = ExpressionValidator.validateAndParse(oneEmpty, oneEmpty.inputs, allowRootEntity = true, this)
     assertSameElements(parseableInputExpressions, actualOneEmpty.validInputs)
     assertSameElements(parseableOutputExpressions, actualOneEmpty.validOutputs)
     assertSameElements(Seq("this.empty"), actualOneEmpty.invalidInputs.keys)
@@ -61,19 +77,31 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
 
   it should "validateAndParseMCExpressions" in {
 
-    val actualValid = ExpressionValidator.validateAndParseMCExpressions(allValid, this)
+    val actualValid = ExpressionValidator.validateAndParseMCExpressions(allValid,  allowRootEntity = true, this)
     assertSameElements(parseableInputExpressions, actualValid.validInputs)
     assertSameElements(parseableOutputExpressions, actualValid.validOutputs)
     actualValid.invalidInputs shouldBe 'empty
     actualValid.invalidOutputs shouldBe 'empty
 
-    val actualInvalid = ExpressionValidator.validateAndParseMCExpressions(allInvalid, this)
+    val actualValidNoRoot = ExpressionValidator.validateAndParseMCExpressions(allValidNoRootMC,  allowRootEntity = false, this)
+    assertSameElements(parseableInputExpressionsWithNoRoot, actualValidNoRoot.validInputs)
+    assertSameElements(parseableOutputExpressionsWithNoRoot, actualValidNoRoot.validOutputs)
+    actualValidNoRoot.invalidInputs shouldBe 'empty
+    actualValidNoRoot.invalidOutputs shouldBe 'empty
+
+    val actualInvalid = ExpressionValidator.validateAndParseMCExpressions(allInvalid, allowRootEntity = true, this)
     actualInvalid.validInputs shouldBe 'empty
     actualInvalid.validOutputs shouldBe 'empty
     actualInvalid.invalidInputs should have size unparseableInputExpressions.size
     actualInvalid.invalidOutputs should have size unparseableOutputExpressions.size
 
-    val actualOneEmpty = ExpressionValidator.validateAndParseMCExpressions(oneEmpty, this)
+    val actualInvalidNoRoot = ExpressionValidator.validateAndParseMCExpressions(allInvalidNoRootMC, allowRootEntity = false, this)
+    actualInvalidNoRoot.validInputs shouldBe 'empty
+    actualInvalidNoRoot.validOutputs shouldBe 'empty
+    actualInvalidNoRoot.invalidInputs should have size unparseableInputExpressionsWithNoRoot.size
+    actualInvalidNoRoot.invalidOutputs should have size unparseableOutputExpressionsWithNoRoot.size
+
+    val actualOneEmpty = ExpressionValidator.validateAndParseMCExpressions(oneEmpty, allowRootEntity = true, this)
     assertSameElements(parseableInputExpressions, actualOneEmpty.validInputs)
     assertSameElements(parseableOutputExpressions, actualOneEmpty.validOutputs)
     assertSameElements(Seq("this.empty"), actualOneEmpty.invalidInputs.keys)
@@ -82,15 +110,21 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
 
   it should "validateExpressionsForSubmission" in {
 
-    val actualValid = ExpressionValidator.validateExpressionsForSubmission(allValid, toMethodInputs(allValid), Seq.empty, this).get
+    val actualValid = ExpressionValidator.validateExpressionsForSubmission(allValid, toMethodInputs(allValid), Seq.empty, allowRootEntity = true, this).get
     assertSameElements(parseableInputExpressions, actualValid.validInputs)
     assertSameElements(parseableOutputExpressions, actualValid.validOutputs)
     actualValid.invalidInputs shouldBe 'empty
     actualValid.invalidOutputs shouldBe 'empty
 
+    val actualValidNoRoot = ExpressionValidator.validateExpressionsForSubmission(allValidNoRootMC, toMethodInputs(allValidNoRootMC), Seq.empty, allowRootEntity = false, this).get
+    assertSameElements(parseableInputExpressionsWithNoRoot, actualValidNoRoot.validInputs)
+    assertSameElements(parseableOutputExpressionsWithNoRoot, actualValidNoRoot.validOutputs)
+    actualValidNoRoot.invalidInputs shouldBe 'empty
+    actualValidNoRoot.invalidOutputs shouldBe 'empty
+
     // fail submission when given an empty non-optional input
 
-    val actualOneEmpty = ExpressionValidator.validateExpressionsForSubmission(oneEmpty, toMethodInputs(oneEmpty), Seq.empty, this)
+    val actualOneEmpty = ExpressionValidator.validateExpressionsForSubmission(oneEmpty, toMethodInputs(oneEmpty), Seq.empty, allowRootEntity = true, this)
     actualOneEmpty shouldBe a [scala.util.Failure[_]]
 
     // succeed if the empty input is optional
@@ -98,7 +132,7 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
     val emptyOptionalInput = toMethodInput(emptyExpr)
     val inputsToProcess = toMethodInputs(oneEmpty).toSet - emptyOptionalInput
 
-    val actualOptionalEmpty = ExpressionValidator.validateExpressionsForSubmission(oneEmpty, inputsToProcess.toSeq, Seq(emptyOptionalInput), this).get
+    val actualOptionalEmpty = ExpressionValidator.validateExpressionsForSubmission(oneEmpty, inputsToProcess.toSeq, Seq(emptyOptionalInput), allowRootEntity = true, this).get
     assertSameElements(oneEmpty.inputs.keys, actualOptionalEmpty.validInputs)
     assertSameElements(oneEmpty.outputs.keys, actualOptionalEmpty.validOutputs)
     actualOptionalEmpty.invalidInputs shouldBe 'empty

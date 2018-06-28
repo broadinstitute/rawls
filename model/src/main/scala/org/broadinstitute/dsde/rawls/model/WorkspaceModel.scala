@@ -12,7 +12,6 @@ import com.netaporter.uri.Uri.parse
 import akka.http.scaladsl.model.StatusCode
 import spray.json._
 import UserModelJsonSupport.ManagedGroupRefFormat
-import akka.http.scaladsl.model.StatusCode
 
 import scala.util.{Failure, Success, Try}
 
@@ -344,7 +343,7 @@ case class MethodInputsOutputs(inputs: Seq[MethodInput], outputs: Seq[MethodOutp
 case class MethodConfiguration(
                    namespace: String,
                    name: String,
-                   rootEntityType: String,
+                   rootEntityType: Option[String],
                    prerequisites: Map[String, AttributeString],
                    inputs: Map[String, AttributeString],
                    outputs: Map[String, AttributeString],
@@ -360,7 +359,7 @@ case class MethodConfiguration(
 
 case class MethodConfigurationShort(
                                 name: String,
-                                rootEntityType: String,
+                                rootEntityType: Option[String],
                                 methodRepoMethod:MethodRepoMethod,
                                 namespace: String)
 

@@ -57,10 +57,14 @@ trait MethodWiths {
     }
   }
 
-  def withValidatedMCExpressions[T](methodConfiguration: MethodConfiguration, methodInputsToProcess: Seq[MethodConfigResolver.MethodInput], emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput], parser: SlickExpressionParser)
+  def withValidatedMCExpressions[T](methodConfiguration: MethodConfiguration,
+                                    methodInputsToProcess: Seq[MethodConfigResolver.MethodInput],
+                                    emptyOptionalMethodInputs: Seq[MethodConfigResolver.MethodInput],
+                                    allowRootEntity: Boolean,
+                                    parser: SlickExpressionParser)
                                    (op: ValidatedMethodConfiguration => ReadWriteAction[T])
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
-    val validated = ExpressionValidator.validateExpressionsForSubmission(methodConfiguration, methodInputsToProcess, emptyOptionalMethodInputs, parser)
+    val validated = ExpressionValidator.validateExpressionsForSubmission(methodConfiguration, methodInputsToProcess, emptyOptionalMethodInputs, allowRootEntity, parser)
     DBIO.from(Future.fromTry(validated)) flatMap op
   }
 }
@@ -97,21 +101,4 @@ trait UserWiths {
       case Some(project) => op(project)
     }
   }
-
-  def withManagedGroupOwnerAccess[T](managedGroupRef: ManagedGroupRef, userRef: RawlsUserRef, dataAccess: DataAccess)(op: ManagedGroup => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
-    dataAccess.managedGroupQuery.load(managedGroupRef) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${managedGroupRef.membersGroupName.value}] not found")))
-      case Some(managedGroup) =>
-        dataAccess.rawlsGroupQuery.isGroupMember(managedGroup.adminsGroup, userRef) flatMap {
-          case true => op(managedGroup)
-          case false =>
-            // figure out what error to show - if they are a user show 403 otherwise 404
-            dataAccess.rawlsGroupQuery.isGroupMember(managedGroup.membersGroup, userRef) flatMap {
-              case true => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "unauthorized")))
-              case false => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${managedGroupRef.membersGroupName.value}] not found")))
-            }
-        }
-    }
-  }
-
 }

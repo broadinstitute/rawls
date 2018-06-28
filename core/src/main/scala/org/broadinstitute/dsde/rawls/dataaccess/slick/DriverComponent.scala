@@ -8,14 +8,13 @@ import akka.util.ByteString
 import org.apache.commons.codec.binary.Base64
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
-import slick.driver.JdbcDriver
-import slick.jdbc.{GetResult, PositionedParameters, SQLActionBuilder, SetParameter}
+import slick.jdbc.{GetResult, JdbcProfile, PositionedParameters, SQLActionBuilder, SetParameter}
 import akka.http.scaladsl.model.StatusCodes
 
 import scala.concurrent.ExecutionContext
 
 trait DriverComponent extends StringValidationUtils {
-  val driver: JdbcDriver
+  val driver: JdbcProfile
   val batchSize: Int
   implicit val executionContext: ExecutionContext
   override implicit val errorReportSource = ErrorReportSource("rawls")
@@ -113,7 +112,7 @@ trait DriverComponent extends StringValidationUtils {
  * that encloses all the GetResult, SetParameter and raw sql into a nice package.
  */
 trait RawSqlQuery {
-  val driver: JdbcDriver
+  val driver: JdbcProfile
 
   import driver.api._
 

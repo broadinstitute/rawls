@@ -15,6 +15,14 @@ trait StringValidationUtils {
     }
   }
 
+  private lazy val workspaceNameRegex = "[A-z0-9 _-]+".r
+  def validateWorkspaceName(s: String): Unit = {
+    if(! workspaceNameRegex.pattern.matcher(s).matches) {
+      val msg = s"Invalid input: $s. Input may only contain alphanumeric characters, underscores, dashes, and spaces."
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
+    }
+  }
+
   def validateMaxStringLength(s: String, maxLength: Int): Unit = {
     if(s.length > maxLength) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: $s. Input may be a max of $maxLength characters.", statusCode = StatusCodes.BadRequest))
   }

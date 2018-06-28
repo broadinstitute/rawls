@@ -10,8 +10,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import slick.dbio.DBIOAction
 import slick.dbio.Effect.{Read, Write}
-import slick.driver.JdbcDriver
-import slick.jdbc.GetResult
+import slick.jdbc.{GetResult, JdbcProfile}
 import akka.http.scaladsl.model.StatusCodes
 
 /**
@@ -99,7 +98,7 @@ trait EntityComponent {
     // Raw queries - used when querying for multiple AttributeEntityReferences
 
     private object EntityRecordRawSqlQuery extends RawSqlQuery {
-      val driver: JdbcDriver = EntityComponent.this.driver
+      val driver: JdbcProfile = EntityComponent.this.driver
       implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<, r.<<) }
 
       def action(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
@@ -114,7 +113,7 @@ trait EntityComponent {
     }
 
     private object EntityAndAttributesRawSqlQuery extends RawSqlQuery {
-      val driver: JdbcDriver = EntityComponent.this.driver
+      val driver: JdbcProfile = EntityComponent.this.driver
 
       // result structure from entity and attribute list raw sql
       case class EntityAndAttributesResult(entityRecord: EntityRecord, attributeRecord: Option[EntityAttributeRecord], refEntityRecord: Option[EntityRecord])
@@ -257,7 +256,7 @@ trait EntityComponent {
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
 
     private object EntityDependenciesDeletionQuery extends RawSqlQuery {
-      val driver: JdbcDriver = EntityComponent.this.driver
+      val driver: JdbcProfile = EntityComponent.this.driver
 
       def deleteAction(workspaceId: UUID): WriteAction[Int] =
         sqlu"""delete ea from ENTITY_ATTRIBUTE ea
@@ -780,7 +779,7 @@ trait EntityComponent {
     }
 
     object EntityStatisticsQueries extends RawSqlQuery {
-      val driver: JdbcDriver = EntityComponent.this.driver
+      val driver: JdbcProfile = EntityComponent.this.driver
       def countEntitiesofTypeInNamespace(workspaceNamespace: Option[String], workspaceName: Option[String]): ReadAction[Seq[NamedStatistic]] = {
         val baseSelect = sql"""select entity_type, count(1) as entityCount
                 from ENTITY e, WORKSPACE w

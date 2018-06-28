@@ -68,6 +68,11 @@ trait SubmissionApiService extends UserInfoDirectives {
           complete { workspaceServiceConstructor(userInfo).GetWorkflowOutputs(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId) }
         }
       } ~
+      path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment / "cost") { (workspaceNamespace, workspaceName, submissionId, workflowId) =>
+        get {
+          complete { workspaceServiceConstructor(userInfo).GetWorkflowCost(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId) }
+        }
+      } ~
       path("submissions" / "queueStatus") {
         get {
           complete { workspaceServiceConstructor(userInfo).WorkflowQueueStatus }

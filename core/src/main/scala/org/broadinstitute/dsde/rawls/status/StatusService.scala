@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, Props}
 import akka.pattern._
 import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
-import org.broadinstitute.dsde.rawls.model.StatusCheckResponse
+import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, Subsystems}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.GetCurrentStatus
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import akka.http.scaladsl.model.StatusCodes
@@ -29,7 +29,10 @@ class StatusService(val healthMonitor: ActorRef)(implicit val executionContext: 
 
   def getStatus: Future[PerRequestMessage] = {
     (healthMonitor ? GetCurrentStatus).mapTo[StatusCheckResponse].map { statusCheckResponse =>
-      val httpStatus = if (statusCheckResponse.ok) StatusCodes.OK else StatusCodes.InternalServerError
+      val criticalStatusOk = Subsystems.CriticalSubsystems.forall { subsystem =>
+        statusCheckResponse.systems.get(subsystem).exists(_.ok)
+      }
+      val httpStatus = if (criticalStatusOk) StatusCodes.OK else StatusCodes.InternalServerError
       RequestComplete(httpStatus, statusCheckResponse)
     }
   }

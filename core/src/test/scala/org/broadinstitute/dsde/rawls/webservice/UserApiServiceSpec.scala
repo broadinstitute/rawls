@@ -129,6 +129,25 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "get a valid billing project status" in withTestDataApiServices { services =>
+    val projectStatus = RawlsBillingProjectStatus(testData.billingProject.projectName, CreationStatuses.Ready)
+    Get(s"/user/billing/${projectStatus.projectName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectStatusFormat
+        assertResult(projectStatus) { responseAs[RawlsBillingProjectStatus] }
+      }
+  }
+
+  it should "fail to get an invalid billing project status" in withTestDataApiServices { services =>
+    Get("/user/billing/not-found-project-name") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
   it should "list a user's billing projects ordered a-z" in withTestDataApiServices { services =>
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
@@ -463,34 +482,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when adding a group to a billing project that the caller owns" in withTestDataApiServices { services =>
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
-    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
-
-    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
-
-    Post(s"/billing", httpJson(createRequest)) ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-
-    // need to manually create the owner group because the test sam dao does not actually talk to ldap
-    Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
-
-    Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
-
-    Put(s"/billing/${project1.projectName.value}/user/${testData.dbGapAuthorizedUsersGroup.membersGroup.groupEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-      }
-  }
-
   it should "return 200 when removing a user from a billing project that the caller owns" in withTestDataApiServices { services =>
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
     val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
@@ -679,310 +670,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.userRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-  }
-
-
-
-  it should "201 create a group" in withUsersTestDataApiServices() { services =>
-    val testGroupName = "testGroup"
-    createManagedGroup(services, testGroupName)
-
-    val testGroupRef = ManagedGroupRef(RawlsGroupName(testGroupName))
-
-    val testGroup = runAndWait(managedGroupQuery.load(testGroupRef)).getOrElse(fail("group not found"))
-    assertResult(Set(RawlsUser.toRef(usersTestData.userOwner))) { testGroup.adminsGroup.users }
-    assertResult(Set(RawlsGroup.toRef(testGroup.adminsGroup))) { testGroup.membersGroup.subGroups }
-    assert(testGroup.adminsGroup.subGroups.isEmpty)
-    assert(testGroup.membersGroup.users.isEmpty)
-  }
-
-  it should "400 when creating a group with a name longer than 50 characters" in withUsersTestDataApiServices() { services =>
-    val testGroupName = "111111111122222222223333333333444444444455555555556666666666" //60 characters
-
-    Post(s"/groups/$testGroupName") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.BadRequest) {
-          status
-        }
-      }
-  }
-
-  it should "400 when creating a group with invalid characters in the name" in withUsersTestDataApiServices() { services =>
-    val testGroupName = "(*#&$(*&#$@"
-
-    Post(s"/groups/$testGroupName") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.BadRequest) {
-          status
-        }
-      }
-  }
-
-  it should "409 creating an existing group" in withUsersTestDataApiServices() { services =>
-    val testGroupName = "testGroup"
-    createManagedGroup(services, testGroupName)
-    createManagedGroup(services, testGroupName, StatusCodes.Conflict)
-  }
-
-  it should "204 delete group" in withUsersTestDataApiServices() { services =>
-    val testGroupName = "testGroup"
-    createManagedGroup(services, testGroupName)
-    val managedGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get
-
-    Delete(s"/groups/$testGroupName") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
-
-    assertResult(None) { runAndWait(managedGroupQuery.load(managedGroup)) }
-    assertResult(None) { runAndWait(rawlsGroupQuery.load(managedGroup.adminsGroup)) }
-    assertResult(None) { runAndWait(rawlsGroupQuery.load(managedGroup.membersGroup)) }
-
-    assert(!services.gcsDAO.googleGroups.contains(managedGroup.adminsGroup.groupEmail.value))
-    assert(!services.gcsDAO.googleGroups.contains(managedGroup.membersGroup.groupEmail.value))
-  }
-
-  it should "409 deleting a group in use" in withUsersTestDataApiServices() { services =>
-    val testGroupName = "testGroup"
-    createManagedGroup(services, testGroupName)
-    val managedGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get
-
-    val otherGroupName = "othergroup"
-    createManagedGroup(services, otherGroupName)
-    val otherGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(otherGroupName)))).get
-
-    // update othergroup to reference the test group
-    runAndWait(rawlsGroupQuery.save(otherGroup.membersGroup.copy(subGroups = Set(managedGroup.membersGroup))))
-
-    Delete(s"/groups/$testGroupName") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.Conflict) {
-          status
-        }
-      }
-
-    assertResult(Some(managedGroup)) { runAndWait(managedGroupQuery.load(managedGroup)) }
-    assertResult(Some(managedGroup.adminsGroup)) { runAndWait(rawlsGroupQuery.load(managedGroup.adminsGroup)) }
-    assertResult(Some(managedGroup.membersGroup)) { runAndWait(rawlsGroupQuery.load(managedGroup.membersGroup)) }
-
-    assert(services.gcsDAO.googleGroups.contains(managedGroup.adminsGroup.groupEmail.value))
-    assert(services.gcsDAO.googleGroups.contains(managedGroup.membersGroup.groupEmail.value))
-  }
-
-  it should "allow users to request access to groups" in withUsersTestDataApiServices(testData.userReader) { services =>
-    Post(s"/groups/my-test-group", httpJsonEmpty) ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created){
-          status
-        }
-      }
-    Post(s"/groups/my-test-group/requestAccess", httpJsonEmpty) ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent){
-          status
-        }
-      }
-  }
-
-  it should "200 list groups for user - no groups" in withUsersTestDataApiServices(usersTestData.userNoAccess) { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupAccessFormat
-    Get("/groups") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        assertResult(Seq.empty) {
-          responseAs[Seq[ManagedGroupAccess]]
-        }
-      }
-  }
-
-  it should "200 list groups for user - some user, some owner, some both" in withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
-    val ownerOnlyGroupName = "owner-only"
-    val userOnlyGroupName = "user-only"
-    val bothGroupName = "both"
-
-    withApiServices(dataSource, usersTestData.userOwner) { services =>
-      createManagedGroup(services, ownerOnlyGroupName)
-      val managedGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(ownerOnlyGroupName)))).get
-      // owners automatically added as users - undo that for this test
-      removeUser(services, ownerOnlyGroupName, ManagedRoles.Member, managedGroup.adminsGroup.groupEmail.value)
-      addUser(services, ownerOnlyGroupName, ManagedRoles.Admin, usersTestData.userUser.userEmail.value)
-
-      createManagedGroup(services, userOnlyGroupName)
-      addUser(services, userOnlyGroupName, ManagedRoles.Member, usersTestData.userUser.userEmail.value)
-
-      createManagedGroup(services, bothGroupName)
-      addUser(services, bothGroupName, ManagedRoles.Admin, usersTestData.userUser.userEmail.value)
-    }
-
-    withApiServices(dataSource, usersTestData.userUser) { services =>
-      import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupAccessResponseFormat
-      Get("/groups") ~>
-        sealRoute(services.userRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          responseAs[Seq[ManagedGroupAccessResponse]] should contain theSameElementsAs Seq(
-            ManagedGroupAccessResponse(RawlsGroupName(ownerOnlyGroupName), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(ownerOnlyGroupName))), ManagedRoles.Admin),
-            ManagedGroupAccessResponse(RawlsGroupName(userOnlyGroupName), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(userOnlyGroupName))), ManagedRoles.Member),
-            ManagedGroupAccessResponse(RawlsGroupName(bothGroupName), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(bothGroupName))), ManagedRoles.Admin)
-          )
-        }
-    }
-  }
-
-  Seq((Option(ManagedRoles.Member), StatusCodes.Forbidden), (Option(ManagedRoles.Admin), StatusCodes.OK), (None, StatusCodes.NotFound)).foreach { case (roleOption, expectedStatus) =>
-    it should s"${expectedStatus.toString} get a group as ${roleOption.map(_.toString).getOrElse("nobody")}" in withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
-      import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupWithMembersFormat
-
-      val testGroupName = "testGroup"
-
-      withApiServices(dataSource, usersTestData.userOwner) { services =>
-        createManagedGroup(services, testGroupName)
-        roleOption.foreach(role => addUser(services, testGroupName, role, usersTestData.userUser.userEmail.value))
-      }
-      withApiServices(dataSource, usersTestData.userUser) { services =>
-        withStatsD {
-          Get(s"/groups/$testGroupName") ~> services.sealedInstrumentedRoutes ~>
-            check {
-              assertResult(expectedStatus) {
-                status
-              }
-              if (status.isSuccess) {
-                val managedGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get
-
-                assertResult(ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort,
-                  managedGroup.adminsGroup.toRawlsGroupShort,
-                  Seq.empty,
-                  Seq(usersTestData.userOwner.userEmail.value, usersTestData.userUser.userEmail.value))) {
-
-                  responseAs[ManagedGroupWithMembers]
-                }
-              }
-            }
-        } { capturedMetrics =>
-          val expected = expectedHttpRequestMetrics("get", "groups.redacted", expectedStatus.intValue, 1)
-          assertSubsetOf(expected, capturedMetrics)
-        }
-      }
-    }
-  }
-
-  Seq((Option(ManagedRoles.Member), StatusCodes.Forbidden), (Option(ManagedRoles.Admin), StatusCodes.NoContent), (None, StatusCodes.NotFound)).foreach { case (roleOption, expectedStatus) =>
-    ManagedRoles.all.foreach { roleToAddRemove =>
-      it should s"${expectedStatus.toString} add ${roleToAddRemove} to group as ${roleOption.map(_.toString).getOrElse("nobody")}" in withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
-        val testGroupName = "testGroup"
-
-        withApiServices(dataSource, usersTestData.userOwner) { services =>
-          createManagedGroup(services, testGroupName)
-          roleOption.foreach(role => addUser(services, testGroupName, role, usersTestData.userUser.userEmail.value))
-        }
-        withApiServices(dataSource, usersTestData.userUser) { services =>
-          addUser(services, testGroupName, roleToAddRemove, usersTestData.userNoAccess.userEmail.value, expectedStatus)
-          val resultGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get
-          assertResult(expectedStatus.isSuccess) {
-            val group = roleToAddRemove match {
-              case ManagedRoles.Admin => resultGroup.adminsGroup
-              case ManagedRoles.Member => resultGroup.membersGroup
-            }
-            group.users.contains(RawlsUser.toRef(usersTestData.userNoAccess))
-          }
-        }
-      }
-
-      it should s"${expectedStatus.toString} remove ${roleToAddRemove} from group as ${roleOption.map(_.toString).getOrElse("nobody")}" in withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
-        val testGroupName = "testGroup"
-
-        withApiServices(dataSource, usersTestData.userOwner) { services =>
-          createManagedGroup(services, testGroupName)
-          addUser(services, testGroupName, roleToAddRemove, usersTestData.userNoAccess.userEmail.value)
-          roleOption.foreach(role => addUser(services, testGroupName, role, usersTestData.userUser.userEmail.value))
-        }
-        withApiServices(dataSource, usersTestData.userUser) { services =>
-          removeUser(services, testGroupName, roleToAddRemove, usersTestData.userNoAccess.userEmail.value, expectedStatus)
-          val resultGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get
-          assertResult(expectedStatus.isSuccess) {
-            val group = roleToAddRemove match {
-              case ManagedRoles.Admin => resultGroup.adminsGroup
-              case ManagedRoles.Member => resultGroup.membersGroup
-            }
-            !group.users.contains(RawlsUser.toRef(usersTestData.userNoAccess))
-          }
-        }
-      }
-    }
-  }
-
-  it should "200 adding a user that already exists" in withUsersTestDataApiServices() { services =>
-    val testGroupName = "testGroup"
-
-    createManagedGroup(services, testGroupName)
-    addUser(services, testGroupName, ManagedRoles.Member, usersTestData.userUser.userEmail.value)
-    addUser(services, testGroupName, ManagedRoles.Member, usersTestData.userUser.userEmail.value)
-  }
-
-  it should "200 removing a user that does not exists" in withUsersTestDataApiServices() { services =>
-    val testGroupName = "testGroup"
-
-    createManagedGroup(services, testGroupName)
-    removeUser(services, testGroupName, ManagedRoles.Member, usersTestData.userNoAccess.userEmail.value)
-
-  }
-
-  it should "400 remove self from owner" in withUsersTestDataApiServices(usersTestData.userOwner) { services =>
-    val testGroupName = "testGroup"
-
-    createManagedGroup(services, testGroupName)
-    removeUser(services, testGroupName, ManagedRoles.Admin, usersTestData.userOwner.userEmail.value, StatusCodes.BadRequest)
-  }
-
-  def createManagedGroup(services: TestApiService, testGroupName: String, expectedStatusCode: StatusCode = StatusCodes.Created): Unit = {
-    Post(s"/groups/$testGroupName") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(expectedStatusCode) {
-          status
-        }
-        if (status.isSuccess) {
-          val usersGroupShort = RawlsGroupShort(RawlsGroupName(testGroupName), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(testGroupName))))
-          val ownersGroupShort = RawlsGroupShort(RawlsGroupName(testGroupName + "-owners"), RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName(testGroupName + "-owners"))))
-          import UserModelJsonSupport.ManagedGroupWithMembersFormat
-          assertResult(ManagedGroupWithMembers(usersGroupShort, ownersGroupShort, Seq(ownersGroupShort.groupEmail.value), Seq(services.userInfo.userEmail.value))) {
-            responseAs[ManagedGroupWithMembers]
-          }
-        }
-      }
-  }
-
-  def addUser(services: TestApiService, group: String, role: ManagedRole, email: String, expectedStatusCode: StatusCode = StatusCodes.NoContent): Unit = {
-    Put(s"/groups/$group/${role.toString}/$email") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(expectedStatusCode) {
-          status
-        }
-      }
-  }
-
-  def removeUser(services: TestApiService, group: String, role: ManagedRole, email: String, expectedStatusCode: StatusCode = StatusCodes.NoContent): Unit = {
-    Delete(s"/groups/$group/${role.toString}/$email") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(expectedStatusCode) {
           status
         }
       }

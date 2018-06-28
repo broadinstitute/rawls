@@ -8,7 +8,7 @@ object Dependencies {
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
-  val cromwellVersion = "31-39223b8"
+  val cromwellVersion = "32-c7bcab8"
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
@@ -66,7 +66,7 @@ object Dependencies {
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
 
-  val cromwellWdl: ModuleID = ("org.broadinstitute" %% "cromwell-wdl-model-draft2" % cromwellVersion
+  val cromwellWdl: ModuleID = ("org.broadinstitute" %% "wdl-draft2" % cromwellVersion
     exclude("org.typelevel", "cats_2.12")
     exclude("io.spray", "spray-json_2.12")
     exclude("io.spray", "akka-parsing_2.12")
@@ -75,6 +75,9 @@ object Dependencies {
 
   val workbenchModelV  = "0.10-6800f3a"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
+  val workbenchGoogleV = "0.16-0027221"
+  val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
+  val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests"
 
   val metricsDependencies = Seq(
     metricsScala,
@@ -149,6 +152,8 @@ object Dependencies {
     mockito,
     googleRpc,
     workbenchModel,
+    workbenchGoogle,
+    workbenchGoogleMocks,
     ficus
   )
 }

@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.model._
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FlatSpecLike, Matchers, PrivateMethodTester}
 import spray.json.JsonParser
 
@@ -16,24 +17,25 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
 
-class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with PrivateMethodTester
+class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike
+  with Matchers with PrivateMethodTester with ScalaFutures
   with TestDriverComponent with RawlsTestUtils {
   import driver.api._
 
   def this() = this(ActorSystem("ExecutionServiceClusterTest"))
 
   // create a cluster of execution service DAOs
-  val instanceMap: Map[ExecutionServiceId, ExecutionServiceDAO] = ((0 to 4) map {idx =>
+  val instanceMap: Set[ClusterMember] = ((0 to 4) map {idx =>
       val key = s"instance$idx"
-      (ExecutionServiceId(key) -> new MockExecutionServiceDAO(identifier = key))
-    }).toMap
+      ClusterMember(ExecutionServiceId(key), new MockExecutionServiceDAO(identifier = key))
+    }).toSet
 
   // arbitrary choice for the instance we'll use for tests; neither first nor last instances
   val instanceKeyForTests = "instance3"
   val cluster = new ShardedHttpExecutionServiceCluster(instanceMap, instanceMap, slickDataSource)
 
   // private method wrappers for testing
-  val getMember = PrivateMethod[ExecutionServiceDAO]('getMember)
+  val getMember = PrivateMethod[ClusterMember]('getMember)
   val parseSubWorkflowIdsFromMetadata = PrivateMethod[Seq[String]]('parseSubWorkflowIdsFromMetadata)
 
   val submissionId = UUID.randomUUID()
@@ -41,7 +43,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
   // dummy WorkflowRecord
   val testWorkflowRecord = WorkflowRecord(
     1, Some(UUID.randomUUID().toString), submissionId, "Submitted",
-    new Timestamp(System.currentTimeMillis()), 1, 1, Some("default"))
+    new Timestamp(System.currentTimeMillis()), Some(1), 1, Some("default"))
 
   // UUIDs
   val subWithExecutionKeys = UUID.randomUUID()
@@ -58,8 +60,8 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
 
     val sample1 = Entity("sample1", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
 
-    val submissionWithExecutionKeys = Submission(subWithExecutionKeys.toString, testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(Some(workflowExternalIdWithExecutionKey.toString),WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+    val submissionWithExecutionKeys = Submission(subWithExecutionKeys.toString, testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+      Seq(Workflow(Some(workflowExternalIdWithExecutionKey.toString), WorkflowStatuses.Submitted, testDate, Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
     override def save() = {
       DBIO.seq(
@@ -69,7 +71,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sample1),
-            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, AgoraMethod("std", "someMethod", 1))),
+            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("std", "someMethod", 1))),
             submissionQuery.create(context, submissionWithExecutionKeys)
           )
         },
@@ -86,7 +88,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
       case Some(rec) =>
         assertResult(instanceKeyForTests) {
           val execInstance = cluster invokePrivate getMember(rec)
-          execInstance.asInstanceOf[MockExecutionServiceDAO].identifier
+          execInstance.dao.asInstanceOf[MockExecutionServiceDAO].identifier
         }
     }
   }
@@ -94,7 +96,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
   it should "return the correct instance from a raw executionServiceKey" in withCustomTestDatabase(execClusterTestData) { dataSource: SlickDataSource =>
     assertResult(instanceKeyForTests) {
       val execInstance = cluster invokePrivate getMember(ExecutionServiceId(instanceKeyForTests))
-      execInstance.asInstanceOf[MockExecutionServiceDAO].identifier
+      execInstance.dao.asInstanceOf[MockExecutionServiceDAO].identifier
     }
   }
 
@@ -119,10 +121,34 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     }
   }
 
-  it should "throw exception on getMember on an incorrect raw execution service key" in {
-    intercept[RawlsException] {
-      cluster invokePrivate getMember(ExecutionServiceId("instance5"))
+  it should "find the execution service, if present" in {
+    // shortcut the execution service cluster when supplying an Execution ID
+    val testId = ExecutionServiceId("Internal to this test")
+    assertResult(testId) {
+      Await.result(cluster.findExecService("garbage", "also garbage", userInfo, Some(testId)), 10.seconds)
     }
+
+    val subId = "my-submission"
+    val wfId = "my-workflow"
+    val testExecId = ExecutionServiceId("instance" + Random.nextInt(5))
+
+    val execInstance = cluster invokePrivate getMember(testExecId)
+    // normally the Workflow would need to already exist on this instance.  Not true for the mock version.
+    execInstance.dao.patchLabels(wfId, userInfo: UserInfo, Map(cluster.SUBMISSION_ID_KEY -> subId))
+
+    assertResult(testExecId) {
+      Await.result(cluster.findExecService(subId, wfId, userInfo, None), 10.seconds)
+    }
+
+    // confirm exception with relevant info when the instance is not found
+
+    val mapWithoutInstance = instanceMap.filterNot { case ClusterMember(id, _, _) => id == testExecId }
+    val clusterWithoutInstance = new ShardedHttpExecutionServiceCluster(mapWithoutInstance, mapWithoutInstance, slickDataSource)
+
+    val exception = clusterWithoutInstance.findExecService(subId, wfId, userInfo, None).failed.futureValue
+    exception shouldBe a[RawlsException]
+    exception.getMessage should include(subId)
+    exception.getMessage should include(wfId)
   }
 
   it should "calculate target index with 4 targets" in {

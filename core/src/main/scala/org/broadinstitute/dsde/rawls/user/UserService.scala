@@ -25,7 +25,7 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -43,6 +43,27 @@ object UserService {
     new UserService(userInfo, dataSource, googleServicesDAO, gpsDAO, gpsGroupSyncTopic, notificationDAO, samDAO, projectOwnerGrantableRoles)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
+
+  def getGoogleProjectOwnerGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[RawlsGroupEmail] = {
+    samDAO
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamProjectRoles.owner)
+      .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
+  }
+
+  def getComputeUserGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[RawlsGroupEmail] = {
+    samDAO
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, UserService.canComputeUserPolicyName)
+      .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
+  }
+
+  def getDefaultGoogleProjectPolicies(ownerGroupEmail: RawlsGroupEmail, computeUserGroupEmail: RawlsGroupEmail) = {
+    Map(
+      "roles/viewer" -> List(s"group:${ownerGroupEmail.value}"),
+      "roles/billing.projectManager" -> List(s"group:${ownerGroupEmail.value}"),
+      "roles/genomics.pipelinesRunner" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
+      "roles/bigquery.jobUser" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
+    )
+  }
 }
 
 class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with DirectorySubjectNameSupport {
@@ -57,6 +78,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def ListGroupsForUser(userEmail: RawlsUserEmail) = listGroupsForUser(userEmail)
   def GetUserGroup(groupRef: RawlsGroupRef) = getUserGroup(groupRef)
 
+  def GetBillingProjectStatus(projectName: RawlsBillingProjectName) = getBillingProjectStatus(projectName)
   def ListBillingProjects = listBillingProjects
   def AdminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { deleteBillingProject(projectName, ownerInfo) }
   def AdminRegisterBillingProject(xfer: RawlsBillingProjectTransfer) = asFCAdmin { registerBillingProject(xfer) }
@@ -68,10 +90,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
   def ListBillingAccounts = listBillingAccounts()
 
-  def AdminCreateGroup(groupRef: RawlsGroupRef) = asFCAdmin { createGroup(groupRef) }
-  def AdminListGroupMembers(groupRef: RawlsGroupRef) = asFCAdmin { listGroupMembers(groupRef) }
-  def AdminDeleteGroup(groupName: RawlsGroupRef) = asFCAdmin { deleteGroup(groupName) }
-  def AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { overwriteGroupMembers(groupRef, memberList) }
+  def AdminCreateGroup(groupRef: RawlsGroupRef) = createManagedGroup(ManagedGroupRef(groupRef.groupName))
+  def AdminListGroupMembers(groupRef: RawlsGroupRef) = getManagedGroup(ManagedGroupRef(groupRef.groupName))
+  def AdminDeleteGroup(groupRef: RawlsGroupRef) = deleteManagedGroup(ManagedGroupRef(groupRef.groupName))
+  def AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = overwriteManagedGroupMembers(ManagedGroupRef(groupRef.groupName), ManagedRoles.Member, memberList)
+  def AdminAddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = addManagedGroupMembers(ManagedGroupRef(groupRef.groupName), ManagedRoles.Member, memberList)
+  def AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = removeManagedGroupMembers(ManagedGroupRef(groupRef.groupName), ManagedRoles.Member, memberList)
 
   def CreateManagedGroup(groupRef: ManagedGroupRef) = createManagedGroup(groupRef)
   def GetManagedGroup(groupRef: ManagedGroupRef) = getManagedGroup(groupRef)
@@ -87,8 +111,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamResourceActions.readPolicies) { getBillingProjectMembers(projectName) }
 
   def OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = overwriteGroupMembers(groupRef, memberList)
-  def AdminAddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { updateGroupMembers(groupRef, addMemberList = memberList) }
-  def AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = asFCAdmin { updateGroupMembers(groupRef, removeMemberList = memberList) }
   def AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = updateGroupMembers(groupRef, addMemberList = memberList)
   def RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = updateGroupMembers(groupRef, removeMemberList = memberList)
   def AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) = asFCAdmin { synchronizeGroupMembersApi(groupRef) }
@@ -224,6 +246,24 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def listBillingAccounts(): Future[PerRequestMessage] =
     gcsDAO.listBillingAccounts(userInfo) map(RequestComplete(_))
 
+  def getBillingProjectStatus(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    val statusFuture: Future[Option[RawlsBillingProjectStatus]] = for {
+      policies <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
+      projectDetail <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) }
+    } yield {
+      policies.find { policy =>
+        projectDetail.isDefined &&
+        policy.resourceId.equals(projectDetail.get.projectName.value)
+      }.flatMap { policy =>
+        Some(RawlsBillingProjectStatus(RawlsBillingProjectName(policy.resourceId), projectDetail.get.status))
+      }
+    }
+    statusFuture.map {
+      case Some(status) => RequestComplete(StatusCodes.OK, status)
+      case _ => RequestComplete(StatusCodes.NotFound)
+    }
+  }
+
   def listBillingProjects(): Future[PerRequestMessage] = {
     val membershipsFuture = for {
       resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
@@ -287,13 +327,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- samDAO.createResource(SamResourceTypeNames.billingProject, billingProjectName.value, ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), ownerUserInfo)
-      ownerGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
-      computeUserGroupEmail <- samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, UserService.canComputeUserPolicyName).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
+      ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, project)
+      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project)
 
-      policiesToAdd = Map(
-        "roles/viewer" -> List(s"group:${ownerGroupEmail.value}"),
-        "roles/billing.projectManager" -> List(s"group:${ownerGroupEmail.value}"),
-        "roles/genomics.pipelinesRunner" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"))
+      policiesToAdd = getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail)
 
       _ <- gcsDAO.addPolicyBindings(billingProjectName, policiesToAdd)
       _ <- gcsDAO.grantReadAccess(billingProjectName, xfer.bucket, Set(ownerGroupEmail, computeUserGroupEmail))
@@ -453,99 +490,41 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def createManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
-    val userDefinedRegex = "[A-z0-9_-]+".r
-    if(! userDefinedRegex.pattern.matcher(groupRef.membersGroupName.value).matches) {
-      val msg = s"Invalid input: ${groupRef.membersGroupName}. Input may only contain alphanumeric characters, underscores, and dashes."
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
-    }
-    if(groupRef.membersGroupName.value.length > 50) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input: ${groupRef.membersGroupName}. Input may be a max of 50 characters.", statusCode = StatusCodes.BadRequest))
-    val usersGroupRef = groupRef.toMembersGroupRef
-    val ownersGroupRef = RawlsGroupRef(RawlsGroupName(groupRef.membersGroupName.value + "-owners"))
     for {
-      managedGroup <- createManagedGroupInternal(usersGroupRef, ownersGroupRef)
-      _ <- updateGroupMembership(managedGroup.adminsGroup, addUsers = Set(RawlsUser(userInfo)))
-      _ <- updateGroupMembership(managedGroup.membersGroup, addSubGroups = Set(managedGroup.adminsGroup))
-    } yield {
-      RequestComplete(StatusCodes.Created, ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort, managedGroup.adminsGroup.toRawlsGroupShort, Seq(managedGroup.adminsGroup.groupEmail.value), Seq(userInfo.userEmail.value)))
-    }
+      _ <- samDAO.createGroup(WorkbenchGroupName(groupRef.membersGroupName.value), userInfo)
+      allUsersEmail <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsGroupQuery.loadEmails(Seq(allUsersGroupRef))
+      }
+      _ <- samDAO.addUserToPolicy(SamResourceTypeNames.managedGroup, groupRef.membersGroupName.value, "admin-notifier", allUsersEmail.getOrElse(allUsersGroupRef, throw new WorkbenchException("Unable to add All_Users to admin-notifier policy")).value, userInfo)
+      group <- getManagedGroupFull(groupRef)
+    } yield RequestComplete(StatusCodes.Created, group)
   }
 
-  private def createManagedGroupInternal(usersGroupRef: RawlsGroupRef, ownersGroupRef: RawlsGroupRef): Future[ManagedGroup] = {
-    dataSource.inTransaction { dataAccess =>
-      val existingGroups = for {
-        preexistingUsersGroup <- dataAccess.rawlsGroupQuery.load(usersGroupRef)
-        preexistingOwnersGroup <- dataAccess.rawlsGroupQuery.load(ownersGroupRef)
-      } yield {
-          (preexistingUsersGroup, preexistingOwnersGroup)
-        }
-
-      existingGroups.flatMap {
-        case (None, None) =>
-          for {
-            usersGroup <- createGroupInternal(usersGroupRef, dataAccess)
-            ownersGroup <- createGroupInternal(ownersGroupRef, dataAccess)
-            managedGroup <- dataAccess.managedGroupQuery.createManagedGroup(ManagedGroup(usersGroup, ownersGroup))
-          } yield {
-            managedGroup
-          }
-
-        case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "please choose a different name"))
-      }
-    }
+  //need to call 3 sam endpoints to construct the response
+  private def getManagedGroupFull(groupRef: ManagedGroupRef): Future[ManagedGroupWithMembers] = {
+    for {
+      adminsEmails <- samDAO.listGroupPolicyEmails(WorkbenchGroupName(groupRef.membersGroupName.value), ManagedRoles.Admin, userInfo)
+      membersEmails <- samDAO.listGroupPolicyEmails(WorkbenchGroupName(groupRef.membersGroupName.value), ManagedRoles.Member, userInfo)
+      groupEmail <- samDAO.getGroupEmail(WorkbenchGroupName(groupRef.membersGroupName.value), userInfo)
+    } yield ManagedGroupWithMembers(RawlsGroupShort(groupRef.membersGroupName, RawlsGroupEmail(groupEmail.value)), membersEmails.map(_.value), adminsEmails.map(_.value))
   }
 
   def getManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        for {
-          usersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.membersGroup)
-          ownersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.adminsGroup)
-        } yield {
-          // we want to hide the fact that the users group contains the owners group because this structure is
-          // confusing to the user even though the functionality is desired
-          val userEmailsSansOwnerGroup = usersEmails.filterNot(_ == managedGroup.adminsGroup.groupEmail.value)
-          RequestComplete(ManagedGroupWithMembers(managedGroup.membersGroup.toRawlsGroupShort, managedGroup.adminsGroup.toRawlsGroupShort, userEmailsSansOwnerGroup, ownersEmails))
-        }
-      }
-    }
+    getManagedGroupFull(groupRef).map(RequestComplete(_))
   }
 
   def listManagedGroupsForUser(): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      for {
-        groupsWithAccess <- dataAccess.managedGroupQuery.listManagedGroupsForUser(RawlsUserRef(userInfo.userSubjectId))
-        emailsByGroup <- dataAccess.rawlsGroupQuery.loadEmails(groupsWithAccess.map(_.managedGroupRef.toMembersGroupRef).toSeq)
-      } yield {
-        val response = groupsWithAccess.groupBy(_.managedGroupRef).map { case (groupRef, accessEntries) =>
-          ManagedGroupAccessResponse(groupRef.membersGroupName, emailsByGroup(groupRef.toMembersGroupRef), accessEntries.map(_.role).max)
-        }
-        RequestComplete(StatusCodes.OK, response)
-      }
-    }
+    samDAO.listManagedGroups(userInfo).map(response => RequestComplete(StatusCodes.OK, response))
   }
 
   def requestAccessToManagedGroup(groupRef: ManagedGroupRef): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      val query = for {
-        group <- dataAccess.managedGroupQuery.load(groupRef)
-        accessInstructions <- dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Set(groupRef))
-      } yield (group, accessInstructions)
+    val instructionsQuery = dataSource.inTransaction { dataAccess =>
+      dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Set(groupRef))
+    }
 
-      query.flatMap { case (group, accessInstructions) =>
-        group match {
-          case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"The group [${groupRef.membersGroupName.value}] was not found"))
-          case Some(managedGroup) =>
-            if (accessInstructions.nonEmpty) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "You may not request access to this group"))
-            else {
-              dataAccess.rawlsGroupQuery.flattenGroupMembership(managedGroup.adminsGroup).map { users =>
-                users.foreach { user =>
-                  notificationDAO.fireAndForgetNotification(GroupAccessRequestNotification(user.userSubjectId, groupRef.membersGroupName.value, users.map(_.userSubjectId) + userInfo.userSubjectId, userInfo.userSubjectId))
-                }
-                RequestComplete(StatusCodes.NoContent)
-              }
-            }
-        }
-      }
+    instructionsQuery.flatMap { accessInstructions =>
+      if(accessInstructions.nonEmpty) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "You may not request access to this group"))
+      else samDAO.requestAccessToManagedGroup(WorkbenchGroupName(groupRef.membersGroupName.value), userInfo).map(_ => RequestComplete(StatusCodes.NoContent))
     }
   }
 
@@ -559,95 +538,65 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def addManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String): Future[PerRequestMessage] = {
-    loadRefList(email) flatMap { addMemberList => updateManagedGroupMembers(groupRef, role, addMemberList = addMemberList) }
+    for {
+      _ <- samDAO.addUserToManagedGroup(WorkbenchGroupName(groupRef.membersGroupName.value), role, WorkbenchEmail(email), userInfo)
+      _ <- findAndUpdateIntersectionGroups(RawlsGroupRef(groupRef.membersGroupName))
+    } yield RequestComplete(StatusCodes.NoContent)
   }
 
   def removeManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String): Future[PerRequestMessage] = {
-    loadRefList(email) flatMap { removeMemberList => updateManagedGroupMembers(groupRef, role, removeMemberList = removeMemberList) }
-  }
-
-  def loadRefList(email: String): Future[RawlsGroupMemberList] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsGroupQuery.loadRefsFromEmails(Seq(email)).map(_.values.headOption) map {
-        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"User or group with email $email not found"))
-        case Some(Left(userRef)) => RawlsGroupMemberList(userSubjectIds = Option(Seq(userRef.userSubjectId.value)))
-        case Some(Right(groupRef)) => RawlsGroupMemberList(subGroupNames = Option(Seq(groupRef.groupName.value)))
-      }
-    }
-  }
-
-  private def updateManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, addMemberList: RawlsGroupMemberList = RawlsGroupMemberList(), removeMemberList: RawlsGroupMemberList = RawlsGroupMemberList()): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        if (role == ManagedRoles.Admin &&
-          (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail.value) ||
-            removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId.value))) {
-
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
-        }
-
-        DBIO.successful(rawlsGroupForRole(role, managedGroup))
-      }
-    } flatMap { rawlsGroup =>
-      updateGroupMembers(rawlsGroup, addMemberList, removeMemberList)
-    }
-  }
-
-  private def rawlsGroupForRole(role: ManagedRole, managedGroup: ManagedGroup): RawlsGroup = {
-    role match {
-      case ManagedRoles.Admin => managedGroup.adminsGroup
-      case ManagedRoles.Member => managedGroup.membersGroup
-    }
+    for {
+      _ <-  samDAO.removeUserFromManagedGroup(WorkbenchGroupName(groupRef.membersGroupName.value), role, WorkbenchEmail(email), userInfo)
+      _ <- findAndUpdateIntersectionGroups(RawlsGroupRef(groupRef.membersGroupName))
+    } yield RequestComplete(StatusCodes.NoContent)
   }
 
   def overwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        if (role == ManagedRoles.Admin &&
-          !memberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail.value) &&
-            !memberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId.value)) {
-
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
-        }
-
-        DBIO.successful(rawlsGroupForRole(role, managedGroup))
-      }
-    } flatMap { rawlsGroup =>
-      overwriteGroupMembers(rawlsGroup, memberList)
+    modifyManagedGroupMembers(groupRef, role, memberList) { emails =>
+      samDAO.overwriteManagedGroupMembership(WorkbenchGroupName(groupRef.membersGroupName.value), role, emails, userInfo)
     }
   }
 
-  def deleteManagedGroup(groupRef: ManagedGroupRef) = {
-    for{
-      _ <- dataSource.inTransaction { dataAccess =>
-        for {
-          groupToCheck <- dataAccess.managedGroupQuery.load(groupRef).map(_.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Group does not exist,"))))
-          admins <- dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.adminsGroup.groupName)
-          members <- dataAccess.rawlsGroupQuery.listAncestorGroups(groupToCheck.membersGroup.groupName)
-        } yield {
-          if ((admins - groupToCheck.membersGroup.groupName).nonEmpty || members.nonEmpty) {
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"Cannot delete group because it is in use. Admins: ${admins} Members: ${members}"))
-          }
-        }
-      }
-      groupEmailsToDelete <- dataSource.inTransaction { dataAccess =>
-        withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-          DBIO.seq(
-            dataAccess.managedGroupQuery.deleteManagedGroup(groupRef),
-            dataAccess.rawlsGroupQuery.delete(managedGroup.membersGroup),
-            dataAccess.rawlsGroupQuery.delete(managedGroup.adminsGroup)
-          ).map(_ => Seq(managedGroup.membersGroup, managedGroup.adminsGroup))
-        }
-      }
-      _ <- Future.traverse(groupEmailsToDelete) { group =>
-        gcsDAO.deleteGoogleGroup(group).recover {
-          // log any exception but ignore
-          case t: Throwable => logger.error(s"error deleting google group $group", t)
-        }
-      }
-    } yield {
-      RequestComplete(StatusCodes.NoContent)
+  def addManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
+    modifyManagedGroupMembers(groupRef, role, memberList) { emails =>
+      Future.traverse(emails) { email => samDAO.addUserToManagedGroup(WorkbenchGroupName(groupRef.membersGroupName.value), role, email, userInfo) }.map(_ => ())
     }
+  }
+
+  def removeManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
+    modifyManagedGroupMembers(groupRef, role, memberList) { emails =>
+      Future.traverse(emails) { email => samDAO.removeUserFromManagedGroup(WorkbenchGroupName(groupRef.membersGroupName.value), role, email, userInfo) }.map(_ => ())
+    }
+  }
+
+  def modifyManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList)(op: Seq[WorkbenchEmail] => Future[Unit]): Future[PerRequestMessage] = {
+    for {
+      subGroupEmailsFromNames <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsGroupQuery.loadEmails(memberList.subGroupNames.map(_.map(name => RawlsGroupRef(RawlsGroupName(name)))).getOrElse(Seq.empty))
+      }
+
+      userEmailsFromIds <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsUserQuery.loadEmails(memberList.userSubjectIds.map(_.map(id => RawlsUserRef(RawlsUserSubjectId(id)))).getOrElse(Seq.empty))
+      }
+
+      allSubgroupEmails = memberList.subGroupEmails.getOrElse(Seq.empty).map(WorkbenchEmail) ++ subGroupEmailsFromNames.values.map(e => WorkbenchEmail(e.value))
+      allUserEmails = memberList.userEmails.getOrElse(Seq.empty).map(WorkbenchEmail) ++ userEmailsFromIds.collect { case (_, Some(email)) => WorkbenchEmail(email.value) }
+
+      _ <- op(allSubgroupEmails ++ allUserEmails)
+      _ <- findAndUpdateIntersectionGroups(RawlsGroupRef(groupRef.membersGroupName))
+    } yield RequestComplete(StatusCodes.NoContent)
+  }
+
+  def deleteManagedGroup(groupRef: ManagedGroupRef) = {
+    for {
+      groupsToIntersect <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.findAssociatedGroupsToIntersect(groupRef.toMembersGroupRef)
+      }
+
+      _ <- if (groupsToIntersect.isEmpty) Future.successful() else Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"cannot delete group ${groupRef.membersGroupName} because it is in use")))
+
+      _ <- samDAO.deleteGroup(WorkbenchGroupName(groupRef.membersGroupName.value), userInfo)
+    } yield RequestComplete(StatusCodes.NoContent)
   }
 
 
@@ -677,6 +626,22 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
       _ <- gpsDAO.publishMessages(gpsGroupSyncTopic, messages)
     } yield savedGroup
+  }
+
+  private def findAndUpdateIntersectionGroups(groupRef: RawlsGroupRef): Future[Iterable[RawlsGroupRef]] = {
+    for {
+      intersectionGroups <- dataSource.inTransaction ({ dataAccess =>
+        for {
+          // update intersection groups associated with groupRef
+          groupsToIntersects <- dataAccess.workspaceQuery.findAssociatedGroupsToIntersect(groupRef)
+          intersectionGroups <- updateIntersectionGroupMembers(groupsToIntersects.toSet, dataAccess)
+        } yield intersectionGroups
+      }, TransactionIsolation.ReadCommitted)
+
+      messages = intersectionGroups.toSeq.map(_.toJson.compactPrint)
+
+      _ <- gpsDAO.publishMessages(gpsGroupSyncTopic, messages)
+    } yield intersectionGroups
   }
 
   private def updateGroupMembershipInternalPolicy(groupRef: RawlsGroupRef)(update: RawlsGroup => RawlsGroup): Future[RawlsGroup] = {
@@ -854,7 +819,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         }.toSeq
       }
 
-      intersectionMemberships.flatMap(dataAccess.rawlsGroupQuery.overwriteGroupUsers).map(_ => groupsToIntersect.map(_.target))
+      intersectionMemberships.flatMap { groupsWithUsers =>
+        groupsWithUsers.foreach {
+          case (groupRef, users) => logger.debug(s"writing intersection group ${groupRef.groupName} with users ${users.mkString(",")}")
+        }
+        dataAccess.rawlsGroupQuery.overwriteGroupUsers(groupsWithUsers)
+      }.map(_ => groupsToIntersect.map(_.target))
     }
   }
 

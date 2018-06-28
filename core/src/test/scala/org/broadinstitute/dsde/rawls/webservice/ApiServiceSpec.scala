@@ -21,6 +21,7 @@ import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.scalatest.concurrent.Eventually
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
@@ -154,10 +155,11 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
 
     val healthMonitor = system.actorOf(HealthMonitor.props(
-      dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO, executionServiceCluster.readMembers,
-      Seq.empty, Seq.empty, Seq("my-favorite-bucket")))
+      dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO, executionServiceCluster.readMembers.map(c => c.key->c.dao).toMap,
+      Seq("my-favorite-group"), Seq.empty, Seq("my-favorite-bucket")))
     override val statusServiceConstructor = StatusService.constructor(healthMonitor)_
-
+    val bigQueryDAO = new MockGoogleBigQueryDAO
+    val submissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
@@ -173,7 +175,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       genomicsServiceConstructor,
       maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser,
-      workbenchMetricBaseName
+      workbenchMetricBaseName,
+      submissionCostService
     )_
 
     def cleanupSupervisor = {
