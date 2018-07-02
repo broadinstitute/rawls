@@ -60,6 +60,7 @@ class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
   val clientSecrets: GoogleClientSecrets,
   clientEmail: String,
+  subEmail: String,
   pemFile: String,
   appsDomain: String,
   groupsPrefix: String,
@@ -1151,7 +1152,7 @@ class HttpGoogleServicesDAO(
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(clientEmail)
       .setServiceAccountScopes(directoryScopes)
-      .setServiceAccountUser(clientSecrets.getDetails.get("sub_email").toString)
+      .setServiceAccountUser(subEmail)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
   }
