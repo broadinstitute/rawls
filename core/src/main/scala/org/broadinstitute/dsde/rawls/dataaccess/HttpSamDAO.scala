@@ -63,7 +63,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
             import WorkspaceJsonSupport.ErrorReportFormat
             toFutureTry(Unmarshal(response.entity).to[ErrorReport]) map {
               case Success(err) =>
-                logger.error(s"Sam call to ${request.method} ${request.uri.path} failed with error ${response.entity}")
+                logger.error(s"Sam call to ${request.method} ${request.uri.path} failed with error $err")
                 throw new RawlsExceptionWithErrorReport(err)
               case Failure(_) =>
                 throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.method} ${request.uri.path} failed with error ${response.entity}"))
