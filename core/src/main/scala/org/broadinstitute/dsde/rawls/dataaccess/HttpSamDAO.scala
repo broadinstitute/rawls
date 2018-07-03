@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SamModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, ManagedGroupAccessResponse, ManagedRoles, RawlsGroupEmail, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus, WorkspaceJsonSupport}
-import org.broadinstitute.dsde.rawls.util.{HttpClientUtils, HttpClientUtilsGzipInstrumented, HttpClientUtilsStandard, Retry}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtils, HttpClientUtilsGzipInstrumented, HttpClientUtilsStandard, Retry}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.WorkbenchEmailFormat
 import spray.json.{DefaultJsonProtocol, JsBoolean, JsValue, JsonParser, JsonPrinter, JsonReader, JsonWriter, PrettyPrinter, RootJsonReader, RootJsonWriter, jsonReader}
@@ -27,11 +27,13 @@ import akka.http.scaladsl.client.RequestBuilding
 import akka.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends SamDAO with DsdeHttpDAO with Retry with LazyLogging with ServiceDAOWithStatus {
+class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext)
+  extends SamDAO with DsdeHttpDAO with Retry with LazyLogging with ServiceDAOWithStatus with FutureSupport {
   import system.dispatcher
 
   override val http = Http(system)
@@ -50,12 +52,22 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
-  private def doSuccessOrFailureRequest(request: HttpRequest, userInfo: UserInfo) = {
+  private def doSuccessOrFailureRequest(request: HttpRequest, userInfo: UserInfo): RetryableFuture[Unit] = {
     retry(when401or500) { () =>
-      httpClientUtils.executeRequest(http, httpClientUtils.addHeader(request, authHeader(userInfo))).map { response =>
+      httpClientUtils.executeRequest(http, httpClientUtils.addHeader(request, authHeader(userInfo))).flatMap { response =>
         response.status match {
-          case s if s.isSuccess => ()
-          case f => throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.method} ${request.uri.path} failed with error ${response.entity}"))
+          case s if s.isSuccess => Future(())
+          case f =>
+            // attempt to propagate an ErrorReport from Sam. If we can't understand Sam's response as an ErrorReport,
+            // create our own error message.
+            import WorkspaceJsonSupport.ErrorReportFormat
+            toFutureTry(Unmarshal(response.entity).to[ErrorReport]) map {
+              case Success(err) =>
+                logger.error(s"Sam call to ${request.method} ${request.uri.path} failed with error $err")
+                throw new RawlsExceptionWithErrorReport(err)
+              case Failure(_) =>
+                throw new RawlsExceptionWithErrorReport(ErrorReport(f, s"Sam call to ${request.method} ${request.uri.path} failed with error ${response.entity}"))
+            }
         }
       }
     }
