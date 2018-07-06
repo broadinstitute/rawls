@@ -1684,14 +1684,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       resultsForPet <- if (maxAccessLevel >= WorkspaceAccessLevels.Write) {
         gcsDAO.diagnosticBucketRead(UserInfo(userInfo.userEmail, OAuth2BearerToken(accessToken), 60, userInfo.userSubjectId), workspace.bucketName)
       } else Future.successful(None)
-      resultsForUser <- gcsDAO.diagnosticBucketRead(userInfo, workspace.bucketName)
     } yield {
-      (resultsForUser, resultsForPet) match {
-        case (None, None) => RequestComplete(StatusCodes.OK)
-        case (Some(report), _) => RequestComplete(report) // report actual user does not have access first
-        case (_, Some(report)) => RequestComplete(report)
+      resultsForPet match {
+        case None => RequestComplete(StatusCodes.OK)
+        case Some(report) => RequestComplete(report)
       }
     }
+//      resultsForUser <- gcsDAO.diagnosticBucketRead(userInfo, workspace.bucketName)
+//    } yield {
+//      (resultsForUser, resultsForPet) match {
+//        case (None, None) => RequestComplete(StatusCodes.OK)
+//        case (Some(report), _) => RequestComplete(report) // report actual user does not have access first
+//        case (_, Some(report)) => RequestComplete(report)
+//      }
+//    }
   }
 
   def listAllActiveSubmissions() = {
