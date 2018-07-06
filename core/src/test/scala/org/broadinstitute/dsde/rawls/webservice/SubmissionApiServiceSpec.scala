@@ -80,7 +80,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       services.methodRepoDAO,
       services.gcsDAO,
       services.samDAO,
-      services.dosResolver,
       MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName), slickDataSource),
       10,
       services.gcsDAO.getPreparedMockGoogleCredential(),
