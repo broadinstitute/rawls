@@ -1680,7 +1680,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
 
-      //if the user only has read access, it doesn't matter if their pet doesn't have access because it will never be used. so we skip over it.
+      // we access GCS as the user's pet, so check access as the pet.
       resultsForPet <- if (maxAccessLevel >= WorkspaceAccessLevels.Write) {
         gcsDAO.diagnosticBucketRead(UserInfo(userInfo.userEmail, OAuth2BearerToken(accessToken), 60, userInfo.userSubjectId), workspace.bucketName)
       } else Future.successful(None)
@@ -1690,14 +1690,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case Some(report) => RequestComplete(report)
       }
     }
-//      resultsForUser <- gcsDAO.diagnosticBucketRead(userInfo, workspace.bucketName)
-//    } yield {
-//      (resultsForUser, resultsForPet) match {
-//        case (None, None) => RequestComplete(StatusCodes.OK)
-//        case (Some(report), _) => RequestComplete(report) // report actual user does not have access first
-//        case (_, Some(report)) => RequestComplete(report)
-//      }
-//    }
   }
 
   def listAllActiveSubmissions() = {
