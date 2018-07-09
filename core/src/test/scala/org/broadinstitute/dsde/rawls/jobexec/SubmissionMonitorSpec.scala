@@ -118,7 +118,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       runAndWait(submissionQuery.updateStatus(UUID.fromString(testData.submission1.submissionId), SubmissionStatuses.Aborting))
 
       // verify the DB changes took effect
-      runAndWait(submissionQuery.loadSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.status) shouldBe SubmissionStatuses.Aborting
+      runAndWait(submissionQuery.loadSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.status) shouldBe Some(SubmissionStatuses.Aborting)
       runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).toSet shouldBe Set(WorkflowStatuses.Aborting)
 
       // kick off the monitor actor with trackDetailedSubmissionMetrics = false
