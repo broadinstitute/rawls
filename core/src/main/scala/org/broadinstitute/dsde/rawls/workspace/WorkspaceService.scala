@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowCostFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowCostFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
@@ -28,6 +28,7 @@ import org.joda.time.DateTime
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -41,12 +42,12 @@ import scala.util.{Failure, Success, Try}
  */
 
 object WorkspaceService {
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) = {
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, trackDetailedSubmissionMetrics: Boolean)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) = {
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService, trackDetailedSubmissionMetrics)
   }
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService)(implicit protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, trackDetailedSubmissionMetrics: Boolean)(implicit protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
 
   import dataSource.dataAccess.driver.api._
@@ -218,7 +219,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         //If a workflow is not done, automatically change its status to Aborted
         _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
           case wf if !WorkflowStatuses.withName(wf.status).isDone =>
-            dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted)(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId)))
+            dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted) { status =>
+              if (trackDetailedSubmissionMetrics) Some(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
+              else None
+            }
         }}
 
         //Gather the Google groups to remove, but don't remove project owners group which is used by other workspaces
@@ -1472,7 +1476,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
           // implicitly passed to SubmissionComponent.create
           implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceName))
-          implicit val wfStatusCounter = workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, submissionId))
+          implicit val wfStatusCounter = (status: WorkflowStatus) =>
+            if (trackDetailedSubmissionMetrics) Some(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, submissionId))(status))
+            else None
 
           dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
             RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, successes))

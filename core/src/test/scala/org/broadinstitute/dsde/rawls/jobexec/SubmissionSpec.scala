@@ -224,7 +224,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName,
-        mockSubmissionCostService
+        mockSubmissionCostService,
+        trackDetailedSubmissionMetrics = true
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {

@@ -120,7 +120,7 @@ trait WorkflowComponent {
       deleteWorkflowAction(id).map(_ > 0)
     }
 
-    def createWorkflows(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflows: Seq[Workflow])(implicit wfStatusCounter: WorkflowStatus => Counter): ReadWriteAction[Seq[Workflow]] = {
+    def createWorkflows(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflows: Seq[Workflow])(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Seq[Workflow]] = {
       def insertWorkflowRecs(submissionId: UUID, workflows: Seq[Workflow], entityRecs: Seq[EntityRecord]): ReadWriteAction[Map[Option[AttributeEntityReference], WorkflowRecord]] = {
         val entityRecsMap = entityRecs.map(e => e.toReference -> e.id).toMap
         val recsToInsert = workflows.map(workflow => marshalNewWorkflow(submissionId, workflow, workflow.workflowEntity.map(entityRecsMap(_))))
@@ -130,7 +130,7 @@ trait WorkflowComponent {
         } yield (workflowRec, workflowEntityRec)
 
         insertInBatches(workflowQuery, recsToInsert).map { rows =>
-          recsToInsert.foreach(wf => wfStatusCounter(WorkflowStatuses.withName(wf.status)) += 1)
+          recsToInsert.foreach(wf => wfStatusCounter(WorkflowStatuses.withName(wf.status)).foreach(_ += 1))
           rows
         } andThen
         insertedRecQuery.result.map(_.map { case (workflowRec, workflowEntityRec) =>
@@ -207,45 +207,48 @@ trait WorkflowComponent {
       workflowMessageQuery ++= messages.map { message => WorkflowMessageRecord(workflowId, message.value) }
     }
 
-    def updateStatus(workflow: WorkflowRecord, newStatus: WorkflowStatus)(implicit wfStatusCounter: WorkflowStatus => Counter): ReadWriteAction[Int] = {
+    def updateStatus(workflow: WorkflowRecord, newStatus: WorkflowStatus)(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Int] = {
       batchUpdateStatus(Seq(workflow), newStatus)
     }
 
     //input: old workflow records, and the status that we want to apply to all of them
-    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus)(implicit wfStatusCounter: WorkflowStatus => Counter): ReadWriteAction[Int] = {
+    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus)(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Int] = {
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
-        wfStatusCounter(newStatus).countDBResult {
-          UpdateWorkflowStatusRawSql.actionForWorkflowRecs(workflows, newStatus) map { rows =>
-            if (rows.head == workflows.size) {
-              workflows.size
-            } else {
-              throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
-            }
+        UpdateWorkflowStatusRawSql.actionForWorkflowRecs(workflows, newStatus) map { rows =>
+          if (rows.head == workflows.size) {
+            workflows.size
+          } else {
+            throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
           }
+        } map { result =>
+          wfStatusCounter(newStatus).foreach(_ += result)
+          result
         }
       }
     }
 
-    def batchUpdateStatusAndExecutionServiceKey(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, execServiceId: ExecutionServiceId)(implicit wfStatusCounter: WorkflowStatus => Counter): ReadWriteAction[Int] = {
+    def batchUpdateStatusAndExecutionServiceKey(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, execServiceId: ExecutionServiceId)(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Int] = {
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
-        wfStatusCounter(newStatus).countDBResult {
-          UpdateWorkflowStatusAndExecutionIdRawSql.actionForWorkflowRecs(workflows, newStatus, execServiceId) map { rows =>
-            if (rows.head == workflows.size)
-              workflows.size
-            else
-              throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
-          }
+        UpdateWorkflowStatusAndExecutionIdRawSql.actionForWorkflowRecs(workflows, newStatus, execServiceId) map { rows =>
+          if (rows.head == workflows.size)
+            workflows.size
+          else
+            throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
+        } map { result =>
+          wfStatusCounter(newStatus).foreach(_ += result)
+          result
         }
       }
     }
 
-    def updateWorkflowRecord(workflowRecord: WorkflowRecord)(implicit wfStatusCounter: WorkflowStatus => Counter): WriteAction[Int] = {
-      wfStatusCounter(WorkflowStatuses.withName(workflowRecord.status)).countDBResult {
-        findWorkflowByIdAndVersion(workflowRecord.id, workflowRecord.recordVersion).update(workflowRecord.copy(statusLastChangedDate = new Timestamp(System.currentTimeMillis()), recordVersion = workflowRecord.recordVersion + 1))
+    def updateWorkflowRecord(workflowRecord: WorkflowRecord)(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): WriteAction[Int] = {
+      findWorkflowByIdAndVersion(workflowRecord.id, workflowRecord.recordVersion).update(workflowRecord.copy(statusLastChangedDate = new Timestamp(System.currentTimeMillis()), recordVersion = workflowRecord.recordVersion + 1)).map { result =>
+        wfStatusCounter(WorkflowStatuses.withName(workflowRecord.status)).foreach(_ += result)
+        result
       }
     }
 
@@ -255,9 +258,10 @@ trait WorkflowComponent {
       UpdateWorkflowStatusRawSql.actionForCurrentStatus(currentStatus, newStatus)
     }
 
-    def batchUpdateWorkflowsOfStatus(submissionId: UUID, currentStatus: WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus)(implicit wfStatusCounter: WorkflowStatus => Counter): WriteAction[Int] = {
-      wfStatusCounter(newStatus).countDBResult {
-        UpdateWorkflowStatusRawSql.actionForCurrentStatusAndSubmission(submissionId, currentStatus, newStatus)
+    def batchUpdateWorkflowsOfStatus(submissionId: UUID, currentStatus: WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus)(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): WriteAction[Int] = {
+      UpdateWorkflowStatusRawSql.actionForCurrentStatusAndSubmission(submissionId, currentStatus, newStatus).map { result =>
+        wfStatusCounter(newStatus).foreach(_ += result)
+        result
       }
     }
 

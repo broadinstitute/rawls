@@ -690,6 +690,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       1 second,
+      trackDetailedSubmissionMetrics = true,
       "test"
     ))
   }
@@ -702,6 +703,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       1 minutes,
+      trackDetailedSubmissionMetrics = true,
       "test"
     )
   }
@@ -756,4 +758,5 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val executionServiceCluster: ExecutionServiceCluster,
                             val credential: Credential,
                             val submissionPollInterval: Duration,
+                            val trackDetailedSubmissionMetrics: Boolean,
                             override val workbenchMetricBaseName: String) extends SubmissionMonitor

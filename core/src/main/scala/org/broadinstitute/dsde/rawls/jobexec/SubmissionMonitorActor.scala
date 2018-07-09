@@ -35,8 +35,9 @@ object SubmissionMonitorActor {
             executionServiceCluster: ExecutionServiceCluster,
             credential: Credential,
             submissionPollInterval: FiniteDuration,
+            trackDetailedSubmissionMetrics: Boolean,
             workbenchMetricBaseName: String): Props = {
-    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, workbenchMetricBaseName))
+    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, trackDetailedSubmissionMetrics, workbenchMetricBaseName))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -73,6 +74,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val executionServiceCluster: ExecutionServiceCluster,
                              val credential: Credential,
                              val submissionPollInterval: FiniteDuration,
+                             val trackDetailedSubmissionMetrics: Boolean,
                              override val workbenchMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
   import context._
 
@@ -131,6 +133,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
   val submissionPollInterval: Duration
+  val trackDetailedSubmissionMetrics: Boolean
 
   // Cache these metric builders since they won't change for this SubmissionMonitor
   protected lazy val workspaceMetricBuilder: ExpandedMetricBuilder =
@@ -140,8 +143,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     workspaceSubmissionMetricBuilder(workspaceName, submissionId)
 
   // implicitly passed to WorkflowComponent/SubmissionComponent methods
-  private implicit val wfStatusCounter: WorkflowStatus => Counter =
-    workflowStatusCounter(workspaceSubmissionMetricBuilder)
+  // note this returns an Option[Counter] because per-submission metrics can be disabled with the trackDetailedSubmissionMetrics flag.
+  private implicit val wfStatusCounter: WorkflowStatus => Option[Counter] = status =>
+    if (trackDetailedSubmissionMetrics) Some(workflowStatusCounter(workspaceSubmissionMetricBuilder)(status)) else None
 
   private implicit val subStatusCounter: SubmissionStatus => Counter =
     submissionStatusCounter(workspaceMetricBuilder)

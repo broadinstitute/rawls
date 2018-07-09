@@ -87,6 +87,7 @@ object BootMonitors extends LazyLogging {
         maxActiveWorkflowsTotal,
         maxActiveWorkflowsPerUser,
         Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
+        conf.getBoolean("trackDetailedSubmissionMetrics"),
         workbenchMetricBaseName = metricsPrefix
       ))
     }
