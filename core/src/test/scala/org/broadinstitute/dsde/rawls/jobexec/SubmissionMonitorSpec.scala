@@ -119,7 +119,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
       // verify the DB changes took effect
       runAndWait(submissionQuery.loadSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.status) shouldBe Some(SubmissionStatuses.Aborting)
-      runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).toSet shouldBe Set(WorkflowStatuses.Aborting)
+      runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).toSet shouldBe Set(WorkflowStatuses.Running.toString)
 
       // kick off the monitor actor with trackDetailedSubmissionMetrics = false
       val monitorRef = createSubmissionMonitorActor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString), trackDetailedSubmissionMetrics = false)
