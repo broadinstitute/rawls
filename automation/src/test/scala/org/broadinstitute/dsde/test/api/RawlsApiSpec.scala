@@ -263,11 +263,11 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           // retrieve the workflow's metadata.
           // Orchestration times out in 1 minute, so we want to be well below that
 
-          // we also need to check that it returns at all in 30sec
+          // we also need to check that it returns *at all* in under a minute
           // `eventually` won't cover this if the call itself is slow and synchronous
 
-          val myTimeout = Timeout(scaled(Span(30, Seconds)))
-          val myInterval = Interval(scaled(Span(5, Seconds)))
+          val myTimeout = Timeout(scaled(Span(45, Seconds)))
+          val myInterval = Interval(scaled(Span(10, Seconds)))
 
           implicit val ec: ExecutionContextExecutor = system.dispatcher
 
