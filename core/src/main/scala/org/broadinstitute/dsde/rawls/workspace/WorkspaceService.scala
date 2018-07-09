@@ -1666,6 +1666,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  /*
+   If the user only has read access, check the bucket using the default pet.
+   If the user has a higher level of access, check the bucket using the pet for this workspace's project.
+
+   We use the default pet when possible because the default pet is created in a per-user shell project, i.e. not in
+     this workspace's project. This prevents proliferation of service accounts within this workspace's project. For
+     FireCloud's common read-only public workspaces, this is an important safeguard; else those common projects
+     would constantly hit limits on the number of allowed service accounts.
+
+   If the user has write access, we need to use the pet for this workspace's project in order to get accurate results.
+ */
   def checkBucketReadAccess(workspaceName: WorkspaceName) = {
     for {
       (workspace, maxAccessLevel) <- dataSource.inTransaction { dataAccess =>
@@ -1676,14 +1687,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
 
-      petKey <- samDAO.getPetServiceAccountKeyForUser(workspace.namespace, userInfo.userEmail)
+      petKey <- if (maxAccessLevel >= WorkspaceAccessLevels.Write)
+        samDAO.getPetServiceAccountKeyForUser(workspace.namespace, userInfo.userEmail)
+      else
+        samDAO.getDefaultPetServiceAccountKeyForUser(userInfo)
 
       accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
 
-      // we access GCS as the user's pet, so check access as the pet.
-      resultsForPet <- if (maxAccessLevel >= WorkspaceAccessLevels.Write) {
-        gcsDAO.diagnosticBucketRead(UserInfo(userInfo.userEmail, OAuth2BearerToken(accessToken), 60, userInfo.userSubjectId), workspace.bucketName)
-      } else Future.successful(None)
+      resultsForPet <- gcsDAO.diagnosticBucketRead(UserInfo(userInfo.userEmail, OAuth2BearerToken(accessToken), 60, userInfo.userSubjectId), workspace.bucketName)
     } yield {
       resultsForPet match {
         case None => RequestComplete(StatusCodes.OK)

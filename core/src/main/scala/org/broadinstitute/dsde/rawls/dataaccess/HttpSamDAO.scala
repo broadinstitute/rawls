@@ -174,6 +174,10 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or500) { () => asRawlsSAPipeline[String] apply RequestBuilding.Get(url) }
   }
 
+  override def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String] = {
+    val url = samServiceURL + "/api/google/v1/user/petServiceAccount/key"
+    retry(when401or500) { () => pipeline[String](userInfo) apply RequestBuilding.Get(url) }
+  }
 
   //managed group apis
 

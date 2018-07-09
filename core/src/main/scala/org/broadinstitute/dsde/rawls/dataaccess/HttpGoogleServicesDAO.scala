@@ -6,7 +6,7 @@ import java.util.UUID
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.Materializer
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
@@ -44,7 +44,7 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard, Retry}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroup}
 import org.joda.time
@@ -76,6 +76,9 @@ class HttpGoogleServicesDAO(
   maxPageSize: Int = 200,
   override val workbenchMetricBaseName: String,
   proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+
+  val http = Http(system)
+  val httpClientUtils = HttpClientUtilsStandard()
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
   val API_SERVICE_MANAGEMENT = "ServiceManagement"
@@ -715,17 +718,21 @@ class HttpGoogleServicesDAO(
   }
 
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]] = {
-    implicit val service = GoogleInstrumentedService.Storage
-    Future {
-      val getter = getStorage(getUserCredential(userInfo)).buckets().get(bucketName)
-      try {
-        blocking {
-          executeGoogleRequest(getter)
-        }
-        None
-      } catch {
-        case t: HttpResponseException => Some(ErrorReport(StatusCode.int2StatusCode(t.getStatusCode), t.getMessage))
+    // we make requests to the target bucket as the default pet, if the user only has read access.
+    // the default pet is created in a project without APIs enabled. Due to Google issue #16062674, we cannot
+    // call the GCS JSON API as the default pet; we must use the XML API. In turn, this means we cannot use
+    // the GCS client library (which internally calls the JSON API); we must hand-code a call to the XML API.
+
+    val bucketUrl = s"https://storage.googleapis.com/$bucketName"
+    val bucketRequest = httpClientUtils.addHeader(RequestBuilding.Head(bucketUrl), Authorization(userInfo.accessToken))
+
+    httpClientUtils.executeRequest(http, bucketRequest) map { httpResponse =>
+      httpResponse.status match {
+        case StatusCodes.OK => None
+        case x => Some(ErrorReport(x, x.defaultMessage()))
       }
+    } recover {
+      case t:Throwable => Some(ErrorReport(t))
     }
   }
 
