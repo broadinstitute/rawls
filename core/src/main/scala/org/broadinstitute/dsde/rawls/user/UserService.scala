@@ -853,6 +853,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     def createForbiddenErrorMessage(who: String, billingAccountName: RawlsBillingAccountName) = {
       s"""${who} must have the permission "Billing Account User" on ${billingAccountName.value} to create a project with it."""
     }
+
+
+
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
       billingAccountNames.find(_.accountName == billingAccountName) match {
         case Some(billingAccount) if billingAccount.firecloudHasAccess =>
