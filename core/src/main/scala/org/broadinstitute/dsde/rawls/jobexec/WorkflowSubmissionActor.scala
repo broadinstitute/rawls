@@ -129,7 +129,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       case Some((wfRecs, submissionRec, workspaceRec)) if wfRecs.nonEmpty =>
         // implicitly passed to WorkflowComponent.batchUpdateStatus
         implicit val wfStatusCounter = (status: WorkflowStatus) =>
-          if (trackDetailedSubmissionMetrics) Some(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceRec.toWorkspaceName, submissionRec.id))(status))
+          if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceRec.toWorkspaceName, submissionRec.id))(status))
           else None
         dataSource.inTransaction { dataAccess =>
           dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching) map { _ =>
@@ -246,7 +246,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
     // implicitly passed to WorkflowComponent methods which update status
     implicit val wfStatusCounter = (status: WorkflowStatus) =>
-      if (trackDetailedSubmissionMetrics) Some(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceRec.toWorkspaceName, submissionRec.id))(status))
+      if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceRec.toWorkspaceName, submissionRec.id))(status))
       else None
 
     val workflowBatchFuture = dataSource.inTransaction { dataAccess =>

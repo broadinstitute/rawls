@@ -145,7 +145,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   // implicitly passed to WorkflowComponent/SubmissionComponent methods
   // note this returns an Option[Counter] because per-submission metrics can be disabled with the trackDetailedSubmissionMetrics flag.
   private implicit val wfStatusCounter: WorkflowStatus => Option[Counter] = status =>
-    if (trackDetailedSubmissionMetrics) Some(workflowStatusCounter(workspaceSubmissionMetricBuilder)(status)) else None
+    if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder)(status)) else None
 
   private implicit val subStatusCounter: SubmissionStatus => Counter =
     submissionStatusCounter(workspaceMetricBuilder)

@@ -69,7 +69,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   // Implicit counters are required for certain methods on WorkflowComponent and SubmissionComponent
   override lazy val metricBaseName = MetricName("test")
-  implicit def wfStatusCounter(wfStatus: WorkflowStatus): Option[Counter] = Some(metrics.counter(s"${wfStatus.toString}"))
+  implicit def wfStatusCounter(wfStatus: WorkflowStatus): Option[Counter] = Option(metrics.counter(s"${wfStatus.toString}"))
   implicit def subStatusCounter(subStatus: SubmissionStatus): Counter = metrics.counter(s"${subStatus.toString}")
 
   override val driver: JdbcProfile = DbResource.dataConfig.driver

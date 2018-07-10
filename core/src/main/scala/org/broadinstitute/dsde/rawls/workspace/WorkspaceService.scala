@@ -220,7 +220,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
           case wf if !WorkflowStatuses.withName(wf.status).isDone =>
             dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted) { status =>
-              if (trackDetailedSubmissionMetrics) Some(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
+              if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
               else None
             }
         }}
@@ -1477,7 +1477,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           // implicitly passed to SubmissionComponent.create
           implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceName))
           implicit val wfStatusCounter = (status: WorkflowStatus) =>
-            if (trackDetailedSubmissionMetrics) Some(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, submissionId))(status))
+            if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, submissionId))(status))
             else None
 
           dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
