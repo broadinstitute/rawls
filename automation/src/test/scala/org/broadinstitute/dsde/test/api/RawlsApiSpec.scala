@@ -219,7 +219,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     "should retrieve metadata with widely scattered sub-workflows in a short time" in {
       implicit val token: AuthToken = studentAToken
 
-      val scatterWidth = 300
+      val scatterWidth = 500
 
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
@@ -285,9 +285,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
           // can we also quickly retrieve metadata for a few of the subworkflows?
 
-          // NOT YET.  Known issue in this iteration of firecloud-app#97
-          // TODO: uncomment when the real solution is in place
-          //Random.shuffle(subworkflowIds.take(4)).foreach { cromwellMetadata(_) }
+          Random.shuffle(subworkflowIds.take(10)).foreach { cromwellMetadata(_) }
 
           // clean up: Abort and wait for one minute or Aborted, whichever comes first
           // Timeout is OK here: just make a best effort
