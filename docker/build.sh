@@ -52,7 +52,7 @@ function docker_cmd()
         echo "building $PROJECT-tests docker image..."
         docker build -t $REPO:${HASH_TAG} .
         cd automation
-        docker build -f Dockerfile-tests -t $TESTS_REPO:${BRANCH} .
+        docker build -f Dockerfile-tests -t $TESTS_REPO:${HASH_TAG} .
         cd ..
 
         if [ $DOCKER_CMD = "push" ]; then
@@ -63,7 +63,11 @@ function docker_cmd()
             docker tag $REPO:${HASH_TAG} $REPO:${BRANCH}
             docker push $REPO:${BRANCH}
 
+            echo "pushing $PROJECT-tests:${HASH_TAG} docker image..."
+            docker push $TESTS_REPO:${HASH_TAG}
+
             echo "pushing $PROJECT-tests:$BRANCH docker image..."
+            docker tag $TESTS_REPO:${HASH_TAG} $TESTS_REPO:${BRANCH}
             docker push $TESTS_REPO:${BRANCH}
         fi
     else
