@@ -13,6 +13,19 @@
 set -ex
 PROJECT=rawls
 
+function build_check()
+{
+    HASH_TAG=${GIT_SHA:0:12}
+    docker_pull_return=0
+    docker pull $REPO:${HASH_TAG} || docker_pull_return=$?
+
+    if [ $docker_pull_return -eq 0 ]; then
+        echo "Image already up-to-date.  Not building."
+        exit 0
+    fi
+
+}
+
 function make_jar()
 {
     echo "building jar..."
@@ -46,26 +59,25 @@ function docker_cmd()
 {
     if [ $DOCKER_CMD = "build" ] || [ $DOCKER_CMD = "push" ]; then
         echo "building $PROJECT docker image..."
-        if [ "$ENV" != "dev" ] && [ "$ENV" != "alpha" ] && [ "$ENV" != "staging" ] && [ "$ENV" != "perf" ]; then
-            DOCKER_TAG=${BRANCH}
-            DOCKER_TAG_TESTS=${BRANCH}
-        else
-            GIT_SHA=$(git rev-parse origin/${BRANCH})
-            echo GIT_SHA=$GIT_SHA > env.properties
-            DOCKER_TAG=${GIT_SHA:0:12}
-            DOCKER_TAG_TESTS=${GIT_SHA:0:12}
-        fi
+        echo GIT_SHA=$GIT_SHA > env.properties
+        HASH_TAG=${GIT_SHA:0:12}
+
         echo "building $PROJECT-tests docker image..."
-        docker build -t $REPO:${DOCKER_TAG} .
+        docker build -t $REPO:${HASH_TAG} .
         cd automation
-        docker build -f Dockerfile-tests -t $TESTS_REPO:${DOCKER_TAG_TESTS} .
+        docker build -f Dockerfile-tests -t $TESTS_REPO:${BRANCH} .
         cd ..
 
         if [ $DOCKER_CMD = "push" ]; then
-            echo "pushing $PROJECT docker image..."
-            docker push $REPO:${DOCKER_TAG}
-            echo "pushing $PROJECT-tests docker image..."
-            docker push $TESTS_REPO:${DOCKER_TAG_TESTS}
+            echo "pushing $PROJECT:$HASH_TAG docker image..."
+            docker push $REPO:${HASH_TAG}
+
+            echo "pushing $PROJECT:$BRANCH docker image..."
+            docker tag $REPO:${HASH_TAG} $REPO:${BRANCH}
+            docker push $REPO:${BRANCH}
+
+            echo "pushing $PROJECT-tests:$BRANCH docker image..."
+            docker push $TESTS_REPO:${BRANCH}
         fi
     else
         echo "Not a valid docker option!  Choose either build or push (which includes build)"
@@ -78,11 +90,15 @@ BRANCH=${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}  # default to current branc
 REPO=${REPO:-broadinstitute/$PROJECT}
 TESTS_REPO=$REPO-tests
 ENV=${ENV:-""}  # if env is not set, push an image with branch name
+GIT_SHA=$(git rev-parse origin/${BRANCH})
+
+# Check to see if we need to build, or if everything is already up-to-date
+build_check
 
 while [ "$1" != "" ]; do
     case $1 in
         jar) make_jar ;;
-	publish) artifactory_push ;;
+	    publish) artifactory_push ;;
         -d | --docker) shift
                        echo $1
                        DOCKER_CMD=$1
