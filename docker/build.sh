@@ -13,19 +13,6 @@
 set -ex
 PROJECT=rawls
 
-function build_check()
-{
-    HASH_TAG=${GIT_SHA:0:12}
-    docker_pull_return=0
-    docker pull $REPO:${HASH_TAG} || docker_pull_return=$?
-
-    if [ $docker_pull_return -eq 0 ]; then
-        echo "Image already up-to-date.  Not building."
-        exit 0
-    fi
-
-}
-
 function make_jar()
 {
     echo "building jar..."
@@ -92,8 +79,6 @@ TESTS_REPO=$REPO-tests
 ENV=${ENV:-""}  # if env is not set, push an image with branch name
 GIT_SHA=$(git rev-parse origin/${BRANCH})
 
-# Check to see if we need to build, or if everything is already up-to-date
-build_check
 
 while [ "$1" != "" ]; do
     case $1 in
