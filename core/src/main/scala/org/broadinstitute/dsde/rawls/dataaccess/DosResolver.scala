@@ -4,5 +4,5 @@ import scala.concurrent.Future
 
 trait DosResolver {
   val dosUriPattern: String = "^dos://.*"
-  def dosToGs(v: String): Future[String]
+  def dosServiceAccountEmail(dos: String): Future[Option[String]]
 }

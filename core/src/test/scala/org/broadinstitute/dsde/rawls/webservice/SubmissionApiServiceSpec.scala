@@ -90,7 +90,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       100000,
       None,
       trackDetailedSubmissionMetrics = true,
-      "test"))
+      "test",
+      "requesterPays"
+    ))
 
     try {
       testCode(actor)

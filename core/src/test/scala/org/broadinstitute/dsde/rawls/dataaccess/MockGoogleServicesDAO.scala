@@ -33,6 +33,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   private var tokenDate: DateTime = null
 
   private val groups: TrieMap[RawlsGroupRef, Set[Either[RawlsUser, RawlsGroup]]] = TrieMap()
+  val policies: TrieMap[RawlsBillingProjectName, Map[String, List[String]]] = TrieMap()
 
   val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudHasThisOne")
   val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
@@ -298,7 +299,10 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Success(()))
   }
 
-  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit] = Future(())
+  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit] = Future.successful {
+    import cats.implicits._
+    policies.put(projectName, policies.getOrElse(projectName, Map.empty) |+| policiesToAdd)
+  }
 
   override def grantReadAccess(billingProject: RawlsBillingProjectName,
                                bucketName: String,
