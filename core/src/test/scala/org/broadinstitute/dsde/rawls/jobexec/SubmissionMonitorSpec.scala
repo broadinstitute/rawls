@@ -110,6 +110,33 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
+  it should "not count per-submission metrics when trackDetailedSubmissionMetrics is disabled" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    withStatsD {
+      // mark workflows as Running and submission as Aborting in the DB
+      val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
+      runAndWait(workflowQuery.batchUpdateStatus(workflowRecs, WorkflowStatuses.Running))
+      runAndWait(submissionQuery.updateStatus(UUID.fromString(testData.submission1.submissionId), SubmissionStatuses.Aborting))
+
+      // verify the DB changes took effect
+      runAndWait(submissionQuery.loadSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.status) shouldBe Some(SubmissionStatuses.Aborting)
+      runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).toSet shouldBe Set(WorkflowStatuses.Running.toString)
+
+      // kick off the monitor actor with trackDetailedSubmissionMetrics = false
+      val monitorRef = createSubmissionMonitorActor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString), trackDetailedSubmissionMetrics = false)
+      watch(monitorRef)
+
+      // workflows should have transitioned to Aborted and actor should be shut down
+      awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Aborted.toString), 10 seconds)
+      expectMsgClass(5 seconds, classOf[Terminated])
+    } { capturedMetrics =>
+      // should not have counted any per-submission metrics
+      capturedMetrics should not contain (expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Aborted))
+      capturedMetrics.map(_._1).foreach { metricName =>
+        metricName should not include testData.submission1.submissionId
+      }
+    }
+  }
+
   it should "queryExecutionServiceForStatus exception" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val exception = new RuntimeException
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(throw exception))
@@ -682,7 +709,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
-  def createSubmissionMonitorActor(dataSource: SlickDataSource, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO): TestActorRef[SubmissionMonitorActor] = {
+  def createSubmissionMonitorActor(dataSource: SlickDataSource, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO, trackDetailedSubmissionMetrics: Boolean = true): TestActorRef[SubmissionMonitorActor] = {
     TestActorRef[SubmissionMonitorActor](SubmissionMonitorActor.props(
       wsName,
       UUID.fromString(submission.submissionId),
@@ -690,6 +717,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       1 second,
+      trackDetailedSubmissionMetrics,
       "test"
     ))
   }
@@ -702,6 +730,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       1 minutes,
+      trackDetailedSubmissionMetrics = true,
       "test"
     )
   }
@@ -756,4 +785,5 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val executionServiceCluster: ExecutionServiceCluster,
                             val credential: Credential,
                             val submissionPollInterval: Duration,
+                            val trackDetailedSubmissionMetrics: Boolean,
                             override val workbenchMetricBaseName: String) extends SubmissionMonitor

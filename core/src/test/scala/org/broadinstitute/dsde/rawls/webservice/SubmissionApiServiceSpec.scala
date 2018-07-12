@@ -89,6 +89,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       100000,
       100000,
       None,
+      trackDetailedSubmissionMetrics = true,
       "test"))
 
     try {

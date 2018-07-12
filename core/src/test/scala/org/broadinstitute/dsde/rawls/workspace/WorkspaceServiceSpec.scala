@@ -133,7 +133,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
-      submissionCostService
+      submissionCostService,
+      trackDetailedSubmissionMetrics = true
     )_
 
     def cleanupSupervisor = {

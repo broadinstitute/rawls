@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, addJitter}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -36,8 +37,9 @@ object WorkflowSubmissionActor {
             maxActiveWorkflowsTotal: Int,
             maxActiveWorkflowsPerUser: Int,
             runtimeOptions: Option[JsValue],
+            trackDetailedSubmissionMetrics: Boolean,
             workbenchMetricBaseName: String): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, workbenchMetricBaseName))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -63,6 +65,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val maxActiveWorkflowsTotal: Int,
                               val maxActiveWorkflowsPerUser: Int,
                               val runtimeOptions: Option[JsValue],
+                              val trackDetailedSubmissionMetrics: Boolean,
                               override val workbenchMetricBaseName: String) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
@@ -107,6 +110,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val maxActiveWorkflowsTotal: Int
   val maxActiveWorkflowsPerUser: Int
   val runtimeOptions: Option[JsValue]
+  val trackDetailedSubmissionMetrics: Boolean
 
   import dataSource.dataAccess.driver.api._
 
@@ -124,7 +128,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     workflowRecsToLaunch flatMap {
       case Some((wfRecs, submissionRec, workspaceRec)) if wfRecs.nonEmpty =>
         // implicitly passed to WorkflowComponent.batchUpdateStatus
-        implicit val wfStatusCounter = workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceRec.toWorkspaceName, submissionRec.id))
+        implicit val wfStatusCounter = (status: WorkflowStatus) =>
+          if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceRec.toWorkspaceName, submissionRec.id))(status))
+          else None
         dataSource.inTransaction { dataAccess =>
           dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching) map { _ =>
             SubmitWorkflowBatch(WorkflowBatch(wfRecs.map(_.id), submissionRec, workspaceRec))
@@ -237,8 +243,11 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   def submitWorkflowBatch(batch: WorkflowBatch)(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
 
     val WorkflowBatch(workflowIds, submissionRec, workspaceRec) = batch
+
     // implicitly passed to WorkflowComponent methods which update status
-    implicit val wfStatusCounter = workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceRec.toWorkspaceName, submissionRec.id))
+    implicit val wfStatusCounter = (status: WorkflowStatus) =>
+      if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceRec.toWorkspaceName, submissionRec.id))(status))
+      else None
 
     val workflowBatchFuture = dataSource.inTransaction { dataAccess =>
       for {

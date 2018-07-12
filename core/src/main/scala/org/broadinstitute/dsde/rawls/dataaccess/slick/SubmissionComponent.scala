@@ -154,7 +154,7 @@ trait SubmissionComponent {
     }
 
     /* creates a submission and associated workflows in a workspace */
-    def create(workspaceContext: SlickWorkspaceContext, submission: Submission)(implicit submissionStatusCounter: SubmissionStatus => Counter, wfStatusCounter: WorkflowStatus => Counter): ReadWriteAction[Submission] = {
+    def create(workspaceContext: SlickWorkspaceContext, submission: Submission)(implicit submissionStatusCounter: SubmissionStatus => Counter, wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Submission] = {
 
       def saveSubmissionWorkflows(workflows: Seq[Workflow]) = {
         workflowQuery.createWorkflows(workspaceContext, UUID.fromString(submission.submissionId), workflows)
