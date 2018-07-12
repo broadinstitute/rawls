@@ -38,7 +38,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   val mockServer = RemoteServicesMockServer()
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
   val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, mockGoogleServicesDAO.getPreparedMockGoogleCredential())
-  val mockDosResolver: DosResolver = (v: String) => Future.successful(v.replaceFirst("dos://", "gs://"))
+  val dosServiceAccount = "serviceaccount@foo.com"
+  val differentDosServiceAccount = "differentserviceaccount@foo.com"
+  val mockDosResolver: DosResolver = (v: String) => Future.successful(if (v.contains("different")) Some(differentDosServiceAccount) else Some(dosServiceAccount))
+  private val requesterPaysRole = "requesterPays"
 
   /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
     */
@@ -51,7 +54,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val maxActiveWorkflowsPerUser: Int = 100,
     val runtimeOptions: Option[JsValue] = None,
     val trackDetailedSubmissionMetrics: Boolean = true,
-    override val workbenchMetricBaseName: String = "test") extends WorkflowSubmission {
+    override val workbenchMetricBaseName: String = "test",
+    val requesterPaysRole: String = requesterPaysRole) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
@@ -251,7 +255,9 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val sample = Entity("sample", "Sample", Map())
       val sampleSet = Entity("sampleset", "sample_set",
         Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference))))
-      val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("dos://foo/bar")), None, "test_input_dos"))
+      val inputResolutions = Seq(
+        SubmissionValidationValue(Option(AttributeString("dos://foo/bar")), None, "test_input_dos"),
+        SubmissionValidationValue(Option(AttributeValueList(Seq(AttributeString("dos://foo/bar1"), AttributeString("dos://different"), AttributeString("dos://foo/bar3")))), None, "test_input_dos_array"))
       val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, data.userOwner,
         Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
 
@@ -264,41 +270,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      assertResult(workflowRecs.map(_ => s"""{"test_input_dos":"gs://foo/bar"}""")) {
-        mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
-      }
-    }
-  }
-
-  it should "resolve DOS URIs in arrays when submitting workflows" in withDefaultTestDatabase {
-    val data = testData
-    // Set up system under test
-    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
-    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
-      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
-    }
-
-    withWorkspaceContext(data.workspace) { ctx =>
-      // Create test submission data
-      val sample = Entity("sample", "Sample", Map())
-      val sampleSet = Entity("sampleset", "sample_set",
-        Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference))))
-      val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeValueList(Seq(AttributeString("dos://foo/bar")))), None, "test_input_dos"))
-      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, data.userOwner,
-        Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
-
-      runAndWait(entityQuery.save(ctx, sample))
-      runAndWait(entityQuery.save(ctx, sampleSet))
-      runAndWait(submissionQuery.create(ctx, submissionDos))
-      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDos, data.workspace)
-
-      // Submit workflow!
-      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
-
-      // Verify
-      assertResult(workflowRecs.map(_ => s"""{"test_input_dos":["gs://foo/bar"]}""")) {
-        mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
-      }
+      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.workspace.namespace))(requesterPaysRole) should contain theSameElementsAs List("user:" + dosServiceAccount, "user:" + differentDosServiceAccount)
     }
   }
 
@@ -383,7 +355,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
-        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test")
+        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole)
       )
 
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).exists(_ == WorkflowStatuses.Submitted.toString), 10 seconds)
@@ -418,7 +390,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
-        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test")
+        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole)
       )
 
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)
