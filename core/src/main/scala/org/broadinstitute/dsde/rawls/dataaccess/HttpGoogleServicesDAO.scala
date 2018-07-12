@@ -723,7 +723,11 @@ class HttpGoogleServicesDAO(
     // call the GCS JSON API as the default pet; we must use the XML API. In turn, this means we cannot use
     // the GCS client library (which internally calls the JSON API); we must hand-code a call to the XML API.
 
-    val bucketUrl = s"https://storage.googleapis.com/$bucketName"
+    // the "proper" request to make into the XML API is HEAD-bucket; see https://cloud.google.com/storage/docs/xml-api/overview.
+    // however, the akka-http client is vulnerable to connection-pool exhaustion with HEAD requests; see akka/akka-http#1495.
+    // therefore, we make a request to GET /?storageClass. Since all we care about is the 200 vs. 40x status code
+    // in the response, this is an equivalent request.
+    val bucketUrl = s"https://$bucketName.storage.googleapis.com/?storageClass"
     val bucketRequest = httpClientUtils.addHeader(RequestBuilding.Head(bucketUrl), Authorization(userInfo.accessToken))
 
     httpClientUtils.executeRequest(http, bucketRequest) map { httpResponse =>
