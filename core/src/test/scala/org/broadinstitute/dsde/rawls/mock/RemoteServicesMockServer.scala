@@ -981,6 +981,19 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
+        .withPath("/api/google/v1/user/petServiceAccount/key")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com"}""".stripMargin
+        )
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
         .withPath("/api/groups")
     ).respond(
       response()
