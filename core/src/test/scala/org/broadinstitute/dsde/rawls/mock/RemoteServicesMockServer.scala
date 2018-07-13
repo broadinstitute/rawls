@@ -43,7 +43,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     val copyMethodConfigPath = "/configurations"
 
     val goodResult = AgoraEntity(Some("workspace_test"), Some("rawls_test_good"), Some(1), None, None, None, None,
-      Some("{\"name\":\"testConfig1\",\"workspaceName\":{\"namespace\":\"myNamespace\",\"name\":\"myWorkspace\"},\"methodRepoMethod\":{\"methodNamespace\":\"ns-config\",\"methodName\":\"meth1\",\"methodVersion\":1},\"methodRepoConfig\":{\"methodConfigNamespace\":\"ns\",\"methodConfigName\":\"meth1\",\"methodConfigVersion\":1},\"outputs\":{\"p1\":\"prereq expr\"},\"inputs\":{\"o1\":\"output expr\"},\"rootEntityType\":\"Sample\",\"prerequisites\":{\"i1\":\"input expr\"},\"namespace\":\"ns\"}"),
+      Some("""{"name":"testConfig1","workspaceName":{"namespace":"myNamespace","name":"myWorkspace"},"methodRepoMethod":{"methodNamespace":"ns-config","methodName":"meth1","methodVersion":1},"methodRepoConfig":{"methodConfigNamespace":"ns","methodConfigName":"meth1","methodConfigVersion":1},"rootEntityType":"Sample","outputs":{"o1":"output expr"},"inputs":{"i1":"input expr"},"prerequisites":{"p1":"prereq expr"},"namespace":"ns"}"""),
       None, None)
 
     val emptyPayloadResult = AgoraEntity(Some("workspace_test"), Some("rawls_test_empty_payload"), Some(1), None, None, None, None,
@@ -169,6 +169,47 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     val threeStepMethod = AgoraEntity(Some("dsde"),Some("three_step"),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
 
+    val goodAndBadInputsWDL =
+      """
+        |workflow goodAndBad {
+        |  call goodAndBadTask
+        |}
+        |
+        |task goodAndBadTask {
+        |  String good_in
+        |  String bad_in
+        |  command {
+        |    echo "hello world"
+        |  }
+        |  output {
+        |    String good_out = "everything is good"
+        |    String bad_out = "everything is bad"
+        |    String empty_out = "everything is empty"
+        |  }
+        |}
+      """.stripMargin
+
+    val goodAndBadMethod = AgoraEntity(Some("dsde"),Some("good_and_bad"),Some(1),None,None,None,None,Some(goodAndBadInputsWDL),None,Some(AgoraEntityType.Workflow))
+
+    val meth1WDL =
+      """
+        |workflow meth1 {
+        |  call method1
+        |}
+        |
+        |task method1 {
+        |  String i1
+        |  command {
+        |    echo "hello world"
+        |  }
+        |  output {
+        |    String o1 = "output one"
+        |  }
+        |}
+      """.stripMargin
+
+    val meth1Method = AgoraEntity(Some("dsde"),Some("meth1"),Some(1),None,None,None,None,Some(meth1WDL),None,Some(AgoraEntityType.Workflow))
+
     mockServer.when(
       request()
         .withMethod("GET")
@@ -183,11 +224,22 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
+        .withPath(methodPath + "/dsde/good_and_bad/1")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(goodAndBadMethod.toJson.prettyPrint)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
         .withPath(methodPath + "/ns-config/meth1/1")
     ).respond(
       response()
         .withHeaders(jsonHeader)
-        .withBody(goodResult.toJson.prettyPrint)
+        .withBody(meth1Method.toJson.prettyPrint)
         .withStatusCode(StatusCodes.OK.intValue)
     )
 

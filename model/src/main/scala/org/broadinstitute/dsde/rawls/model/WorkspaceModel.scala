@@ -374,15 +374,17 @@ case class AgoraMethodConfiguration(namespace: String,
 
 case class ValidatedMethodConfiguration(
                                          methodConfiguration: MethodConfiguration,
-                                         validInputs: Seq[String],
+                                         validInputs: Set[String],
                                          invalidInputs: Map[String,String],
-                                         validOutputs: Seq[String],
+                                         missingInputs: Set[String],
+                                         extraInputs: Set[String],
+                                         validOutputs: Set[String],
                                          invalidOutputs: Map[String,String])
 
 case class ParsedMCExpressions(
-                                         validInputs: Seq[String],
+                                         validInputs: Set[String],
                                          invalidInputs: Map[String,String],
-                                         validOutputs: Seq[String],
+                                         validOutputs: Set[String],
                                          invalidOutputs: Map[String,String])
 
 case class MethodRepoConfigurationImport(
@@ -615,7 +617,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 
-  implicit val ValidatedMethodConfigurationFormat = jsonFormat5(ValidatedMethodConfiguration)
+  implicit val ValidatedMethodConfigurationFormat = jsonFormat7(ValidatedMethodConfiguration)
 
   implicit val GA4GHToolDescriptorFormat = jsonFormat3(GA4GHTool)
 

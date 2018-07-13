@@ -14,7 +14,7 @@ object ExpressionParser {
   def parseMCExpressions(inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], allowRootEntity: Boolean, parser: SlickExpressionParser): ParsedMCExpressions = {
     def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[Unit] ) = {
       val parsed = m map { case (key, attr) => (key, parseFunc(attr.value)) }
-      ( parsed collect { case (key, Success(_)) => key } toSeq,
+      ( parsed collect { case (key, Success(_)) => key } toSet,
         parsed collect { case (key, Failure(regret)) => (key, regret.getMessage) } )
     }
     val (successInputs, failedInputs)   = parseAndPartition(inputs, parseInputExpr(allowRootEntity, parser) )

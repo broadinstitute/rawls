@@ -62,31 +62,37 @@ object MethodConfigResolver {
 
   case class MethodInput(workflowInput: InputDefinition, expression: String)
 
-  def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[Seq[MethodInput]] = parseWDL(wdl) map { workflow =>
+  case class GatherInputsResult(processableInputs: Set[MethodInput], emptyOptionalInputs: Set[MethodInput], missingInputs: Set[FullyQualifiedName], extraInputs: Set[String])
+
+  def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[GatherInputsResult] = parseWDL(wdl) map { workflow =>
     def isAttributeEmpty(fqn: FullyQualifiedName): Boolean = {
       methodConfig.inputs.get(fqn) match {
         case Some(AttributeString(value)) => value.isEmpty
         case _ => throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} input ${fqn} value is unavailable")
       }
     }
-    val agoraInputs = workflow.inputs
-    val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => (!methodConfig.inputs.contains(fqn) || isAttributeEmpty(fqn)) && !workflowInput.optional }.keys
-    val extraInputs = methodConfig.inputs.filter { case (name, expression) => !agoraInputs.contains(name) }.keys
-    if (missingInputs.nonEmpty || extraInputs.nonEmpty) {
-      val message =
-        if (missingInputs.nonEmpty)
-          if (extraInputs.nonEmpty)
-            "is missing definitions for these inputs: " + missingInputs.mkString(", ") + " and it has extraneous definitions for these inputs: " + extraInputs.mkString(", ")
-          else
-            "is missing definitions for these inputs: " + missingInputs.mkString(", ")
-        else
-          "has extraneous definitions for these inputs: " + extraInputs.mkString(", ")
-      throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} ${message}")
-    }
-    for ((name, expression) <- methodConfig.inputs.toSeq) yield MethodInput(agoraInputs(name), expression.value)
+    val wdlInputs = workflow.inputs
+
+    /* ok, so there are:
+        - inputs that the WDL requires and the MC defines: ok - definedInputs
+        - inputs that the WDL says are optional but the MC defines anyway: ok - contained in definedInputs
+
+        - inputs that the WDL requires and the MC does not define: bad - missingRequired
+        - inputs that the WDL says are optional and the MC doesn't define: ok - emptyOptionals
+        - inputs that the WDL has no idea about but the MC defines anyway: bad - extraInputs
+     */
+    val (definedInputs, undefinedInputs) = wdlInputs.partition { case (fqn, workflowInput) => methodConfig.inputs.contains(fqn) && !isAttributeEmpty(fqn) }
+    val (emptyOptionals, missingRequired) = undefinedInputs.partition { case (fqn, workflowInput) => workflowInput.optional }
+    val extraInputs = methodConfig.inputs.filterNot { case (name, expression) => wdlInputs.contains(name) }
+
+    GatherInputsResult(
+      definedInputs.map  { case (fqn, inputDef) => MethodInput(inputDef, methodConfig.inputs(fqn).value) }.toSet,
+      emptyOptionals.map { case (fqn, inputDef) => MethodInput(inputDef, methodConfig.inputs.getOrElse(fqn, AttributeString("")).value ) }.toSet,
+      missingRequired.keys.toSet,
+      extraInputs.keys.toSet)
   }
 
-  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
+  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Set[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
     val entityNames = entities match {
@@ -100,7 +106,7 @@ object MethodConfigResolver {
     } else {
       ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
         //Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
-        val resultsByInput = inputs.map { input =>
+        val resultsByInput = inputs.toSeq.map { input =>
           evaluator.evalFinalAttribute(workspaceContext, input.expression).asTry.map { tryAttribsByEntity =>
             val validationValuesByEntity: Seq[(String, SubmissionValidationValue)] = tryAttribsByEntity match {
               case Failure(regret) =>

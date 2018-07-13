@@ -401,7 +401,18 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       agoraMethod
     )
 
-    val dockstoreMethod = DockstoreMethod("dockstore/method/path", "dockstore-method-version")
+    val goodAndBadMethod = AgoraMethod("dsde", "good_and_bad", 1)
+
+    val goodAndBadMethodConfig = MethodConfiguration(
+      "dsde",
+      "good_and_bad",
+      Some("samples"),
+      Map(),
+      Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse")),
+      Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString("")),
+      goodAndBadMethod)
+
+    val dockstoreMethod = DockstoreMethod("dockstore-method-path", "dockstore-method-version")
 
     val dockstoreMethodConfig = MethodConfiguration(
       "dockstore-config-namespace",
@@ -634,6 +645,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
                 methodConfigurationQuery.create(context, agoraMethodConfig),
                 methodConfigurationQuery.create(context, dockstoreMethodConfig),
+                methodConfigurationQuery.create(context, goodAndBadMethodConfig),
                 methodConfigurationQuery.create(context, methodConfig2),
                 methodConfigurationQuery.create(context, methodConfig3),
                 methodConfigurationQuery.create(context, methodConfigValid),
