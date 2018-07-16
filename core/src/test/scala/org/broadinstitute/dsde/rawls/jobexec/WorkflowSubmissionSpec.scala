@@ -230,7 +230,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             testData.billingProject.cromwellAuthBucketUrl,
             s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
             Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
-            false
+            false,
+            None
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }

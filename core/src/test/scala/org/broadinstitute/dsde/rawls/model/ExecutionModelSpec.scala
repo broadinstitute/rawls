@@ -88,6 +88,7 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
       "final_workflow_log_dir",
       None,
       true,
+      Some("non-default-backend"),
       Some(WorkflowFailureModes.ContinueWhilePossible)
     )
 
@@ -102,6 +103,7 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
         |  "auth_bucket": "auth_bucket",
         |  "final_workflow_log_dir": "final_workflow_log_dir",
         |  "read_from_cache": true,
+        |  "backend": "non-default-backend",
         |  "workflow_failure_mode": "ContinueWhilePossible"
         |}
       """.stripMargin.parseJson
@@ -123,13 +125,35 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
         |  "user_service_account_json": "{\n  \"type\": \"service_account\",\n  \"project_id\": \"broad-dsde-dev\",\n  \"proovate_key_id\": \"120924d141277cef7a976320d3dc3e4e298ac447\",\n  \"proovate_key\": \"-----BEGIN proovate KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCJbNtO6w2ExfGg\\n-----END proovate KEY-----\\n\",\n  \"client_email\": \"pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com\",\n  \"client_id\": \"110086970853956779852\",\n  \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n  \"token_uri\": \"https://accounts.google.com/o/oauth2/token\",\n  \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n  \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com\"\n}",
         |  "auth_bucket": "auth_bucket",
         |  "final_workflow_log_dir": "final_workflow_log_dir",
-        |  "read_from_cache": true
+        |  "read_from_cache": true,
+        |  "backend": "non-default-backend"
         |}
       """.stripMargin.parseJson
 
     val noFailureModeJson = noFailureMode.toJson
     noFailureModeJson should equal (expectedJsonNoFailureMode)
     noFailureModeJson.convertTo[ExecutionServiceWorkflowOptions] should equal (noFailureMode)
+
+    // Verify it works with no backend
+    val noBackend = test.copy(backend = None)
+    val expectedJsonNoBackend =
+      """
+        |{
+        |  "jes_gcs_root": "jes_gcs_root",
+        |  "google_project": "google_project",
+        |  "account_name": "account_name",
+        |  "google_compute_service_account": "account@foo.com",
+        |  "user_service_account_json": "{\n  \"type\": \"service_account\",\n  \"project_id\": \"broad-dsde-dev\",\n  \"proovate_key_id\": \"120924d141277cef7a976320d3dc3e4e298ac447\",\n  \"proovate_key\": \"-----BEGIN proovate KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCJbNtO6w2ExfGg\\n-----END proovate KEY-----\\n\",\n  \"client_email\": \"pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com\",\n  \"client_id\": \"110086970853956779852\",\n  \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n  \"token_uri\": \"https://accounts.google.com/o/oauth2/token\",\n  \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n  \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com\"\n}",
+        |  "auth_bucket": "auth_bucket",
+        |  "final_workflow_log_dir": "final_workflow_log_dir",
+        |  "read_from_cache": true,
+        |  "workflow_failure_mode": "ContinueWhilePossible"
+        |}
+      """.stripMargin.parseJson
+
+    val noBackendJson = noBackend.toJson
+    noBackendJson should equal (expectedJsonNoBackend)
+    noBackendJson.convertTo[ExecutionServiceWorkflowOptions] should equal (noBackend)
   }
 
 }
