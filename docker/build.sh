@@ -38,6 +38,9 @@ function make_jar()
 
 function artifactory_push()
 {
+    VAULT_TOKEN=${VAULT_TOKEN:-$(cat /etc/vault-token-dsde)}
+    ARTIFACTORY_USERNAME=dsdejenkins
+    ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox vault read -field=password secret/dsp/accts/artifactory/dsdejenkins)
     echo "Publishing to artifactory..."
     docker run --rm -v $PWD:/$PROJECT -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD broadinstitute/scala-baseimage:scala-2.11.8 /$PROJECT/core/src/bin/publishSnapshot.sh
 }
