@@ -252,7 +252,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val testProject1Name = RawlsBillingProjectName("arbitrary")
     val testProject1Groups = generateBillingGroups(testProject1Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map(ProjectRoles.User -> Set(nestedProjectGroup)))
-    val testProject1 = RawlsBillingProject(testProject1Name, "http://cromwell-auth-url.example.com", CreationStatuses.Ready, None, None)
+    val testProject1 = RawlsBillingProject(testProject1Name, "http://cromwell-auth-url.example.com", CreationStatuses.Ready, None, None, Some("my_backend"))
 
     val testProject2Name = RawlsBillingProjectName("project2")
     val testProject2Groups = generateBillingGroups(testProject2Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map.empty)

@@ -75,6 +75,7 @@ case class ExecutionServiceWorkflowOptions(
   final_workflow_log_dir: String,
   default_runtime_attributes: Option[JsValue],
   read_from_cache: Boolean,
+  backend: Option[String],
   workflow_failure_mode: Option[WorkflowFailureMode] = None
 )
 
@@ -330,7 +331,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat10(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat11(ExecutionServiceWorkflowOptions)
 
   implicit val ExecutionServiceLabelResponseFormat = jsonFormat2(ExecutionServiceLabelResponse)
 

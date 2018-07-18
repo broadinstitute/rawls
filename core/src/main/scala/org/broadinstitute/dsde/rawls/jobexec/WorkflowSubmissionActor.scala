@@ -184,6 +184,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       s"gs://${workspace.bucketName}/${submissionId}/workflow.logs",
       runtimeOptions,
       useCallCache,
+      billingProject.cromwellBackend,
       workflowFailureMode
     )
   }
