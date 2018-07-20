@@ -196,7 +196,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         "test-topic-name",
         notificationDAO,
         samDAO,
-        Seq("bigquery.jobUser")
+        Seq("bigquery.jobUser"),
+        "requesterPaysRole"
       )_
 
       val genomicsServiceConstructor = GenomicsService.constructor(

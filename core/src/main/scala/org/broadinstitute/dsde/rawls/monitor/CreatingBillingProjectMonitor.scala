@@ -19,8 +19,8 @@ import scala.util.Success
  * Created by dvoet on 8/22/16.
  */
 object CreatingBillingProjectMonitor {
-  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate)(implicit executionContext: ExecutionContext): Props = {
-    Props(new CreatingBillingProjectMonitorActor(datasource, gcsDAO, samDAO, projectTemplate))
+  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String)(implicit executionContext: ExecutionContext): Props = {
+    Props(new CreatingBillingProjectMonitorActor(datasource, gcsDAO, samDAO, projectTemplate, requesterPaysRole))
   }
 
   sealed trait CreatingBillingProjectMonitorMessage
@@ -28,7 +28,7 @@ object CreatingBillingProjectMonitor {
   case class CheckDone(creatingCount: Int) extends CreatingBillingProjectMonitorMessage
 }
 
-class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, val projectTemplate: ProjectTemplate)(implicit executionContext: ExecutionContext) extends Actor with CreatingBillingProjectMonitor with LazyLogging {
+class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, val projectTemplate: ProjectTemplate, val requesterPaysRole: String)(implicit executionContext: ExecutionContext) extends Actor with CreatingBillingProjectMonitor with LazyLogging {
   self ! CheckNow
 
   override def receive = {
@@ -48,6 +48,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
   val gcsDAO: GoogleServicesDAO
   val projectTemplate: ProjectTemplate
   val samDAO: SamDAO
+  val requesterPaysRole: String
 
   def checkCreatingProjects()(implicit executionContext: ExecutionContext): Future[CheckDone] = {
     for {
@@ -104,7 +105,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
               updatedTemplate = projectTemplate.copy(
                 policies = projectTemplate.policies ++
-                  UserService.getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail))
+                  UserService.getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole))
 
               updatedProject <- gcsDAO.beginProjectSetup(project, updatedTemplate).flatMap {
                 case util.Failure(t) =>

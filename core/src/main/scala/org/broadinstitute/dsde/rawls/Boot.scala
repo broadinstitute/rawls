@@ -170,12 +170,13 @@ object Boot extends App with LazyLogging {
     val projectEditors = gcsConfig.getStringList("projectTemplate.editors")
     val projectServices = gcsConfig.getStringList("projectTemplate.services")
     val projectOwnerGrantableRoles = gcsConfig.getStringList("projectTemplate.ownerGrantableRoles")
+    val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
     val projectTemplate = ProjectTemplate(Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices)
 
     val notificationDAO = new PubSubNotificationDAO(pubSubDAO, gcsConfig.getString("notifications.topicName"))
     val marthaConfig = conf.getConfig("martha")
     val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl_v2"))
-    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO, samDAO, projectOwnerGrantableRoles)
+    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"),  notificationDAO, samDAO, projectOwnerGrantableRoles, requesterPaysRole)
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
     val submissionCostService: SubmissionCostService =
@@ -197,7 +198,7 @@ object Boot extends App with LazyLogging {
       logger.info("This instance has been marked as BACK. Booting monitors...")
       BootMonitors.bootMonitors(
         system, conf, slickDataSource, gcsDAO, samDAO, pubSubDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster,
-        maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, userServiceConstructor, projectTemplate, metricsPrefix
+         maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, userServiceConstructor, projectTemplate, metricsPrefix, requesterPaysRole
       )
     } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")
 

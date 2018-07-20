@@ -23,12 +23,12 @@ object BootMonitors extends LazyLogging {
                    samDAO: SamDAO, pubSubDAO: GooglePubSubDAO, methodRepoDAO: MethodRepoDAO, dosResolver: DosResolver,
                    shardedExecutionServiceCluster: ExecutionServiceCluster, maxActiveWorkflowsTotal: Int,
                    maxActiveWorkflowsPerUser: Int, userServiceConstructor: (UserInfo) => UserService,
-                   projectTemplate: ProjectTemplate, metricsPrefix: String): Unit = {
+                   projectTemplate: ProjectTemplate, metricsPrefix: String, requesterPaysRole: String): Unit = {
     //Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
 
     //Boot billing project creation monitor
-    startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate)
+    startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
 
     //Boot google group sync monitor
     val gcsConfig = conf.getConfig("gcs")
@@ -39,14 +39,14 @@ object BootMonitors extends LazyLogging {
     startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
 
     //Boot workflow submission actors
-    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix)
+    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole)
 
     //Boot bucket deletion monitor
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
   }
 
-  private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate): Unit = {
-    system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, samDAO, projectTemplate))
+  private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
+    system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole))
   }
 
   private def startGoogleGroupSyncMonitor(system: ActorSystem, gcsConfig: Config, pubSubDAO: GooglePubSubDAO, userServiceConstructor: (UserInfo) => UserService) = {
@@ -71,7 +71,7 @@ object BootMonitors extends LazyLogging {
     ), "rawls-submission-supervisor")
   }
 
-  private def startWorkflowSubmissionActors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, methodRepoDAO: MethodRepoDAO, dosResolver: DosResolver, shardedExecutionServiceCluster: ExecutionServiceCluster, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, metricsPrefix: String) = {
+  private def startWorkflowSubmissionActors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, methodRepoDAO: MethodRepoDAO, dosResolver: DosResolver, shardedExecutionServiceCluster: ExecutionServiceCluster, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, metricsPrefix: String, requesterPaysRole: String) = {
     for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
       system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
@@ -89,7 +89,7 @@ object BootMonitors extends LazyLogging {
         Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
         conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),
         metricsPrefix,
-        conf.getString("gcs.requesterPaysRole")
+        requesterPaysRole
       ))
     }
   }
