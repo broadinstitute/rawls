@@ -6,6 +6,8 @@ import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.github.tomakehurst.wiremock.WireMockServer
+import com.github.tomakehurst.wiremock.recording.SnapshotRecordResult
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, Sam}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
@@ -19,14 +21,14 @@ import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.time.{Minutes, Seconds, Span}
-import org.scalatest.{FreeSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FreeSpecLike, Matchers}
 
 import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures
+class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with BeforeAndAfterAll with Matchers with Eventually with ScalaFutures
   with CleanUp with RandomUtil with Retry
   with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures {
 
@@ -77,6 +79,24 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       s.get("subWorkflowId").textValue()
     }
   }
+
+
+  var wireMockServer: WireMockServer = _
+  var recordedMappings: SnapshotRecordResult = _
+
+  override def beforeAll(): Unit = {
+    wireMockServer = new WireMockServer()
+    wireMockServer.start()
+    recordedMappings = wireMockServer.snapshotRecord()
+
+    super.beforeAll()
+  }
+
+  override def afterAll(): Unit = {
+    wireMockServer.stop()
+    super.afterAll()
+  }
+
 
   "Rawls" - {
     "should give pets the same access as their owners" in {
