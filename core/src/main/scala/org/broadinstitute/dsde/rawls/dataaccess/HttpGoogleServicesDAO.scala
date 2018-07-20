@@ -728,15 +728,18 @@ class HttpGoogleServicesDAO(
     // therefore, we make a request to GET /?storageClass. Since all we care about is the 200 vs. 40x status code
     // in the response, this is an equivalent request.
     val bucketUrl = s"https://$bucketName.storage.googleapis.com/?storageClass"
-    val bucketRequest = httpClientUtils.addHeader(RequestBuilding.Head(bucketUrl), Authorization(userInfo.accessToken))
+    val bucketRequest = httpClientUtils.addHeader(RequestBuilding.Get(bucketUrl), Authorization(userInfo.accessToken))
 
     httpClientUtils.executeRequest(http, bucketRequest) map { httpResponse =>
+      logger.info(s"diagnosticBucketRead to $bucketName returned ${httpResponse.status.intValue}")
       httpResponse.status match {
         case StatusCodes.OK => None
         case x => Some(ErrorReport(x, x.defaultMessage()))
       }
     } recover {
-      case t:Throwable => Some(ErrorReport(t))
+      case t:Throwable =>
+        logger.warn(s"diagnosticBucketRead to $bucketName encountered unexpected error: ${t.getMessage}")
+        Some(ErrorReport(t))
     }
   }
 
