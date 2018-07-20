@@ -103,7 +103,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       "test-topic-name",
       notificationDAO,
       samDAO,
-      Seq("bigquery.jobUser")
+      Seq("bigquery.jobUser"),
+      "requesterPaysRole"
     )_
 
     val genomicsServiceConstructor = GenomicsService.constructor(

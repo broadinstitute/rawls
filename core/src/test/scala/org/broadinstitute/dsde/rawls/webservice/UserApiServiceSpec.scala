@@ -216,6 +216,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty, Seq("foo", "bar", "baz"))
         override val gcsDAO = new MockGoogleServicesDAO("foo")
         override val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
+        override val requesterPaysRole: String = "requesterPaysRole"
       }
 
       assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
@@ -321,6 +322,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = failureMode(rawlsBillingProjectOperation)
         }
         override val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
+        override val requesterPaysRole: String = "requesterPaysRole"
       }
 
       assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
@@ -401,6 +403,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
         override val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
+        override val requesterPaysRole: String = "requesterPaysRole"
       }
 
       assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }

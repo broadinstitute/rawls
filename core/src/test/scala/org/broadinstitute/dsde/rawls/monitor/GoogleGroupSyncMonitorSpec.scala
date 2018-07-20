@@ -41,7 +41,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val syncedGroups = Collections.synchronizedSet(new util.HashSet[RawlsGroupRef]()).asScala
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null, null, null, "requesterPaysRole") {
         override def InternalSynchronizeGroupMembers(rawlsGroupRef: RawlsGroupRef) = {
           syncedGroups.add(rawlsGroupRef)
           Future.successful(SyncReport(RawlsGroupEmail("foo@bar.com"), Seq.empty))
@@ -68,7 +68,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val topic = "topic"
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null, null, null, "requesterPaysRole") {
         override def InternalSynchronizeGroupMembers(rawlsGroupRef: RawlsGroupRef) = {
           Future.failed(new RawlsException("I am a failure"))
         }
@@ -95,7 +95,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val topic = "topic"
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null, null, null, "requesterPaysRole") {
         override def InternalSynchronizeGroupMembers(rawlsGroupRef: RawlsGroupRef) = {
           Future.successful(SyncReport(RawlsGroupEmail("foo@bar.com"), Seq(SyncReportItem("op", "email", Option(ErrorReport("I am another failure"))))))
         }
@@ -124,7 +124,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     import akka.pattern._
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null, null, null, "requesterPaysRole") {
         override def InternalSynchronizeGroupMembers(rawlsGroupRef: RawlsGroupRef) = {
           Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "group not found")))
         }
