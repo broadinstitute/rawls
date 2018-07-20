@@ -731,11 +731,10 @@ class HttpGoogleServicesDAO(
     val bucketRequest = httpClientUtils.addHeader(RequestBuilding.Get(bucketUrl), Authorization(userInfo.accessToken))
 
     httpClientUtils.executeRequest(http, bucketRequest) map { httpResponse =>
+      logger.info(s"diagnosticBucketRead to $bucketName returned ${httpResponse.status.intValue}")
       httpResponse.status match {
         case StatusCodes.OK => None
-        case x =>
-          logger.info(s"diagnosticBucketRead to $bucketName returned ${x.intValue}")
-          Some(ErrorReport(x, x.defaultMessage()))
+        case x => Some(ErrorReport(x, x.defaultMessage()))
       }
     } recover {
       case t:Throwable =>
