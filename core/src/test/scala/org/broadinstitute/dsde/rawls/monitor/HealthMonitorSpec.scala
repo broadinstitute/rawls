@@ -281,16 +281,6 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     new MockGooglePubSubDAO
   }
 
-  def mockUserDirectoryDAO: UserDirectoryDAO = {
-    val mockUserDirectoryDAO = new MockUserDirectoryDAO
-    mockUserDirectoryDAO.createUser(new RawlsUserSubjectId("me"), RawlsUserEmail(""))
-    mockUserDirectoryDAO
-  }
-
-  def mockUserDirectoryDAO_noUsers: UserDirectoryDAO = {
-    new MockUserDirectoryDAO
-  }
-
   def mockMethodRepoDAO: MethodRepoDAO = {
     val dao = mock[MethodRepoDAO]
     when {

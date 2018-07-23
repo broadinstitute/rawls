@@ -24,7 +24,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingEmail: String
 
   // returns bucket and group information
-  def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, projectOwnerGroup: RawlsGroup, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo]
+  def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], authDomain: Set[ManagedGroupRef]): Future[GoogleWorkspaceInfo]
 
   def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project]
 
@@ -57,39 +57,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def hasGoogleRole(roleGroupName: String, userEmail: String): Future[Boolean]
 
-  /**
-   *
-   * @param group
-   * @return None if the google group does not exist, Some(Map.empty) if there are no members, key is the actual
-   *         email address in the google group, value is the rawls user or group reference or None if neither
-   */
-  def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]]
-
-  def createProxyGroup(user: RawlsUser): Future[Unit]
-
-  def deleteProxyGroup(user: RawlsUser): Future[Unit]
-
-  def addUserToProxyGroup(user: RawlsUser): Future[Unit]
-
-  def removeUserFromProxyGroup(user: RawlsUser): Future[Unit]
-
-  def isUserInProxyGroup(user: RawlsUser): Future[Boolean]
-
-  def createGoogleGroup(groupRef: RawlsGroupRef): Future[RawlsGroup]
-
-  def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean]
-
-  /**
-    * Gets a Google group.
-    *
-    * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
-    * is because this method is used for health monitoring, and we want health checks to use a
-    * different execution context (thread pool) than user-facing operations.
-    *
-    * @param groupName the group name
-    * @param executionContext the execution context to use for aysnc operations
-    * @return optional Google group
-    */
   def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]]
 
   /**
@@ -124,19 +91,11 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
 
-  def diagnosticBucketWrite(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]]
-
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]
-
-  def addMemberToGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
 
   def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
 
-  def removeMemberFromGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
-
   def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit]
-
-  def deleteGoogleGroup(group: RawlsGroup): Future[Unit]
 
   def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]]
 
@@ -172,8 +131,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]]
 
-  def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
-  def toUserFromProxy(proxy: String): String
   def toGoogleGroupName(groupName: RawlsGroupName): String
   def toBillingProjectGroupName(billingProjectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = s"PROJECT_${billingProjectName.value}-${role.toString}"
 
@@ -218,7 +175,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def grantReadAccess(billingProject: RawlsBillingProjectName,
                       bucketName: String,
-                      readers: Set[RawlsGroupEmail]): Future[String]
+                      readers: Set[WorkbenchEmail]): Future[String]
 
   /**
    * Second step of project creation. See createProject for more details.
@@ -234,7 +191,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
    * @param project
    * @return
    */
-  def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[RawlsGroupEmail]): Future[Try[Unit]]
+  def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[WorkbenchEmail]): Future[Try[Unit]]
 
   def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
@@ -246,5 +203,5 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getUserInfoUsingJson(saKey: String): Future[UserInfo]
 }
 
-case class GoogleWorkspaceInfo(bucketName: String, accessGroupsByLevel: Map[WorkspaceAccessLevel, RawlsGroup], intersectionGroupsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroup]])
+case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
 case class ProjectTemplate(policies: Map[String, Seq[String]], services: Seq[String])

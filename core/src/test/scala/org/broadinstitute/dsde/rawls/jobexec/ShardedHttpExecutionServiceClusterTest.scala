@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{FlatSpecLike, Matchers, PrivateMethodTester}
 import spray.json.JsonParser
@@ -56,17 +57,15 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     val wsName = WorkspaceName("ExecClusterTestDataNamespace", "ExecClusterTestDataName")
     val user = RawlsUser(userInfo)
     val ownerGroup = makeRawlsGroup("ExecClusterTestDataOwnerGroup", Set(user))
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "ExecClusterTestDataBucket", currentTime(), currentTime(), "testUser", Map.empty, Map(WorkspaceAccessLevels.Owner -> ownerGroup), Map(WorkspaceAccessLevels.Owner -> ownerGroup))
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "ExecClusterTestDataBucket", currentTime(), currentTime(), "testUser", Map.empty)
 
     val sample1 = Entity("sample1", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
 
-    val submissionWithExecutionKeys = Submission(subWithExecutionKeys.toString, testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+    val submissionWithExecutionKeys = Submission(subWithExecutionKeys.toString, testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
       Seq(Workflow(Some(workflowExternalIdWithExecutionKey.toString), WorkflowStatuses.Submitted, testDate, Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.createUser(user),
-        rawlsGroupQuery.save(ownerGroup),
         workspaceQuery.save(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(

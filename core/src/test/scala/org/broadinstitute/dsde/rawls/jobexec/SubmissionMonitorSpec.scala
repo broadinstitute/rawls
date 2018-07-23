@@ -14,11 +14,12 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
@@ -39,7 +40,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   val testDbName = "SubmissionMonitorSpec"
   val mockServer = RemoteServicesMockServer()
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-  val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, mockGoogleServicesDAO.getPreparedMockGoogleCredential())
+  val mockSamDAO = new MockSamDAO(slickDataSource)
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -358,7 +359,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val mcUpdateEntityLibraryOutputs = MethodConfiguration("ns", "testConfig12", Some("Sample"), Map(), Map(), Map("o1_lib" -> AttributeString("this.library:foo")), AgoraMethod("ns-config", "meth1", 1))
 
-    val subUpdateEntityLibraryOutputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryOutputs, testData.indiv1, testData.userOwner,
+    val subUpdateEntityLibraryOutputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryOutputs, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
       Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
       Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
@@ -381,7 +382,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val mcUpdateEntityLibraryInputs = MethodConfiguration("ns", "testConfig11", Some("Sample"), Map(), Map("i_lib" -> AttributeString("this.library:foo")), Map("o2_lib" -> AttributeString("this.library:bar")), AgoraMethod("ns-config", "meth1", 1))
 
-    val subUpdateEntityLibraryInputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryInputs, testData.indiv1, testData.userOwner,
+    val subUpdateEntityLibraryInputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryInputs, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
       Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
       Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
@@ -479,7 +480,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val mcUnboundExpr = MethodConfiguration("ns", "testConfig12", Some("Sample"), Map(), Map(), outputExpressions, AgoraMethod("ns-config", "meth1", 1))
 
-    val subUnboundExpr = createTestSubmission(testData.workspace, mcUnboundExpr, testData.indiv1, testData.userOwner,
+    val subUnboundExpr = createTestSubmission(testData.workspace, mcUnboundExpr, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
       Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
       Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
@@ -532,7 +533,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     badExprs foreach { badExpr =>
       val mcBadExprs = MethodConfiguration("ns", "testConfig12", Some("Sample"), Map(), Map(), Map("bad1" -> AttributeString(badExpr)), AgoraMethod("ns-config", "meth1", 1))
 
-      val subBadExprs = createTestSubmission(testData.workspace, mcBadExprs, testData.indiv1, testData.userOwner,
+      val subBadExprs = createTestSubmission(testData.workspace, mcBadExprs, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
         Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
         Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
@@ -700,7 +701,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val (submissions, methodConfigs) = (1 to numSubmissions).map { subNumber =>
       val methodConfig = testData.methodConfigEntityUpdate.copy(name = s"this.sub_$subNumber", outputs = Map("o1" -> AttributeString(s"this.sub_$subNumber")))
-      val testSub = createTestSubmission(testData.workspace, methodConfig, testData.indiv1, testData.userOwner,
+      val testSub = createTestSubmission(testData.workspace, methodConfig, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
         Seq(testData.indiv1, testData.indiv2), Map(testData.indiv1 -> testData.inputResolutions, testData.indiv2 -> testData.inputResolutions),
         Seq(), Map())
 

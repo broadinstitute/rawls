@@ -5,12 +5,11 @@ import java.util.UUID
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import nl.grons.metrics.scala.{Counter, DefaultInstrumented, MetricName}
-import org.broadinstitute.dsde.rawls.{SamDataSaver, TestExecutionContext, model}
+import org.broadinstitute.dsde.rawls.{TestExecutionContext, model}
 import slick.basic.DatabaseConfig
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.{DirectoryConfig, DirectorySubjectNameSupport}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.Owner
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
@@ -23,6 +22,7 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers, Suite}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -35,34 +35,18 @@ object DbResource {
   private val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
 
   val dataConfig = DatabaseConfig.forConfig[JdbcProfile](testdb)
-  val dirConfig = DirectoryConfig(
-    conf.getString("directory.url"),
-    conf.getString("directory.user"),
-    conf.getString("directory.password"),
-    conf.getString("directory.baseDn")
-  )
 
   private val liquibaseConf = ConfigFactory.load().getConfig("liquibase")
   private val liquibaseChangeLog = liquibaseConf.getString("changelog")
 
-  val dataSource = new SlickDataSource(dataConfig, dirConfig)(TestExecutionContext.testExecutionContext)
+  val dataSource = new SlickDataSource(dataConfig)(TestExecutionContext.testExecutionContext)
   dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
-
-  // create or replace ldap schema
-  import scala.concurrent.ExecutionContext.Implicits.global
-  Await.result(new SamDataSaver().removePolicySchema().recover {
-    case t: Throwable => t.printStackTrace()
-  }, Duration.Inf)
-  Await.result(dataSource.database.run(dataSource.dataAccess.initLdap()), Duration.Inf)
-  Await.result(new SamDataSaver().createPolicySchema().recover {
-    case t: Throwable => t.printStackTrace()
-  }, Duration.Inf)
 }
 
 /**
  * Created by dvoet on 2/3/16.
  */
-trait TestDriverComponent extends DriverComponent with DataAccess with DefaultInstrumented with DirectorySubjectNameSupport {
+trait TestDriverComponent extends DriverComponent with DataAccess with DefaultInstrumented {
   this: Suite =>
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
@@ -75,8 +59,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   override val driver: JdbcProfile = DbResource.dataConfig.driver
   override val batchSize: Int = DbResource.dataConfig.config.getInt("batchSize")
   val slickDataSource = DbResource.dataSource
-
-  val samDataSaver = new SamDataSaver
 
   val userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))
 
@@ -103,7 +85,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   import driver.api._
 
-  def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, rawlsUserRef: RawlsUserRef,
+  def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, rawlsUserEmail: WorkbenchEmail,
                            workflowEntities: Seq[Entity], inputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
                            failedWorkflowEntities: Seq[Entity], failedInputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
                            status: WorkflowStatus = WorkflowStatuses.Submitted, useCallCache: Boolean = false,
@@ -114,34 +96,17 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Workflow(uuid, status, testDate, Some(ref.toReference), inputResolutions(ref), cost = individualWorkflowCost)
     }
 
-    Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, Some(submissionEntity.toReference),
+    Submission(UUID.randomUUID.toString, testDate, rawlsUserEmail, methodConfig.namespace, methodConfig.name, Some(submissionEntity.toReference),
       workflows, SubmissionStatuses.Submitted, useCallCache, workflowFailureMode, individualWorkflowCost.map (_ * workflows.length))
   }
 
-  def generateBillingGroups(projectName: RawlsBillingProjectName, users: Map[ProjectRoles.ProjectRole, Set[RawlsUserRef]], subGroups: Map[ProjectRoles.ProjectRole, Set[RawlsGroupRef]]): Map[ProjectRoles.ProjectRole, Seq[RawlsGroup]] = {
-    val gcsDAO = new MockGoogleServicesDAO("foo")
-
-    val ownerName = RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, UserService.ownerPolicyName))
-    val wsCreatorName = RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, UserService.workspaceCreatorPolicyName))
-    val computeUserName = RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, UserService.canComputeUserPolicyName))
-
-    Map(
-      ProjectRoles.Owner -> Seq(RawlsGroup(ownerName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(ownerName)), users.getOrElse(ProjectRoles.Owner, Set.empty), subGroups.getOrElse(ProjectRoles.Owner, Set.empty))),
-      ProjectRoles.User -> Seq(
-        RawlsGroup(wsCreatorName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(wsCreatorName)), users.getOrElse(ProjectRoles.User, Set.empty), subGroups.getOrElse(ProjectRoles.User, Set.empty)),
-        RawlsGroup(computeUserName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(computeUserName)), users.getOrElse(ProjectRoles.User, Set.empty), subGroups.getOrElse(ProjectRoles.User, Set.empty)))
-    )
-  }
-
-  def billingProjectFromName(name: String) = (RawlsBillingProject(RawlsBillingProjectName(name), "mockBucketUrl", CreationStatuses.Ready, None, None), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty))
+  def billingProjectFromName(name: String) = (RawlsBillingProject(RawlsBillingProjectName(name), "mockBucketUrl", CreationStatuses.Ready, None, None))
 
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef] = Set.empty) =
     RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, groups)
 
-  def makeWorkspaceWithUsers(usersByLevel: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, Set[RawlsUserRef]], groupsByLevel: Map[WorkspaceAccessLevel, Set[RawlsGroupRef]] = Map(WorkspaceAccessLevels.Owner -> Set.empty, WorkspaceAccessLevels.Write -> Set.empty, WorkspaceAccessLevels.Read -> Set.empty))(project: RawlsBillingProject,
-                    projectOwnerPolicyGroup: RawlsGroup,
+  def makeWorkspaceWithUsers(project: RawlsBillingProject,
                     name: String,
-                    authDomain: Set[ManagedGroupRef],
                     workspaceId: String,
                     bucketName: String,
                     createdDate: DateTime,
@@ -150,24 +115,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                     attributes: AttributeMap,
                     isLocked: Boolean) = {
 
-    val intersectionGroupsByLevel = if(authDomain.isEmpty) None else {
-      Option(usersByLevel.map { case (level, users) =>
-        level -> makeRawlsGroup(s"${project.projectName.value}-${name}-IG-${level.toString}", users, groupsByLevel(level))
-      } + (ProjectOwner -> makeRawlsGroup(s"${project.projectName.value}-${name}-IG-${ProjectOwner.toString}", projectOwnerPolicyGroup.users, Set.empty)))
-    }
-
-
-    val newAccessGroupsByLevel = usersByLevel.map { case (level, users) =>
-      level -> makeRawlsGroup(s"${project.projectName.value}-${name}-${level.toString}", users, groupsByLevel(level))
-    }
-
-    val accessGroupsByLevel = newAccessGroupsByLevel + (ProjectOwner -> projectOwnerPolicyGroup)
-
-    (Workspace(project.projectName.value, name, authDomain, workspaceId, bucketName, createdDate, createdDate, createdBy, attributes,
-      accessGroupsByLevel.map { case (level, group) => level -> RawlsGroup.toRef(group) },
-      intersectionGroupsByLevel.getOrElse(accessGroupsByLevel).map { case (level, group) => level -> RawlsGroup.toRef(group) }, isLocked),
-
-      intersectionGroupsByLevel.getOrElse(Map.empty).values ++ newAccessGroupsByLevel.values)
+    Workspace(project.projectName.value, name, workspaceId, bucketName, createdDate, createdDate, createdBy, attributes, isLocked)
   }
 
   class EmptyWorkspace() extends TestData {
@@ -179,18 +127,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.createUser(userOwner),
-        rawlsUserQuery.createUser(userWriter),
-        rawlsUserQuery.createUser(userReader),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
         workspaceQuery.save(workspace)
       )
     }
@@ -205,18 +145,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup), isLocked = true)
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty, isLocked = true)
 
     override def save() = {
       DBIO.seq (
-        rawlsUserQuery.createUser(userOwner),
-        rawlsUserQuery.createUser(userWriter),
-        rawlsUserQuery.createUser(userReader),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
         workspaceQuery.save(workspace)
       )
     }
@@ -247,36 +179,16 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val nestedProjectGroup = makeRawlsGroup("nested_project_group", Set(userOwner))
     val dbGapAuthorizedUsersGroup = ManagedGroupRef(RawlsGroupName("dbGapAuthorizedUsers"))
 
-    val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner, userOwner), ProjectRoles.User -> Set.empty), Map.empty)
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
 
     val testProject1Name = RawlsBillingProjectName("arbitrary")
-    val testProject1Groups = generateBillingGroups(testProject1Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map(ProjectRoles.User -> Set(nestedProjectGroup)))
     val testProject1 = RawlsBillingProject(testProject1Name, "http://cromwell-auth-url.example.com", CreationStatuses.Ready, None, None, Some("my_backend"))
 
     val testProject2Name = RawlsBillingProjectName("project2")
-    val testProject2Groups = generateBillingGroups(testProject2Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map.empty)
     val testProject2 = RawlsBillingProject(testProject2Name, "http://cromwell-auth-url.example.com", CreationStatuses.Ready, None, None)
 
     val testProject3Name = RawlsBillingProjectName("project3")
-    val testProject3Groups = generateBillingGroups(testProject3Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userReader)), Map.empty)
     val testProject3 = RawlsBillingProject(testProject3Name, "http://cromwell-auth-url.example.com", CreationStatuses.Ready, None, None)
-
-    val makeWorkspace = makeWorkspaceWithUsers(Map(
-      WorkspaceAccessLevels.Owner -> Set(userOwner),
-      WorkspaceAccessLevels.Write -> Set(userWriter),
-      WorkspaceAccessLevels.Read -> Set(userReader)
-    ))_
-
-    val makeWorkspaceToTestGrant = makeWorkspaceWithUsers(Map(
-      WorkspaceAccessLevels.Owner -> Set(userOwner),
-      WorkspaceAccessLevels.Write -> Set(userWriter),
-      WorkspaceAccessLevels.Read -> Set.empty
-    ),Map(
-      WorkspaceAccessLevels.Owner -> Set.empty,
-      WorkspaceAccessLevels.Write -> Set.empty,
-      WorkspaceAccessLevels.Read -> Set(dbGapAuthorizedUsersGroup.toMembersGroupRef)
-    ))_
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
@@ -285,13 +197,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       AttributeName.withDefaultNS("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
-    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", Set.empty, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", wsAttrs, Map.empty, Map.empty)
+    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", wsAttrs)
 
-    val (workspace, workspaceGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspace) = makeWorkspaceWithUsers(billingProject, wsName.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", Set.empty, UUID.randomUUID().toString, "aBucket3", currentTime(), currentTime(), "testUser",
-      wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)), Map.empty, Map.empty)
-    val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", Set.empty, UUID.randomUUID().toString, "aBucket4", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
+    val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", UUID.randomUUID().toString, "aBucket3", currentTime(), currentTime(), "testUser",
+      wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)))
+    val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", UUID.randomUUID().toString, "aBucket4", currentTime(), currentTime(), "testUser", Map.empty)
 
     val realm = ManagedGroupRef(RawlsGroupName("Test-Realm"))
     val realmWsName = wsName.name + "withRealm"
@@ -299,43 +211,43 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val realm2 = ManagedGroupRef(RawlsGroupName("Test-Realm2"))
     val realmWs2Name = wsName2.name + "withRealm"
 
-    val (workspaceWithRealm, workspaceWithRealmGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, realmWsName, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceWithRealm) = makeWorkspaceWithUsers(billingProject, realmWsName, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val (workspaceWithMultiGroupAD, workspaceWithMultiGroupADGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName10.name, Set(realm, realm2), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceWithMultiGroupAD) = makeWorkspaceWithUsers(billingProject, wsName10.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val (controlledWorkspace, controlledWorkspaceGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, "test-tcga", Set(dbGapAuthorizedUsersGroup), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (controlledWorkspace) = makeWorkspaceWithUsers(billingProject, "test-tcga", UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val (otherWorkspaceWithRealm, otherWorkspaceWithRealmGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, realmWs2Name, Set(realm2), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (otherWorkspaceWithRealm) = makeWorkspaceWithUsers(billingProject, realmWs2Name,  UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, without submissions
-    val (workspaceNoSubmissions, workspaceNoSubmissionsGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName3.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceNoSubmissions) = makeWorkspaceWithUsers(billingProject, wsName3.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with successful submission
-    val (workspaceSuccessfulSubmission, workspaceSuccessfulSubmissionGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName4.name , Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceSuccessfulSubmission) = makeWorkspaceWithUsers(billingProject, wsName4.name , UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with failed submission
-    val (workspaceFailedSubmission, workspaceFailedSubmissionGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName5.name , Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceFailedSubmission) = makeWorkspaceWithUsers(billingProject, wsName5.name , UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with submitted submission
-    val (workspaceSubmittedSubmission, workspaceSubmittedSubmissionGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName6.name , Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceSubmittedSubmission) = makeWorkspaceWithUsers(billingProject, wsName6.name , UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms with mixed workflows
-    val (workspaceMixedSubmissions, workspaceMixedSubmissionsGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName7.name, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceMixedSubmissions) = makeWorkspaceWithUsers(billingProject, wsName7.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with aborted and successful submissions
-    val (workspaceTerminatedSubmissions, workspaceTerminatedSubmissionsGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName8.name, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceTerminatedSubmissions) = makeWorkspaceWithUsers(billingProject, wsName8.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with a successful submission that had another submission run and fail while it was running
-    val (workspaceInterleavedSubmissions, workspaceInterleavedSubmissionsGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsInterleaved.name, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceInterleavedSubmissions) = makeWorkspaceWithUsers(billingProject, wsInterleaved.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with a custom workflow failure mode
-    val (workspaceWorkflowFailureMode, workspaceWorkflowFailureModeGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsWorkflowFailureMode.name, Set(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceWorkflowFailureMode) = makeWorkspaceWithUsers(billingProject, wsWorkflowFailureMode.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Standard workspace to test grant permissions
-    val (workspaceToTestGrant, workspaceToTestGrantGroups) = makeWorkspaceToTestGrant(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName9.name, Set.empty, workspaceToTestGrantId.toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceToTestGrant) = makeWorkspaceWithUsers(billingProject, wsName9.name, workspaceToTestGrantId.toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Test copying configs between workspaces
-    val (workspaceConfigCopyDestination, workspaceConfigCopyDestinationGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsNameConfigCopyDestination.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceConfigCopyDestination) = makeWorkspaceWithUsers(billingProject, wsNameConfigCopyDestination.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
@@ -471,68 +383,68 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2"))
     val missingOutputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
 
-    val submissionNoWorkflows = createTestSubmission(workspace, agoraMethodConfig, indiv1, userOwner,
+    val submissionNoWorkflows = createTestSubmission(workspace, agoraMethodConfig, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq.empty, Map.empty,
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
-    val submission1 = createTestSubmission(workspace, agoraMethodConfig, indiv1, userOwner,
+    val submission1 = createTestSubmission(workspace, agoraMethodConfig, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
-    val costedSubmission1 = createTestSubmission(workspace, agoraMethodConfig, indiv1, userOwner,
+    val costedSubmission1 = createTestSubmission(workspace, agoraMethodConfig, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2),
       // the constant value we set in MockSubmissionCostService
       individualWorkflowCost = Some(1.23f))
-    val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, userOwner,
+    val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
 
-    val submissionUpdateEntity = createTestSubmission(workspace, methodConfigEntityUpdate, indiv1, userOwner,
+    val submissionUpdateEntity = createTestSubmission(workspace, methodConfigEntityUpdate, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq(indiv1), Map(indiv1 -> inputResolutions),
       Seq(indiv2), Map(indiv2 -> inputResolutions2))
-    val submissionUpdateWorkspace = createTestSubmission(workspace, methodConfigWorkspaceUpdate, indiv1, userOwner,
+    val submissionUpdateWorkspace = createTestSubmission(workspace, methodConfigWorkspaceUpdate, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq(indiv1), Map(indiv1 -> inputResolutions),
       Seq(indiv2), Map(indiv2 -> inputResolutions2))
 
     //NOTE: This is deliberately not saved in the list of active submissions!
-    val submissionMissingOutputs = createTestSubmission(workspace, methodConfigMissingOutputs, indiv1, userOwner,
+    val submissionMissingOutputs = createTestSubmission(workspace, methodConfigMissingOutputs, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq(indiv1), Map(indiv1 -> missingOutputResolutions), Seq(), Map())
 
     //NOTE: This is deliberately not saved in the list of active submissions!
-    val submissionNoRootEntity = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfigValid.namespace,methodConfigValid.name,None,
+    val submissionNoRootEntity = Submission(UUID.randomUUID().toString(),testDate, WorkbenchEmail(userOwner.userEmail.value),methodConfigValid.namespace,methodConfigValid.name,None,
       Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted, testDate, None, inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,agoraMethodConfig.namespace,agoraMethodConfig.name,Some(indiv1.toReference),
+    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, WorkbenchEmail(userOwner.userEmail.value),agoraMethodConfig.namespace,agoraMethodConfig.name,Some(indiv1.toReference),
       Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), inputResolutions),
         Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,Some(sample2.toReference), inputResolutions),
         Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,Some(sample3.toReference), inputResolutions),
         Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,Some(sample4.toReference), inputResolutions)), SubmissionStatuses.Submitted, false)
 
     //a submission with a succeeeded workflow
-    val submissionSuccessful1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionSuccessful1 = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
 
     //a submission with a succeeeded workflow
-    val submissionSuccessful2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionSuccessful2 = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
 
     //a submission with a failed workflow
-    val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("worklowFailed"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
 
     //a submission with a submitted workflow
-    val submissionSubmitted = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionSubmitted = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowSubmitted"), WorkflowStatuses.Submitted, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Submitted, false)
 
     //a submission with an aborted workflow
-    val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowAborted1"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Aborted, false)
 
     //a submission with an aborted workflow
-    val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowAborted2"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Aborted, false)
 
     //a submission with multiple failed and succeeded workflows
-    val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowSuccessful3"), WorkflowStatuses.Succeeded, testDate, Some(sample1.toReference), inputResolutions),
         Workflow(Option("workflowSuccessful4"), WorkflowStatuses.Succeeded, testDate, Some(sample2.toReference), inputResolutions),
         Workflow(Option("worklowFailed1"), WorkflowStatuses.Failed, testDate, Some(sample3.toReference), inputResolutions),
@@ -546,37 +458,15 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val t2 = new DateTime(2017, 1, 1, 5, 15)
     val t3 = new DateTime(2017, 1, 1, 5, 20)
     val t4 = new DateTime(2017, 1, 1, 5, 30)
-    val outerSubmission = Submission(UUID.randomUUID().toString(), t1, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val outerSubmission = Submission(UUID.randomUUID().toString(), t1, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, t4, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
-    val innerSubmission = Submission(UUID.randomUUID().toString(), t2, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val innerSubmission = Submission(UUID.randomUUID().toString(), t2, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowFailed1"), WorkflowStatuses.Failed, t3, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
 
     // a submission with a submitted workflow and a custom workflow failure mode
-    val submissionWorkflowFailureMode = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionWorkflowFailureMode = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowFailureMode"), WorkflowStatuses.Submitted, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Submitted, false,
       Some(WorkflowFailureModes.ContinueWhilePossible))
-
-    def createWorkspaceGoogleGroups(gcsDAO: GoogleServicesDAO): Unit = {
-      val groups = billingProjectGroups.values.flatten ++
-        testProject1Groups.values.flatten ++
-        testProject2Groups.values.flatten ++
-        testProject3Groups.values.flatten ++
-        workspaceGroups ++
-        workspaceWithRealmGroups ++
-        workspaceWithMultiGroupADGroups ++
-        otherWorkspaceWithRealmGroups ++
-        workspaceNoSubmissionsGroups ++
-        workspaceSuccessfulSubmissionGroups ++
-        workspaceFailedSubmissionGroups ++
-        workspaceSubmittedSubmissionGroups ++
-        workspaceMixedSubmissionsGroups ++
-        workspaceTerminatedSubmissionsGroups ++
-        workspaceInterleavedSubmissionsGroups ++
-        workspaceWorkflowFailureModeGroups ++
-        controlledWorkspaceGroups
-
-      groups.foreach(gcsDAO.createGoogleGroup(_))
-    }
 
     val allWorkspaces = Seq(
       workspace,
@@ -601,44 +491,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.createUser(userProjectOwner),
-        rawlsUserQuery.createUser(userOwner),
-        rawlsUserQuery.createUser(userWriter),
-        rawlsUserQuery.createUser(userReader),
-        rawlsUserQuery.createUser(userReaderViaGroup),
-        rawlsGroupQuery.save(nestedProjectGroup),
-        rawlsGroupQuery.save(RawlsGroup(dbGapAuthorizedUsersGroup.membersGroupName, RawlsGroupEmail("dbGapAuthorizedUsers@example.com"), Set(userOwner, userReaderViaGroup), Set.empty)),
-        rawlsGroupQuery.save(RawlsGroup(realm.membersGroupName, RawlsGroupEmail("realm@example.com"), Set.empty, Set.empty)),
-        rawlsGroupQuery.save(RawlsGroup(realm2.membersGroupName, RawlsGroupEmail("realm2@example.com"), Set.empty, Set.empty)),
-        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
-        DBIO.from(samDataSaver.savePolicyGroups(testProject1Groups.values.flatten, SamResourceTypeNames.billingProject.value, testProject1.projectName.value)),
         rawlsBillingProjectQuery.create(testProject1),
-        DBIO.from(samDataSaver.savePolicyGroups(testProject2Groups.values.flatten, SamResourceTypeNames.billingProject.value, testProject2.projectName.value)),
         rawlsBillingProjectQuery.create(testProject2),
-        DBIO.from(samDataSaver.savePolicyGroups(testProject3Groups.values.flatten, SamResourceTypeNames.billingProject.value, testProject3.projectName.value)),
         rawlsBillingProjectQuery.create(testProject3),
-        DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceWithMultiGroupADGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(controlledWorkspaceGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(otherWorkspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceNoSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceSuccessfulSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceFailedSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceSubmittedSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceMixedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceTerminatedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceInterleavedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceWorkflowFailureModeGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceToTestGrantGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspaceConfigCopyDestinationGroups.map(rawlsGroupQuery.save).toSeq),
-        managedGroupQuery.createManagedGroup(realm),
-        managedGroupQuery.createManagedGroup(realm2),
-        managedGroupQuery.createManagedGroup(dbGapAuthorizedUsersGroup),
         saveAllWorkspacesAction,
-        workspaceQuery.insertUserSharePermissions(workspaceToTestGrantId, Seq(RawlsUserRef(userWriter.userSubjectId))),
-        workspaceQuery.insertGroupSharePermissions(workspaceToTestGrantId, Seq(dbGapAuthorizedUsersGroup.toMembersGroupRef)),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
@@ -779,27 +636,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val writerGroup2 = makeRawlsGroup(s"${wsName2.namespace}-${wsName2.name}-WRITER", Set.empty)
     val readerGroup2 = makeRawlsGroup(s"${wsName2.namespace}-${wsName2.name}-READER", Set.empty)
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
-    val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map.empty, Map.empty)
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
-    val workspace2 = Workspace(wsName2.namespace, wsName2.name, Set.empty, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", Map.empty,
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup2, WorkspaceAccessLevels.Write -> writerGroup2, WorkspaceAccessLevels.Read -> readerGroup2),
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup2, WorkspaceAccessLevels.Write -> writerGroup2, WorkspaceAccessLevels.Read -> readerGroup2))
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
+    val workspace2 = Workspace(wsName2.namespace, wsName2.name, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", Map.empty)
 
     override def save() = {
       DBIO.seq(
-        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
-        rawlsGroupQuery.save(ownerGroup2),
-        rawlsGroupQuery.save(writerGroup2),
-        rawlsGroupQuery.save(readerGroup2),
         workspaceQuery.save(workspace),
-        workspaceQuery.save(workspace2),
-        rawlsUserQuery.createUser(userReader)
+        workspaceQuery.save(workspace2)
       )
     }
   }
@@ -817,7 +661,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
-    val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(RawlsUser(userInfo))), Map.empty)
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
 
     val wsAttrs = Map(
@@ -827,9 +670,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       AttributeName.withDefaultNS("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs)
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
@@ -920,13 +761,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
     val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2"))
 
-    val submissionNoWorkflows = createTestSubmission(workspace, methodConfig, indiv1, userOwner,
+    val submissionNoWorkflows = createTestSubmission(workspace, methodConfig, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq.empty, Map.empty,
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
-    val submission1 = createTestSubmission(workspace, methodConfig, indiv1, userOwner,
+    val submission1 = createTestSubmission(workspace, methodConfig, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
-    val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, userOwner,
+    val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, WorkbenchEmail(userOwner.userEmail.value),
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
 
@@ -936,13 +777,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.createUser(userOwner),
-        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
-        rawlsUserQuery.createUser(userWriter),
-        rawlsUserQuery.createUser(userReader),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
         workspaceQuery.save(workspace),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
@@ -1005,7 +839,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def withCustomTestDatabaseInternal[T](dataSource: SlickDataSource, data: TestData)(testCode: => T): T = {
     runAndWait(DBIO.seq(dataSource.dataAccess.truncateAll), 2 minutes)
-    Await.result(dataSource.dataAccess.clearLdap(), 2 minutes)
     try {
       runAndWait(data.save())
       testCode
