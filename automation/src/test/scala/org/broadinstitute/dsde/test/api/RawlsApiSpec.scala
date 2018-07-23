@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.test.api
 
-import language.postfixOps
 import java.util.UUID
 
 import akka.actor.ActorSystem
@@ -11,14 +10,21 @@ import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
+<<<<<<< 4779f82c1e0b66f9f472f8370409ff500be34ca8
 import org.broadinstitute.dsde.workbench.dao.Google
 import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
+=======
+import org.broadinstitute.dsde.workbench.dao.Google.googleIamDAO
+>>>>>>> move workspace access control to sam
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.fixture._
-import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
+<<<<<<< 4779f82c1e0b66f9f472f8370409ff500be34ca8
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GoogleProject, ServiceAccount}
+=======
+import org.broadinstitute.dsde.workbench.model.google.{GoogleProject, ServiceAccount}
+>>>>>>> move workspace access control to sam
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
@@ -142,6 +148,31 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           userBWorkspace should include(workspaceNameB)
 
           Sam.removePet(projectName, userAStatus.userInfo)
+        }
+      }
+    }
+
+    "should create and destroy a workflow collection resource in Sam for a workspace" in {
+      withCleanBillingProject(owner) { projectName =>
+        withCleanUp {
+          //Create workspaces for Students
+          Orchestration.billing.addUserToBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
+          register cleanUp Orchestration.billing.removeUserFromBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
+
+          val uuid = UUID.randomUUID().toString
+
+          val workspaceName = "rawls_test_workflow_collection_workspace" + uuid
+          Rawls.workspaces.create(projectName, workspaceName)(studentAToken)
+          register cleanUp Rawls.workspaces.delete(projectName, workspaceName)(studentAToken)
+
+          //it's enough that the resource exists
+          val collName = Rawls.workspaces.getWorkflowCollectionName(projectName, workspaceName)(studentAToken)
+
+          //deleting the workspace should subsequently make the resource vanish (returning a 404, which gets turned into a RestException)
+          Rawls.workspaces.delete(projectName, workspaceName)(studentAToken)
+          assertThrows[RestException] {
+            Sam.user.listResourcePolicies("workflow-collection", collName)(studentAToken)
+          }
         }
       }
     }
@@ -325,34 +356,63 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
     }
 
-    "should label low security bucket" in {
+    // bucket and object access levels for sam policies as described in comments in insertBucket function in HttpGoogleServicesDAO
+    val policyToBucketAccessLevel = Map("project-owner" -> "WRITER", "owner" -> "WRITER", "writer" -> "WRITER", "reader" -> "READER")
+    val policyToObjectAccessLevel = Map("project-owner" -> "READER", "owner" -> "READER", "writer" -> "READER", "reader" -> "READER")
+
+    "should have correct policies in Sam and ACLs in Google when an unconstrained workspace is created" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = studentAToken
+      implicit val token: AuthToken = ownerAuthToken
 
-      withCleanBillingProject(studentA) { projectName =>
-        withWorkspace(projectName, "rawls-bucket-test") { workspaceName =>
-          val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
-          val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
+      withCleanBillingProject(owner) { projectName =>
+        withWorkspace(projectName, s"unconstrained-workspace") { workspaceName =>
+          val workspaceId = getWorkspaceId(projectName, workspaceName)
+          val samPolicies = verifySamPolicies(workspaceId)
+          val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
 
-          bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "low")
+          // check bucket acls
+          val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
+          val expectedBucketRolesWithEmails = samPolicies.collect {
+            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("WRITER", emails.head)
+            case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
+          }
+          actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
+
+          // check object acls
+          val actualObjectRolesWithEmails = getObjectRolesWithEmails(bucketName)
+          val expectedObjectRolesWithEmails = samPolicies.collect {
+            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("READER", emails.head)
+            case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
+          }
+          actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
         }
       }
     }
 
-    "should label high security bucket" in {
+    "should have correct policies in Sam and ACLs in Google when a constrained workspace is created" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = studentAToken
+      implicit val token: AuthToken = ownerAuthToken
 
-      withGroup("ad") { realmGroup =>
-        withGroup("ad2") { realmGroup2 =>
-          withCleanBillingProject(studentA) { projectName =>
-            withWorkspace(projectName, "rawls-bucket-test", Set(realmGroup, realmGroup2)) { workspaceName =>
-              val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
-              val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
+      withCleanBillingProject(owner) { projectName =>
+        withGroup("authDomain", List(owner.email)) { authDomain =>
+          withWorkspace(projectName, s"constrained-workspace", Set(authDomain)) { workspaceName =>
+            val workspaceId = getWorkspaceId(projectName, workspaceName)
+            val samPolicies = verifySamPolicies(workspaceId)
+            val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
 
-              bucketName should startWith("fc-secure-")
-              bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "high", "ad-" + realmGroup.toLowerCase -> "", "ad-" + realmGroup2.toLowerCase -> "")
+            // check bucket acls
+            val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
+            val expectedBucketRolesWithEmails = samPolicies.collect {
+              case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
             }
+            actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
+
+            // check object acls
+            val actualObjectRolesWithEmails = getObjectRolesWithEmails(bucketName)
+            val expectedObjectRolesWithEmails = samPolicies.collect {
+              case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
+            }
+            actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
           }
         }
       }
@@ -483,6 +543,46 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     val bucketAcls = googleStorageDAO.getBucketAccessControls(bucketName).futureValue.getItems.asScala.toList
     // service account should have owner access
     assert(bucketAcls.exists(acl => Option(acl.getRole()).contains("OWNER") && Option(acl.getEmail()).exists(_.endsWith(serviceAccountEmailDomain))))
+    bucketAcls.collect {
+      case acl if (acl.getRole() != null && !acl.getRole().equals("OWNER")) => (acl.getRole(), acl.getEmail())
+    }
+  }
+
+  // Retrieves roles with policy emails for object acls and checks that service account is set up correctly
+  private def getObjectRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, String)] = {
+    val objectAcls = googleStorageDAO.getDefaultObjectAccessControls(bucketName).futureValue.getItems.asScala.toList
+    // service account should have owner access
+    assert(objectAcls.exists(acl => acl.getRole().equals("OWNER") && acl.getEmail().endsWith(serviceAccountEmailDomain)))
+    objectAcls.collect {
+      case acl if (acl.getRole() != null && !acl.getRole().equals("OWNER")) => (acl.getRole(), acl.getEmail())
+    }
+  }
+
+  private def getWorkspaceId(projectName: String, workspaceName: String)(implicit token: AuthToken): String = {
+    import DefaultJsonProtocol._
+
+    Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName).parseJson.asJsObject.getFields("workspace").flatMap { workspace =>
+      workspace.asJsObject.getFields("workspaceId")
+    }.head.convertTo[String]
+  }
+
+  // Retrieves policies for workspace from Sam and verifies they are correct
+  private def verifySamPolicies(workspaceId: String)(implicit token: AuthToken): Set[AccessPolicyResponseEntry] = {
+    val workspacePolicyNames = Set("can-compute", "project-owner", "writer", "reader", "share-writer", "can-catalog", "owner", "share-reader")
+    val samPolicies = Sam.user.listResourcePolicies("workspace", workspaceId)
+
+    val samPolicyNames = samPolicies.map(_.policyName)
+    samPolicyNames should contain theSameElementsAs workspacePolicyNames
+    samPolicies
+  }
+
+  private val serviceAccountEmailDomain = "developer.gserviceaccount.com"
+
+  // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
+  private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, String)] = {
+    val bucketAcls = googleStorageDAO.getBucketAccessControls(bucketName).futureValue.getItems.asScala.toList
+    // service account should have owner access
+    assert(bucketAcls.exists(acl => acl.getRole().equals("OWNER") && acl.getEmail().endsWith(serviceAccountEmailDomain)))
     bucketAcls.collect {
       case acl if (acl.getRole() != null && !acl.getRole().equals("OWNER")) => (acl.getRole(), acl.getEmail())
     }

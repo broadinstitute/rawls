@@ -14,6 +14,7 @@ object SamResourceTypeNames {
   val billingProject = SamResourceTypeName("billing-project")
   val managedGroup = SamResourceTypeName("managed-group")
   val workspace = SamResourceTypeName("workspace")
+  val workflowCollection = SamResourceTypeName("workflow-collection")
 }
 
 /*
@@ -39,6 +40,12 @@ object SamProjectRoles {
   val batchComputeUser = SamResourceRole("batch-compute-user")
   val notebookUser = SamResourceRole("notebook-user")
   val owner = SamResourceRole("owner")
+}
+
+object SamWorkflowCollectionRoles {
+  val owner = SamResourceRole("owner")
+  val writer = SamResourceRole("writer")
+  val reader = SamResourceRole("reader")
 }
 
 /*
@@ -87,6 +94,12 @@ object SamBillingProjectPolicyNames {
   val owner = SamResourcePolicyName("owner")
   val workspaceCreator = SamResourcePolicyName("workspace-creator")
   val canComputeUser = SamResourcePolicyName("can-compute-user")
+}
+
+object SamWorkflowCollectionPolicyNames {
+  val workflowCollectionOwnerPolicyName = SamResourcePolicyName("workflow-collection-owner")
+  val workflowCollectionWriterPolicyName = SamResourcePolicyName("workflow-collection-writer")
+  val workflowCollectionReaderPolicyName = SamResourcePolicyName("workflow-collection-reader")
 }
 
 case class SamPolicy(memberEmails: Set[WorkbenchEmail], actions: Set[SamResourceAction], roles: Set[SamResourceRole])

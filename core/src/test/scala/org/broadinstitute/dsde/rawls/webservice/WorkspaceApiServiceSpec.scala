@@ -149,10 +149,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspace3Name = WorkspaceName(billingProject.projectName.value, "testworkspace3")
 
     val workspace1Id = UUID.randomUUID().toString
-    val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
+    val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", Some(workspace1Id), testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
 
     val workspace2Id = UUID.randomUUID().toString
-    val workspace2 = makeWorkspaceWithUsers(billingProject, workspace2Name.name, workspace2Id, "bucket2", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("b") -> AttributeString("y")), false)
+    val workspace2 = makeWorkspaceWithUsers(billingProject, workspace2Name.name, workspace2Id, "bucket2", Some(workspace2Id), testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("b") -> AttributeString("y")), false)
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
@@ -455,7 +455,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "delete workspace sam resource when deleting a workspace" in withTestDataApiServicesMockitoSam { services =>
+  it should "delete workspace and workflow collection sam resource when deleting a workspace" in withTestDataApiServicesMockitoSam { services =>
     when(services.samDAO.userHasAction(
       ArgumentMatchers.eq(SamResourceTypeNames.workspace),
       ArgumentMatchers.eq(testData.workspace.workspaceId),
@@ -466,6 +466,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     when(services.samDAO.deleteResource(
       ArgumentMatchers.eq(SamResourceTypeNames.workspace),
       ArgumentMatchers.eq(testData.workspace.workspaceId),
+      any[UserInfo]
+    )).thenReturn(Future.successful(()))
+
+    when(services.samDAO.deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection),
+      ArgumentMatchers.eq(testData.workspace.workflowCollectionName.get),
       any[UserInfo]
     )).thenReturn(Future.successful(()))
 
@@ -480,6 +486,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     verify(services.samDAO).deleteResource(
       ArgumentMatchers.eq(SamResourceTypeNames.workspace),
       ArgumentMatchers.eq(testData.workspace.workspaceId),
+      any[UserInfo]
+    )
+
+    verify(services.samDAO).deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection),
+      ArgumentMatchers.eq(testData.workspace.workflowCollectionName.get),
       any[UserInfo]
     )
   }

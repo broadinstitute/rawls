@@ -112,7 +112,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val doubleIntArrayName = "w1.aint_array"
   val tripleIntArrayName = "w1.aaint_array"
 
-  val workspace = Workspace("workspaces", "test_workspace", UUID.randomUUID().toString(), "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
+  val workspace = Workspace("workspaces", "test_workspace", UUID.randomUUID().toString(), "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
   import spray.json._
   val sampleGood = Entity("sampleGood", "Sample",
