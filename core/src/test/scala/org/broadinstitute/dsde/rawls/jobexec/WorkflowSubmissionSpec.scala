@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch, WorkflowBatch}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -21,6 +21,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -37,7 +38,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
   val mockServer = RemoteServicesMockServer()
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-  val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, mockGoogleServicesDAO.getPreparedMockGoogleCredential())
+  val mockSamDAO = new MockSamDAO(slickDataSource)
   val dosServiceAccount = "serviceaccount@foo.com"
   val differentDosServiceAccount = "differentserviceaccount@foo.com"
   val mockDosResolver: DosResolver = (v: String) => Future.successful(if (v.contains("different")) Some(differentDosServiceAccount) else Some(dosServiceAccount))
@@ -221,7 +222,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
       }
 
-      val token = Await.result(workflowSubmission.googleServicesDAO.getToken(testData.submission1.submitter), Duration.Inf).get
       val petJson = Await.result(workflowSubmission.samDAO.getPetServiceAccountKeyForUser(testData.workspace.namespace, testData.userOwner.userEmail), Duration.Inf)
       assertResult(
         Some(
@@ -258,7 +258,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val inputResolutions = Seq(
         SubmissionValidationValue(Option(AttributeString("dos://foo/bar")), None, "test_input_dos"),
         SubmissionValidationValue(Option(AttributeValueList(Seq(AttributeString("dos://foo/bar1"), AttributeString("dos://different"), AttributeString("dos://foo/bar3")))), None, "test_input_dos_array"))
-      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, data.userOwner,
+      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
         Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
 
       runAndWait(entityQuery.save(ctx, sample))
@@ -294,7 +294,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         Seq(SubmissionValidationValue(Option(AttributeString(sampleName)), Option("message"), "three_step.cgrep.pattern"))
       }
 
-      val thisSubmission = createTestSubmission(testData.workspace, testData.methodConfigValid, sset, testData.userOwner,
+      val thisSubmission = createTestSubmission(testData.workspace, testData.methodConfigValid, sset, WorkbenchEmail(testData.userOwner.userEmail.value),
         Seq(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6),
         Map(testData.sample1 -> inputResolutions("sample1"), testData.sample2 -> inputResolutions("sample2"),
           testData.sample3 -> inputResolutions("sample3"), testData.sample4 -> inputResolutions("sample4"),
@@ -409,7 +409,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
 
-      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
+      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, WorkbenchEmail(testData.userOwner.userEmail.value),
         Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
         Seq.empty, Map.empty)
 

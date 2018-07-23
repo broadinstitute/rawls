@@ -53,9 +53,6 @@ trait InstrumentationDirectives extends RawlsInstrumented {
   private val redactAdminBilling =
     (Slash ~ "admin").? / "billing" / Segment / SegmentIgnore / Segment
 
-  private val redactAdminAllUserReadAccess =
-    (Slash ~ "admin").? / "allUserReadAccess" / Segment / Segment
-
   private val redactNotifications =
     (Slash ~ "api").? / "notifications" / "workspace" / Segment / Segment
 
@@ -64,7 +61,7 @@ trait InstrumentationDirectives extends RawlsInstrumented {
   override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
     Seq(redactBillingProject, redactBillingProjectRoleEmail, redactUserGroup, redactUserGroupRoleEmail, redactGroupAndUser, redactGroups,
       redactWorkflowIds, redactSubmissionIds, redactEntityIds, redactMethodConfigs, redactGenomicsOperations, redactWorkspaceNames,
-      redactAdminBilling, redactAdminAllUserReadAccess, redactNotifications).map(_.asInstanceOf[PathMatcher[Product]])
+      redactAdminBilling, redactNotifications).map(_.asInstanceOf[PathMatcher[Product]])
   )
 
   private lazy val globalRequestCounter = ExpandedMetricBuilder.empty.asCounter("request")

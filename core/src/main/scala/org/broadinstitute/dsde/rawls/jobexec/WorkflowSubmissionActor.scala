@@ -297,7 +297,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       wdl <- getWdl(methodConfig, userCredentials)
     } yield {
 
-      val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, submitter, petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
+      val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, RawlsUser(RawlsUserSubjectId(userIdInfo), RawlsUserEmail(submissionRec.submitterEmail)), petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
 
       val wfInputsBatch = workflowBatch map { wf =>
         val methodProps = wf.inputResolutions map {

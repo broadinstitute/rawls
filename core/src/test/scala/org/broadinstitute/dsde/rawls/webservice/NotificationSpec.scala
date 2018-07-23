@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Notifications._
 import org.broadinstitute.dsde.rawls.model._
@@ -11,20 +11,42 @@ import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import scala.concurrent.duration._
 import spray.json.DefaultJsonProtocol._
 import WorkspaceACLJsonSupport._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import org.broadinstitute.dsde.rawls.mock.CustomizableMockSamDAO
+import org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.mockito.{ArgumentMatcher, ArgumentMatchers}
 
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{ExecutionContext, Future}
+import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers._
+
 
 /**
  * Created by dvoet on 3/3/17.
  */
 class NotificationSpec extends ApiServiceSpec {
 
+  case class TestApiService(dataSource: SlickDataSource, user: RawlsUser, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser {
+    override val samDAO: CustomizableMockSamDAO = new CustomizableMockSamDAO(dataSource)
+  }
 
-  case class TestApiService(dataSource: SlickDataSource, user: RawlsUser, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
+  case class TestApiServiceMokitoSam(dataSource: SlickDataSource, user: RawlsUser, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser {
+    override val samDAO: SamDAO = mock[SamDAO]
+  }
 
   def withApiServices[T](dataSource: SlickDataSource, user: RawlsUser = testData.userOwner)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
+    }
+  }
+
+  def withApiServicesMockitoSam[T](dataSource: SlickDataSource, user: RawlsUser = testData.userOwner)(testCode: TestApiServiceMokitoSam => T): T = {
+    val apiService = new TestApiServiceMokitoSam(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
     try {
       testCode(apiService)
     } finally {
@@ -41,12 +63,18 @@ class NotificationSpec extends ApiServiceSpec {
   def withTestDataApiServicesAndUser[T](user: RawlsUser)(testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource, user) { services =>
-        testData.createWorkspaceGoogleGroups(services.gcsDAO)
         testCode(services)
       }
     }
   }
 
+  def withTestDataApiServicesAndUserAndMockitoSam[T](user: RawlsUser)(testCode: TestApiServiceMokitoSam => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withApiServicesMockitoSam(dataSource, user) { services =>
+        testCode(services)
+      }
+    }
+  }
 
   "Notification" should "be sent for invitation" in withTestDataApiServices { services =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
@@ -55,15 +83,16 @@ class NotificationSpec extends ApiServiceSpec {
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl?inviteUsersNotFound=true", httpJson(Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.OK, responseAs[String]) { status }
       }
 
+    services.samDAO.invitedUsers.keySet should contain(user.userEmail.value)
     TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceInvitedNotification(RawlsUserEmail("obama@whitehouse.gov"), userInfo.userSubjectId, testData.workspace.toWorkspaceName, testData.workspace.bucketName)).compactPrint}"), 30 seconds)
   }
 
-  it should "be sent for add and remove from workspace" in withTestDataApiServices { services =>
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    runAndWait(rawlsUserQuery.createUser(user))
+  it should "be sent for add to workspace" in withTestDataApiServices { services =>
+    val user = model.UserInfo(RawlsUserEmail("obama@whitehouse.gov"), OAuth2BearerToken(""), 0, RawlsUserSubjectId("obamaiscool"))
+    services.samDAO.registerUser(user)
 
     //add ACL
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>
@@ -73,74 +102,72 @@ class NotificationSpec extends ApiServiceSpec {
       }
 
     TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceAddedNotification(user.userSubjectId, WorkspaceAccessLevels.Write.toString, testData.workspace.toWorkspaceName, userInfo.userSubjectId)).compactPrint}"), 30 seconds)
+  }
+
+  it should "be sent for remove from workspace" in withTestDataApiServices { services =>
+    val user = model.UserInfo(RawlsUserEmail("obama@whitehouse.gov"), OAuth2BearerToken(""), 0, RawlsUserSubjectId("obamaiscool"))
+    services.samDAO.registerUser(user)
+    services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.writer, SamPolicy(Set(WorkbenchEmail(user.userEmail.value)), Set.empty, Set.empty), userInfo)
 
     //remove ACL
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.NoAccess, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.OK, responseAs[String]) { status }
       }
 
     TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceRemovedNotification(user.userSubjectId, WorkspaceAccessLevels.NoAccess.toString, testData.workspace.toWorkspaceName, userInfo.userSubjectId)).compactPrint}"), 30 seconds)
   }
 
-  it should "be sent for activation" in withEmptyTestDatabase { dataSource: SlickDataSource => withApiServices(dataSource) { services =>
-    val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
+  it should "be sent on sendChangeNotification" in withTestDataApiServicesAndUserAndMockitoSam(testData.userOwner) { services =>
+    when(services.samDAO.userHasAction(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      ArgumentMatchers.eq(SamWorkspaceActions.own),
+      any[UserInfo]
+    )).thenReturn(Future.successful(true))
 
-    Post("/user") ~>
-      sealRoute(services.createUserRoute) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
+    when(services.samDAO.listAllResourceMemberIds(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      any[UserInfo]
+    )).thenReturn(Future.successful(Set(UserIdInfo("1", "", None), UserIdInfo("1", "", Some("11")), UserIdInfo("1", "", Some("22")))))
 
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(ActivationNotification(user.userSubjectId)).compactPrint}"), 30 seconds)
-
-  } }
-  // Send Change Notification for Workspace require WRITE access. Accept if OWNER or WRITE; Reject if READ or NO ACCESS
-  it should "allow an owner to send change notifications" in withTestDataApiServicesAndUser(testData.userOwner) { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
+        assertResult("2") {
+          responseAs[String]
+        }
       }
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(testData.userProjectOwner.userSubjectId, testData.workspace.toWorkspaceName)).compactPrint}"), 30 seconds)
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(testData.userOwner.userSubjectId, testData.workspace.toWorkspaceName)).compactPrint}"), 30 seconds)
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(testData.userWriter.userSubjectId, testData.workspace.toWorkspaceName)).compactPrint}"), 30 seconds)
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(testData.userReader.userSubjectId, testData.workspace.toWorkspaceName)).compactPrint}"), 30 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(RawlsUserSubjectId("11"), testData.workspace.toWorkspaceName)).compactPrint}"), 30 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceChangedNotification(RawlsUserSubjectId("22"), testData.workspace.toWorkspaceName)).compactPrint}"), 30 seconds)
   }
 
- it should "allow user with write-access to send change notifications" in withTestDataApiServicesAndUser(testData.userWriter) { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
+  it should "403 on sendChangeNotification for non owner" in withTestDataApiServicesAndUserAndMockitoSam(testData.userOwner) { services =>
+    when(services.samDAO.userHasAction(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      ArgumentMatchers.eq(SamWorkspaceActions.read),
+      any[UserInfo]
+    )).thenReturn(Future.successful(true))
+
+    when(services.samDAO.userHasAction(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      ArgumentMatchers.eq(SamWorkspaceActions.own),
+      any[UserInfo]
+    )).thenReturn(Future.successful(false))
+
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK){
-          status
-        }
-      }
-  }
-
-  it should "not allow user with read-access to send change notifications" in withTestDataApiServicesAndUser(testData.userReader) { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
-          status
-        }
-      }
-  }
-
-  it should "not allow user with no-access to send change notifications" in withTestDataApiServicesAndUser(RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("obamaiscool"))) { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check{
-        assertResult(StatusCodes.NotFound) {
+        assertResult(StatusCodes.Forbidden, responseAs[String]) {
           status
         }
       }
   }
-
 }

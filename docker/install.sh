@@ -13,7 +13,7 @@ fi
 if [ "$SKIP_TESTS" = "skip-tests" ]; then
 	echo skipping tests
 else
-	sbt -J-Xms4g -J-Xmx4g -J-XX:MaxMetaspaceSize=1024m test -Dmysql.host=mysql -Dmysql.port=3306 -Ddirectory.url=ldap://opendj:389 -Ddirectory.password=testtesttest
+	sbt -J-Xms4g -J-Xmx4g -J-XX:MaxMetaspaceSize=1024m test -Dmysql.host=mysql -Dmysql.port=3306
 fi
 
 sbt -J-Xms4g -J-Xmx4g -J-XX:MaxMetaspaceSize=1024m assembly

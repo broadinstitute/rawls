@@ -7,11 +7,11 @@ import cats.implicits._
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import slick.jdbc.{GetResult, JdbcProfile}
 
@@ -22,7 +22,7 @@ import slick.jdbc.{GetResult, JdbcProfile}
 case class SubmissionRecord(id: UUID,
                             workspaceId: UUID,
                             submissionDate: Timestamp,
-                            submitterId: String,
+                            submitterEmail: String,
                             methodConfigurationId: Long,
                             submissionEntityId: Option[Long],
                             status: String,
@@ -40,7 +40,6 @@ case class SubmissionAuditStatusRecord(id: Long, submissionId: UUID, status: Str
 
 trait SubmissionComponent {
   this: DriverComponent
-    with JndiDirectoryDAO
     with MethodConfigurationComponent
     with EntityComponent
     with AttributeComponent
@@ -124,17 +123,13 @@ trait SubmissionComponent {
         workflowStatusResponses <- GatherStatusesForWorkspaceSubmissionsQuery.gatherWorkflowIdsAndStatuses(workspaceContext.workspaceId)
         states = workflowStatusResponses.groupBy(_.submissionId)
         recs <- query.result
-        users <- rawlsUserQuery.load(recs.map { case (submissionRec, _, _) => RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId)) })
       } yield {
-        val usersById = users.map(u => u.userSubjectId -> u).toMap
-
         recs.map { case (submissionRec, methodConfigRec, entityRec) =>
-          val user = usersById(RawlsUserSubjectId(submissionRec.submitterId))
           val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
           val statusCounts = states.getOrElse(submissionRec.id, Seq.empty).map(x => Map(x.workflowStatus -> x.count)).foldLeft(Map.empty[String, Int])(_|+|_)
           val maybeWorkflowIds = states.getOrElse(submissionRec.id, Seq.empty).flatMap(_.workflowId).sorted
           val workflowIds = if (maybeWorkflowIds.nonEmpty) Some(maybeWorkflowIds) else None
-          SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), user, workflowIds, statusCounts)
+          SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), workflowIds, statusCounts)
         }
       }
     }
@@ -376,7 +371,7 @@ trait SubmissionComponent {
         UUID.fromString(submission.submissionId),
         workspaceId,
         new Timestamp(submission.submissionDate.toDate.getTime),
-        submission.submitter.userSubjectId.value,
+        submission.submitter.value,
         configId,
         entityId,
         submission.status.toString,
@@ -388,7 +383,7 @@ trait SubmissionComponent {
       Submission(
         submissionRec.id.toString,
         new DateTime(submissionRec.submissionDate.getTime),
-        RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId)),
+        WorkbenchEmail(submissionRec.submitterEmail),
         config.namespace,
         config.name,
         entity,

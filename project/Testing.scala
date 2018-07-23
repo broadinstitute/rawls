@@ -12,6 +12,7 @@ object Testing {
     sys.exit()
   }.value
 
+<<<<<<< e24ae619300c7eba1bcf576f13820e24f7cc5639
   lazy val validDirectoryUrl = taskKey[Unit]("Determine if directory.url is provided.")
   lazy val validDirectoryPassword = taskKey[Unit]("Determine if directory.password is provided.")
 
@@ -31,6 +32,8 @@ object Testing {
     sys.exit()
   }.value
 
+=======
+>>>>>>> move workspace access control to sam
   def isIntegrationTest(name: String) = name contains "integrationtest"
 
   lazy val IntegrationTest = config("it") extend Test
@@ -65,13 +68,16 @@ object Testing {
     testOptions in IntegrationTest := Seq(Tests.Filter(s => isIntegrationTest(s))),
 
     validMySqlHostSetting,
-    validDirectoryUrlSetting,
-    validDirectoryPasswordSetting,
 
+<<<<<<< e24ae619300c7eba1bcf576f13820e24f7cc5639
     (test in Test) := ((test in Test) dependsOn(validDirectoryUrl, validDirectoryPassword)).value,
     (testOnly in Test) := ((testOnly in Test) dependsOn(validDirectoryUrl, validDirectoryPassword)).inputTaskValue.evaluated,
     (test in Test) := ((test in Test) dependsOn validMySqlHost).value,
     (testOnly in Test) := ((testOnly in Test) dependsOn validMySqlHost).inputTaskValue.evaluated,
+=======
+    (test in Test) <<= (test in Test) dependsOn validMySqlHost,
+    (testOnly in Test) <<= (testOnly in Test) dependsOn validMySqlHost,
+>>>>>>> move workspace access control to sam
 
     parallelExecution in Test := false
 

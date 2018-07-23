@@ -1,16 +1,13 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.model._
 
 case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String])
 case class RawlsBillingProjectOperationRecord(projectName: String, operationName: String, operationId: String, done: Boolean, errorMessage: Option[String], api: String)
 
 trait RawlsBillingProjectComponent {
-  this: DriverComponent
-    with JndiDirectoryDAO =>
+  this: DriverComponent =>
 
   import driver.api._
 
@@ -56,12 +53,19 @@ trait RawlsBillingProjectComponent {
       DBIO.sequence(projects.map(project => rawlsBillingProjectQuery.filter(_.projectName === project.projectName.value).update(marshalBillingProject(project))).toSeq)
     }
 
+    def listAll(): ReadWriteAction[Seq[RawlsBillingProject]] = {
+      for {
+        projectRecords <- this.result
+      } yield {
+        projectRecords.map(unmarshalBillingProject)
+      }
+    }
+
     def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadWriteAction[Seq[RawlsBillingProject]] = {
       for {
         projectRecords <- filter(_.creationStatus === status.toString).result
-        projects <- DBIO.sequence(projectRecords.map { projectRec => load(RawlsBillingProjectName(projectRec.projectName)) })
       } yield {
-        projects.flatten
+        projectRecords.map(unmarshalBillingProject)
       }
     }
 
