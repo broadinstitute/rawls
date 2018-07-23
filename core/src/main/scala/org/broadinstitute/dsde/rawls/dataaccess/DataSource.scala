@@ -18,16 +18,15 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import liquibase.{Contexts, Liquibase}
 import liquibase.database.jvm.JdbcConnection
 import liquibase.resource.{ClassLoaderResourceAccessor, ResourceAccessor}
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 
 object DataSource {
-  def apply(databaseConfig: DatabaseConfig[JdbcProfile], directoryConfig: DirectoryConfig)(implicit executionContext: ExecutionContext): SlickDataSource = {
-    new SlickDataSource(databaseConfig, directoryConfig)
+  def apply(databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext): SlickDataSource = {
+    new SlickDataSource(databaseConfig)
   }
 }
 
-class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile], directoryConfig: DirectoryConfig)(implicit executionContext: ExecutionContext) extends LazyLogging {
-  val dataAccess = new DataAccessComponent(databaseConfig.profile, databaseConfig.config.getInt("batchSize"), directoryConfig)
+class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext) extends LazyLogging {
+  val dataAccess = new DataAccessComponent(databaseConfig.profile, databaseConfig.config.getInt("batchSize"))
 
   val database = databaseConfig.db
 

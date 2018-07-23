@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.model._
 
 /**
@@ -13,8 +11,7 @@ import org.broadinstitute.dsde.rawls.model._
 case class ManagedGroupRecord(membersGroupName: String, adminsGroupName: String, accessInstructions: Option[String] = None)
 
 trait ManagedGroupComponent {
-  this: DriverComponent
-    with JndiDirectoryDAO =>
+  this: DriverComponent =>
 
   import driver.api._
 

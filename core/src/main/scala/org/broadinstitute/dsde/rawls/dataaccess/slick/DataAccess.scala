@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import javax.naming.NameNotFoundException
 import javax.naming.directory.DirContext
 
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.JndiDirectoryDAO
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionParser
 import org.broadinstitute.dsde.rawls.model.{RawlsGroupName, RawlsGroupRef}
 import slick.jdbc.JdbcProfile
@@ -22,8 +21,7 @@ trait DataAccess
   with WorkflowComponent
   with ManagedGroupComponent
   with ExprEvalComponent
-  with SlickExpressionParser
-  with JndiDirectoryDAO {
+  with SlickExpressionParser {
 
 
   this: DriverComponent =>
@@ -71,12 +69,6 @@ trait DataAccess
 
   def sqlDBStatus() = {
     sql"select version()".as[String]
-  }
-
-  def clearLdap(): Future[Unit] = withContext(directoryConfig.directoryUrl, directoryConfig.user, directoryConfig.password) { ctx =>
-    clear(ctx, resourcesOu)
-    clear(ctx, groupsOu)
-    clear(ctx, peopleOu)
   }
 
   private def clear(ctx: DirContext, dn: String): Unit = Try {

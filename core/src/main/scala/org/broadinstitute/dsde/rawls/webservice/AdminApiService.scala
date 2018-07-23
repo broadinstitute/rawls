@@ -72,56 +72,14 @@ trait AdminApiService extends UserInfoDirectives {
         complete { workspaceServiceConstructor(userInfo).AdminWorkflowQueueStatusByUser }
       }
     } ~
-    path("admin" / "groups") { //create group
-      post {
-        entity(as[RawlsGroupRef]) { groupRef =>
-          complete { userServiceConstructor(userInfo).AdminCreateGroup(groupRef) }
-        }
-      }
-    } ~
     pathPrefix("admin" / "groups" / Segment) { (groupNameRaw) =>
       val rawlsGroupRef = RawlsGroupRef(RawlsGroupName(URLDecoder.decode(groupNameRaw, "UTF-8")))
-      pathEnd {
-        delete {
-          complete { userServiceConstructor(userInfo).AdminDeleteGroup(rawlsGroupRef) }
-        }
-      } ~
       path("accessInstructions") {
         post {
           entity(as[ManagedGroupAccessInstructions]) { instructions =>
             complete { userServiceConstructor(userInfo).SetManagedGroupAccessInstructions(ManagedGroupRef(RawlsGroupName(URLDecoder.decode(groupNameRaw, "UTF-8"))), instructions) }
           }
         }
-      } ~
-      // there are 3 methods supported to modify group membership:
-      // PUT = "set the group members to exactly this list"
-      // POST = "add these things to the list"
-      // DELETE = "remove these things from the list"
-      path("members") {
-        put {
-          entity(as[RawlsGroupMemberList]) { memberList =>
-            complete { userServiceConstructor(userInfo).AdminOverwriteGroupMembers(rawlsGroupRef, memberList) }
-          }
-        } ~
-        post {
-          entity(as[RawlsGroupMemberList]) { memberList =>
-            complete { userServiceConstructor(userInfo).AdminAddGroupMembers(rawlsGroupRef, memberList) }
-          }
-        } ~
-        delete {
-          entity(as[RawlsGroupMemberList]) { memberList =>
-            complete { userServiceConstructor(userInfo).AdminRemoveGroupMembers(rawlsGroupRef, memberList) }
-          }
-        } ~
-        get {
-          complete { userServiceConstructor(userInfo).AdminListGroupMembers(rawlsGroupRef) }
-        }
-      }
-    } ~
-    path("admin" / "groups" / Segment / "sync") { (groupNameRaw) =>
-      val groupName = URLDecoder.decode(groupNameRaw, "UTF-8")
-      post {
-        complete { userServiceConstructor(userInfo).AdminSynchronizeGroupMembers(RawlsGroupRef(RawlsGroupName(groupName))) }
       }
     } ~
     path("admin" / "user" / "role" / "curator" / Segment) { (userEmail) =>
@@ -176,11 +134,6 @@ trait AdminApiService extends UserInfoDirectives {
     path("admin" / "refreshToken" / Segment ) { userSubjectId =>
       delete {
         complete { userServiceConstructor(userInfo).AdminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))) }
-      }
-    } ~
-    path("admin" / "allRefreshTokens" ) {
-      delete {
-        complete { userServiceConstructor(userInfo).AdminDeleteAllRefreshTokens }
       }
     } ~
     path("admin" / "statistics") {

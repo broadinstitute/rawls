@@ -20,7 +20,6 @@ import com.typesafe.scalalogging.LazyLogging
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, UserInfo}
@@ -53,14 +52,7 @@ object Boot extends App with LazyLogging {
     implicit val system = ActorSystem("rawls")
     implicit val materializer = ActorMaterializer()
 
-    val directoryConfig = DirectoryConfig(
-      conf.getString("directory.url"),
-      conf.getString("directory.user"),
-      conf.getString("directory.password"),
-      conf.getString("directory.baseDn")
-    )
-
-    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", conf), directoryConfig)
+    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", conf))
 
     val liquibaseConf = conf.getConfig("liquibase")
     val liquibaseChangeLog = liquibaseConf.getString("changelog")
