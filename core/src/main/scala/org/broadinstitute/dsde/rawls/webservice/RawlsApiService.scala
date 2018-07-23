@@ -64,14 +64,12 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   implicit val materializer: Materializer
 
   def apiRoutes = options { complete(OK) } ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ notificationsRoutes
-  def registerRoutes = options { complete(OK) } ~ createUserRoute
 
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler)) {
     swaggerRoutes ~
     versionRoutes ~
     statusRoute ~
-    pathPrefix("api") { apiRoutes } ~
-    pathPrefix("register") { registerRoutes }
+    pathPrefix("api") { apiRoutes }
   }
 
   // basis for logRequestResult lifted from http://stackoverflow.com/questions/32475471/how-does-one-log-akka-http-client-requests

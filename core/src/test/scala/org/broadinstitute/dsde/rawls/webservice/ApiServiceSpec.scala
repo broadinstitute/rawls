@@ -13,9 +13,9 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
-import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor, HealthMonitor}
+import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, HealthMonitor}
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -107,7 +107,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val swaggerConfig: SwaggerConfig = SwaggerConfig("foo", "bar")
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
+    val samDAO: SamDAO = new MockSamDAO(dataSource)
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
@@ -132,15 +132,12 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      gpsDAO,
-      googleGroupSyncTopic,
       notificationDAO,
       samDAO,
       Seq("bigquery.jobUser"),
       "requesterPaysRole"
     )_
 
-    val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, googleGroupSyncTopic, "test-sub-name", 1, userServiceConstructor))
 
     override val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
@@ -185,7 +182,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
-      googleGroupSyncMonitorSupervisor ! PoisonPill
     }
 
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
@@ -194,7 +190,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     // for metrics testing
     val sealedInstrumentedRoutes: Route = instrumentRequest {
       sealRoute(adminRoutes ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
-        submissionRoutes ~ userRoutes ~ createUserRoute ~ workspaceRoutes)
+        submissionRoutes ~ userRoutes ~ workspaceRoutes)
     }
   }
 

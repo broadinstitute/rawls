@@ -5,15 +5,15 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 
+import scala.util.Try
+
 case class AccessEntry(accessLevel: WorkspaceAccessLevel, pending: Boolean, canShare: Boolean, canCompute: Boolean)
 
 case class WorkspaceACL(acl: Map[String, AccessEntry])
 
 case class WorkspaceACLUpdate(email: String, accessLevel: WorkspaceAccessLevel, canShare: Option[Boolean] = None, canCompute: Option[Boolean] = None)
 
-case class WorkspaceACLUpdateResponse(subjectId: String, email: String, accessLevel: WorkspaceAccessLevel)
-
-case class WorkspaceACLUpdateResponseList(usersUpdated: Seq[WorkspaceACLUpdateResponse], invitesSent: Seq[WorkspaceACLUpdate], invitesUpdated: Seq[WorkspaceACLUpdate], usersNotFound: Seq[WorkspaceACLUpdate])
+case class WorkspaceACLUpdateResponseList(usersUpdated: Set[WorkspaceACLUpdate], invitesSent: Set[WorkspaceACLUpdate], usersNotFound: Set[WorkspaceACLUpdate])
 
 case class WorkspaceCatalog(email: String, catalog: Boolean)
 
@@ -27,6 +27,7 @@ object WorkspaceAccessLevels {
     def compare(that: WorkspaceAccessLevel) = { all.indexOf(this).compare(all.indexOf(that)) }
 
     override def toString = WorkspaceAccessLevels.toString(this)
+    def toPolicyName = WorkspaceAccessLevels.toPolicyName(this)
     override def withName(name: String) = WorkspaceAccessLevels.withName(name)
   }
 
@@ -53,15 +54,29 @@ object WorkspaceAccessLevels {
     }
   }
 
+  def toPolicyName(v: WorkspaceAccessLevel): Option[String] = {
+    v match {
+      case ProjectOwner => Option("project-owner")
+      case Owner => Option("owner")
+      case Write => Option("writer")
+      case Read => Option("reader")
+      case _ => None
+    }
+  }
+
   def withName(s: String): WorkspaceAccessLevel = {
     s match {
-      case "PROJECT_OWNER" => ProjectOwner
-      case "OWNER" => Owner
-      case "WRITER" => Write
-      case "READER" => Read
-      case "NO ACCESS" => NoAccess
+      case accessLevel if accessLevel.equalsIgnoreCase("PROJECT_OWNER") => ProjectOwner
+      case accessLevel if accessLevel.equalsIgnoreCase("OWNER") => Owner
+      case accessLevel if accessLevel.equalsIgnoreCase("WRITER") => Write
+      case accessLevel if accessLevel.equalsIgnoreCase("READER") => Read
+      case accessLevel if accessLevel.equalsIgnoreCase("NO ACCESS") => NoAccess
       case _ => throw new RawlsException(s"invalid WorkspaceAccessLevel [${s}]")
     }
+  }
+
+  def withPolicyName(policyName: String): Option[WorkspaceAccessLevel] = {
+    Try(withName(policyName.replace("-", "_"))).toOption
   }
 
   def max(a: WorkspaceAccessLevel, b: WorkspaceAccessLevel): WorkspaceAccessLevel = {
@@ -90,9 +105,7 @@ class WorkspaceACLJsonSupport extends JsonSupport {
 
   implicit val WorkspaceACLUpdateFormat = jsonFormat4(WorkspaceACLUpdate)
 
-  implicit val WorkspaceACLUpdateResponseFormat = jsonFormat3(WorkspaceACLUpdateResponse)
-
-  implicit val WorkspaceACLUpdateResponseListFormat = jsonFormat4(WorkspaceACLUpdateResponseList)
+  implicit val WorkspaceACLUpdateResponseListFormat = jsonFormat3(WorkspaceACLUpdateResponseList)
 
   implicit val WorkspaceCatalogFormat = jsonFormat2(WorkspaceCatalog)
 

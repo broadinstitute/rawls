@@ -93,15 +93,12 @@ case class WorkspaceRequest (
 case class Workspace(
                       namespace: String,
                       name: String,
-                      authorizationDomain: Set[ManagedGroupRef],
                       workspaceId: String,
                       bucketName: String,
                       createdDate: DateTime,
                       lastModified: DateTime,
                       createdBy: String,
                       attributes: AttributeMap,
-                      accessLevels: Map[WorkspaceAccessLevel, RawlsGroupRef],
-                      authDomainACLs: Map[WorkspaceAccessLevel, RawlsGroupRef],
                       isLocked: Boolean = false
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
@@ -112,7 +109,6 @@ case class Workspace(
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
                                     lastFailureDate: Option[DateTime],
                                     runningSubmissionsCount: Int)
-
 
 case class EntityName(
                    name: String)
@@ -402,18 +398,47 @@ case class MethodRepoConfigurationExport(
                                          )
 
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
-                                 workspace: Workspace,
+                                 workspace: WorkspaceDetails,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
-                                 owners: Seq[String],
-                                 public: Option[Boolean])
+                                 public: Boolean)
 
 case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
                              canShare: Boolean,
                              canCompute: Boolean,
                              catalog: Boolean,
-                             workspace: Workspace,
+                             workspace: WorkspaceDetails,
                              workspaceSubmissionStats: WorkspaceSubmissionStats,
-                             owners: Seq[String])
+                             owners: Set[String])
+
+case class WorkspaceDetails(namespace: String,
+                            name: String,
+                            workspaceId: String,
+                            bucketName: String,
+                            createdDate: DateTime,
+                            lastModified: DateTime,
+                            createdBy: String,
+                            attributes: AttributeMap,
+                            isLocked: Boolean = false,
+                            authorizationDomain: Set[ManagedGroupRef]) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, createdDate, lastModified, createdBy, attributes, isLocked)
+}
+
+object WorkspaceDetails {
+  def apply(workspace: Workspace, authorizationDomain: Set[ManagedGroupRef]): WorkspaceDetails = {
+    WorkspaceDetails(
+      workspace.namespace,
+      workspace.name,
+      workspace.workspaceId,
+      workspace.bucketName,
+      workspace.createdDate,
+      workspace.lastModified,
+      workspace.createdBy,
+      workspace.attributes,
+      workspace.isLocked,
+      authorizationDomain
+    )
+  }
+}
 
 case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
 
@@ -536,8 +561,6 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
 
-  implicit val WorkspaceFormat = jsonFormat12(Workspace)
-
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
   implicit val EntityTypeMetadataFormat = jsonFormat3(EntityTypeMetadata)
@@ -612,7 +635,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 
-  implicit val WorkspaceListResponseFormat = jsonFormat5(WorkspaceListResponse)
+  implicit val WorkspaceDetailsFormat = jsonFormat10(WorkspaceDetails.apply)
+
+  implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
   implicit val WorkspaceResponseFormat = jsonFormat7(WorkspaceResponse)
 

@@ -176,13 +176,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       }
     }
 
-    def getWorkspaceAndSubmitter(dataAccess: DataAccess): ReadWriteAction[(RawlsUser, WorkspaceRecord)] = {
+    def getWorkspaceAndSubmitter(dataAccess: DataAccess): ReadWriteAction[(RawlsUserEmail, WorkspaceRecord)] = {
       for {
         submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.head)
-        submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
         workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result.map(_.head)
       } yield {
-        (submitter, workspaceRec)
+        (RawlsUserEmail(submissionRec.submitterEmail), workspaceRec)
       }
     }
 
@@ -206,7 +205,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         }
       } flatMap { case (workflowRecs, submitter, workspaceRec) =>
           for {
-            petUserInfo <- getPetSAUserInfo(workspaceRec.namespace, submitter.userEmail)
+            petUserInfo <- getPetSAUserInfo(workspaceRec.namespace, submitter)
             abortResults <- Future.traverse(workflowRecs) { workflowRec =>
               Future.successful(workflowRec.externalId).zip(executionServiceCluster.abort(workflowRec, petUserInfo))
             }
@@ -236,7 +235,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         }
       } flatMap { case (externalWorkflowIds, submitter, workspaceRec) =>
         for {
-          petUserInfo <- getPetSAUserInfo(workspaceRec.namespace, submitter.userEmail)
+          petUserInfo <- getPetSAUserInfo(workspaceRec.namespace, submitter)
           workflowOutputs <- gatherWorkflowOutputs(externalWorkflowIds, petUserInfo)
         } yield {
           workflowOutputs

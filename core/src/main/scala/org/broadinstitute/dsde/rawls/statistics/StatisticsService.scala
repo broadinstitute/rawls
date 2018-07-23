@@ -59,11 +59,9 @@ class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickD
       }
 
       DBIO.sequence(actions).flatMap { results =>
-        dataAccess.rawlsUserQuery.countUsers() flatMap { numUsers =>
-          entityStatistics.countEntitiesofTypeInNamespace(workspaceNamespace, workspaceName) map { entityStats =>
-            val allResults = results.toMap + ("currentTotalUsers" -> numUsers) + ("currentEntityStatistics" -> EntityStatistics(workspaceNamespace, workspaceName, entityStats))
-            RequestComplete(StatusCodes.OK, StatisticsReport(startDate, endDate, allResults))
-          }
+        entityStatistics.countEntitiesofTypeInNamespace(workspaceNamespace, workspaceName) map { entityStats =>
+          val allResults = results.toMap + ("currentEntityStatistics" -> EntityStatistics(workspaceNamespace, workspaceName, entityStats))
+          RequestComplete(StatusCodes.OK, StatisticsReport(startDate, endDate, allResults))
         }
       }
     }

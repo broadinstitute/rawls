@@ -4,7 +4,6 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.dataaccess.slick.DbResource.dirConfig
 import org.broadinstitute.dsde.rawls.model.{Workflow, WorkflowStatuses}
 import org.scalatest.Assertion
 import org.scalatest.concurrent.PatienceConfiguration.Interval
@@ -30,6 +29,7 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
     val safeTableNames: Seq[String] = rawTableNames flatMap {
       case "GROUP" => None
       case "USER" => None
+      case "MANAGED_GROUP" => None
       case "DATABASECHANGELOG" => None        // managed by Liquibase
       case "DATABASECHANGELOGLOCK" => None    // managed by Liquibase
       case other => Option(other)
@@ -47,7 +47,7 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
   it should "not deadlock due to too few threads" in {
     // DB Config with only 2 threads
     val altDataConfig = DatabaseConfig.forConfig[JdbcProfile]("mysql-low-thread-count")
-    val altDataSource = new SlickDataSource(altDataConfig, dirConfig)(TestExecutionContext.testExecutionContext)
+    val altDataSource = new SlickDataSource(altDataConfig)(TestExecutionContext.testExecutionContext)
 
     withCustomTestDatabaseInternal(altDataSource, testData) {
       withWorkspaceContext(testData.workspace) { context =>
