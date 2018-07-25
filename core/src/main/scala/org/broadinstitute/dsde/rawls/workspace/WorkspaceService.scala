@@ -70,7 +70,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def LockWorkspace(workspaceName: WorkspaceName) = lockWorkspace(workspaceName)
   def UnlockWorkspace(workspaceName: WorkspaceName) = unlockWorkspace(workspaceName)
   def CheckBucketReadAccess(workspaceName: WorkspaceName) = checkBucketReadAccess(workspaceName)
-  def GetWorkspaceStatus(workspaceName: WorkspaceName, userSubjectId: Option[String]) = getWorkspaceStatus(workspaceName, userSubjectId)
   def GetBucketUsage(workspaceName: WorkspaceName) = getBucketUsage(workspaceName)
   def GetAccessInstructions(workspaceName: WorkspaceName) = getAccessInstructions(workspaceName)
 
@@ -135,47 +134,35 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess) flatMap { accessLevel =>
+        DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel =>
           if (accessLevel < WorkspaceAccessLevels.Read)
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
           else {
             for {
-              catalog <- getUserCatalogPermissions(workspaceContext, dataAccess)
-              canShare <- getUserSharePermissions(workspaceContext, accessLevel, dataAccess)
-              canCompute <- getUserComputePermissions(workspaceContext, accessLevel, dataAccess)
+              catalog <- DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, SamResourceActions.launchBatchCompute, userInfo)) //todo: change to correct action***
+              canShare <- DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, SamResourceActions.launchBatchCompute, userInfo)) //todo: change to correct action***
+              canCompute <- DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, SamResourceActions.launchBatchCompute, userInfo))
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
-              owners <- getWorkspaceOwners(workspaceContext.workspace, dataAccess)
+              owners <- DBIO.from(getWorkspaceOwners(workspaceContext.workspaceId.toString))
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, catalog, workspaceContext.workspace, stats, owners))
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, catalog, canShare, canCompute, workspaceContext.workspace, stats, owners))
             }
           }
         }
       }
     }
 
-  def getMaximumAccessLevel(user: RawlsUser, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadWriteAction[WorkspaceAccessLevel] = {
-    val accessLevels = workspaceContext.workspace.authDomainACLs.map { case (accessLevel, groupRef) =>
-      dataAccess.rawlsGroupQuery.loadGroupIfMember(groupRef, user).map {
-        case Some(_) => accessLevel
-        case None => WorkspaceAccessLevels.NoAccess
-      }
+  def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] = {
+    samDAO.listUserPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { policies =>
+      policies.map(policy => WorkspaceAccessLevels.withName(policy.policyName))
+    }.map { policyNames =>
+      if(policyNames.isEmpty) WorkspaceAccessLevels.NoAccess
+      else policyNames.fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max)
     }
-
-    DBIO.sequence(accessLevels).map { _.fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max) }
   }
 
-  def getWorkspaceOwners(workspace: Workspace, dataAccess: DataAccess): ReadWriteAction[Seq[String]] = {
-    dataAccess.rawlsGroupQuery.load(workspace.accessLevels(WorkspaceAccessLevels.Owner)).flatMap {
-      case None => DBIO.failed(new RawlsException(s"Unable to load owners for workspace ${workspace.toWorkspaceName}"))
-      case Some(ownerGroup) =>
-        val usersAction = DBIO.sequence(ownerGroup.users.map(dataAccess.rawlsUserQuery.load(_).map(_.get.userEmail.value)).toSeq)
-        val subGroupsAction = DBIO.sequence(ownerGroup.subGroups.map(dataAccess.rawlsGroupQuery.load(_).map(_.get.groupEmail.value)).toSeq)
-
-        for {
-          users <- usersAction
-          subGroups <- subGroupsAction
-        } yield users ++ subGroups
-    }
+  def getWorkspaceOwners(workspaceId: String): Future[Seq[String]] = {
+    samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "owner", userInfo).map(_.memberEmails)
   }
 
   def getWorkspaceContext(workspaceName: WorkspaceName): Future[SlickWorkspaceContext] = {
@@ -234,15 +221,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         _ <- dataAccess.workspaceQuery.deleteWorkspaceAuthDomainRecords(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceInvites(workspaceContext.workspaceId)
-        _ <- dataAccess.workspaceQuery.deleteWorkspaceSharePermissions(workspaceContext.workspaceId)
-        _ <- dataAccess.workspaceQuery.deleteWorkspaceComputePermissions(workspaceContext.workspaceId)
-        _ <- dataAccess.workspaceQuery.deleteWorkspaceCatalogPermissions(workspaceContext.workspaceId)
         _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceId)
         _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceId)
         _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceId)
 
-        // Delete groups
-        _ <- DBIO.seq(groupRefsToRemove.map { group => dataAccess.rawlsGroupQuery.delete(group) }.toSeq: _*)
+        // Delete resource in sam
+        _ <- DBIO.from(samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, userInfo))
 
         // Delete the workspace
         _ <- dataAccess.workspaceQuery.delete(workspaceName)
@@ -278,7 +262,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
         getWorkspaceContext(workspaceName) flatMap { ctx =>
           dataSource.inTransaction { dataAccess =>
-            getMaximumAccessLevel(RawlsUser(userInfo), ctx, dataAccess) flatMap {maxAccessLevel =>
+            DBIO.from(getMaximumAccessLevel(ctx)) flatMap {maxAccessLevel =>
               withLibraryPermissions(ctx, operations, dataAccess, userInfo, isCurator, maxAccessLevel) {
                 updateWorkspace(operations, dataAccess)(ctx)
               }
@@ -326,9 +310,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def listWorkspaces(): Future[PerRequestMessage] =
     dataSource.inTransaction ({ dataAccess =>
 
+      //ask sam: which workspaces do i have access to?
+      //
+
       val query = for {
-        permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
-        managedGroupsForUser <- DBIO.from(samDAO.listManagedGroups(userInfo))
+        permissionsPairs <- DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
+//        managedGroupsForUser <- DBIO.from(samDAO.listManagedGroups(userInfo))
+        ownerEmails <- getWorkspaceOwners()
         ownerEmails <- dataAccess.workspaceQuery.listAccessGroupMemberEmails(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), WorkspaceAccessLevels.Owner)
         publicWorkspaces <- dataAccess.workspaceQuery.listWorkspacesWithGroupAccess(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), UserService.allUsersGroupRef)
         submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
@@ -354,19 +342,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       results.map { responses => RequestComplete(StatusCodes.OK, responses) }
     }, TransactionIsolation.ReadCommitted)
-
-  def listWorkspaces(user: RawlsUser, dataAccess: DataAccess): ReadWriteAction[Seq[WorkspacePermissionsPair]] = {
-    val rawPairs = for {
-      groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
-      pairs <- dataAccess.workspaceQuery.listPermissionPairsForGroups(groups)
-    } yield pairs
-
-    rawPairs.map { pairs =>
-      pairs.groupBy(_.workspaceId).map { case (workspaceId, pairsInWorkspace) =>
-        pairsInWorkspace.reduce((a, b) => WorkspacePermissionsPair(workspaceId, WorkspaceAccessLevels.max(a.accessLevel, b.accessLevel)))
-      }.toSeq
-    }
-  }
 
   private def getWorkspaceSubmissionStats(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[WorkspaceSubmissionStats] = {
     // listSubmissionSummaryStats works against a sequence of workspaces; we call it just for this one workspace
@@ -1793,141 +1768,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  // this function is a bit naughty because it waits for database results
-  // this is acceptable because it is a seldom used admin functions, not part of the mainstream
-  // refactoring it to do the propper database action chaining is too much work at this time
-  def getWorkspaceStatus(workspaceName: WorkspaceName, userSubjectId: Option[String]): Future[PerRequestMessage] = {
-    def run[T](action: DataAccess => ReadWriteAction[T]): T = {
-      Await.result(dataSource.inTransaction { dataAccess => action(dataAccess) }, 10 seconds)
-    }
-
-    asFCAdmin {
-      val workspace = run { _.workspaceQuery.findByName(workspaceName) }.get
-      val STATUS_FOUND = "FOUND"
-      val STATUS_NOT_FOUND = "NOT_FOUND"
-      val STATUS_CAN_WRITE = "USER_CAN_WRITE"
-      val STATUS_CANNOT_WRITE = "USER_CANNOT_WRITE"
-      val STATUS_NA = "NOT_AVAILABLE"
-
-      val bucketName = workspace.bucketName
-      val rawlsAccessGroupRefs = workspace.accessLevels
-      val googleAccessGroupRefs = rawlsAccessGroupRefs map { case (accessLevel, groupRef) =>
-        accessLevel -> run {
-          _.rawlsGroupQuery.load(groupRef)
-        }
-      }
-      val rawlsIntersectionGroupRefs = workspace.authDomainACLs
-      val googleIntersectionGroupRefs = rawlsIntersectionGroupRefs map { case (accessLevel, groupRef) =>
-        accessLevel -> run {
-          _.rawlsGroupQuery.load(groupRef)
-        }
-      }
-
-      val userRef = userSubjectId.flatMap(id => run {
-        _.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(id)))
-      })
-
-      val userStatus = userRef match {
-        case Some(user) => "FIRECLOUD_USER: " + user.userSubjectId.value -> STATUS_FOUND
-        case None => userSubjectId match {
-          case Some(id) => "FIRECLOUD_USER: " + id -> STATUS_NOT_FOUND
-          case None => "FIRECLOUD_USER: None Supplied" -> STATUS_NA
-        }
-      }
-
-      val rawlsAccessGroupStatuses = rawlsAccessGroupRefs map { case (_, groupRef) =>
-        run {
-          _.rawlsGroupQuery.load(groupRef)
-        } match {
-          case Some(group) => "WORKSPACE_ACCESS_GROUP: " + group.groupName.value -> STATUS_FOUND
-          case None => "WORKSPACE_ACCESS_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
-        }
-      }
-
-      val googleAccessGroupStatuses = googleAccessGroupRefs map { case (_, groupRef) =>
-        val groupEmail = groupRef.get.groupEmail.value
-        toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
-          case Some(_) => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_FOUND
-          case None => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_NOT_FOUND
-        }))
-      }
-
-      val rawlsIntersectionGroupStatuses = rawlsIntersectionGroupRefs map { case (_, groupRef) =>
-        run {
-          _.rawlsGroupQuery.load(groupRef)
-        } match {
-          case Some(group) => "WORKSPACE_INTERSECTION_GROUP: " + group.groupName.value -> STATUS_FOUND
-          case None => "WORKSPACE_INTERSECTION_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
-        }
-      }
-
-      val googleIntersectionGroupStatuses = googleIntersectionGroupRefs map { case (_, groupRef) =>
-        val groupEmail = groupRef.get.groupEmail.value
-        toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
-          case Some(_) => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_FOUND
-          case None => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_NOT_FOUND
-        }))
-      }
-
-      val bucketStatus = toFutureTry(gcsDAO.getBucket(bucketName).map(_ match {
-        case Some(_) => "GOOGLE_BUCKET: " + bucketName -> STATUS_FOUND
-        case None => "GOOGLE_BUCKET: " + bucketName -> STATUS_NOT_FOUND
-      }))
-
-      val bucketWriteStatus = userStatus match {
-        case (_, STATUS_FOUND) => {
-          toFutureTry(gcsDAO.diagnosticBucketWrite(userRef.get, bucketName).map(_ match {
-            case None => "GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_CAN_WRITE
-            case Some(error) => "GOOGLE_BUCKET_WRITE: " + bucketName -> error.message
-          }))
-        }
-        case (_, _) => Future(Try("GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_NA))
-      }
-
-      val userProxyStatus = userStatus match {
-        case (_, STATUS_FOUND) => {
-          toFutureTry(gcsDAO.isUserInProxyGroup(userRef.get).map { status =>
-            if (status) "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_FOUND
-            else "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NOT_FOUND
-          })
-        }
-        case (_, _) => Future(Try("FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NA))
-      }
-
-      val userAccessLevel = userStatus match {
-        case (_, STATUS_FOUND) =>
-          "WORKSPACE_USER_ACCESS_LEVEL" -> run {
-            getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _)
-          }.toString
-        case (_, _) => "WORKSPACE_USER_ACCESS_LEVEL" -> STATUS_NA
-      }
-
-      val googleAccessLevel = userStatus match {
-        case (_, STATUS_FOUND) => {
-          val accessLevel = run {
-            getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _)
-          }
-          if (accessLevel >= WorkspaceAccessLevels.Read) {
-            val groupEmail = run {
-              _.rawlsGroupQuery.load(workspace.accessLevels.get(accessLevel).get)
-            }.get.groupEmail.value
-            toFutureTry(gcsDAO.isEmailInGoogleGroup(gcsDAO.toProxyFromUser(userRef.get.userSubjectId), groupEmail).map { status =>
-              if (status) "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_FOUND
-              else "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_NOT_FOUND
-            })
-          }
-          else Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> WorkspaceAccessLevels.NoAccess.toString))
-        }
-        case (_, _) => Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> STATUS_NA))
-      }
-
-      Future.sequence(googleAccessGroupStatuses ++ googleIntersectionGroupStatuses ++ Seq(bucketStatus, bucketWriteStatus, userProxyStatus, googleAccessLevel)).map { tries =>
-        val statuses = tries.collect { case Success(s) => s }.toSeq
-        RequestComplete(WorkspaceStatus(workspaceName, (rawlsAccessGroupStatuses ++ rawlsIntersectionGroupStatuses ++ statuses ++ Seq(userStatus, userAccessLevel)).toMap))
-      }
-    }
-  }
-
   def getBucketUsage(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     for {
       bucketName <- dataSource.inTransaction { dataAccess =>
@@ -2051,13 +1891,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           val workspaceId = UUID.randomUUID.toString
           for {
             project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
-
-            // we have already verified that the user is in all of the auth domain groups but the project owners might not be
-            // so if there is an auth domain we have to do the intersection. There should not be any readers or writers
-            // at this point (brand new workspace) so we don't need to do intersections for those
-            authDomainProjectOwnerIntersection <- DBIOUtils.maybeDbAction(workspaceRequest.authorizationDomain.flatMap(ad => if (ad.isEmpty) None else Option(ad))) { authDomain =>
-              dataAccess.rawlsGroupQuery.intersectGroupMembership(authDomain.map(_.toMembersGroupRef) ++ Set(RawlsGroupRef(RawlsGroupName(dataAccess.policyGroupName(SamResourceTypeNames.billingProject.value, project.get.projectName.value, ProjectRoles.Owner.toString)))))
-            }
             projectOwnerGroupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email"))))
             projectOwnerGroupOE <- dataAccess.rawlsGroupQuery.loadFromEmail(projectOwnerGroupEmail.value)
             projectOwnerGroup = projectOwnerGroupOE.collect { case Right(g) => g } getOrElse(throw new RawlsException(s"could not find project owner group for email $projectOwnerGroupEmail"))

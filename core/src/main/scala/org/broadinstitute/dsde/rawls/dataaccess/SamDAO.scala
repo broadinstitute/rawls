@@ -26,6 +26,7 @@ trait SamDAO extends ErrorReportable {
   def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String): Future[Map[RawlsGroupEmail, Seq[SyncReportItem]]]
   def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]]
   def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]]
+  def listUserPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]]
 
   @deprecated
   def createGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit]
@@ -73,6 +74,7 @@ object SamResourceTypeNames {
 
   val billingProject = SamResourceTypeName("billing-project")
   val managedGroup = SamResourceTypeName("managed-group")
+  val workspace = SamResourceTypeName("workspace")
 }
 
 trait SamResourceRoles
