@@ -355,6 +355,7 @@ case class MethodConfiguration(
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ): String = workspaceName.path+s"/methodconfigs/${namespace}/${name}"
   def path( workspace: Workspace ): String = path(workspace.toWorkspaceName)
+  def toId: String = s"$namespace/$name/$methodConfigVersion"
 }
 
 case class MethodConfigurationShort(

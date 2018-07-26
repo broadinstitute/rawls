@@ -65,6 +65,7 @@ object Dependencies {
   val mockito: ModuleID =         "org.mockito"                   % "mockito-core"          % "2.7.22" % "test"
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
+  val scalaCache: ModuleID =      "com.github.cb372"              %% "scalacache-caffeine"  % "0.24.2"
 
   val cromwellWdl: ModuleID = ("org.broadinstitute" %% "wdl-draft2" % cromwellVersion
     exclude("org.typelevel", "cats_2.12")
@@ -154,6 +155,7 @@ object Dependencies {
     workbenchModel,
     workbenchGoogle,
     workbenchGoogleMocks,
-    ficus
+    ficus,
+    scalaCache
   )
 }
