@@ -1,41 +1,25 @@
 package org.broadinstitute.dsde.rawls.jobexec
-import com.github.benmanes.caffeine.cache.Caffeine
-import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
-import scalacache._
-import scalacache.caffeine._
 import spray.json._
 import wdl.draft2.parser.WdlParser.SyntaxError
 import wom.callable.Callable.InputDefinition
 import wom.types.{WomArrayType, WomOptionalType, WomType}
 import wdl.draft2.model.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow}
 import languages.wdl.draft2.WdlDraft2LanguageFactory.httpResolver
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingThreadPoolWDLParser}
 
 import scala.concurrent.ExecutionContext
-import scala.util.hashing.MurmurHash3
 import scala.util.{Failure, Success, Try}
 
-object MethodConfigResolver extends LazyLogging {
+object MethodConfigResolver {
   val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
   val multipleResultError  = "Expected single value for workflow input, but evaluated result set had multiple values"
   val missingMandatoryValueError  = "Mandatory workflow input is not specified in method config"
-
-  // set up cache for WDL parsing
-  /* from scalacache doc: "Note: If you’re using an in-memory cache (e.g. Guava or Caffeine) then it makes sense
-     to use the synchronous mode. But if you’re communicating with a cache over a network (e.g. Redis, Memcached)
-     then this mode is not recommended. If the network goes down, your app could hang forever!"
-   */
-  import scalacache.modes.sync._
-  // TODO: set maximum cache size in config; set other options?
-  val underlyingCaffeineCache = Caffeine.newBuilder()
-    .maximumSize(10000L)
-    .build[String, Entry[Try[WdlWorkflow]]]
-  implicit val customisedCaffeineCache: Cache[Try[WdlWorkflow]] = CaffeineCache(underlyingCaffeineCache)
 
   private def getSingleResult(inputName: String, seq: Iterable[AttributeValue], optional: Boolean): SubmissionValidationValue = {
     def handleEmpty = if (optional) None else Some(emptyResultError)
@@ -69,37 +53,7 @@ object MethodConfigResolver extends LazyLogging {
     case _ => getSingleResult(wfInput.localName.value, mcSequence, wfInput.optional)
   }
 
-  // alternate implementation, but can't get good logging
-  /*
-  def parseWDL(wdl: String): Try[WdlWorkflow] = {
-    val key = MurmurHash3.stringHash(wdl) // reduce key size to keep cache small. No attachment to the Murmur algo specifically.
-    sync.caching(key)(ttl = None) {
-      ThreadPoolWDLParser.parse(wdl)
-    }
-  }
-  */
-
-  def parseWDL(wdl: String): Try[WdlWorkflow] = {
-    val tick = System.currentTimeMillis()
-    val key = MurmurHash3.stringHash(wdl) // reduce key size to keep cache small. No attachment to the Murmur algo specifically.
-    logger.debug(s"<parseWDL-cache> looking up $key ...")
-    get(key) match {
-      case Some(parseResult) =>
-        val tock = System.currentTimeMillis() - tick
-        logger.debug(s"<parseWDL-cache> found cached result for $key in $tock ms.")
-        parseResult
-      case None =>
-        val miss = System.currentTimeMillis() - tick
-        logger.debug(s"<parseWDL-cache> encountered cache miss for $key in $miss ms.")
-        val parseResult = ThreadPoolWDLParser.parse(wdl)
-        val parsetime = System.currentTimeMillis() - tick
-        logger.debug(s"<parseWDL-cache> actively parsed WDL for $key in $parsetime ms.")
-        put(key)(parseResult)
-        val tock = System.currentTimeMillis() - tick
-        logger.debug(s"<parseWDL-cache> cached result $key in $tock ms.")
-        parseResult
-    }
-  }
+  def parseWDL(wdl: String): Try[WdlWorkflow] = CachingThreadPoolWDLParser.parse(wdl)
 
   case class MethodInput(workflowInput: InputDefinition, expression: String)
 
