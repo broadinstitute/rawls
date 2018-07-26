@@ -69,34 +69,36 @@ object MethodConfigResolver extends LazyLogging {
     case _ => getSingleResult(wfInput.localName.value, mcSequence, wfInput.optional)
   }
 
+  // alternate implementation, but can't get good logging
+  /*
+  def parseWDL(wdl: String): Try[WdlWorkflow] = {
+    val key = MurmurHash3.stringHash(wdl) // reduce key size to keep cache small. No attachment to the Murmur algo specifically.
+    sync.caching(key)(ttl = None) {
+      ThreadPoolWDLParser.parse(wdl)
+    }
+  }
+  */
+
   def parseWDL(wdl: String): Try[WdlWorkflow] = {
     val tick = System.currentTimeMillis()
     val key = MurmurHash3.stringHash(wdl) // reduce key size to keep cache small. No attachment to the Murmur algo specifically.
-    logger.info(s"<parseWDL-cache> looking up $key ...")
+    logger.debug(s"<parseWDL-cache> looking up $key ...")
     get(key) match {
       case Some(parseResult) =>
         val tock = System.currentTimeMillis() - tick
-        logger.info(s"<parseWDL-cache> found cached result for $key in $tock ms.")
+        logger.debug(s"<parseWDL-cache> found cached result for $key in $tock ms.")
         parseResult
       case None =>
         val miss = System.currentTimeMillis() - tick
-        logger.info(s"<parseWDL-cache> encountered cache miss for $key in $miss ms.")
-        val parseResult = alwaysParseWDL(wdl)
+        logger.debug(s"<parseWDL-cache> encountered cache miss for $key in $miss ms.")
+        val parseResult = ThreadPoolWDLParser.parse(wdl)
         val parsetime = System.currentTimeMillis() - tick
-        logger.info(s"<parseWDL-cache> actively parsed WDL for $key in $parsetime ms.")
+        logger.debug(s"<parseWDL-cache> actively parsed WDL for $key in $parsetime ms.")
         put(key)(parseResult)
         val tock = System.currentTimeMillis() - tick
-        logger.info(s"<parseWDL-cache> cached result $key in $tock ms.")
+        logger.debug(s"<parseWDL-cache> cached result $key in $tock ms.")
         parseResult
     }
-  }
-
-  private def alwaysParseWDL(wdl: String): Try[WdlWorkflow] = {
-    val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq(httpResolver(_))).recoverWith { case t: SyntaxError =>
-      Failure(new RawlsException("Failed to parse WDL: " + t.getMessage()))
-    }
-
-    parsed map( _.workflow )
   }
 
   case class MethodInput(workflowInput: InputDefinition, expression: String)
