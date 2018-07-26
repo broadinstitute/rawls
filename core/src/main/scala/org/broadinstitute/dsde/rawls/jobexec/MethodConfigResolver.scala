@@ -148,10 +148,10 @@ object MethodConfigResolver {
   ) toString
 
   def getMethodInputsOutputs(wdl: String): Try[MethodInputsOutputs] = parseWDL(wdl) map { parsedWdlWorkflow =>
-    val foo: Seq[model.MethodInput] = (parsedWdlWorkflow.inputs map {
+    val inputs = parsedWdlWorkflow.inputs map {
       case (fqn: FullyQualifiedName, wfInput: InputDefinition) => model.MethodInput(fqn, wfInput.womType.toDisplayString, wfInput.optional)
-    }).toSeq
-    MethodInputsOutputs(foo, parsedWdlWorkflow.outputs)
+    }
+    MethodInputsOutputs(inputs.toSeq, parsedWdlWorkflow.outputs)
   }
 
   def toMethodConfiguration(wdl: String, methodRepoMethod: MethodRepoMethod): Try[MethodConfiguration] = {
