@@ -7,9 +7,11 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import languages.wdl.draft2.WdlDraft2LanguageFactory.httpResolver
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.ParsedWdlWorkflow
+import org.broadinstitute.dsde.rawls.model.MethodOutput
 import scalacache.{Cache, Entry, get, put}
 import scalacache.caffeine.CaffeineCache
-import wdl.draft2.model.{WdlNamespaceWithWorkflow, WdlWorkflow}
+import wdl.draft2.model.WdlNamespaceWithWorkflow
 import wdl.draft2.parser.WdlParser.SyntaxError
 
 import scala.collection.JavaConverters._
@@ -39,13 +41,13 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
   import scalacache.modes.sync._
   private val underlyingCaffeineCache = Caffeine.newBuilder()
     .maximumSize(cacheMaxSize)
-    .build[String, Entry[Try[WdlWorkflow]]]
-  implicit val customisedCaffeineCache: Cache[Try[WdlWorkflow]] = CaffeineCache(underlyingCaffeineCache)
+    .build[String, Entry[Try[ParsedWdlWorkflow]]]
+  implicit val customisedCaffeineCache: Cache[Try[ParsedWdlWorkflow]] = CaffeineCache(underlyingCaffeineCache)
 
   // set up thread pool
   val executorService: ExecutorService = Executors.newFixedThreadPool(threadPoolSize)
 
-  def parse(wdl: String): Try[WdlWorkflow] = {
+  def parse(wdl: String): Try[ParsedWdlWorkflow] = {
     val tick = System.currentTimeMillis()
     val key = generateCacheKey(wdl)
     logger.debug(s"<parseWDL-cache> looking up $key ...")
@@ -81,14 +83,14 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
 
   // an alternate terse/idiomatic implementation, but can't get good logging
   /*
-  def parse(wdl: String): Try[WdlWorkflow] = {
+  def parse(wdl: String): Try[ParsedWdlWorkflow] = {
     sync.caching(generateCacheKey(wdl))(ttl = None) {
       threadedParse(wdl)
     }
   }
   */
 
-  private def threadedParse(wdl: String): Try[WdlWorkflow] = {
+  private def threadedParse(wdl: String): Try[ParsedWdlWorkflow] = {
     try {
       blocking {
         executorService.invokeAny(List(new CallableParser(wdl)).asJava, threadPoolTimeout, TimeUnit.SECONDS)
@@ -106,11 +108,12 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
 }
 
 
-class CallableParser(wdl: String) extends Callable[Try[WdlWorkflow]] {
-  override def call(): Try[WdlWorkflow] = {
+class CallableParser(wdl: String) extends Callable[Try[ParsedWdlWorkflow]] {
+  override def call(): Try[ParsedWdlWorkflow] = {
     val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq(httpResolver(_))).recoverWith { case t: SyntaxError =>
-      Failure(new RawlsException("Failed to parse WDL: " + t.getMessage(), t))
+      Failure(new RawlsException("Failed to parse WDL: " + t.getMessage()))
     }
-    parsed map( _.workflow )
+
+    parsed map { p => ParsedWdlWorkflow(p.workflow.inputs, p.workflow.outputs.map(o => MethodOutput(o.locallyQualifiedName(p.workflow), o.womType.toDisplayString))) }
   }
 }

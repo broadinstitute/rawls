@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.jobexec.wdlparsing
 
-import wdl.draft2.model.WdlWorkflow
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.ParsedWdlWorkflow
 
 import scala.util.Try
 
 trait WDLParsing {
 
-  def parse(wdl: String): Try[WdlWorkflow]
+  def parse(wdl: String): Try[ParsedWdlWorkflow]
 
 }
