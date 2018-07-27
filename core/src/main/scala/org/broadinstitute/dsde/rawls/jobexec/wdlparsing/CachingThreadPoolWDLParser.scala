@@ -30,7 +30,6 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
   private val cacheMaxSize = wdlParsingConf.getInt("cache-max-size")
   private val cacheTTLSuccess = Duration(wdlParsingConf.getInt("cache-ttl-success-seconds"), TimeUnit.SECONDS)
   private val cacheTTLFailure = Duration(wdlParsingConf.getInt("cache-ttl-failure-seconds"), TimeUnit.SECONDS)
-  private val threadPoolSize = wdlParsingConf.getInt("parser-thread-pool-size")
   private val threadPoolTimeout = wdlParsingConf.getInt("parser-thread-pool-timeout-seconds")
 
   // set up cache for WDL parsing
@@ -45,39 +44,41 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
   implicit val customisedCaffeineCache: Cache[Try[ParsedWdlWorkflow]] = CaffeineCache(underlyingCaffeineCache)
 
   // set up thread pool
-  val executorService: ExecutorService = Executors.newFixedThreadPool(threadPoolSize)
+  val executorService: ExecutorService = Executors.newCachedThreadPool()
 
   def parse(wdl: String): Try[ParsedWdlWorkflow] = {
     val tick = System.currentTimeMillis()
     val key = generateCacheKey(wdl)
-    logger.debug(s"<parseWDL-cache> looking up $key ...")
-    get(key) match {
-      case Some(parseResult) =>
-        val tock = System.currentTimeMillis() - tick
-        logger.debug(s"<parseWDL-cache> found cached result for $key in $tock ms.")
-        parseResult
-      case None =>
-        val miss = System.currentTimeMillis() - tick
-        logger.debug(s"<parseWDL-cache> encountered cache miss for $key in $miss ms.")
-        val parseResult = threadedParse(wdl)
-        val parsetime = System.currentTimeMillis() - tick
-        logger.debug(s"<parseWDL-cache> actively parsed WDL for $key in $parsetime ms.")
-        val ttl = parseResult match {
-          case Success(_) => Some(cacheTTLSuccess)
-          case Failure(ex) => ex.getCause match {
-            case se:SyntaxError =>
-              // syntax error is an expected, deterministic response to invalid wdl. cache this equivalent to a success.
-              Some(cacheTTLSuccess)
-            case _  =>
-              // other errors may be transient, such as timeouts retrieving http imports, or timeouts
-              // on the thread pool because parsing was slow
-              Some(cacheTTLFailure)
+    logger.info(s"<parseWDL-cache> looking up $key ...")
+    key.synchronized {
+      get(key) match {
+        case Some(parseResult) =>
+          val tock = System.currentTimeMillis() - tick
+          logger.info(s"<parseWDL-cache> found cached result for $key in $tock ms.")
+          parseResult
+        case None =>
+          val miss = System.currentTimeMillis() - tick
+          logger.info(s"<parseWDL-cache> encountered cache miss for $key in $miss ms.")
+          val parseResult = threadedParse(wdl)
+          val parsetime = System.currentTimeMillis() - tick
+          logger.info(s"<parseWDL-cache> actively parsed WDL for $key in $parsetime ms.")
+          val ttl = parseResult match {
+            case Success(_) => Some(cacheTTLSuccess)
+            case Failure(ex) => ex.getCause match {
+              case se:SyntaxError =>
+                // syntax error is an expected, deterministic response to invalid wdl. cache this equivalent to a success.
+                Some(cacheTTLSuccess)
+              case _  =>
+                // other errors may be transient, such as timeouts retrieving http imports, or timeouts
+                // on the thread pool because parsing was slow
+                Some(cacheTTLFailure)
+            }
           }
-        }
-        put(key)(parseResult, ttl = ttl)
-        val tock = System.currentTimeMillis() - tick
-        logger.debug(s"<parseWDL-cache> cached result $key in $tock ms.")
-        parseResult
+          put(key)(parseResult, ttl = ttl)
+          val tock = System.currentTimeMillis() - tick
+          logger.info(s"<parseWDL-cache> cached result $key in $tock ms.")
+          parseResult
+      }
     }
   }
 
@@ -102,7 +103,7 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
 
   private def generateCacheKey(wdl: String): String = {
     // reduce key size to keep cache small. No attachment to the Murmur algorithm specifically.
-    MurmurHash3.stringHash(wdl).toString
+    MurmurHash3.stringHash(wdl).toString.intern()
   }
 
 }
