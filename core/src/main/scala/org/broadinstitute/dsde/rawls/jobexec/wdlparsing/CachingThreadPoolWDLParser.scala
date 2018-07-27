@@ -49,38 +49,39 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
   def parse(wdl: String): Try[ParsedWdlWorkflow] = {
     val tick = System.currentTimeMillis()
     val key = generateCacheKey(wdl)
-    logger.info(s"<parseWDL-cache> looking up $key ...")
+    val wdlhash = generateHash(wdl)
+    logger.info(s"<parseWDL-cache> looking up $wdlhash ...")
     get(key) match {
       case Some(parseResult) =>
         val tock = System.currentTimeMillis() - tick
-        logger.info(s"<parseWDL-cache> found cached result for $key in $tock ms.")
+        logger.info(s"<parseWDL-cache> found cached result for $wdlhash in $tock ms.")
         parseResult
-      case None => parseAndCache(wdl, key, tick)
+      case None => parseAndCache(wdl, key, tick, wdlhash)
     }
   }
 
-  private def parseAndCache(wdl: String, key: String, tick: Long): Try[ParsedWdlWorkflow] = {
-    logger.info(s"<parseWDL-cache> entering sync block for $key ...")
+  private def parseAndCache(wdl: String, key: String, tick: Long, wdlhash: String): Try[ParsedWdlWorkflow] = {
+    logger.info(s"<parseWDL-cache> entering sync block for $wdlhash ...")
     /* Generate the synchronization key. Because synchronization works via object reference equality,
        we need to intern any strings we use. And if we're interning the string, we want it to be small
        to preserve PermGen space.
        Therefore, use an interned hash of the WDL. In the off chance of a hash collision, we end up performing
        unnecessary synchronization, but there should be no other ill effects.
      */
-    val syncKey = MurmurHash3.stringHash(wdl).toString.intern
+    val syncKey = wdlhash.intern
 
     syncKey.synchronized {
       get(key) match {
         case Some(parseResult) =>
           val tock = System.currentTimeMillis() - tick
-          logger.info(s"<parseWDL-cache> found cached result for $key in $tock ms.")
+          logger.info(s"<parseWDL-cache> found cached result for $wdlhash in $tock ms.")
           parseResult
         case None =>
           val miss = System.currentTimeMillis() - tick
-          logger.info(s"<parseWDL-cache> encountered cache miss for $key in $miss ms.")
-          val parseResult = threadedParse(wdl)
+          logger.info(s"<parseWDL-cache> encountered cache miss for $wdlhash in $miss ms.")
+          val parseResult = inContextParse(wdl)
           val parsetime = System.currentTimeMillis() - tick
-          logger.info(s"<parseWDL-cache> actively parsed WDL for $key in $parsetime ms.")
+          logger.info(s"<parseWDL-cache> actively parsed WDL for $wdlhash in $parsetime ms.")
           val ttl = parseResult match {
             case Success(_) => Some(cacheTTLSuccess)
             case Failure(ex) => ex.getCause match {
@@ -95,7 +96,7 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
           }
           put(key)(parseResult, ttl = ttl)
           val tock = System.currentTimeMillis() - tick
-          logger.info(s"<parseWDL-cache> cached result $key in $tock ms.")
+          logger.info(s"<parseWDL-cache> cached result $wdlhash in $tock ms.")
           parseResult
       }
     }
@@ -110,6 +111,21 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
   }
   */
 
+  /**
+    * parse the WDL in the global execution context.
+    * @param wdl
+    * @return
+    */
+  private def inContextParse(wdl: String): Try[ParsedWdlWorkflow] = {
+    new CallableParser(wdl).call()
+  }
+
+  /**
+    * parse the WDL inside of a thread pool. The thread pool itself is defined above.
+    *
+    * @param wdl
+    * @return
+    */
   private def threadedParse(wdl: String): Try[ParsedWdlWorkflow] = {
     try {
       blocking {
@@ -120,10 +136,25 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
     }
   }
 
+  /**
+    * generate a short string that identifies this WDL. Should not be used where uniqueness is a strict
+    * requirement due to the (low) chance of hash collisions.
+    * @param wdl
+    * @return
+    */
+  private def generateHash(wdl: String) = {
+    MurmurHash3.stringHash(wdl).toString
+  }
+
+  /**
+    * this method exists as an abstraction, making it easy to change what we use as a cache key in case
+    * we want to reduce large wdl payloads to something smaller. Current implementation returns the wdl
+    * unchanged to ensure correctness of cache lookups.
+    *
+    * @param wdl
+    * @return
+    */
   private def generateCacheKey(wdl: String): String = {
-    // this method exists as an abstraction, making it easy to change what we use as a cache key in case
-    // we want to reduce large wdl payloads to something smaller. Current implementation returns the wdl
-    // unchanged to ensure correctness of cache lookups.
     wdl
   }
 
