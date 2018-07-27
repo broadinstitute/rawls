@@ -13,8 +13,10 @@ import wdl.draft2.model.{WdlNamespaceWithWorkflow, WdlWorkflow}
 import wdl.draft2.parser.WdlParser.SyntaxError
 
 import scala.collection.JavaConverters._
+import scala.concurrent._
+import scala.concurrent.duration.Duration
 import scala.util.hashing.MurmurHash3
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 
 object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
@@ -24,6 +26,8 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
   private val wdlParsingConf = conf.getConfig("wdl-parsing")
 
   private val cacheMaxSize = wdlParsingConf.getInt("cache-max-size")
+  private val cacheTTLSuccess = Duration(wdlParsingConf.getInt("cache-ttl-success-seconds"), TimeUnit.SECONDS)
+  private val cacheTTLFailure = Duration(wdlParsingConf.getInt("cache-ttl-failure-seconds"), TimeUnit.SECONDS)
   private val threadPoolSize = wdlParsingConf.getInt("parser-thread-pool-size")
   private val threadPoolTimeout = wdlParsingConf.getInt("parser-thread-pool-timeout-seconds")
 
@@ -56,7 +60,19 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
         val parseResult = threadedParse(wdl)
         val parsetime = System.currentTimeMillis() - tick
         logger.debug(s"<parseWDL-cache> actively parsed WDL for $key in $parsetime ms.")
-        put(key)(parseResult)
+        val ttl = parseResult match {
+          case Success(_) => Some(cacheTTLSuccess)
+          case Failure(ex) => ex.getCause match {
+            case se:SyntaxError =>
+              // syntax error is an expected, deterministic response to invalid wdl. cache this equivalent to a success.
+              Some(cacheTTLSuccess)
+            case _  =>
+              // other errors may be transient, such as timeouts retrieving http imports, or timeouts
+              // on the thread pool because parsing was slow
+              Some(cacheTTLFailure)
+          }
+        }
+        put(key)(parseResult, ttl = ttl)
         val tock = System.currentTimeMillis() - tick
         logger.debug(s"<parseWDL-cache> cached result $key in $tock ms.")
         parseResult
@@ -74,7 +90,9 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
 
   private def threadedParse(wdl: String): Try[WdlWorkflow] = {
     try {
-      executorService.invokeAny(List(new CallableParser(wdl)).asJava, threadPoolTimeout, TimeUnit.SECONDS)
+      blocking {
+        executorService.invokeAny(List(new CallableParser(wdl)).asJava, threadPoolTimeout, TimeUnit.SECONDS)
+      }
     } catch {
       case e: Exception => Failure(e)
     }
@@ -91,7 +109,7 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
 class CallableParser(wdl: String) extends Callable[Try[WdlWorkflow]] {
   override def call(): Try[WdlWorkflow] = {
     val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq(httpResolver(_))).recoverWith { case t: SyntaxError =>
-      Failure(new RawlsException("Failed to parse WDL: " + t.getMessage()))
+      Failure(new RawlsException("Failed to parse WDL: " + t.getMessage(), t))
     }
     parsed map( _.workflow )
   }
