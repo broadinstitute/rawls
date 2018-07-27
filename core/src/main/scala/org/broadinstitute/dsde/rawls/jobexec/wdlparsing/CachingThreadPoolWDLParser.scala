@@ -50,6 +50,17 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
     val tick = System.currentTimeMillis()
     val key = generateCacheKey(wdl)
     logger.info(s"<parseWDL-cache> looking up $key ...")
+    get(key) match {
+      case Some(parseResult) =>
+        val tock = System.currentTimeMillis() - tick
+        logger.info(s"<parseWDL-cache> found cached result for $key in $tock ms.")
+        parseResult
+      case None => parseAndCache(wdl, key, tick)
+    }
+  }
+
+  private def parseAndCache(wdl: String, key: String, tick: Long): Try[ParsedWdlWorkflow] = {
+    logger.info(s"<parseWDL-cache> entering sync block for $key ...")
     key.synchronized {
       get(key) match {
         case Some(parseResult) =>
