@@ -61,7 +61,15 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
 
   private def parseAndCache(wdl: String, key: String, tick: Long): Try[ParsedWdlWorkflow] = {
     logger.info(s"<parseWDL-cache> entering sync block for $key ...")
-    key.synchronized {
+    /* Generate the synchronization key. Because synchronization works via object reference equality,
+       we need to intern any strings we use. And if we're interning the string, we want it to be small
+       to preserve PermGen space.
+       Therefore, use an interned hash of the WDL. In the off chance of a hash collision, we end up performing
+       unnecessary synchronization, but there should be no other ill effects.
+     */
+    val syncKey = MurmurHash3.stringHash(wdl).toString.intern
+
+    syncKey.synchronized {
       get(key) match {
         case Some(parseResult) =>
           val tock = System.currentTimeMillis() - tick
@@ -113,8 +121,10 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
   }
 
   private def generateCacheKey(wdl: String): String = {
-    // reduce key size to keep cache small. No attachment to the Murmur algorithm specifically.
-    MurmurHash3.stringHash(wdl).toString.intern()
+    // this method exists as an abstraction, making it easy to change what we use as a cache key in case
+    // we want to reduce large wdl payloads to something smaller. Current implementation returns the wdl
+    // unchanged to ensure correctness of cache lookups.
+    wdl
   }
 
 }
