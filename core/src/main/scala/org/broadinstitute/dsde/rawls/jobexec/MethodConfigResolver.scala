@@ -6,11 +6,10 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
-import wdl.draft2.parser.WdlParser.SyntaxError
 import wom.callable.Callable.InputDefinition
-import wom.types.{WomType, WomArrayType, WomOptionalType}
-import wdl.draft2.model.{FullyQualifiedName, WdlNamespaceWithWorkflow, WdlWorkflow}
-import languages.wdl.draft2.WdlDraft2LanguageFactory.httpResolver
+import wom.types.{WomArrayType, WomOptionalType}
+import wdl.draft2.model.FullyQualifiedName
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingThreadPoolWDLParser
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
@@ -52,31 +51,28 @@ object MethodConfigResolver {
     case _ => getSingleResult(wfInput.localName.value, mcSequence, wfInput.optional)
   }
 
-  def parseWDL(wdl: String): Try[WdlWorkflow] = {
-    val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq(httpResolver(_))).recoverWith { case t: SyntaxError =>
-      Failure(new RawlsException("Failed to parse WDL: " + t.getMessage()))
-    }
+  // cache-friendly copy of what we need from WdlNamespaceWithWorkflow
+  // these values are materialized instead of lazily-evaluated
+  case class ParsedWdlWorkflow(inputs: Map[FullyQualifiedName, InputDefinition], outputs: Seq[MethodOutput])
 
-    parsed map( _.workflow )
-  }
+  def parseWDL(wdl: String): Try[ParsedWdlWorkflow] = CachingThreadPoolWDLParser.parse(wdl)
 
   case class MethodInput(workflowInput: InputDefinition, expression: String)
 
   case class GatherInputsResult(processableInputs: Set[MethodInput], emptyOptionalInputs: Set[MethodInput], missingInputs: Set[FullyQualifiedName], extraInputs: Set[String])
 
-  def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[GatherInputsResult] = parseWDL(wdl) map { workflow =>
+  def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[GatherInputsResult] = parseWDL(wdl) map { parsedWdlWorkflow =>
     def isAttributeEmpty(fqn: FullyQualifiedName): Boolean = {
       methodConfig.inputs.get(fqn) match {
         case Some(AttributeString(value)) => value.isEmpty
         case _ => throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} input ${fqn} value is unavailable")
       }
     }
-    val wdlInputs = workflow.inputs
+    val wdlInputs = parsedWdlWorkflow.inputs
 
     /* ok, so there are:
         - inputs that the WDL requires and the MC defines: ok - definedInputs
         - inputs that the WDL says are optional but the MC defines anyway: ok - contained in definedInputs
-
         - inputs that the WDL requires and the MC does not define: bad - missingRequired
         - inputs that the WDL says are optional and the MC doesn't define: ok - emptyOptionals
         - inputs that the WDL has no idea about but the MC defines anyway: bad - extraInputs
@@ -132,9 +128,9 @@ object MethodConfigResolver {
   }
 
   /**
-   * Convert result of resolveInputs to WDL input format, ignoring AttributeNulls.
-   * @return serialized JSON to send to Cromwell
-   */
+    * Convert result of resolveInputs to WDL input format, ignoring AttributeNulls.
+    * @return serialized JSON to send to Cromwell
+    */
   def propertiesToWdlInputs(inputs: Map[String, Attribute]): String = JsObject(
     inputs flatMap {
       case (key, AttributeNull) => None
@@ -142,16 +138,20 @@ object MethodConfigResolver {
     }
   ) toString
 
-  def toMethodConfiguration(wdl: String, methodRepoMethod: MethodRepoMethod): Try[MethodConfiguration] = parseWDL(wdl) map { workflow =>
-    val nothing = AttributeString("")
-    val inputs = for ((fqn: FullyQualifiedName, wfInput: InputDefinition) <- workflow.inputs) yield fqn.toString -> nothing
-    val outputs = workflow.outputs map (o => o.locallyQualifiedName(workflow) -> nothing)
-    MethodConfiguration("namespace", "name", Some("rootEntityType"), Map(), inputs.toMap, outputs.toMap, methodRepoMethod)
+  def getMethodInputsOutputs(wdl: String): Try[MethodInputsOutputs] = parseWDL(wdl) map { parsedWdlWorkflow =>
+    val inputs = parsedWdlWorkflow.inputs map {
+      case (fqn: FullyQualifiedName, wfInput: InputDefinition) => model.MethodInput(fqn, wfInput.womType.toDisplayString, wfInput.optional)
+    }
+    MethodInputsOutputs(inputs.toSeq, parsedWdlWorkflow.outputs)
   }
 
-  def getMethodInputsOutputs(wdl: String): Try[MethodInputsOutputs] = parseWDL(wdl) map { workflow =>
-    MethodInputsOutputs(
-      (workflow.inputs map { case (fqn: FullyQualifiedName, wfInput: InputDefinition) => model.MethodInput(fqn, wfInput.womType.toDisplayString, wfInput.optional) }).toSeq,
-      workflow.outputs.map(o => MethodOutput(o.locallyQualifiedName(workflow), o.womType.toDisplayString)))
+  def toMethodConfiguration(wdl: String, methodRepoMethod: MethodRepoMethod): Try[MethodConfiguration] = {
+    val empty = AttributeString("")
+    getMethodInputsOutputs(wdl) map { io =>
+      val inputs = io.inputs map { _.name -> empty }
+      val outputs = io.outputs map { _.name -> empty }
+      MethodConfiguration("namespace", "name", Some("rootEntityType"), Map(), inputs.toMap, outputs.toMap, methodRepoMethod)
+    }
   }
+
 }
