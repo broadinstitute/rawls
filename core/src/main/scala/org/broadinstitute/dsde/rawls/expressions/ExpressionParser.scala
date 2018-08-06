@@ -12,17 +12,16 @@ import cats.instances.try_._
 
 object ExpressionParser {
   def parseMCExpressions(inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], allowRootEntity: Boolean, parser: SlickExpressionParser): ParsedMCExpressions = {
-    val noEntityAllowedErrorMsg = "Only allowed when running with workspace data model. However, workspace attributes can be used."
-    val invalidErrorMsg = "Invalid expression. Use a string or workspace attribute."
+    val noEntityAllowedErrorMsg = "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used."
     def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[Unit] ) = {
       val parsed = m map { case (key, attr) => (key, parseFunc(attr.value)) }
       ( parsed collect { case (key, Success(_)) => key } toSet,
-        parsed collect { case (key, Failure(regret)) => if (allowRootEntity)
-          (key, regret.getMessage)
-        else if (m.get(key).isDefined && m.get(key).get.value.startsWith("this."))
-          (key, noEntityAllowedErrorMsg)
-        else
-          (key, invalidErrorMsg)} )
+        parsed collect { case (key, Failure(regret)) =>
+          if (!allowRootEntity && m.get(key).isDefined && m.get(key).get.value.startsWith("this."))
+            (key, noEntityAllowedErrorMsg)
+          else
+            (key, regret.getMessage)}
+      )
     }
 
     val (successInputs, failedInputs)   = parseAndPartition(inputs, parseInputExpr(allowRootEntity, parser) )
