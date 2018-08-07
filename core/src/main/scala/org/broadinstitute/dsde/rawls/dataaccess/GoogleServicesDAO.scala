@@ -205,8 +205,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   /**
     * Adds the IAM policies to the project's existing policies
+    * @return true if the policy was actually changed
     */
-  def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit]
+  def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Boolean]
 
   /**
     *
@@ -238,7 +239,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
 
-  def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit]
+  def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean]
   def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit]
 
   def getAccessTokenUsingJson(saKey: String) : Future[String]

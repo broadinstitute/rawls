@@ -299,9 +299,16 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Success(()))
   }
 
-  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Unit] = Future.successful {
+  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Boolean] = Future.successful {
     import cats.implicits._
-    policies.put(projectName, policies.getOrElse(projectName, Map.empty) |+| policiesToAdd)
+    val existingPolicies = policies.getOrElse(projectName, Map.empty)
+    val newPolicies = existingPolicies |+| policiesToAdd
+    if (newPolicies.equals(existingPolicies)) {
+      false
+    } else {
+      policies.put(projectName, newPolicies)
+      true
+    }
   }
 
   override def grantReadAccess(billingProject: RawlsBillingProjectName,
@@ -320,7 +327,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(())
 
-  override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = Future.successful(())
+  override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = Future.successful(false)
 
   override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = Future.successful(())
 }
