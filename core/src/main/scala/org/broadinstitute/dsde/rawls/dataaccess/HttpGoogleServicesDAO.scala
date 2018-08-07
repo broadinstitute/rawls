@@ -1067,7 +1067,7 @@ class HttpGoogleServicesDAO(
     })
   }
 
-  override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = {
+  override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = {
     addPolicyBindings(projectName, Map(s"roles/$role" -> List(s"group:${groupEmail.value}")))
   }
 
