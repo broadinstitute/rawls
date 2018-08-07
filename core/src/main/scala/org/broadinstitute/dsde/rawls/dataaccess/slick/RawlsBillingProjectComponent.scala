@@ -47,7 +47,7 @@ trait RawlsBillingProjectComponent {
     def create(billingProject: RawlsBillingProject): ReadWriteAction[RawlsBillingProject] = {
       validateUserDefinedString(billingProject.projectName.value)
       uniqueResult(findBillingProjectByName(billingProject.projectName).result) flatMap {
-        case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProject.projectName.value}] in database because it already exists")
+        case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProject.projectName.value}] in database because it already exists. If you're testing, this is likely because you previously registered this project, but failed to correctly unregister it. See https://broad.io/44jud7")
         case None => (rawlsBillingProjectQuery += marshalBillingProject(billingProject)).map { _ => billingProject }
       }
     }
