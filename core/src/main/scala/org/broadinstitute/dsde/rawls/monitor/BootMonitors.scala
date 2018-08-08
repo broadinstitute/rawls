@@ -30,10 +30,6 @@ object BootMonitors extends LazyLogging {
     //Boot billing project creation monitor
     startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate)
 
-    //Boot google group sync monitor
-    val gcsConfig = conf.getConfig("gcs")
-    startGoogleGroupSyncMonitor(system, gcsConfig, pubSubDAO, userServiceConstructor)
-
     //Boot submission monitor supervisor
     val submissionMonitorConfig = conf.getConfig("submissionmonitor")
     startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
@@ -47,17 +43,6 @@ object BootMonitors extends LazyLogging {
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate): Unit = {
     system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, samDAO, projectTemplate))
-  }
-
-  private def startGoogleGroupSyncMonitor(system: ActorSystem, gcsConfig: Config, pubSubDAO: GooglePubSubDAO, userServiceConstructor: (UserInfo) => UserService) = {
-    system.actorOf(GoogleGroupSyncMonitorSupervisor.props(
-      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
-      util.toScalaDuration(gcsConfig.getDuration("groupMonitor.pollIntervalJitter")),
-      pubSubDAO,
-      gcsConfig.getString("groupMonitor.topicName"),
-      gcsConfig.getString("groupMonitor.subscriptionName"),
-      gcsConfig.getInt("groupMonitor.workerCount"),
-      userServiceConstructor))
   }
 
   private def startSubmissionMonitorSupervisor(system: ActorSystem, submissionMonitorConfig: Config, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {

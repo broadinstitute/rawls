@@ -65,7 +65,7 @@ object UserService {
   }
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with DirectorySubjectNameSupport {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging {
 
   import dataSource.dataAccess.driver.api._
   import spray.json.DefaultJsonProtocol._
@@ -123,50 +123,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   //Note: As of Sam Phase I, this function only fires off the welcome email and updates pending workspace access
   //The rest of user registration now takes place in Sam
+  //TODO: really this is pointless and we should prob do it in sam
   def createUser(): Future[Unit] = {
-    val user = RawlsUser(userInfo)
-
-    val response = handleFutures(Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user)))))(_ => {
-      notificationDAO.fireAndForgetNotification(ActivationNotification(user.userSubjectId))
-    }, handleException("Errors creating user"))
-
-    response.map(_ => ())
+    Future.successful(notificationDAO.fireAndForgetNotification(ActivationNotification(userInfo.userSubjectId)))
   }
-
-  //TODO: this is just a stub to get it to compile for now
-  def turnInvitesIntoRealAccess(user: RawlsUser) = {
-    Future.successful(())
-  }
-
-//  def turnInvitesIntoRealAccess(user: RawlsUser) = {
-//    val groupRefs = dataSource.inTransaction { dataAccess =>
-//      dataAccess.workspaceQuery.findWorkspaceInvitesForUser(user.userEmail).flatMap { invites =>
-//        DBIO.sequence(invites.map { case (workspaceName, accessLevel) =>
-//          dataAccess.workspaceQuery.loadAccessGroup(workspaceName, accessLevel)
-//        })
-//      }
-//    }
-//
-//    groupRefs.flatMap { refs =>
-//      Future.sequence(refs.map { ref =>
-//        updateGroupMembers(ref, RawlsGroupMemberList(userSubjectIds = Option(Seq(user.userSubjectId.value))), RawlsGroupMemberList())
-//      })
-//    } flatMap { _ =>
-//      dataSource.inTransaction { dataAccess =>
-//        dataAccess.workspaceQuery.deleteWorkspaceInvitesForUser(user.userEmail)
-//      }
-//    }
-//  }
 
   private def loadUser(userRef: RawlsUserRef): Future[RawlsUser] = dataSource.inTransaction { dataAccess => withUser(userRef, dataAccess)(DBIO.successful) }
-
-
-  private def verifyNoSubmissions(userRef: RawlsUserRef, dataAccess: DataAccess): ReadAction[Unit] = {
-    dataAccess.submissionQuery.findBySubmitter(userRef.userSubjectId.value).exists.result flatMap {
-      case false => DBIO.successful(())
-      case _ => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Cannot delete a user with submissions")))
-    }
-  }
 
   def isAdmin(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     toFutureTry(tryIsFCAdmin(userEmail)) map {
