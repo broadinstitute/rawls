@@ -141,7 +141,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       AgoraMethod("dsde", "good_and_bad", 1))
 
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
-    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Invalid expression. Use a string or workspace attribute.")
+    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `b' found")
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
     val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Only allowed when running with workspace data model. However, workspace attributes can be used.")
 
