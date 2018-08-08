@@ -140,8 +140,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
           else {
             for {
-              catalog <- DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, SamResourceActions.launchBatchCompute, userInfo)) //todo: change to correct action***
-              canShare <- DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, SamResourceActions.launchBatchCompute, userInfo)) //todo: change to correct action***
+              catalog <- DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, SamResourceActions.workspaceCanCatalog, userInfo))
+              canShare <- DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, SamResourceActions.workspaceCanShare, userInfo))
               canCompute <- DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, SamResourceActions.launchBatchCompute, userInfo))
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
               owners <- DBIO.from(getWorkspaceOwners(workspaceContext.workspaceId.toString))

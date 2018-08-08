@@ -67,6 +67,8 @@ object SamResourceActions {
   val alterPolicies = SamResourceAction("alter_policies")
   val readPolicies = SamResourceAction("read_policies")
   val alterGoogleRole = SamResourceAction("alter_google_role")
+  val workspaceCanShare = SamResourceAction("can_share")
+  val workspaceCanCatalog = SamResourceAction("can_catalog")
 }
 
 object SamResourceTypeNames {
