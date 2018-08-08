@@ -1,30 +1,23 @@
 package org.broadinstitute.dsde.rawls.user
 
-import _root_.slick.jdbc.TransactionIsolation
-import akka.actor.{Actor, Props}
-import akka.pattern._
-import com.google.api.client.http.HttpResponseException
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.auth.oauth2.TokenResponseException
+import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Notifications._
-import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
-import akka.http.scaladsl.model.StatusCodes
-import spray.json._
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -68,7 +61,6 @@ object UserService {
 class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging {
 
   import dataSource.dataAccess.driver.api._
-  import spray.json.DefaultJsonProtocol._
 
   def SetRefreshToken(token: UserRefreshToken) = setRefreshToken(token)
   def GetRefreshTokenDate = getRefreshTokenDate()

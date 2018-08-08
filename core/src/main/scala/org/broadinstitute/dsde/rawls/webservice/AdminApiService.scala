@@ -6,17 +6,15 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.net.URLDecoder
 
+import akka.http.scaladsl.server
+import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import akka.http.scaladsl.server
-import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.model.StatusCodes
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
@@ -24,10 +22,9 @@ import scala.concurrent.ExecutionContext
 trait AdminApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
-  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-  import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-  import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import PerRequest.requestCompleteMarshaller
+  import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val userServiceConstructor: UserInfo => UserService
@@ -88,17 +85,6 @@ trait AdminApiService extends UserInfoDirectives {
       } ~
       delete {
         complete { userServiceConstructor(userInfo).AdminRemoveLibraryCurator(RawlsUserEmail(userEmail)) }
-      }
-    } ~
-    path("admin" / "allUserReadAccess" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
-      get {
-        complete { workspaceServiceConstructor(userInfo).HasAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
-      } ~
-      put {
-        complete { workspaceServiceConstructor(userInfo).GrantAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
-      } ~
-      delete {
-        complete { workspaceServiceConstructor(userInfo).RevokeAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
       }
     } ~
     path("admin" / "validate" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
