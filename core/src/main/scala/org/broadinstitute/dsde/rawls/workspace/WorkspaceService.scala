@@ -29,6 +29,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.workbench.model.WorkbenchException
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -417,19 +418,25 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def getCatalog(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        dataAccess.workspaceQuery.listEmailsWithCatalogAccess(workspaceContext).map {RequestComplete(StatusCodes.OK, _)}
-      }
+  def getCatalog(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    loadWorkspaceId(workspaceName).map { workspaceId =>
+      samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "canCatalog", userInfo)
     }
+  }
 
-  def updateCatalog(workspaceName: WorkspaceName, input: Seq[WorkspaceCatalog]): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        updateCatalogPermissions(input, dataAccess, workspaceContext).map {RequestComplete(StatusCodes.OK, _)}
-      }
+  private def loadWorkspaceId(workspaceName: WorkspaceName): Future[String] = {
+    dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.getWorkspaceId(workspaceName) }.map {
+      case None => throw new WorkbenchException("unable to load workspace")
+      case Some(id) => id.toString
     }
+  }
+
+  //TODO: actually fill in response
+  def updateCatalog(workspaceName: WorkspaceName, input: Seq[WorkspaceCatalog]): Future[PerRequestMessage] = {
+    for {
+      workspaceId <- loadWorkspaceId(workspaceName)
+      _ <- Future.traverse(input) { user => samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, "canCatalog", user.email, userInfo) }
+    } yield RequestComplete(StatusCodes.OK, WorkspaceCatalogUpdateResponseList(Seq.empty, Seq.empty))
   }
 
   /**
@@ -440,159 +447,29 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @return
    */
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate], inviteUsersNotFound: Boolean): Future[PerRequestMessage] = {
+    //TODO: take care of the invitation part, take care of fully populating the WorkspaceACLUpdateResponseList
 
-    import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
+    //we need to update 5 policies: owner, writer, reader, canShare, canCompute
+    //we get noAccess for free because those will be filtered out entirely and removed during the process of overwriting
+    val owner = aclUpdates.filter(_.accessLevel.compare(WorkspaceAccessLevels.Owner) == 0)
+    val writer = aclUpdates.filter(_.accessLevel.compare(WorkspaceAccessLevels.Write) == 0)
+    val reader = aclUpdates.filter(_.accessLevel.compare(WorkspaceAccessLevels.Read) == 0)
+    val canShare = aclUpdates.filter(_.canShare.contains(true))
+    val canCompute = aclUpdates.filter(_.canCompute.contains(true))
 
-    val overwriteGroupMessagesFuture = dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireSharePermission(workspaceContext.workspace, dataAccess) { accessLevel =>
-          determineCompleteNewAcls(aclUpdates, accessLevel, dataAccess, workspaceContext)
-        }
-      }
-    }
-
-    def getExistingWorkspaceInvites(workspaceName: WorkspaceName) = {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { pairs =>
-            pairs.map(pair => WorkspaceACLUpdate(pair._1, pair._2))
-          }
-        }
-      }
-    }
-
-    def deleteWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName) = {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          val removals = invites.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess)
-          val dedupedRemovals = removals.filter(update => existingInvites.map(_.email).contains(update.email))
-          DBIO.sequence(dedupedRemovals.map(removal => dataAccess.workspaceQuery.removeInvite(workspaceContext.workspaceId, removal.email))) map { _ =>
-            dedupedRemovals
-          }
-        }
-      }
-    }
-
-    def saveWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName): Future[Seq[WorkspaceACLUpdate]] = {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          DBIO.sequence(invites.map(invite => dataAccess.workspaceQuery.saveInvite(workspaceContext.workspaceId, userInfo.userSubjectId.value, invite)))
-        }
-      }
-    }
-
-    def getUsersUpdatedResponse(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel], invitesUpdated: Seq[WorkspaceACLUpdate], emailsNotFound: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], refsToUpdateByEmail: Map[String, Either[RawlsUserRef, RawlsGroupRef]]): WorkspaceACLUpdateResponseList = {
-      val emailsByRef = refsToUpdateByEmail.map { case (k, v) => v -> k }
-      val usersUpdated = actualChangesToMake.map {
-        case (eitherRef@Left(RawlsUserRef(subjectId)), accessLevel) => WorkspaceACLUpdateResponse(subjectId.value, emailsByRef(eitherRef), accessLevel)
-        case (eitherRef@Right(RawlsGroupRef(groupName)), accessLevel) => WorkspaceACLUpdateResponse(groupName.value, emailsByRef(eitherRef), accessLevel)
-      }.toSeq
-
-      val usersNotFound = emailsNotFound.filterNot(aclUpdate => invitesUpdated.map(_.email).contains(aclUpdate.email)).filterNot(aclUpdate => existingInvites.map(_.email).contains(aclUpdate.email))
-      val invitesSent = invitesUpdated.filterNot(aclUpdate => existingInvites.map(_.email).contains(aclUpdate.email))
-
-      WorkspaceACLUpdateResponseList(usersUpdated, invitesSent, invitesUpdated.diff(invitesSent), usersNotFound)
-    }
-
-    def updateWorkspaceSharePermissions(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], Option[Boolean]]) = {
-      val (usersToAdd, usersToRemove) = actualChangesToMake.collect{ case (Left(userRef), Some(canShare)) => userRef -> canShare }.toSeq
-        .partition { case (_, canShare) => canShare }
-      val (groupsToAdd, groupsToRemove) = actualChangesToMake.collect{ case (Right(groupRef), Some(canShare)) => groupRef -> canShare }.toSeq
-        .partition { case (_, canShare) => canShare }
-
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          dataAccess.workspaceQuery.insertUserSharePermissions(workspaceContext.workspaceId, usersToAdd.map { case (userRef, _) => userRef } ) andThen
-            dataAccess.workspaceQuery.deleteUserSharePermissions(workspaceContext.workspaceId, usersToRemove.map { case (userRef, _) => userRef } ) andThen
-              dataAccess.workspaceQuery.insertGroupSharePermissions(workspaceContext.workspaceId, groupsToAdd.map { case (groupRef, _) => groupRef } ) andThen
-                dataAccess.workspaceQuery.deleteGroupSharePermissions(workspaceContext.workspaceId, groupsToRemove.map { case (groupRef, _) => groupRef } )
-        }
-      }
-    }
-
-    def updateWorkspaceComputePermissions(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], Option[Boolean]]) = {
-      val (usersToAdd, usersToRemove) = actualChangesToMake.collect{ case (Left(userRef), Some(canCompute)) => userRef -> canCompute }.toSeq
-        .partition { case (_, canCompute) => canCompute }
-      val (groupsToAdd, groupsToRemove) = actualChangesToMake.collect{ case (Right(groupRef), Some(canCompute)) => groupRef -> canCompute }.toSeq
-        .partition { case (_, canCompute) => canCompute }
-
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          dataAccess.workspaceQuery.insertUserComputePermissions(workspaceContext.workspaceId, usersToAdd.map { case (userRef, _) => userRef } ) andThen
-            dataAccess.workspaceQuery.deleteUserComputePermissions(workspaceContext.workspaceId, usersToRemove.map { case (userRef, _) => userRef } ) andThen
-              dataAccess.workspaceQuery.insertGroupComputePermissions(workspaceContext.workspaceId, groupsToAdd.map { case (groupRef, _) => groupRef } ) andThen
-                dataAccess.workspaceQuery.deleteGroupComputePermissions(workspaceContext.workspaceId, groupsToRemove.map { case (groupRef, _) => groupRef } )
-        }
-      }
-    }
-
-    val userServiceRef = userServiceConstructor(userInfo)
-    val resultsFuture = for {
-      (overwriteGroupMessages, emailsNotFound, actualChangesToMake, actualShareChangesToMake, actualComputeChangesToMake, refsToUpdateByEmail) <- overwriteGroupMessagesFuture
-      overwriteGroupResults <- Future.traverse(overwriteGroupMessages) { message => (userServiceRef.OverwriteGroupMembers(message.groupRef, message.memberList)) }
-      existingInvites <- getExistingWorkspaceInvites(workspaceName)
-      _ <- updateWorkspaceSharePermissions(actualShareChangesToMake)
-      _ <- updateWorkspaceComputePermissions(actualComputeChangesToMake)
-      deletedInvites <- deleteWorkspaceInvites(emailsNotFound, existingInvites, workspaceName)
-      workspaceContext <- getWorkspaceContext(workspaceName)
-      savedInvites <- if(inviteUsersNotFound) {
-        val invites = emailsNotFound diff deletedInvites
-
-        // only send invites for those that do not already exist
-        val newInviteEmails = invites.map(_.email) diff existingInvites.map((_.email))
-        val inviteNotifications = newInviteEmails.map(em => Notifications.WorkspaceInvitedNotification(RawlsUserEmail(em), userInfo.userSubjectId, workspaceName, workspaceContext.workspace.bucketName))
-        notificationDAO.fireAndForgetNotifications(inviteNotifications)
-
-        saveWorkspaceInvites(invites, workspaceName)
-      } else {
-        // save changes to only existing invites
-        val invitesToUpdate = emailsNotFound.filter(rec => existingInvites.map(_.email).contains(rec.email)) diff deletedInvites
-        saveWorkspaceInvites(invitesToUpdate, workspaceName)
-      }
-    } yield {
-      // fire and forget notifications
-      val notificationMessages = actualChangesToMake collect {
-        // note that we don't send messages to groups
-        case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId, NoAccess.toString, workspaceName, userInfo.userSubjectId)
-        case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId, access.toString, workspaceName, userInfo.userSubjectId)
-      }
-      notificationDAO.fireAndForgetNotifications(notificationMessages)
-
-      overwriteGroupResults.map {
-        case RequestComplete(StatusCodes.NoContent) =>
-          RequestComplete(StatusCodes.OK, getUsersUpdatedResponse(actualChangesToMake, (deletedInvites ++ savedInvites), (emailsNotFound diff savedInvites), existingInvites, refsToUpdateByEmail))
-        case otherwise => otherwise
-      }.reduce { (prior, next) =>
-        // this reduce will propagate the first non-NoContent (i.e. error) response
-        prior match {
-          case RequestComplete(StatusCodes.NoContent) => next
-          case otherwise => prior
-        }
-      }
-    }
-
-    maybeShareProjectComputePolicy(resultsFuture, workspaceName)
-  }
-
-  // called from test harness
-  private[workspace] def maybeShareProjectComputePolicy(resultsFuture: Future[PerRequestMessage], workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     for {
-      results <- resultsFuture
-      _ <- results match {
-        case RequestComplete((status: StatusCode, WorkspaceACLUpdateResponseList(usersUpdated, _, _, _))) if status.isSuccess =>
-          Future.traverse(usersUpdated) {
-            case WorkspaceACLUpdateResponse(_, email, WorkspaceAccessLevels.Write) =>
-              samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, email, userInfo)
-            case _ => Future.successful(())
-          }
-        case RequestComplete((status: StatusCode, _)) if status.isSuccess => Future.failed(throw new RawlsException(s"unexpected message returned: $results"))
-        case _ => Future.successful(())
-      }
-    } yield results
+      workspaceId <- loadWorkspaceId(workspaceName)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "owner", SamPolicy(owner.map(_.email), Seq.empty, Seq.empty), userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "writer", SamPolicy(writer.map(_.email), Seq.empty, Seq.empty), userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "reader", SamPolicy(reader.map(_.email), Seq.empty, Seq.empty), userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "canShare", SamPolicy(canShare.map(_.email), Seq.empty, Seq.empty), userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "canCompute", SamPolicy(canCompute.map(_.email), Seq.empty, Seq.empty), userInfo)
+      _ <- Future.traverse(writer) { update => samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, update.email, userInfo) }
+    } yield RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Seq.empty, Seq.empty, Seq.empty, Seq.empty))
   }
 
+  //TODO: writers can't read any members lower than owners. how will this continue to work?
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-
     val getUsers = {
       dataSource.inTransaction{ dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) {workspaceContext =>
@@ -616,40 +493,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def updateCatalogPermissions(catalogUpdates: Seq[WorkspaceCatalog], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[WorkspaceCatalogUpdateResponseList] = {
 
-    // map from email to ref
-    dataAccess.rawlsGroupQuery.loadRefsFromEmails(catalogUpdates.map(_.email)) flatMap { refsToUpdateByEmail =>
-      val (emailsFound, emailsNotFound) = catalogUpdates.partition(catalogUpdate => refsToUpdateByEmail.keySet.contains(catalogUpdate.email))
-      val emailsFoundWithRefs:Seq[(WorkspaceCatalog,Either[RawlsUserRef, RawlsGroupRef])] = emailsFound map {wc =>
-        (wc, refsToUpdateByEmail(wc.email))
-      }
-      val (emailsToAddCatalog, emailsToRemoveCatalog) = emailsFoundWithRefs.partition(update => update._1.catalog)
 
-      dataAccess.workspaceQuery.findWorkspaceUsersAndGroupsWithCatalog(workspaceContext.workspaceId) flatMap { case ((usersWithCatalog, groupsWithCatalog)) =>
-        val usersToAdd = emailsToAddCatalog.collect {
-          case (cat, Left(userref)) if !usersWithCatalog.contains(userref) => (userref, true)
-        }
-        val usersToRemove = emailsToRemoveCatalog.collect {
-          case (cat, Left(userref)) if usersWithCatalog.contains(userref) => (userref, false)
-        }
-        val groupsToAdd = emailsToAddCatalog.collect {
-          case (cat, Right(groupref)) if !groupsWithCatalog.contains(groupref) => (groupref, true)
-        }
-        val groupsToRemove = emailsToRemoveCatalog.collect {
-          case (cat, Right(groupref)) if groupsWithCatalog.contains(groupref) => (groupref, false)
-        }
-
-        val emails = emailsNotFound.map { wsCatalog => wsCatalog.email }
-        val users = (usersToAdd ++ usersToRemove).map { case (userRef, catalog) => WorkspaceCatalogResponse(userRef.userSubjectId.value, catalog) }
-        val groups = (groupsToAdd ++ groupsToRemove).map { case (groupRef, catalog) => WorkspaceCatalogResponse(groupRef.groupName.value, catalog) }
-
-        dataAccess.workspaceQuery.insertUserCatalogPermissions(workspaceContext.workspaceId, usersToAdd.map { case (userRef, _) => userRef }) andThen
-          dataAccess.workspaceQuery.deleteUserCatalogPermissions(workspaceContext.workspaceId, usersToRemove.map { case (userRef, _) => userRef }) andThen
-          dataAccess.workspaceQuery.insertGroupCatalogPermissions(workspaceContext.workspaceId, groupsToAdd.map { case (groupRef, _) => groupRef }) andThen
-          dataAccess.workspaceQuery.deleteGroupCatalogPermissions(workspaceContext.workspaceId, groupsToRemove.map { case (groupRef, _) => groupRef }) map { _ =>
-          WorkspaceCatalogUpdateResponseList(users ++ groups, emails)
-        }
-      }
-    }
   }
 
   /**
@@ -1666,7 +1510,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     for {
       (workspace, maxAccessLevel) <- dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-          getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess).map { accessLevel =>
+          DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)).map { accessLevel =>
             (workspaceContext.workspace, accessLevel)
           }
         }

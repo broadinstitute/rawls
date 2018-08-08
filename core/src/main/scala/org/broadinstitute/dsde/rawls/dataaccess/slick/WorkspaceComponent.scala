@@ -344,6 +344,10 @@ trait WorkspaceComponent {
       workspaceAccessQuery.filter(_.workspaceId === workspaceId).delete
     }
 
+    def getWorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] = {
+      uniqueResult(workspaceQuery.findByNameQuery(workspaceName).result).map(x => x.map(_.id))
+    }
+
     /**
       * Lists all workspaces with a particular attribute name/value pair.
       *
