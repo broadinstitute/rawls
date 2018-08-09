@@ -416,31 +416,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val member = new Member().setEmail(user.userEmail.value).setRole(groupMemberRole)
-    val inserter = getGroupDirectory.members.insert(toProxyFromUser(user.userSubjectId), member)
-    retryWhen500orGoogleError(() => { executeGoogleRequest(inserter) })
-  }
-
-  override def removeUserFromProxyGroup(user: RawlsUser): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val deleter = getGroupDirectory.members.delete(toProxyFromUser(user.userSubjectId), user.userEmail.value)
-    retryWhen500orGoogleError(() => { executeGoogleRequest(deleter) })
-  }
-
-  override def isUserInProxyGroup(user: RawlsUser): Future[Boolean] = {
-    isEmailInGoogleGroup(user.userEmail.value, toProxyFromUser(user.userSubjectId))
-  }
-
-  override def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val getter = getGroupDirectory.members.get(groupName, email)
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
-      case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
-    } map { _.isDefined }
-  }
-
   override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] = {
     implicit val service = GoogleInstrumentedService.Groups
     val getter = getGroupDirectory.groups().get(groupName)
@@ -556,42 +531,6 @@ class HttpGoogleServicesDAO(
       // when accumulated is None (group does not exist) or next page token is null
       case _ => Future.successful(accumulated)
     }
-  }
-
-  val proxyPattern = s"${proxyNamePrefix}PROXY_(.+)@${appsDomain}".toLowerCase.r
-  val groupPattern = s"${proxyNamePrefix}GROUP_(.+)@${appsDomain}".toLowerCase.r
-
-  override def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]] = {
-    listGroupMembersInternal(group.groupEmail.value) map { membersOption =>
-      membersOption match {
-        case None => None
-        case Some(emails) => Option(emails map(_.toLowerCase) map {
-          case email@proxyPattern(subjectId) => email -> Option(Left(RawlsUserRef(RawlsUserSubjectId(subjectId))))
-          case email@groupPattern(groupName) => email -> Option(Right(RawlsGroupRef(RawlsGroupName(groupName))))
-          case email => email -> None
-        } toMap)
-      }
-    }
-  }
-
-  def createProxyGroup(user: RawlsUser): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val directory = getGroupDirectory
-    val groups = directory.groups
-    retryWhen500orGoogleError (() => {
-      val inserter = groups.insert(new Group().setEmail(toProxyFromUser(user.userSubjectId)).setName(user.userEmail.value))
-      executeGoogleRequest(inserter)
-    })
-  }
-
-  def deleteProxyGroup(user: RawlsUser): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val directory = getGroupDirectory
-    val groups = directory.groups
-    retryWhen500orGoogleError (() => {
-      val deleter = groups.delete(toProxyFromUser(user.userSubjectId))
-      executeGoogleRequest(deleter)
-    })
   }
 
   override def createGoogleGroup(groupRef: RawlsGroupRef): Future[RawlsGroup] = {

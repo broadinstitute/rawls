@@ -57,27 +57,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def hasGoogleRole(roleGroupName: String, userEmail: String): Future[Boolean]
 
-  /**
-   *
-   * @param group
-   * @return None if the google group does not exist, Some(Map.empty) if there are no members, key is the actual
-   *         email address in the google group, value is the rawls user or group reference or None if neither
-   */
-  def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]]
-
-  def createProxyGroup(user: RawlsUser): Future[Unit]
-
-  def deleteProxyGroup(user: RawlsUser): Future[Unit]
-
-  def addUserToProxyGroup(user: RawlsUser): Future[Unit]
-
-  def removeUserFromProxyGroup(user: RawlsUser): Future[Unit]
-
-  def isUserInProxyGroup(user: RawlsUser): Future[Boolean]
-
   def createGoogleGroup(groupRef: RawlsGroupRef): Future[RawlsGroup]
-
-  def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean]
 
   /**
     * Gets a Google group.
