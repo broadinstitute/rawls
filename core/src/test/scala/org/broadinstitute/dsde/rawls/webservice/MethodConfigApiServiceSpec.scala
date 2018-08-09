@@ -143,7 +143,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
     val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `b' found")
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
-    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Only allowed when running with workspace data model. However, workspace attributes can be used.")
+    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.")
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
