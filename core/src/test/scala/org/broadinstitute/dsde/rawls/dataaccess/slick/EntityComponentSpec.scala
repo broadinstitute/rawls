@@ -278,9 +278,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val id2 = 2   // arbitrary
 
       // count distinct misses rows with null columns, like this one
-      runAndWait(entityQuery += EntityRecord(id1, "test1", "null_attrs_type", context.workspaceId, 0, None, deleted = false, None))
+      runAndWait(entityQueryWithInlineAttributes += EntityRecordWithInlineAttributes(id1, "test1", "null_attrs_type", context.workspaceId, 0, None, deleted = false, None))
 
-      runAndWait(entityQuery += EntityRecord(id2, "test2", "blank_attrs_type", context.workspaceId, 0, Some(""), deleted = false, None))
+      runAndWait(entityQueryWithInlineAttributes += EntityRecordWithInlineAttributes(id2, "test2", "blank_attrs_type", context.workspaceId, 0, Some(""), deleted = false, None))
 
       val desiredTypeMetadata = Map[String, EntityTypeMetadata](
         "null_attrs_type" -> EntityTypeMetadata(1, "null_attrs_type_id", Seq()),
@@ -311,7 +311,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     withWorkspaceContext(testWorkspace.workspace) { context =>
       runAndWait(entityQuery.save(context, sample1))
 
-      val entityRec = runAndWait(uniqueResult(entityQuery.findEntityByName(UUID.fromString(testWorkspace.workspace.workspaceId), "Sample", "sample1").result))
+      val entityRec = runAndWait(uniqueResult(entityQueryWithInlineAttributes.findEntityByName(UUID.fromString(testWorkspace.workspace.workspaceId), "Sample", "sample1").result))
       assertResult(EntityComponent.allAttributeValuesColumnSize) {
         entityRec.get.allAttributeValues.get.length
       }
@@ -910,7 +910,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "not select the all_attribute_values column when using entityQuery.withoutAllAttributes" in withDefaultTestDatabase {
+  it should "select the all_attribute_values column when using entityQueryWithInlineAttributes and not otherwise" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
 
       val hasAttrs = Entity("entityWithAttrs", "Pair", Map(
@@ -922,27 +922,29 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       runAndWait(entityQuery.save(context, hasAttrs))
 
-      val recWithAttrs = runAndWait(entityQuery
+      val recWithAttrs = runAndWait(entityQueryWithInlineAttributes
         .filter(e => e.name === "entityWithAttrs" && e.entityType === "Pair")
           .result.headOption)
 
       assert(recWithAttrs.isDefined, "entityQuery should find the record")
+      withClue("entityQueryWithInlineAttributes should return an EntityRecordWithInlineAttributes, which has allAttributeValues") {
+        recWithAttrs shouldBe an[Option[EntityRecordWithInlineAttributes]]
+      }
       assertResult(Some(Some("entitywithattrs one two three four")), "entityQuery should return allAttributeValues") {
         recWithAttrs.map(_.allAttributeValues)
       }
-      import entityQuery.EntityRecordLightShape
 
-      val recWithoutAttrs = runAndWait(entityQuery.withoutAllAttributeValues
+      val recWithoutAttrs = runAndWait(entityQuery
         .filter(e => e.name === "entityWithAttrs" && e.entityType === "Pair")
         .result.headOption)
 
-      assert(recWithoutAttrs.isDefined, "entityQuery.withoutAllAttributeValues should find the record")
-      assertResult(Some(None), "entityQueryLight should not return allAttributeValues") {
-        recWithoutAttrs.map(_.allAttributeValues)
+      assert(recWithoutAttrs.isDefined, "entityQuery should find the record")
+      withClue("entityQuery should return an EntityRecord, which does not have allAttributeValues") {
+        recWithoutAttrs shouldBe an[Option[EntityRecord]]
       }
 
-      assertResult(recWithoutAttrs, "entityQuery and entityQuery.withoutAllAttributeValues should return the same record otherwise") {
-        recWithAttrs.map(_.copy(allAttributeValues = None))
+      assertResult(recWithoutAttrs, "entityQuery and entityQueryWithInlineAttributes should return the same record otherwise") {
+        recWithAttrs.map(_.withoutAllAttributeValues)
       }
     }
   }
