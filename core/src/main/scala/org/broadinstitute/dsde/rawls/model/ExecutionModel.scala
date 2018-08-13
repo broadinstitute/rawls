@@ -55,7 +55,7 @@ case class ExecutionServiceOutputs(
 
 case class ExecutionServiceLogs(
  id: String,
- calls: Map[String, Seq[ExecutionServiceCallLogs]]
+ calls: Option[Map[String, Seq[ExecutionServiceCallLogs]]]
 )
 
 // cromwell.engine.backend.CallLogs

@@ -1560,7 +1560,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * Munges together the output of Cromwell's /outputs and /logs endpoints, grouping them by task name */
   private def mergeWorkflowOutputs(execOuts: ExecutionServiceOutputs, execLogs: ExecutionServiceLogs, workflowId: String): PerRequestMessage = {
     val outs = execOuts.outputs
-    val logs = execLogs.calls
+    val logs = execLogs.calls getOrElse Map()
 
     //Cromwell workflow outputs look like workflow_name.task_name.output_name.
     //Under perverse conditions it might just be workflow_name.output_name.
