@@ -654,9 +654,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
           .withBody(
             """
               |{
-              |  "id": "8afafe21-2b70-4180-a565-748cb573e10c",
-              |  "calls": {
-              |  }
+              |  "id": "8afafe21-2b70-4180-a565-748cb573e10c"
               |}
             """.stripMargin)
           .withStatusCode(StatusCodes.Created.intValue)
