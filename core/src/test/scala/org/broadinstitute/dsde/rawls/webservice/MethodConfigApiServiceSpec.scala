@@ -133,6 +133,41 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "validate attribute syntax in create method configuration without data model" in withTestDataApiServices { services =>
+    //This tests that invalid MC expressions still return 201 and a ValidatedMethodConfiguration with validation results in it
+    val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("workspace.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("blah"))
+    val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("workspace.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("this.nomodel"), "empty_out" -> AttributeString(""))
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", None, Map(), inputs, outputs,
+      AgoraMethod("dsde", "good_and_bad", 1))
+
+    val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
+    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `b' found")
+    val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
+    val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.")
+
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        val validated = responseAs[ValidatedMethodConfiguration]
+        assertResult(newMethodConfig) { validated.methodConfiguration }
+        assertSameElements(expectedSuccessInputs, validated.validInputs)
+        assertSameElements(expectedFailureInputs, validated.invalidInputs)
+        assertSameElements(expectedSuccessOutputs, validated.validOutputs)
+        assertSameElements(expectedFailureOutputs, validated.invalidOutputs)
+
+        // all inputs and outputs are saved, regardless of parsing errors
+        for ((key, value) <- inputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
+        }
+        for ((key, value) <- outputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
+        }
+      }
+  }
+
   it should "return 404 if you try to create a method configuration that points to an unknown method" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), Map(), Map(), Map(),
       AgoraMethod("dsde", "method_doesnt_exist", 1))
