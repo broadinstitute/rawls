@@ -750,7 +750,7 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
   override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo) = Future.successful(Seq(Left(ExecutionServiceStatus("test_id", workflowStatus))))
 
   override def outputs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceOutputs(id, Map("o1" -> Left(AttributeString("foo")))))
-  override def logs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceLogs(id, Map("task1" -> Seq(ExecutionServiceCallLogs(stdout = "foo", stderr = "bar")))))
+  override def logs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceLogs(id, Option(Map("task1" -> Seq(ExecutionServiceCallLogs(stdout = "foo", stderr = "bar"))))))
 
   override def status(id: String, userInfo: UserInfo) = {
     if(abortedMap.keySet.contains(id)) Future(ExecutionServiceStatus(id, WorkflowStatuses.Aborted.toString))

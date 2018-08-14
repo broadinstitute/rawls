@@ -36,9 +36,9 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
   }
 
   override def logs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceLogs(id,
-    Map("x" -> Seq(ExecutionServiceCallLogs(
+    Option(Map("x" -> Seq(ExecutionServiceCallLogs(
       stdout = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
-      stderr = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt")))))
+      stderr = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt"))))))
 
   override def outputs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceOutputs(id, Map("foo" -> Left(AttributeString("bar")))))
 

@@ -130,7 +130,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       }
     }
 
-    "should retrieve sub-workflow metadata from Cromwell" in {
+    "should retrieve sub-workflow metadata and outputs from Cromwell" in {
       implicit val token: AuthToken = studentAToken
 
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
@@ -198,6 +198,17 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
           eventually {
             Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
+          }
+
+          // verify that Rawls can retrieve the workflows' outputs from Cromwell without error
+          // https://github.com/DataBiosphere/firecloud-app/issues/157
+
+          val outputsTimeout = Timeout(scaled(Span(10, Seconds)))
+          eventually(outputsTimeout) {
+            Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstWorkflowId)
+            // nope https://github.com/DataBiosphere/firecloud-app/issues/160
+            //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubWorkflowId)
+            //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
           }
 
           // clean up: Abort and wait for Aborted
