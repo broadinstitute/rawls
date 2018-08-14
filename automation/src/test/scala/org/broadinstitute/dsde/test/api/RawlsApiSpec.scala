@@ -202,7 +202,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
           // verify that Rawls can retrieve the workflows' outputs from Cromwell without error
           // https://github.com/DataBiosphere/firecloud-app/issues/157
-          
+
           val outputsTimeout = Timeout(scaled(Span(20, Seconds)))
           eventually(outputsTimeout) {
             Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstWorkflowId)
