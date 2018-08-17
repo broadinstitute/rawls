@@ -47,6 +47,9 @@ while [ "$1" != "" ]; do
         jar)
             MAKE_JAR=true
             ;;
+        publish)
+            PUSH_ARTIFACTORY=true
+            ;;
         -d | --docker)
             shift
             echo "docker command = $1"
