@@ -54,7 +54,7 @@ import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 import scala.concurrent.{Future, _}
 import scala.io.Source
-import scala.util.{Success, Try}
+import scala.util.{Random, Success, Try}
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -73,6 +73,7 @@ class HttpGoogleServicesDAO(
   billingPemFile: String,
   val billingEmail: String,
   bucketLogsMaxAge: Int,
+  groupServiceAccountPool: Array[(String, String)],
   maxPageSize: Int = 200,
   override val workbenchMetricBaseName: String,
   proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
@@ -1168,13 +1169,15 @@ class HttpGoogleServicesDAO(
   }
 
   private def getGroupServiceAccountCredential: Credential = {
+    val (clientEmail, pathToPem) = groupServiceAccountPool(Random.nextInt(groupServiceAccountPool.length))
+
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(clientEmail)
       .setServiceAccountScopes(directoryScopes)
       .setServiceAccountUser(subEmail)
-      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pathToPem))
       .build()
   }
 
