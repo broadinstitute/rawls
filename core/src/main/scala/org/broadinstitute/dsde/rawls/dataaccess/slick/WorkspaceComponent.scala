@@ -29,27 +29,6 @@ case class WorkspaceRecord(
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
 }
 
-case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLevel: String, isAuthDomainAcl: Boolean)
-
-/** result class for workspaceQuery.findAssociatedGroupsToIntersect, target = group1 intersect group2 */
-case class GroupsToIntersect(target: RawlsGroupRef, groups: Set[RawlsGroupRef])
-
-case class WorkspaceUserShareRecord(workspaceId: UUID, subjectId: String)
-case class WorkspaceGroupShareRecord(workspaceId: UUID, groupName: String)
-case class WorkspaceUserComputeRecord(workspaceId: UUID, subjectId: String)
-case class WorkspaceGroupComputeRecord(workspaceId: UUID, groupName: String)
-case class WorkspaceUserCatalogRecord(workspaceId: UUID, subjectId: String)
-case class WorkspaceGroupCatalogRecord(workspaceId: UUID, groupName: String)
-case class WorkspaceAuthDomainRecord(workspaceId: UUID, groupName: String)
-
-case class PendingWorkspaceAccessRecord(
-  workspaceId: UUID,
-  userEmail: String,
-  originSubjectId: String,
-  inviteDate: Timestamp,
-  accessLevel: String
-)
-
 trait WorkspaceComponent {
   this: DriverComponent
     with AttributeComponent
@@ -76,106 +55,6 @@ trait WorkspaceComponent {
 
     def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
-
-  class WorkspaceAccessTable(tag: Tag) extends Table[WorkspaceAccessRecord](tag, "WORKSPACE_ACCESS") {
-    def groupName = column[String]("group_name", O.Length(254))
-    def workspaceId = column[UUID]("workspace_id")
-    def accessLevel = column[String]("access_level", O.Length(254))
-    def isAuthDomainAcl = column[Boolean]("is_auth_domain_acl")
-
-    def accessPrimaryKey = primaryKey("PK_WORKSPACE_ACCESS", (workspaceId, accessLevel, isAuthDomainAcl))
-
-    def * = (workspaceId, groupName, accessLevel, isAuthDomainAcl) <> (WorkspaceAccessRecord.tupled, WorkspaceAccessRecord.unapply)
-  }
-
-  class PendingWorkspaceAccessTable(tag: Tag) extends Table[PendingWorkspaceAccessRecord](tag, "PENDING_WORKSPACE_ACCESS") {
-    def workspaceId = column[UUID]("workspace_id")
-    def userEmail = column[String]("user_email", O.Length(254))
-    def originSubjectId = column[String]("origin_subject_id", O.Length(254))
-    def inviteDate = column[Timestamp]("invite_date", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
-    def accessLevel = column[String]("access_level", O.Length(254))
-
-    def workspace = foreignKey("FK_PENDING_WS_ACCESS_WORKSPACE", workspaceId, workspaceQuery)(_.id)
-
-    def pendingAccessPrimaryKey = primaryKey("PK_PENDING_WORKSPACE_ACCESS", (workspaceId, userEmail)) //only allow one invite per user per workspace
-
-    def * = (workspaceId, userEmail, originSubjectId, inviteDate, accessLevel) <> (PendingWorkspaceAccessRecord.tupled, PendingWorkspaceAccessRecord.unapply)
-  }
-
-  class WorkspaceUserShareTable(tag: Tag) extends Table[WorkspaceUserShareRecord](tag, "WORKSPACE_USER_SHARE") {
-    def workspaceId = column[UUID]("workspace_id")
-    def userSubjectId = column[String]("user_subject_id")
-
-    def workspace = foreignKey("FK_USER_SHARE_PERMS_WS", workspaceId, workspaceQuery)(_.id)
-
-    def * = (workspaceId, userSubjectId) <> (WorkspaceUserShareRecord.tupled, WorkspaceUserShareRecord.unapply)
-  }
-
-  class WorkspaceGroupShareTable(tag: Tag) extends Table[WorkspaceGroupShareRecord](tag, "WORKSPACE_GROUP_SHARE") {
-    def workspaceId = column[UUID]("workspace_id")
-    def groupName = column[String]("group_name")
-
-    def workspace = foreignKey("FK_GROUP_SHARE_PERMS_WS", workspaceId, workspaceQuery)(_.id)
-
-    def * = (workspaceId, groupName) <> (WorkspaceGroupShareRecord.tupled, WorkspaceGroupShareRecord.unapply)
-  }
-
-  class WorkspaceUserComputeTable(tag: Tag) extends Table[WorkspaceUserComputeRecord](tag, "WORKSPACE_USER_COMPUTE") {
-    def workspaceId = column[UUID]("workspace_id")
-    def userSubjectId = column[String]("user_subject_id")
-
-    def workspace = foreignKey("FK_USER_COMPUTE_PERMS_WS", workspaceId, workspaceQuery)(_.id)
-
-    def * = (workspaceId, userSubjectId) <> (WorkspaceUserComputeRecord.tupled, WorkspaceUserComputeRecord.unapply)
-  }
-
-  class WorkspaceGroupComputeTable(tag: Tag) extends Table[WorkspaceGroupComputeRecord](tag, "WORKSPACE_GROUP_COMPUTE") {
-    def workspaceId = column[UUID]("workspace_id")
-    def groupName = column[String]("group_name")
-
-    def workspace = foreignKey("FK_GROUP_COMPUTE_PERMS_WS", workspaceId, workspaceQuery)(_.id)
-
-    def * = (workspaceId, groupName) <> (WorkspaceGroupComputeRecord.tupled, WorkspaceGroupComputeRecord.unapply)
-  }
-
-  class WorkspaceUserCatalogTable(tag: Tag) extends Table[WorkspaceUserCatalogRecord](tag, "WORKSPACE_USER_CATALOG") {
-    def workspaceId = column[UUID]("workspace_id")
-    def userSubjectId = column[String]("user_subject_id")
-
-    def workspace = foreignKey("FK_USER_CATALOG_PERMS_WS", workspaceId, workspaceQuery)(_.id)
-
-    def * = (workspaceId, userSubjectId) <> (WorkspaceUserCatalogRecord.tupled, WorkspaceUserCatalogRecord.unapply)
-  }
-
-  class WorkspaceGroupCatalogTable(tag: Tag) extends Table[WorkspaceGroupCatalogRecord](tag, "WORKSPACE_GROUP_CATALOG") {
-    def workspaceId = column[UUID]("workspace_id")
-    def groupName = column[String]("group_name")
-
-    def workspace = foreignKey("FK_GROUP_CATALOG_PERMS_WS", workspaceId, workspaceQuery)(_.id)
-
-    def * = (workspaceId, groupName) <> (WorkspaceGroupCatalogRecord.tupled, WorkspaceGroupCatalogRecord.unapply)
-  }
-
-  class WorkspaceAuthDomainTable(tag: Tag) extends Table[WorkspaceAuthDomainRecord](tag, "WORKSPACE_AUTH_DOMAIN") {
-    def workspaceId = column[UUID]("workspace_id")
-    def groupName = column[String]("group_name")
-
-    def workspace = foreignKey("FK_AUTH_DOMAIN_WS", workspaceId, workspaceQuery)(_.id)
-
-    def uniqueWorkspaceAuthDomain = index("IDX_AD_WS_GROUP", (workspaceId, groupName), unique = true)
-
-    def * = (workspaceId, groupName) <> (WorkspaceAuthDomainRecord.tupled, WorkspaceAuthDomainRecord.unapply)
-  }
-
-  protected val workspaceAccessQuery = TableQuery[WorkspaceAccessTable]
-  protected val pendingWorkspaceAccessQuery = TableQuery[PendingWorkspaceAccessTable]
-  protected val workspaceUserShareQuery = TableQuery[WorkspaceUserShareTable]
-  protected val workspaceGroupShareQuery = TableQuery[WorkspaceGroupShareTable]
-  protected val workspaceUserComputeQuery = TableQuery[WorkspaceUserComputeTable]
-  protected val workspaceGroupComputeQuery = TableQuery[WorkspaceGroupComputeTable]
-  protected val workspaceUserCatalogQuery = TableQuery[WorkspaceUserCatalogTable]
-  protected val workspaceGroupCatalogQuery = TableQuery[WorkspaceGroupCatalogTable]
-  protected val workspaceAuthDomainQuery = TableQuery[WorkspaceAuthDomainTable]
 
   object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
     private type WorkspaceQueryType = driver.api.Query[WorkspaceTable, WorkspaceRecord, Seq]
@@ -206,23 +85,13 @@ trait WorkspaceComponent {
       uniqueResult[WorkspaceRecord](findByIdQuery(UUID.fromString(workspace.workspaceId))) flatMap {
         case None =>
           (workspaceQuery += marshalNewWorkspace(workspace)) andThen
-            insertAuthDomainRecords(workspace) andThen
-            insertOrUpdateAccessRecords(workspace) andThen
             rewriteAttributes(workspace) andThen
             updateLastModified(UUID.fromString(workspace.workspaceId))
         case Some(workspaceRecord) =>
-          insertOrUpdateAccessRecords(workspace) andThen
-            rewriteAttributes(workspace) andThen
+          rewriteAttributes(workspace) andThen
             optimisticLockUpdate(workspaceRecord) andThen
             updateLastModified(UUID.fromString(workspace.workspaceId))
       } map { _ => workspace }
-    }
-
-    private def insertOrUpdateAccessRecords(workspace: Workspace): WriteAction[Int] = {
-      val id = UUID.fromString(workspace.workspaceId)
-      val accessRecords = workspace.accessLevels.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, false) }
-      val authDomainAclRecords = workspace.authDomainACLs.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, true) }
-      DBIO.sequence((accessRecords ++ authDomainAclRecords).map { workspaceAccessQuery insertOrUpdate }).map(_.sum)
     }
 
     private def rewriteAttributes(workspace: Workspace) = {

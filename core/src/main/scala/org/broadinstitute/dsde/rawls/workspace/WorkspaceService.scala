@@ -252,6 +252,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
         getWorkspaceContext(workspaceName) flatMap { ctx =>
           dataSource.inTransaction { dataAccess =>
+            loadWorkspaceId(workspaceName)
             DBIO.from(getMaximumAccessLevel(ctx)) flatMap {maxAccessLevel =>
               withLibraryPermissions(ctx, operations, dataAccess, userInfo, isCurator, maxAccessLevel) {
                 updateWorkspace(operations, dataAccess)(ctx)
@@ -297,36 +298,31 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
+  //lots of TODO in here. implementing a "lite" version to move towards getting compilation working...
   def listWorkspaces(): Future[PerRequestMessage] =
     dataSource.inTransaction ({ dataAccess =>
 
       //ask sam: which workspaces do i have access to?
-      //
+      //sam should take care of all auth domain related computation
+      //what we get back should be a pure list of access levels and resource IDs.
+      //we then need to take those resource IDs and load all of the necessary data about the workspace (some fields may be outdated, like the ACL groups)
+
 
       val query = for {
         permissionsPairs <- DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
-//        managedGroupsForUser <- DBIO.from(samDAO.listManagedGroups(userInfo))
-        ownerEmails <- getWorkspaceOwners()
-        ownerEmails <- dataAccess.workspaceQuery.listAccessGroupMemberEmails(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), WorkspaceAccessLevels.Owner)
-        publicWorkspaces <- dataAccess.workspaceQuery.listWorkspacesWithGroupAccess(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), UserService.allUsersGroupRef)
-        submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
-        workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
-      } yield (permissionsPairs, managedGroupsForUser, ownerEmails, publicWorkspaces, submissionSummaryStats, workspaces)
+//        ownerEmails <- permissionsPairs.map(p => getWorkspaceOwners(p.resourceId).map(x => p.resourceId -> x))
+//        publicWorkspaces <- dataAccess.workspaceQuery.listWorkspacesWithGroupAccess(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), UserService.allUsersGroupRef)
+        submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.resourceId)).toSeq)
+        workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.resourceId)).toSeq)
+      } yield (permissionsPairs, submissionSummaryStats, workspaces)
 
-      val results = query.map { case (permissionsPairs, managedGroupsForUser, ownerEmails, publicWorkspaces, submissionSummaryStats, workspaces) =>
+      val results = query.map { case (permissionsPairs, submissionSummaryStats, workspaces) =>
         val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
         permissionsPairs.map { permissionsPair =>
-          val groupsForUser = managedGroupsForUser.map(group => ManagedGroupRef(group.groupName)).toSet
-
-          workspacesById.get(permissionsPair.workspaceId).map { workspace =>
-            def trueAccessLevel = {
-              if((workspace.authorizationDomain -- groupsForUser).nonEmpty) WorkspaceAccessLevels.NoAccess
-              else permissionsPair.accessLevel
-            }
-            val wsId = UUID.fromString(workspace.workspaceId)
-            val public: Boolean = publicWorkspaces.contains(wsId)
-            WorkspaceListResponse(trueAccessLevel, workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId, Seq.empty), Some(public))
-          }
+          val wsId = UUID.fromString(permissionsPair.resourceId)
+          val workspace = workspacesById(permissionsPair.resourceId)
+          val public: Boolean = false //TODO!
+          WorkspaceListResponse(WorkspaceAccessLevels.withName(permissionsPair.accessPolicyName), workspace, submissionSummaryStats(wsId), Seq.empty, Some(public))
         }
       }
 
@@ -405,8 +401,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getCatalog(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    loadWorkspaceId(workspaceName).map { workspaceId =>
-      samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "canCatalog", userInfo)
+    loadWorkspaceId(workspaceName).flatMap { workspaceId =>
+      samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "canCatalog", userInfo).map { members => RequestComplete(StatusCodes.OK, members.memberEmails.map(WorkspaceCatalog(_, true)))}
     }
   }
 
@@ -455,6 +451,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   //TODO: writers can't read any members lower than owners. how will this continue to work?
+  //via doug: something similar to the "pester" policy
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     val getUsers = {
       dataSource.inTransaction{ dataAccess =>
@@ -1506,7 +1503,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         _.map { case (a, g) => (a -> RawlsGroup.toRef(g)) }
       }
 
-      val workspace = Workspace(
+      val workspace = WorkspaceLite(
         namespace = workspaceRequest.namespace,
         name = workspaceRequest.name,
         authorizationDomain = workspaceRequest.authorizationDomain.getOrElse(Set.empty),
@@ -1516,17 +1513,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         lastModified = currentDate,
         createdBy = userInfo.userEmail.value,
         attributes = workspaceRequest.attributes,
-        accessLevels = accessGroups,
-        authDomainACLs = intersectionGroups getOrElse accessGroups
       )
 
-      val groupInserts =
-        // project owner group should already exsist, don't save it again
-        googleWorkspaceInfo.accessGroupsByLevel.filterKeys(_ != ProjectOwner).values.map(dataAccess.rawlsGroupQuery.save) ++
-          googleWorkspaceInfo.intersectionGroupsByLevel.map(_.values.map(dataAccess.rawlsGroupQuery.save)).getOrElse(Seq.empty)
-
-      DBIO.seq(groupInserts.toSeq: _*) andThen
-        dataAccess.workspaceQuery.save(workspace)
+      dataAccess.workspaceQuery.save(workspace)
     }
 
 
@@ -1613,7 +1602,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamResourceActions.launchBatchCompute, userInfo)) flatMap { projectCanCompute =>
       if (!projectCanCompute) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
       else {
-        getMaximumAccessLevel(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { userLevel =>
+        getMaximumAccessLevel(workspace.workspaceId) flatMap { userLevel =>
           if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock
           else dataAccess.workspaceQuery.getUserComputePermissions(userInfo.userSubjectId, SlickWorkspaceContext(workspace)) flatMap { canCompute =>
             if (canCompute) codeBlock

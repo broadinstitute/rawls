@@ -109,6 +109,23 @@ case class Workspace(
   def path: String = toWorkspaceName.path
 }
 
+case class WorkspaceLite(
+                        namespace: String,
+                        name: String,
+                        authorizationDomain: Set[ManagedGroupRef],
+                        workspaceId: String,
+                        bucketName: String,
+                        createdDate: DateTime,
+                        lastModified: DateTime,
+                        createdBy: String,
+                        attributes: AttributeMap,
+                        isLocked: Boolean = false
+                        ) extends Attributable {
+  def toWorkspaceName = WorkspaceName(namespace,name)
+  def briefName: String = toWorkspaceName.toString
+  def path: String = toWorkspaceName.path
+}
+
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
                                     lastFailureDate: Option[DateTime],
                                     runningSubmissionsCount: Int)
@@ -536,6 +553,8 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
 
   implicit val WorkspaceFormat = jsonFormat12(Workspace)
+
+  implicit val WorkspaceLiteFormat = jsonFormat10(WorkspaceLite)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
