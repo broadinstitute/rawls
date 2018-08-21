@@ -106,6 +106,11 @@ object Boot extends App with LazyLogging {
     val jsonFactory = JacksonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
+
+    val groupServiceAccountPool: Array[(String, String)] = gcsConfig.getObjectOption("groupServiceAccountPool").map(_.map {
+      case (pooledClientEmail, pooledPathToPem) => pooledClientEmail -> pooledPathToPem.unwrapped.toString
+    }.toArray).getOrElse(Array(clientEmail -> gcsConfig.getString("pathToPem")))
+
     val gcsDAO = new HttpGoogleServicesDAO(
       false,
       clientSecrets,
@@ -123,6 +128,7 @@ object Boot extends App with LazyLogging {
       gcsConfig.getString("pathToBillingPem"),
       gcsConfig.getString("billingEmail"),
       gcsConfig.getInt("bucketLogsMaxAge"),
+      groupServiceAccountPool,
       workbenchMetricBaseName = metricsPrefix,
       proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", "")
     )
