@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls
 
-import java.io.StringReader
+import java.io.{File, StringReader}
 import java.net.InetAddress
 import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
@@ -15,7 +15,7 @@ import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
-import com.typesafe.config.{ConfigFactory, ConfigObject}
+import com.typesafe.config.{ConfigException, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
@@ -33,8 +33,8 @@ import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.config._
-import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
-import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.{GoogleCredentialMode, Json}
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO}
 
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -42,6 +42,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 object Boot extends App with LazyLogging {
   private def startup(): Unit = {
@@ -106,7 +107,16 @@ object Boot extends App with LazyLogging {
     val jsonFactory = JacksonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
+
+    val defaultServiceAccountPem = GoogleCredentialModes.Pem(WorkbenchEmail(clientEmail), new File(gcsConfig.getString("pathToPem")), Option(WorkbenchEmail(gcsConfig.getString("subEmail"))))
+
+    val groupServiceAccountPool: Array[GoogleCredentialMode] = try { gcsConfig.getStringList("groupServiceAccountPool").map(GoogleCredentialModes.Json).toArray } catch {
+      //if the config entry is missing
+      case _:ConfigException.Missing => Array(defaultServiceAccountPem)
+    }
+
     val gcsDAO = new HttpGoogleServicesDAO(
+      groupServiceAccountPool,
       false,
       clientSecrets,
       clientEmail,
