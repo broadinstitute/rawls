@@ -351,8 +351,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           }
         }
       }
-
-      results.map { responses => RequestComplete(StatusCodes.OK, responses) }
+      results.map { responses =>
+        // GAWB-3729 workspaces that have been deleted from another thread will show up as None
+        val noNullResponses = responses.filter(_.isDefined)
+        RequestComplete(StatusCodes.OK, noNullResponses)
+      }
     }, TransactionIsolation.ReadCommitted)
 
   def listWorkspaces(user: RawlsUser, dataAccess: DataAccess): ReadWriteAction[Seq[WorkspacePermissionsPair]] = {
