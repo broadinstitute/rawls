@@ -76,16 +76,6 @@ trait UserApiService extends UserInfoDirectives {
         get {
           complete { userServiceConstructor(userInfo).ListBillingAccounts }
         }
-      } ~
-      pathPrefix("groups") {
-        pathPrefix(Segment) { groupName =>
-          val groupRef = ManagedGroupRef(RawlsGroupName(groupName))
-          path("requestAccess") {
-            post {
-              complete { userServiceConstructor(userInfo).RequestAccessToManagedGroup(groupRef) }
-            }
-          }
-        }
       }
   }
 }

@@ -57,19 +57,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def hasGoogleRole(roleGroupName: String, userEmail: String): Future[Boolean]
 
-  def createGoogleGroup(groupRef: RawlsGroupRef): Future[RawlsGroup]
-
-  /**
-    * Gets a Google group.
-    *
-    * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
-    * is because this method is used for health monitoring, and we want health checks to use a
-    * different execution context (thread pool) than user-facing operations.
-    *
-    * @param groupName the group name
-    * @param executionContext the execution context to use for aysnc operations
-    * @return optional Google group
-    */
   def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]]
 
   /**
@@ -107,8 +94,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def diagnosticBucketWrite(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]]
 
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]
-
-  def addMemberToGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
 
   def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
 

@@ -69,16 +69,6 @@ trait AdminApiService extends UserInfoDirectives {
         complete { workspaceServiceConstructor(userInfo).AdminWorkflowQueueStatusByUser }
       }
     } ~
-    pathPrefix("admin" / "groups" / Segment) { (groupNameRaw) =>
-      val rawlsGroupRef = RawlsGroupRef(RawlsGroupName(URLDecoder.decode(groupNameRaw, "UTF-8")))
-      path("accessInstructions") {
-        post {
-          entity(as[ManagedGroupAccessInstructions]) { instructions =>
-            complete { userServiceConstructor(userInfo).SetManagedGroupAccessInstructions(ManagedGroupRef(RawlsGroupName(URLDecoder.decode(groupNameRaw, "UTF-8"))), instructions) }
-          }
-        }
-      }
-    } ~
     path("admin" / "user" / "role" / "curator" / Segment) { (userEmail) =>
       put {
         complete { userServiceConstructor(userInfo).AdminAddLibraryCurator(RawlsUserEmail(userEmail)) }
@@ -87,13 +77,13 @@ trait AdminApiService extends UserInfoDirectives {
         complete { userServiceConstructor(userInfo).AdminRemoveLibraryCurator(RawlsUserEmail(userEmail)) }
       }
     } ~
-    path("admin" / "validate" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
-      get {
-        parameters('userSubjectId.?) { (userSubjectId) =>
-          complete { workspaceServiceConstructor(userInfo).GetWorkspaceStatus(WorkspaceName(workspaceNamespace, workspaceName), userSubjectId) }
-        }
-      }
-    } ~
+//    path("admin" / "validate" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
+//      get {
+//        parameters('userSubjectId.?) { (userSubjectId) =>
+//          complete { workspaceServiceConstructor(userInfo).GetWorkspaceStatus(WorkspaceName(workspaceNamespace, workspaceName), userSubjectId) }
+//        }
+//      }
+//    } ~
     path("admin" / "workspaces") {
       get {
         parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) { (nameOption, stringOption, numberOption, booleanOption) =>

@@ -2,13 +2,14 @@ package org.broadinstitute.dsde.rawls.util
 
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspaceAccessLevels, _}
 import akka.http.scaladsl.model.StatusCodes
 
 import scala.collection.Set
+import scala.concurrent.Future
 
 /**
   * Created by ahaessly on 3/31/17.
@@ -26,8 +27,8 @@ trait LibraryPermissionsSupport extends RoleSupport {
                             (op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
     val names = operations.map(attribute => attribute.name)
     for {
-      canShare <- dataAccess.workspaceQuery.getUserSharePermissions(userInfo.userSubjectId, ctx)
-      hasCatalogOnly <- dataAccess.workspaceQuery.getUserCatalogPermissions(userInfo.userSubjectId, ctx)
+      canShare <- DBIO.successful(true) //dataAccess.workspaceQuery.getUserSharePermissions(userInfo.userSubjectId, ctx) TODO: call sam for this
+      hasCatalogOnly <- DBIO.successful(true) //dataAccess.workspaceQuery.getUserCatalogPermissions(userInfo.userSubjectId, ctx) //TODO: call sam for this?
       result <- getPermissionChecker(names, isCurator, canShare, hasCatalogOnly, userLevel)(op)
     } yield result
   }

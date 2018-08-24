@@ -10,7 +10,6 @@ import slick.basic.DatabaseConfig
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.{DirectoryConfig, DirectorySubjectNameSupport}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.Owner
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
@@ -35,17 +34,11 @@ object DbResource {
   private val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
 
   val dataConfig = DatabaseConfig.forConfig[JdbcProfile](testdb)
-  val dirConfig = DirectoryConfig(
-    conf.getString("directory.url"),
-    conf.getString("directory.user"),
-    conf.getString("directory.password"),
-    conf.getString("directory.baseDn")
-  )
 
   private val liquibaseConf = ConfigFactory.load().getConfig("liquibase")
   private val liquibaseChangeLog = liquibaseConf.getString("changelog")
 
-  val dataSource = new SlickDataSource(dataConfig, dirConfig)(TestExecutionContext.testExecutionContext)
+  val dataSource = new SlickDataSource(dataConfig)(TestExecutionContext.testExecutionContext)
   dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
 
   // create or replace ldap schema

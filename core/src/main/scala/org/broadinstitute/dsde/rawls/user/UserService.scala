@@ -79,8 +79,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
   def ListBillingAccounts = listBillingAccounts()
 
-  def RequestAccessToManagedGroup(groupRef: ManagedGroupRef) = requestAccessToManagedGroup(groupRef)
-  def SetManagedGroupAccessInstructions(groupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions) = asFCAdmin { setManagedGroupAccessInstructions(groupRef, instructions) }
+//  def RequestAccessToManagedGroup(groupRef: ManagedGroupRef) = requestAccessToManagedGroup(groupRef)
+//  def SetManagedGroupAccessInstructions(groupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions) = asFCAdmin { setManagedGroupAccessInstructions(groupRef, instructions) }
 
   def CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) = startBillingProjectCreation(projectName, billingAccount)
   def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamResourceActions.readPolicies) { getBillingProjectMembers(projectName) }
@@ -115,12 +115,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   //Note: As of Sam Phase I, this function only fires off the welcome email and updates pending workspace access
   //The rest of user registration now takes place in Sam
-  //TODO: really this is pointless and we should prob do it in sam
+  //TODO: move this to orch
   def createUser(): Future[Unit] = {
     Future.successful(notificationDAO.fireAndForgetNotification(ActivationNotification(userInfo.userSubjectId)))
   }
-
-  private def loadUser(userRef: RawlsUserRef): Future[RawlsUser] = dataSource.inTransaction { dataAccess => withUser(userRef, dataAccess)(DBIO.successful) }
 
   def isAdmin(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     toFutureTry(tryIsFCAdmin(userEmail)) map {

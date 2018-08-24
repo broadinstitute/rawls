@@ -1468,7 +1468,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
-    def saveNewWorkspace(workspaceId: String, googleWorkspaceInfo: GoogleWorkspaceInfo, workspaceRequest: WorkspaceRequest, dataAccess: DataAccess): ReadWriteAction[WorkspaceLite] = {
+    def saveNewWorkspace(workspaceId: String, googleWorkspaceInfo: GoogleWorkspaceInfo, workspaceRequest: WorkspaceRequest, dataAccess: DataAccess): ReadWriteAction[Workspace] = {
       val currentDate = DateTime.now
 
       val workspace = Workspace(
@@ -1497,7 +1497,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             projectOwnerGroupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))) //TODO: use new get email policy endpoint
 //            projectOwnerGroupOE <- dataAccess.rawlsGroupQuery.loadFromEmail(projectOwnerGroupEmail.value)
 //            projectOwnerGroup = projectOwnerGroupOE.collect { case Right(g) => g } getOrElse(throw new RawlsException(s"could not find project owner group for email $projectOwnerGroupEmail"))
-            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, projectOwnerGroup, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain.getOrElse(Set.empty), authDomainProjectOwnerIntersection))
+            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, Map.empty)) //TODO: this map should have all of the policy emails for the access levels
 
             savedWorkspace <- saveNewWorkspace(workspaceId, googleWorkspaceInfo, workspaceRequest, dataAccess)
             response <- op(SlickWorkspaceContext(savedWorkspace))

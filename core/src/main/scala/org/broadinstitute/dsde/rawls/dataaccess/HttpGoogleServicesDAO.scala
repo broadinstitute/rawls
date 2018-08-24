@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.io._
 import java.util.UUID
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
 import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
@@ -21,7 +21,7 @@ import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
-import com.google.api.services.compute.model.{ServiceAccount, UsageExportLocation}
+import com.google.api.services.compute.model.UsageExportLocation
 import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.genomics.model.Operation
 import com.google.api.services.genomics.{Genomics, GenomicsScopes}
@@ -34,27 +34,24 @@ import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
-import com.typesafe.scalalogging.LazyLogging
+import io.grpc.Status.Code
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.GoogleUtilities
-import io.grpc.Status.Code
-import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, GoogleInstrumentedService}
-import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService._
+import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard, Retry}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroup}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time
 import spray.json._
 
 import scala.collection.JavaConversions._
-import scala.concurrent.duration._
 import scala.concurrent.{Future, _}
 import scala.io.Source
-import scala.util.{Success, Try}
+import scala.util.Try
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -138,9 +135,9 @@ class HttpGoogleServicesDAO(
 
     // we do not make a special access group for project owners because the only member would be a single group
     // we will just use that group directly and avoid potential google problems with a group being in too many groups
-    val accessGroupRefsByLevel: Map[WorkspaceAccessLevel, RawlsGroupRef] = groupAccessLevelsAscending.filterNot(_ == ProjectOwner).map { accessLevel =>
-      (accessLevel, RawlsGroupRef(RawlsGroupName(workspaceAccessGroupName(workspaceId, accessLevel))))
-    }.toMap
+//    val accessGroupRefsByLevel: Map[WorkspaceAccessLevel, RawlsGroupRef] = groupAccessLevelsAscending.filterNot(_ == ProjectOwner).map { accessLevel =>
+//      (accessLevel, RawlsGroupRef(RawlsGroupName(workspaceAccessGroupName(workspaceId, accessLevel))))
+//    }.toMap
 
 
     //TODO: I think this is sam logic now
@@ -228,12 +225,6 @@ class HttpGoogleServicesDAO(
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
 
     bucketInsertion
-  }
-
-  def workspaceAccessGroupName(workspaceId: String, accessLevel: WorkspaceAccessLevel) = s"${workspaceId}-${accessLevel.toString}"
-
-  def intersectionGroupName(workspaceId: String, accessLevel: WorkspaceAccessLevel) = {
-    s"I_$workspaceId-${accessLevel.toString}"
   }
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[RawlsGroupEmail]): Future[String] = {
@@ -437,101 +428,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  private def listGroupMembersInternal(groupName: String): Future[Option[Seq[String]]] = {
-    val fetcher = getGroupDirectory.members.list(groupName).setMaxResults(maxPageSize)
-
-    listGroupMembersRecursive(fetcher) map { pagesOption =>
-      pagesOption.map { pages =>
-        pages.toSeq.flatMap { page =>
-          Option(page.getMembers) match {
-            case None => Seq.empty
-            case Some(members) => members.map(_.getEmail)
-          }
-        }
-      }
-    }
-  }
-
-  /**
-   * recursive because the call to list all members is paginated.
-   * @param fetcher
-   * @param accumulated the accumulated Members objects, 1 for each page, the head element is the last prior request
-   *                    for easy retrieval. The initial state is Some(Nil). This is what is eventually returned. This
-   *                    is None when the group does not exist.
-   * @return None if the group does not exist or a Members object for each page.
-   */
-  private def listGroupMembersRecursive(fetcher: Directory#Members#List, accumulated: Option[List[Members]] = Some(Nil)): Future[Option[List[Members]]] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    accumulated match {
-      // when accumulated has a Nil list then this must be the first request
-      case Some(Nil) => retryWithRecoverWhen500orGoogleError(() => {
-        blocking {
-          Option(executeGoogleRequest(fetcher))
-        }
-      }) {
-        case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
-      }.flatMap(firstPage => listGroupMembersRecursive(fetcher, firstPage.map(List(_))))
-
-      // the head is the Members object of the prior request which contains next page token
-      case Some(head :: xs) if head.getNextPageToken != null => retryWhen500orGoogleError(() => {
-        blocking {
-          executeGoogleRequest(fetcher.setPageToken(head.getNextPageToken))
-        }
-      }).flatMap(nextPage => listGroupMembersRecursive(fetcher, accumulated.map(pages => nextPage :: pages)))
-
-      // when accumulated is None (group does not exist) or next page token is null
-      case _ => Future.successful(accumulated)
-    }
-  }
-
-  override def createGoogleGroup(groupRef: RawlsGroupRef): Future[RawlsGroup] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val newGroup = RawlsGroup(groupRef.groupName, RawlsGroupEmail(toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    val directory = getGroupDirectory
-    val groups = directory.groups
-
-    for {
-      // first verify it does not exist
-      // then try to create it, sometimes we get a 503 error creating the group but it actually gets created
-      // so we get a 409 on subsequent retries - because we have already check it does not exist assume that any
-      // 409 means we created it
-      // last verify it is there
-      preexistingGroup <- retryWithRecoverWhen500orGoogleError( () => {
-        Option(executeGoogleRequest(groups.get(newGroup.groupEmail.value)))
-      }) {
-        case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
-      }
-
-      _ <- if (preexistingGroup.isDefined) Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"google group ${newGroup.groupEmail.value} already exists"))) else Future.successful(())
-
-      _ <- retryWithRecoverWhen500orGoogleError (() => {
-        // group names have a 60 char limit
-        executeGoogleRequest(groups.insert(new Group().setEmail(newGroup.groupEmail.value).setName(newGroup.groupName.value.take(60))))
-        () // need this because in the recover case below we can't create a Group object to return
-      }) {
-        case e: HttpResponseException if e.getStatusCode == StatusCodes.Conflict.intValue =>
-      }
-
-      // GAWB-853 verify that the group exists by retrying to get group until success or too many tries
-      _ <- retryWhen500orGoogleError (() => {
-        executeGoogleRequest(groups.get(newGroup.groupEmail.value))
-      }) recover {
-        case t: Throwable =>
-        // log but ignore any error in the getter, downstream code will fail or not as appropriate
-        logger.debug(s"could not verify that google group ${newGroup.groupEmail.value} exists", t)
-      }
-
-    } yield newGroup
-  }
-
-  override def addMemberToGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
-    val memberEmail = memberToAdd match {
-      case Left(member) => toProxyFromUser(member)
-      case Right(member) => member.groupEmail.value
-    }
-    addEmailToGoogleGroup(group.groupEmail.value, memberEmail)
-  }
-
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Groups
     val inserter = getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
@@ -550,29 +446,11 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def removeMemberFromGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
-    val memberEmail = memberToAdd match {
-      case Left(member) => toProxyFromUser(member.userSubjectId)
-      case Right(member) => member.groupEmail.value
-    }
-    removeEmailFromGoogleGroup(group.groupEmail.value, memberEmail)
-  }
-
   override def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Groups
     val deleter = getGroupDirectory.members.delete(groupEmail, emailToRemove)
     retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(deleter) }) {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // it is ok of the email is already missing
-    }
-  }
-
-  override def deleteGoogleGroup(group: RawlsGroup): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val directory = getGroupDirectory
-    val groups = directory.groups
-    val deleter = groups.delete(group.groupEmail.value)
-    retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(deleter) }) {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // if the group is already gone, don't fail
     }
   }
 
@@ -1039,11 +917,6 @@ class HttpGoogleServicesDAO(
 
   def getGroupDirectory = {
     new Directory.Builder(httpTransport, jsonFactory, getGroupServiceAccountCredential).setApplicationName(appName).build()
-  }
-
-  private def getBucketCredential(userInfo: UserInfo): Credential = {
-    if (useServiceAccountForBuckets) getBucketServiceAccountCredential
-    else getUserCredential(userInfo)
   }
 
   private def getUserCredential(userInfo: UserInfo): Credential = {
