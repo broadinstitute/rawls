@@ -5,10 +5,9 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.workbench.model.ValueObject
+import org.broadinstitute.dsde.workbench.model.{ValueObject, WorkbenchEmail}
 import org.joda.time.DateTime
 import spray.json._
 
@@ -114,7 +113,7 @@ case class WorkflowCost(
 case class Submission(
   submissionId: String,
   submissionDate: DateTime,
-  submitter: RawlsUserRef,
+  submitter: WorkbenchEmail,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
   submissionEntity: Option[AttributeEntityReference],
@@ -139,11 +138,11 @@ case class SubmissionStatusResponse(
   cost: Option[Float] = None
 )
 object SubmissionStatusResponse {
-  def apply(submission: Submission, rawlsUser: RawlsUser): SubmissionStatusResponse =
+  def apply(submission: Submission): SubmissionStatusResponse =
     SubmissionStatusResponse(
       submissionId = submission.submissionId,
       submissionDate = submission.submissionDate,
-      submitter = rawlsUser.userEmail.value,
+      submitter = submission.submissionId,
       methodConfigurationNamespace = submission.methodConfigurationNamespace,
       methodConfigurationName = submission.methodConfigurationName,
       submissionEntity = submission.submissionEntity,
@@ -170,11 +169,11 @@ case class SubmissionListResponse(
   cost: Option[Float] = None
 )
 object SubmissionListResponse {
-  def apply(submission: Submission, rawlsUser: RawlsUser, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts): SubmissionListResponse =
+  def apply(submission: Submission, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts): SubmissionListResponse =
     SubmissionListResponse(
       submissionId = submission.submissionId,
       submissionDate = submission.submissionDate,
-      submitter = rawlsUser.userEmail.value,
+      submitter = submission.submitter.value,
       methodConfigurationNamespace = submission.methodConfigurationNamespace,
       methodConfigurationName = submission.methodConfigurationName,
       submissionEntity = submission.submissionEntity,

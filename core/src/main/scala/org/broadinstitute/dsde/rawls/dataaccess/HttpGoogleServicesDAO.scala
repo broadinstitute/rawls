@@ -134,63 +134,35 @@ class HttpGoogleServicesDAO(
 
   private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
-  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, projectOwnerGroup: RawlsGroup, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], authDomainProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[GoogleWorkspaceInfo] = {
 
     // we do not make a special access group for project owners because the only member would be a single group
     // we will just use that group directly and avoid potential google problems with a group being in too many groups
-    val accessGroupRefsByLevel: Map[WorkspaceAccessLevel, RawlsGroupRef] = (groupAccessLevelsAscending.filterNot(_ == ProjectOwner)).map { accessLevel =>
+    val accessGroupRefsByLevel: Map[WorkspaceAccessLevel, RawlsGroupRef] = groupAccessLevelsAscending.filterNot(_ == ProjectOwner).map { accessLevel =>
       (accessLevel, RawlsGroupRef(RawlsGroupName(workspaceAccessGroupName(workspaceId, accessLevel))))
     }.toMap
 
-    val intersectionGroupRefsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroupRef]] = {
-      if(authDomain.isEmpty) None
-      else {
-        Option(groupAccessLevelsAscending.map { accessLevel =>
-          (accessLevel, RawlsGroupRef(RawlsGroupName(intersectionGroupName(workspaceId, accessLevel))))
-        }.toMap)
-      }
-    }
 
-    def rollbackGroups(groupInsertTries: Iterable[Try[RawlsGroup]]) = {
-      Future.traverse(groupInsertTries) {
-        case Success(group) => deleteGoogleGroup(group)
-        case _ => Future.successful(())
-      }
-    }
+    //TODO: I think this is sam logic now
+//    def insertAuthDomainProjectOwnerIntersection: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
+//      val projectOwnerGroup = groupsByAccess(WorkspaceAccessLevels.ProjectOwner)
+//      val inserts = Future.traverse(authDomainProjectOwnerIntersection.getOrElse(Set.empty)) { userRef =>
+//        addEmailToGoogleGroup(projectOwnerGroup.groupEmail.value, toProxyFromUser(userRef.userSubjectId))
+//      }
+//
+//      inserts.map { _ =>
+//        groupsByAccess.map {
+//          case (ProjectOwner, group) => ProjectOwner -> group.copy(users = authDomainProjectOwnerIntersection.getOrElse(Set.empty))
+//          case otherwise => otherwise
+//        }
+//      }
+//    }
 
-    def insertGroups(groupRefsByAccess: Map[WorkspaceAccessLevel, RawlsGroupRef]): Future[Map[WorkspaceAccessLevel, Try[RawlsGroup]]] = {
-      Future.traverse(groupRefsByAccess) { case (access, groupRef) => toFutureTry(createGoogleGroup(groupRef)).map(access -> _) }.map(_.toMap)
-    }
-
-    def insertOwnerMember: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
-      val ownerGroup = groupsByAccess(WorkspaceAccessLevels.Owner)
-      addMemberToGoogleGroup(ownerGroup, Left(RawlsUser(userInfo))).map(_ => groupsByAccess + (WorkspaceAccessLevels.Owner -> ownerGroup.copy(users = ownerGroup.users + RawlsUser(userInfo))))
-    }
-
-    def insertAuthDomainProjectOwnerIntersection: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
-      val projectOwnerGroup = groupsByAccess(WorkspaceAccessLevels.ProjectOwner)
-      val inserts = Future.traverse(authDomainProjectOwnerIntersection.getOrElse(Set.empty)) { userRef =>
-        addEmailToGoogleGroup(projectOwnerGroup.groupEmail.value, toProxyFromUser(userRef.userSubjectId))
-      }
-
-      inserts.map { _ =>
-        groupsByAccess.map {
-          case (ProjectOwner, group) => ProjectOwner -> group.copy(users = authDomainProjectOwnerIntersection.getOrElse(Set.empty))
-          case otherwise => otherwise
-        }
-      }
-    }
-
-    def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[String] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
+    def insertBucket: Map[WorkspaceAccessLevel, WorkbenchEmail] => Future[String] = { policyGroupsByAccessLevel =>
       implicit val service = GoogleInstrumentedService.Storage
       val bucketName = getBucketName(workspaceId)
       retryWhen500orGoogleError {
         () => {
-
-          // When Intersection Groups exist, these are the groups used to determine ACLs.  Otherwise, Access Groups are used directly.
-
-          val groupsByAccess = intersectionGroupsByLevel getOrElse accessGroupsByLevel
-
           // bucket ACLs should be:
           //   project owner - bucket writer
           //   workspace owner - bucket writer
@@ -199,7 +171,7 @@ class HttpGoogleServicesDAO(
           //   bucket service account - bucket owner
           val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(ProjectOwner -> "WRITER", Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
           val bucketAcls =
-            groupsByAccess.map { case (access, group) => newBucketAccessControl(makeGroupEntityString(group.groupEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
+            policyGroupsByAccessLevel.map { case (access, policyEmail) => newBucketAccessControl(makeGroupEntityString(policyEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
               newBucketAccessControl("user-" + clientEmail, "OWNER")
 
           // default object ACLs should be:
@@ -209,7 +181,7 @@ class HttpGoogleServicesDAO(
           //   workspace reader - object reader
           //   bucket service account - object owner
           val defaultObjectAcls =
-            groupsByAccess.map { case (access, group) => newObjectAccessControl(makeGroupEntityString(group.groupEmail.value), "READER") }.toSeq :+
+          policyGroupsByAccessLevel.map { case (_, policyEmail) => newObjectAccessControl(makeGroupEntityString(policyEmail.value), "READER") }.toSeq :+
               newObjectAccessControl("user-" + clientEmail, "OWNER")
 
           val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
@@ -245,38 +217,17 @@ class HttpGoogleServicesDAO(
 
     // setupWorkspace main logic
 
-    val accessGroupInserts = insertGroups(accessGroupRefsByLevel)
-
-    val intersectionGroupInserts = intersectionGroupRefsByLevel match {
-      case Some(g) => insertGroups(g) map { Option(_) }
-      case None => Future.successful(None)
-    }
-
     val bucketInsertion = for {
-      accessGroupTries <- accessGroupInserts
-      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember map { _ + (ProjectOwner -> projectOwnerGroup) }
-      intersectionGroupTries <- intersectionGroupInserts
-      intersectionGroups <- intersectionGroupTries match {
-        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertAuthDomainProjectOwnerIntersection map { Option(_) }
-        case None => Future.successful(None)
-      }
-      bucketName <- insertBucket(accessGroups, intersectionGroups)
+//      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember map { _ + (ProjectOwner -> projectOwnerGroup) }
+//      intersectionGroups <- intersectionGroupTries match {
+//        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertAuthDomainProjectOwnerIntersection map { Option(_) }
+//        case None => Future.successful(None)
+//      }
+      bucketName <- insertBucket(policyGroupsByAccessLevel)
       _ <- insertInitialStorageLog(bucketName)
-    } yield GoogleWorkspaceInfo(bucketName, accessGroups, intersectionGroups)
+    } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
 
-    bucketInsertion recoverWith {
-      case regrets =>
-        val groupsToRollback = for {
-          accessGroupTries <- accessGroupInserts
-          intersectionGroupTries <- intersectionGroupInserts
-        } yield {
-          intersectionGroupTries match {
-            case Some(tries) => accessGroupTries.values ++ tries.values
-            case None => accessGroupTries.values
-          }
-        }
-        groupsToRollback flatMap rollbackGroups flatMap (_ => Future.failed(regrets))
-    }
+    bucketInsertion
   }
 
   def workspaceAccessGroupName(workspaceId: String, accessLevel: WorkspaceAccessLevel) = s"${workspaceId}-${accessLevel.toString}"

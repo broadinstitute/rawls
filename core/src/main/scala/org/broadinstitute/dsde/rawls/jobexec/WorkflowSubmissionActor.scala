@@ -251,6 +251,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       else None
 
     val workflowBatchFuture = dataSource.inTransaction { dataAccess =>
+
+      val fakeSubmitter = RawlsUser(RawlsUserSubjectId("1111111"), RawlsUserEmail("foo-bar@baz.bar")) //TODO!
+
       for {
         //Load a bunch of things we'll need to reconstruct information:
         //The list of workflows in this submission
@@ -262,16 +265,15 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         billingProject <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRec.namespace)).map(_.get)
 
         //The person who submitted the submission, and their token
-        submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
-        petSAJson <- DBIO.from(samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, submitter.userEmail))
-        userCredentials <- DBIO.from(googleServicesDAO.getUserCredentials(submitter)).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for $submitter")))
+        petSAJson <- DBIO.from(samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, RawlsUserEmail(submissionRec.submitterEmail)))
+        userCredentials <- DBIO.from(googleServicesDAO.getUserCredentials(fakeSubmitter)).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for $fakeSubmitter")))
 
         //The wdl
         methodConfig <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId).map(_.get)
 
         wdl <- getWdl(methodConfig, userCredentials)
       } yield {
-        val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, submitter, petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
+        val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, fakeSubmitter, petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
 
         val wfInputsBatch = workflowBatch map { wf =>
           val methodProps = wf.inputResolutions map {

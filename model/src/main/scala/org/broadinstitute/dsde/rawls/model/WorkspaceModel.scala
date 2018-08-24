@@ -100,8 +100,6 @@ case class Workspace(
                       lastModified: DateTime,
                       createdBy: String,
                       attributes: AttributeMap,
-                      accessLevels: Map[WorkspaceAccessLevel, RawlsGroupRef],
-                      authDomainACLs: Map[WorkspaceAccessLevel, RawlsGroupRef],
                       isLocked: Boolean = false
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
@@ -109,7 +107,7 @@ case class Workspace(
   def path: String = toWorkspaceName.path
 }
 
-case class WorkspaceLite(
+case class WorkspaceLiteX(
                         namespace: String,
                         name: String,
                         authorizationDomain: Set[ManagedGroupRef],
@@ -552,9 +550,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
 
-  implicit val WorkspaceFormat = jsonFormat12(Workspace)
+  implicit val WorkspaceFormat = jsonFormat10(Workspace)
 
-  implicit val WorkspaceLiteFormat = jsonFormat10(WorkspaceLite)
+//  implicit val WorkspaceLiteFormat = jsonFormat10(WorkspaceLite)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 

@@ -29,7 +29,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.workbench.model.WorkbenchException
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -72,7 +72,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def UnlockWorkspace(workspaceName: WorkspaceName) = unlockWorkspace(workspaceName)
   def CheckBucketReadAccess(workspaceName: WorkspaceName) = checkBucketReadAccess(workspaceName)
   def GetBucketUsage(workspaceName: WorkspaceName) = getBucketUsage(workspaceName)
-  def GetAccessInstructions(workspaceName: WorkspaceName) = getAccessInstructions(workspaceName)
 
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
   def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) = getEntity(workspaceName, entityType, entityName)
@@ -209,14 +208,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             }
         }}
 
-        //Gather the Google groups to remove, but don't remove project owners group which is used by other workspaces
-        authDomainAclRefsToRemove = if(workspaceContext.workspace.authorizationDomain.nonEmpty) workspaceContext.workspace.authDomainACLs.values else Seq.empty
-        groupRefsToRemove: Set[RawlsGroupRef] = (workspaceContext.workspace.accessLevels.filterKeys(_ != ProjectOwner).values ++ authDomainAclRefsToRemove).toSet
-
         // Delete components of the workspace
-        _ <- dataAccess.workspaceQuery.deleteWorkspaceAuthDomainRecords(workspaceContext.workspaceId)
-        _ <- dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId)
-        _ <- dataAccess.workspaceQuery.deleteWorkspaceInvites(workspaceContext.workspaceId)
         _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceId)
         _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceId)
         _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceId)
@@ -253,7 +245,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         getWorkspaceContext(workspaceName) flatMap { ctx =>
           dataSource.inTransaction { dataAccess =>
             loadWorkspaceId(workspaceName)
-            DBIO.from(getMaximumAccessLevel(ctx)) flatMap {maxAccessLevel =>
+            DBIO.from(getMaximumAccessLevel(ctx.workspaceId.toString)) flatMap {maxAccessLevel =>
               withLibraryPermissions(ctx, operations, dataAccess, userInfo, isCurator, maxAccessLevel) {
                 updateWorkspace(operations, dataAccess)(ctx)
               }
@@ -453,24 +445,26 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   //TODO: writers can't read any members lower than owners. how will this continue to work?
   //via doug: something similar to the "pester" policy
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    val getUsers = {
-      dataSource.inTransaction{ dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) {workspaceContext =>
-          requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Write, dataAccess) {
-            DBIO.sequence(workspaceContext.workspace.accessLevels.values.map {group =>
-              dataAccess.rawlsGroupQuery.flattenGroupMembership(group)
-            })
-          }
-        }
-      }
-    }
-    getUsers.map { groups =>
-      val userIds = groups.flatten.map(user => user.userSubjectId).toSet
-      val notificationMessages = userIds.map { userId => Notifications.WorkspaceChangedNotification(userId, workspaceName) }
-      val numMessages = notificationMessages.size.toString
-      notificationDAO.fireAndForgetNotifications(notificationMessages)
-      RequestComplete(StatusCodes.OK, numMessages)
-    }
+//    val getUsers = {
+//      dataSource.inTransaction{ dataAccess =>
+//        withWorkspaceContext(workspaceName, dataAccess) {workspaceContext =>
+//          requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Write, dataAccess) {
+//            DBIO.sequence(workspaceContext.workspace.accessLevels.values.map {group =>
+//              dataAccess.rawlsGroupQuery.flattenGroupMembership(group)
+//            })
+//          }
+//        }
+//      }
+//    }
+//    getUsers.map { groups =>
+//      val userIds = groups.flatten.map(user => user.userSubjectId).toSet
+//      val notificationMessages = userIds.map { userId => Notifications.WorkspaceChangedNotification(userId, workspaceName) }
+//      val numMessages = notificationMessages.size.toString
+//      notificationDAO.fireAndForgetNotifications(notificationMessages)
+//      RequestComplete(StatusCodes.OK, numMessages)
+//    }
+
+    Future.successful(RequestComplete(StatusCodes.OK)) //todo: actually re-implement
 
   }
 
@@ -1142,7 +1136,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
           val submission = Submission(submissionId = submissionId.toString,
             submissionDate = DateTime.now(),
-            submitter = RawlsUser(userInfo),
+            submitter = WorkbenchEmail(userInfo.userEmail.value),
             methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
             methodConfigurationName = submissionRequest.methodConfigurationName,
             submissionEntity = submissionEntityOpt,
@@ -1175,20 +1169,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val submissionWithoutCosts = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
-          withUser(submission.submitter, dataAccess) { user =>
-            DBIO.successful(submission, user)
-          }
+            DBIO.successful(submission)
         }
       }
     }
 
     submissionWithoutCosts flatMap {
-      case (submission, user) => {
+      case (submission) => {
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
         toFutureTry(submissionCostService.getWorkflowCosts(allWorkflowIds, workspaceName.namespace)) map {
           case Failure(ex) =>
             logger.error("Unable to get workflow costs for this submission. ", ex)
-            RequestComplete((StatusCodes.OK, SubmissionStatusResponse(submission, user)))
+            RequestComplete((StatusCodes.OK, SubmissionStatusResponse(submission)))
           case Success(costMap) =>
             val costedWorkflows = submission.workflows.map { workflow =>
               workflow.workflowId match {
@@ -1197,7 +1189,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               }
             }
             val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
-            RequestComplete((StatusCodes.OK, SubmissionStatusResponse(costedSubmission, user)))
+            RequestComplete((StatusCodes.OK, SubmissionStatusResponse(costedSubmission)))
         }
       }
     }
@@ -1425,25 +1417,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       RequestComplete(BucketUsageResponse(usage))
     }
   }
-
-  def getAccessInstructions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        val accessGroups = DBIO.sequence(workspaceContext.workspace.accessLevels.values.map { ref =>
-          dataAccess.rawlsGroupQuery.loadGroupIfMember(ref, RawlsUser(userInfo))
-        })
-
-        accessGroups.flatMap { memberOf =>
-          if (memberOf.flatten.isEmpty) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-          else {
-            dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(workspaceContext.workspace.authorizationDomain) map { instructions =>
-              RequestComplete(StatusCodes.OK, instructions)
-            }
-          }
-        }
-      }
-    }
-  }
   
   def getGenomicsOperation(workspaceName: WorkspaceName, jobId: String): Future[PerRequestMessage] = {
     // First check the workspace context and permissions in a DB transaction.
@@ -1495,15 +1468,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
-    def saveNewWorkspace(workspaceId: String, googleWorkspaceInfo: GoogleWorkspaceInfo, workspaceRequest: WorkspaceRequest, dataAccess: DataAccess): ReadWriteAction[Workspace] = {
+    def saveNewWorkspace(workspaceId: String, googleWorkspaceInfo: GoogleWorkspaceInfo, workspaceRequest: WorkspaceRequest, dataAccess: DataAccess): ReadWriteAction[WorkspaceLite] = {
       val currentDate = DateTime.now
 
-      val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g)) }
-      val intersectionGroups = googleWorkspaceInfo.intersectionGroupsByLevel map {
-        _.map { case (a, g) => (a -> RawlsGroup.toRef(g)) }
-      }
-
-      val workspace = WorkspaceLite(
+      val workspace = Workspace(
         namespace = workspaceRequest.namespace,
         name = workspaceRequest.name,
         authorizationDomain = workspaceRequest.authorizationDomain.getOrElse(Set.empty),
@@ -1512,7 +1480,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         createdDate = currentDate,
         lastModified = currentDate,
         createdBy = userInfo.userEmail.value,
-        attributes = workspaceRequest.attributes,
+        attributes = workspaceRequest.attributes
       )
 
       dataAccess.workspaceQuery.save(workspace)
@@ -1526,9 +1494,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           val workspaceId = UUID.randomUUID.toString
           for {
             project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
-            projectOwnerGroupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email"))))
-            projectOwnerGroupOE <- dataAccess.rawlsGroupQuery.loadFromEmail(projectOwnerGroupEmail.value)
-            projectOwnerGroup = projectOwnerGroupOE.collect { case Right(g) => g } getOrElse(throw new RawlsException(s"could not find project owner group for email $projectOwnerGroupEmail"))
+            projectOwnerGroupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))) //TODO: use new get email policy endpoint
+//            projectOwnerGroupOE <- dataAccess.rawlsGroupQuery.loadFromEmail(projectOwnerGroupEmail.value)
+//            projectOwnerGroup = projectOwnerGroupOE.collect { case Right(g) => g } getOrElse(throw new RawlsException(s"could not find project owner group for email $projectOwnerGroupEmail"))
             googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, projectOwnerGroup, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain.getOrElse(Set.empty), authDomainProjectOwnerIntersection))
 
             savedWorkspace <- saveNewWorkspace(workspaceId, googleWorkspaceInfo, workspaceRequest, dataAccess)

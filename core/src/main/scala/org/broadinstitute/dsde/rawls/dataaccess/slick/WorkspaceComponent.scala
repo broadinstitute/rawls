@@ -35,8 +35,7 @@ trait WorkspaceComponent {
     with EntityComponent
     with SubmissionComponent
     with WorkflowComponent
-    with MethodConfigurationComponent
-    with ManagedGroupComponent =>
+    with MethodConfigurationComponent =>
 
   import driver.api._
 
@@ -134,10 +133,8 @@ trait WorkspaceComponent {
       uniqueResult[WorkspaceRecord](findByNameQuery(workspaceName)).flatMap {
         case None => DBIO.successful(false)
         case Some(workspaceRecord) =>
+          //should we be deleting ALL workspace-related things inside of this method?
           workspaceAttributes(findByIdQuery(workspaceRecord.id)).result.flatMap(recs => DBIO.seq(deleteWorkspaceAttributes(recs.map(_._2)))) andThen {
-            //should we be deleting ALL workspace-related things inside of this method?
-            workspaceAccessQuery.filter(_.workspaceId === workspaceRecord.id).delete
-          } andThen {
             findByIdQuery(workspaceRecord.id).delete
           } map { count =>
             count > 0
@@ -163,56 +160,6 @@ trait WorkspaceComponent {
       findByNameQuery(workspaceName).map(_.isLocked).update(false)
     }
 
-    def listWorkspacesInAuthDomain(authDomainRef: ManagedGroupRef): ReadAction[Seq[WorkspaceName]] = {
-      for {
-        workspaceIds <- findWorkspaceIdsInAuthDomainGroup(authDomainRef).result
-        workspaces <- findByIdsQuery(workspaceIds).result
-      } yield workspaces.map(ws => WorkspaceName(ws.namespace, ws.name))
-    }
-
-    def saveInvite(workspaceId: UUID, originUser: String, invite: WorkspaceACLUpdate): ReadWriteAction[WorkspaceACLUpdate] = {
-      pendingWorkspaceAccessQuery insertOrUpdate marshalWorkspaceInvite(workspaceId, originUser, invite) map { _ => invite }
-    }
-
-    def removeInvite(workspaceId: UUID, userEmail: String): ReadWriteAction[Boolean] = {
-      pendingWorkspaceAccessQuery.filter(rec => rec.workspaceId === workspaceId && rec.userEmail === userEmail).delete.map { count => count == 1 }
-    }
-
-    def getInvites(workspaceId: UUID): ReadAction[Seq[(String, WorkspaceAccessLevel)]] = {
-      pendingWorkspaceAccessQuery.filter(_.workspaceId === workspaceId).map(rec => (rec.userEmail, rec.accessLevel)).result.map(_.map {case (email, access) =>
-        (email, WorkspaceAccessLevels.withName(access))
-      })
-    }
-
-    def findWorkspaceInvitesForUser(userEmail: RawlsUserEmail): ReadAction[Seq[(WorkspaceName, WorkspaceAccessLevel)]] = {
-      (pendingWorkspaceAccessQuery.filter(_.userEmail === userEmail.value) join workspaceQuery on (_.workspaceId === _.id)).map(rec => (rec._2.namespace, rec._2.name, rec._1.accessLevel)).result.map { namesWithAccessLevel =>
-        namesWithAccessLevel.map{ case (namespace, name, accessLevel) => (WorkspaceName(namespace, name), WorkspaceAccessLevels.withName(accessLevel))}
-      }
-    }
-
-    def deleteWorkspaceInvitesForUser(userEmail: RawlsUserEmail) = {
-      pendingWorkspaceAccessQuery.filter(_.userEmail === userEmail.value).delete
-    }
-
-    def deleteWorkspaceInvites(workspaceId: UUID) = {
-      findWorkspaceInvitesQuery(workspaceId).delete
-    }
-
-    private def insertAuthDomainRecords(workspace: Workspace): WriteAction[Int] = {
-      val id = UUID.fromString(workspace.workspaceId)
-      val authDomainRecords = workspace.authorizationDomain.map(_.membersGroupName.value).map(groupName => WorkspaceAuthDomainRecord(id, groupName))
-
-      (workspaceAuthDomainQuery ++= authDomainRecords).map(_.sum)
-    }
-
-    def deleteWorkspaceAuthDomainRecords(workspaceId: UUID) = {
-      findAuthDomainGroupsForWorkspace(workspaceId).delete
-    }
-
-    def deleteWorkspaceAccessReferences(workspaceId: UUID): WriteAction[Int] = {
-      workspaceAccessQuery.filter(_.workspaceId === workspaceId).delete
-    }
-
     def getWorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] = {
       uniqueResult(workspaceQuery.findByNameQuery(workspaceName).result).map(x => x.map(_.id))
     }
@@ -232,15 +179,6 @@ trait WorkspaceComponent {
         attribute <- workspaceAttributeQuery.queryByAttribute(attrName, attrValue)
         workspace <- workspaceQuery if workspace.id === attribute.ownerId
       } yield workspace
-    }
-
-    def loadAccessGroup(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) = {
-      val query = for {
-        workspace <- workspaceQuery if workspace.namespace === workspaceName.namespace && workspace.name === workspaceName.name
-        accessGroup <- workspaceAccessQuery if accessGroup.workspaceId === workspace.id && accessGroup.accessLevel === accessLevel.toString && accessGroup.isAuthDomainAcl === false
-      } yield accessGroup.groupName
-
-      uniqueResult(query.result).map(name => RawlsGroupRef(RawlsGroupName(name.getOrElse(throw new RawlsException(s"Unable to load ${accessLevel} access group for workspace ${workspaceName}")))))
     }
 
     /**
@@ -337,10 +275,6 @@ trait WorkspaceComponent {
       filter(rec => (rec.namespace === workspaceName.namespace) && (rec.name === workspaceName.name))
     }
 
-    private def findWorkspaceInvitesQuery(workspaceId: UUID) = {
-      pendingWorkspaceAccessQuery.filter(_.workspaceId === workspaceId)
-    }
-
     def findByIdQuery(workspaceId: UUID): WorkspaceQueryType = {
       filter(_.id === workspaceId)
     }
@@ -353,35 +287,6 @@ trait WorkspaceComponent {
       filter(_.id.inSetBind(workspaceIds))
     }
 
-    def findWorkspaceIdsInAuthDomainGroup(groupRef: ManagedGroupRef) = {
-      workspaceAuthDomainQuery.filter(_.groupName === groupRef.membersGroupName.value).map(_.workspaceId).distinct
-    }
-
-    def findAuthDomainGroupsForWorkspace(workspaceId: UUID) = {
-      workspaceAuthDomainQuery.filter(_.workspaceId === workspaceId)
-    }
-
-    def listPermissionPairsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[WorkspacePermissionsPair]] = {
-      val query = for {
-        accessLevel <- workspaceAccessQuery if accessLevel.groupName.inSetBind(groups.map(_.groupName.value)) && accessLevel.isAuthDomainAcl === false
-        workspace <- workspaceQuery if workspace.id === accessLevel.workspaceId
-      } yield (workspace, accessLevel)
-      query.result.map(_.map { case (workspace, accessLevel) => WorkspacePermissionsPair(workspace.id.toString, WorkspaceAccessLevels.withName(accessLevel.accessLevel)) })
-    }
-
-    def findWorkspaceUsersAndGroupsWithCatalog(workspaceId: UUID): ReadAction[(Set[RawlsUserRef], Set[RawlsGroupRef])] = {
-
-      val usersWithCatalogPermission = workspaceUserCatalogQuery.filter(rec => rec.workspaceId === workspaceId)
-      val groupsWithCatalogPermission = workspaceGroupCatalogQuery.filter(rec => rec.workspaceId === workspaceId)
-
-      for {
-        users <- usersWithCatalogPermission.result.map(_.map { rec =>RawlsUserRef(RawlsUserSubjectId(rec.subjectId)) } )
-        groups <- groupsWithCatalogPermission.result.map(_.map { rec => RawlsGroupRef(RawlsGroupName(rec.groupName)) } )
-      } yield {
-        (users.toSet, groups.toSet)
-      }
-    }
-
     private def loadWorkspace(lookup: WorkspaceQueryType): ReadAction[Option[Workspace]] = {
       uniqueResult(loadWorkspaces(lookup))
     }
@@ -389,22 +294,13 @@ trait WorkspaceComponent {
     private def loadWorkspaces(lookup: WorkspaceQueryType): ReadAction[Seq[Workspace]] = {
       for {
         workspaceRecs <- lookup.result
-        workspaceAuthDomains <- workspaceAuthDomainQuery.filter(_.workspaceId.in(lookup.map(_.id))).result
         workspaceAttributeRecs <- workspaceAttributesWithReferences(lookup).result
-        workspaceAccessGroupRecs <- workspaceAccessQuery.filter(_.workspaceId.in(lookup.map(_.id))).result
       } yield {
         val attributesByWsId = workspaceAttributeQuery.unmarshalAttributes(workspaceAttributeRecs)
-        val authDomainsByWsId = workspaceAuthDomains.groupBy(_.workspaceId).map{ case(workspaceId, authDomainRecords) => (workspaceId, authDomainRecords.map(x => x.groupName)) }
-        val workspaceGroupsByWsId = workspaceAccessGroupRecs.groupBy(_.workspaceId).map{ case(workspaceId, accessRecords) => (workspaceId, unmarshalRawlsGroupRefs(accessRecords)) }
         workspaceRecs.map { workspaceRec =>
-          val workspaceGroups = workspaceGroupsByWsId.getOrElse(workspaceRec.id, WorkspaceGroups(Map.empty[WorkspaceAccessLevel, RawlsGroupRef], Map.empty[WorkspaceAccessLevel, RawlsGroupRef]))
-          unmarshalWorkspace(workspaceRec, authDomainsByWsId.getOrElse(workspaceRec.id, Seq.empty), attributesByWsId.getOrElse(workspaceRec.id, Map.empty), workspaceGroups.accessGroups, workspaceGroups.authDomainAcls)
+          unmarshalWorkspace(workspaceRec, Seq.empty, attributesByWsId.getOrElse(workspaceRec.id, Map.empty), Map.empty, Map.empty) //TODO
         }
       }
-    }
-
-    private def marshalWorkspaceInvite(workspaceId: UUID, originUser: String, invite: WorkspaceACLUpdate) = {
-      PendingWorkspaceAccessRecord(workspaceId, invite.email, originUser, new Timestamp(DateTime.now.getMillis), invite.accessLevel.toString)
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
@@ -413,15 +309,7 @@ trait WorkspaceComponent {
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, authDomain: Seq[String], attributes: AttributeMap, accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], authDomainACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
       val authDomainRefs = authDomain.map(name => ManagedGroupRef(RawlsGroupName(name)))
-      Workspace(workspaceRec.namespace, workspaceRec.name, authDomainRefs.toSet, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, accessGroups, authDomainACLs, workspaceRec.isLocked)
-    }
-
-    private def unmarshalRawlsGroupRefs(workspaceAccessRecords: Seq[WorkspaceAccessRecord]) = {
-      def toGroupMap(recs: Seq[WorkspaceAccessRecord]) =
-        recs.map(rec => WorkspaceAccessLevels.withName(rec.accessLevel) -> RawlsGroupRef(RawlsGroupName(rec.groupName))).toMap
-
-      val (authDomainAclRecs, accessGroupRecs) = workspaceAccessRecords.partition(_.isAuthDomainAcl)
-      WorkspaceGroups(toGroupMap(authDomainAclRecs), toGroupMap(accessGroupRecs))
+      Workspace(workspaceRec.namespace, workspaceRec.name, authDomainRefs.toSet, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked)
     }
   }
 

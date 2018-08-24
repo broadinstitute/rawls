@@ -307,26 +307,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def requestAccessToManagedGroup(groupRef: ManagedGroupRef): Future[PerRequestMessage] = {
-    val instructionsQuery = dataSource.inTransaction { dataAccess =>
-      dataAccess.managedGroupQuery.getManagedGroupAccessInstructions(Set(groupRef))
-    }
-
-    instructionsQuery.flatMap { accessInstructions =>
-      if(accessInstructions.nonEmpty) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "You may not request access to this group"))
-      else samDAO.requestAccessToManagedGroup(WorkbenchGroupName(groupRef.membersGroupName.value), userInfo).map(_ => RequestComplete(StatusCodes.NoContent))
-    }
-  }
-
-  def setManagedGroupAccessInstructions(managedGroupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.managedGroupQuery.setManagedGroupAccessInstructions(managedGroupRef, instructions).map {
-        case 0 => RequestComplete(StatusCodes.InternalServerError, "We were unable to update the access instructions")
-        case _ => RequestComplete(StatusCodes.NoContent)
-      }
-    }
-  }
-
   def deleteRefreshToken(rawlsUserRef: RawlsUserRef): Future[PerRequestMessage] = {
     deleteRefreshTokenInternal(rawlsUserRef).map(_ => RequestComplete(StatusCodes.OK))
 

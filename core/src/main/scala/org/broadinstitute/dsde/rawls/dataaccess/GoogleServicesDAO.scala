@@ -24,7 +24,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingEmail: String
 
   // returns bucket and group information
-  def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, projectOwnerGroup: RawlsGroup, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo]
+  def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[GoogleWorkspaceInfo]
 
   def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project]
 
@@ -224,5 +224,5 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getAccessTokenUsingJson(saKey: String) : Future[String]
 }
 
-case class GoogleWorkspaceInfo(bucketName: String, accessGroupsByLevel: Map[WorkspaceAccessLevel, RawlsGroup], intersectionGroupsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroup]])
+case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
 case class ProjectTemplate(policies: Map[String, Seq[String]], services: Seq[String])

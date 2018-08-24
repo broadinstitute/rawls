@@ -55,11 +55,12 @@ trait WorkspaceApiService extends UserInfoDirectives {
             complete { workspaceServiceConstructor(userInfo).DeleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
           }
       } ~
-      path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>
-        get {
-          complete { workspaceServiceConstructor(userInfo).GetAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName)) }
-        }
-      } ~
+    //todo: re-implement this
+//      path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>
+//        get {
+//          complete { workspaceServiceConstructor(userInfo).GetAccessInstructions(WorkspaceName(workspaceNamespace, workspaceName)) }
+//        }
+//      } ~
       path("workspaces" / Segment / Segment / "clone") { (sourceNamespace, sourceWorkspace) =>
         post {
           entity(as[WorkspaceRequest]) { destWorkspace =>
