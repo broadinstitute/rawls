@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowCostFormat, WorkflowOutputsFormat, WorkflowQueueStatusByUserResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.AgoraEntityFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
-import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceACLUpdateResponseListFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -1566,17 +1566,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     requireAccess(workspace.copy(isLocked = false), requiredLevel, dataAccess)(op)
   }
 
-  private def requireComputePermission[T](workspace: Workspace, dataAccess: DataAccess)(codeBlock: => Future[T]): Future[T] = {
-    samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamResourceActions.launchBatchCompute, userInfo) flatMap { projectCanCompute =>
-      if (!projectCanCompute) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+  private def requireComputePermission[T](workspace: Workspace, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
+    DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamResourceActions.launchBatchCompute, userInfo)) flatMap { projectCanCompute =>
+      if (!projectCanCompute) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
       else {
-        getMaximumAccessLevel(workspace.workspaceId) flatMap { userLevel =>
+        DBIO.from(getMaximumAccessLevel(workspace.workspaceId)) flatMap { userLevel =>
           if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock
-          else samDAO.listUserPoliciesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo) flatMap { policies =>
+          else DBIO.from(samDAO.listUserPoliciesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)) flatMap { policies =>
             val policyNames = policies.map(_.policyName)
             if (policyNames.contains("canCompute")) codeBlock
-            else if (userLevel >= WorkspaceAccessLevels.Read) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
-            else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+            else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+            else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
           }
         }
       }

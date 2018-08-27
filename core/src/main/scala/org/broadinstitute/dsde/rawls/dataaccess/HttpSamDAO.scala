@@ -73,6 +73,10 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
+  def listUserPoliciesForResource(resourceTypeName: org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName,resourceId: String,userInfo: org.broadinstitute.dsde.rawls.model.UserInfo): scala.concurrent.Future[Set[org.broadinstitute.dsde.rawls.dataaccess.SamPolicyWithName]] = ???
+
+  def listUserRolesForResource(resourceTypeName: org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName,resourceId: String,userInfo: org.broadinstitute.dsde.rawls.model.UserInfo): scala.concurrent.Future[Set[String]] = ???
+
   override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = {
     val url = samServiceURL + "/register/user"
     retry(when401or500) { () =>
