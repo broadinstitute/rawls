@@ -149,11 +149,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] = {
-    samDAO.listUserPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { policies =>
-      policies.map(policy => WorkspaceAccessLevels.withName(policy.policyName))
-    }.map { policyNames =>
-      if(policyNames.isEmpty) WorkspaceAccessLevels.NoAccess
-      else policyNames.fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max)
+    samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { roles =>
+      roles.map(WorkspaceAccessLevels.withName)
+    }.map { roles =>
+      if(roles.isEmpty) WorkspaceAccessLevels.NoAccess
+      else roles.fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max)
     }
   }
 
@@ -1566,16 +1566,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     requireAccess(workspace.copy(isLocked = false), requiredLevel, dataAccess)(op)
   }
 
-  private def requireComputePermission[T](workspace: Workspace, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamResourceActions.launchBatchCompute, userInfo)) flatMap { projectCanCompute =>
-      if (!projectCanCompute) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+  private def requireComputePermission[T](workspace: Workspace, dataAccess: DataAccess)(codeBlock: => Future[T]): Future[T] = {
+    samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamResourceActions.launchBatchCompute, userInfo) flatMap { projectCanCompute =>
+      if (!projectCanCompute) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
       else {
         getMaximumAccessLevel(workspace.workspaceId) flatMap { userLevel =>
           if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock
-          else dataAccess.workspaceQuery.getUserComputePermissions(userInfo.userSubjectId, SlickWorkspaceContext(workspace)) flatMap { canCompute =>
-            if (canCompute) codeBlock
-            else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
-            else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+          else samDAO.listUserPoliciesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo) flatMap { policies =>
+            val policyNames = policies.map(_.policyName)
+            if (policyNames.contains("canCompute")) codeBlock
+            else if (userLevel >= WorkspaceAccessLevels.Read) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+            else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
           }
         }
       }

@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.workbench.model.{ValueObject, WorkbenchEmail}
+import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
 import org.joda.time.DateTime
 import spray.json._
 
@@ -181,7 +182,7 @@ object SubmissionListResponse {
       workflowStatuses = workflowStatuses,
       useCallCache = submission.useCallCache,
       workflowFailureMode = submission.workflowFailureMode,
-      workflowIds = workflowIds,
+      workflowIds = workflowIds
     )
 }
 
