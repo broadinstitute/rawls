@@ -994,7 +994,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def withCustomTestDatabaseInternal[T](data: TestData)(testCode: => T): T = {
     runAndWait(DBIO.seq(slickDataSource.dataAccess.truncateAll), 2 minutes)
-    Await.result(slickDataSource.dataAccess.clearLdap(), 2 minutes)
     try {
       runAndWait(data.save())
       testCode

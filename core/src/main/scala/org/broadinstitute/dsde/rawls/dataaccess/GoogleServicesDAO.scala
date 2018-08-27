@@ -96,7 +96,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]
 
   def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
-  
+
   def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit]
 
   def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]]
