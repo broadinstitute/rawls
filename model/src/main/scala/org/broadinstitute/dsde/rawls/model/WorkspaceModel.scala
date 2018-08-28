@@ -107,27 +107,9 @@ case class Workspace(
   def path: String = toWorkspaceName.path
 }
 
-case class WorkspaceLiteX(
-                        namespace: String,
-                        name: String,
-                        authorizationDomain: Set[ManagedGroupRef],
-                        workspaceId: String,
-                        bucketName: String,
-                        createdDate: DateTime,
-                        lastModified: DateTime,
-                        createdBy: String,
-                        attributes: AttributeMap,
-                        isLocked: Boolean = false
-                        ) extends Attributable {
-  def toWorkspaceName = WorkspaceName(namespace,name)
-  def briefName: String = toWorkspaceName.toString
-  def path: String = toWorkspaceName.path
-}
-
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
                                     lastFailureDate: Option[DateTime],
                                     runningSubmissionsCount: Int)
-
 
 case class EntityName(
                    name: String)
@@ -419,11 +401,6 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspace: Workspace,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
                                  owners: Seq[String],
-                                 public: Option[Boolean])
-
-case class WorkspaceListResponseLite(accessLevel: WorkspaceAccessLevel,
-                                 workspace: Workspace,
-                                 workspaceSubmissionStats: WorkspaceSubmissionStats,
                                  public: Option[Boolean])
 
 case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
