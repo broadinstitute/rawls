@@ -36,19 +36,19 @@ object UserService {
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
-  def getGoogleProjectOwnerGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[RawlsGroupEmail] = {
+  def getGoogleProjectOwnerGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
       .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamProjectRoles.owner)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
   }
 
-  def getComputeUserGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[RawlsGroupEmail] = {
+  def getComputeUserGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
       .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, UserService.canComputeUserPolicyName)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
   }
 
-  def getDefaultGoogleProjectPolicies(ownerGroupEmail: RawlsGroupEmail, computeUserGroupEmail: RawlsGroupEmail) = {
+  def getDefaultGoogleProjectPolicies(ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail) = {
     Map(
       "roles/viewer" -> List(s"group:${ownerGroupEmail.value}"),
       "roles/billing.projectManager" -> List(s"group:${ownerGroupEmail.value}"),

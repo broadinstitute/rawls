@@ -227,7 +227,7 @@ class HttpGoogleServicesDAO(
     bucketInsertion
   }
 
-  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[RawlsGroupEmail]): Future[String] = {
+  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
     val bucketName = getCromwellAuthBucketName(billingProject)
     retryWithRecoverWhen500orGoogleError(
@@ -252,7 +252,7 @@ class HttpGoogleServicesDAO(
 
   def grantReadAccess(billingProject: RawlsBillingProjectName,
                       bucketName: String,
-                      authBucketReaders: Set[RawlsGroupEmail]): Future[String] = {
+                      authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
 
     def insertNewAcls() = for {
@@ -836,7 +836,7 @@ class HttpGoogleServicesDAO(
     removePolicyBindings(projectName, Map(s"roles/$role" -> Seq(s"group:${groupEmail.value}")))
   }
 
-  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[RawlsGroupEmail]): Future[Try[Unit]] = {
+  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[WorkbenchEmail]): Future[Try[Unit]] = {
     implicit val service = GoogleInstrumentedService.Billing
     val projectName = project.projectName
     val credential = getBillingServiceAccountCredential

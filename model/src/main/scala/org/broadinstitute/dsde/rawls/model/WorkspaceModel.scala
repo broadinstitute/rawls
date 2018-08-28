@@ -421,6 +421,11 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  owners: Seq[String],
                                  public: Option[Boolean])
 
+case class WorkspaceListResponseLite(accessLevel: WorkspaceAccessLevel,
+                                 workspace: Workspace,
+                                 workspaceSubmissionStats: WorkspaceSubmissionStats,
+                                 public: Option[Boolean])
+
 case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
                              canShare: Boolean,
                              canCompute: Boolean,

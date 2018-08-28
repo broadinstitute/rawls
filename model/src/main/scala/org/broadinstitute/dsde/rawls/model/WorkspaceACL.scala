@@ -55,11 +55,11 @@ object WorkspaceAccessLevels {
 
   def withName(s: String): WorkspaceAccessLevel = {
     s match {
-      case "PROJECT_OWNER" => ProjectOwner
-      case "OWNER" => Owner
-      case "WRITER" => Write
-      case "READER" => Read
-      case "NO ACCESS" => NoAccess
+      case accessLevel if accessLevel.equalsIgnoreCase("PROJECT_OWNER") => ProjectOwner
+      case accessLevel if accessLevel.equalsIgnoreCase("OWNER") => Owner
+      case accessLevel if accessLevel.equalsIgnoreCase("WRITER") => Write
+      case accessLevel if accessLevel.equalsIgnoreCase("READER") => Read
+      case accessLevel if accessLevel.equalsIgnoreCase("NO ACCESS") => NoAccess
       case _ => throw new RawlsException(s"invalid WorkspaceAccessLevel [${s}]")
     }
   }

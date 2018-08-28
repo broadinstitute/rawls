@@ -178,7 +178,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def grantReadAccess(billingProject: RawlsBillingProjectName,
                       bucketName: String,
-                      readers: Set[RawlsGroupEmail]): Future[String]
+                      readers: Set[WorkbenchEmail]): Future[String]
 
   /**
    * Second step of project creation. See createProject for more details.
@@ -194,7 +194,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
    * @param project
    * @return
    */
-  def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[RawlsGroupEmail]): Future[Try[Unit]]
+  def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[WorkbenchEmail]): Future[Try[Unit]]
 
   def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]

@@ -127,6 +127,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
+  //looks good
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
@@ -135,18 +136,32 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
           else {
             for {
-              catalog <- DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, SamResourceActions.workspaceCanCatalog, userInfo))
-              canShare <- DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, SamResourceActions.workspaceCanShare, userInfo))
-              canCompute <- DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, SamResourceActions.launchBatchCompute, userInfo))
+              catalog <- DBIO.from(getUserCatalogPermissions(workspaceContext.workspaceId.toString))
+              canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel))
+              canCompute <- DBIO.from(getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel))
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
               owners <- DBIO.from(getWorkspaceOwners(workspaceContext.workspaceId.toString))
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, catalog, canShare, canCompute, workspaceContext.workspace, stats, owners))
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, catalog, workspaceContext.workspace, stats, owners))
             }
           }
         }
       }
     }
+
+  def getUserComputePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] = {
+    if(userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
+    else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.launchBatchCompute, userInfo)
+  }
+
+  def getUserSharePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] = {
+    if(userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
+    else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceCanShare, userInfo)
+  }
+
+  def getUserCatalogPermissions(workspaceId: String): Future[Boolean] = {
+    samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceCanCatalog, userInfo)
+  }
 
   def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] = {
     samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { roles =>
@@ -290,31 +305,24 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  //lots of TODO in here. implementing a "lite" version to move towards getting compilation working...
   def listWorkspaces(): Future[PerRequestMessage] =
     dataSource.inTransaction ({ dataAccess =>
-
-      //ask sam: which workspaces do i have access to?
-      //sam should take care of all auth domain related computation
-      //what we get back should be a pure list of access levels and resource IDs.
-      //we then need to take those resource IDs and load all of the necessary data about the workspace (some fields may be outdated, like the ACL groups)
-
-
       val query = for {
         permissionsPairs <- DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
-//        ownerEmails <- permissionsPairs.map(p => getWorkspaceOwners(p.resourceId).map(x => p.resourceId -> x))
+        ownerEmails <- DBIO.sequence(permissionsPairs.toSeq.map(p => DBIO.from(getWorkspaceOwners(p.resourceId).map(owners => p.resourceId -> owners)))) //this could be a lot of calls to sam...
 //        publicWorkspaces <- dataAccess.workspaceQuery.listWorkspacesWithGroupAccess(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), UserService.allUsersGroupRef)
         submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.resourceId)).toSeq)
         workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.resourceId)).toSeq)
-      } yield (permissionsPairs, submissionSummaryStats, workspaces)
+      } yield (permissionsPairs, ownerEmails.toMap, submissionSummaryStats, workspaces)
 
-      val results = query.map { case (permissionsPairs, submissionSummaryStats, workspaces) =>
+      val results = query.map { case (permissionsPairs, ownerEmails, submissionSummaryStats, workspaces) =>
         val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
+        println(permissionsPairs)
         permissionsPairs.map { permissionsPair =>
           val wsId = UUID.fromString(permissionsPair.resourceId)
           val workspace = workspacesById(permissionsPair.resourceId)
           val public: Boolean = false //TODO!
-          WorkspaceListResponse(WorkspaceAccessLevels.withName(permissionsPair.accessPolicyName), workspace, submissionSummaryStats(wsId), Seq.empty, Some(public))
+          WorkspaceListResponse(WorkspaceAccessLevels.withName(permissionsPair.accessPolicyName), workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId.toString, Seq.empty), Some(public))
         }
       }
 
@@ -380,14 +388,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       owners <- samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "owner", userInfo)
       writers <- samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "writer", userInfo)
       readers <- samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "reader", userInfo)
-      canShare <- samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "canShare", userInfo)
-      canCompute <- samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "canCompute", userInfo)
+//      canShare <- samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "canShare", userInfo)
+//      canCompute <- samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "canCompute", userInfo)
 //      invites <- ..........................call to get invites here.......................... //todo
-    } yield (owners.memberEmails.map(_ -> WorkspaceAccessLevels.Owner) ++ writers.memberEmails.map(_ -> WorkspaceAccessLevels.Write) ++ readers.memberEmails.map(_ -> WorkspaceAccessLevels.Read), canShare.memberEmails, canCompute.memberEmails)
+    } yield (owners.memberEmails.map(_ -> WorkspaceAccessLevels.Owner) ++ writers.memberEmails.map(_ -> WorkspaceAccessLevels.Write) ++ readers.memberEmails.map(_ -> WorkspaceAccessLevels.Read), Seq.empty, Seq.empty)//canShare.memberEmails, canCompute.memberEmails)
 
     members.map { case (entries, canShare, canCompute) =>
       entries.map { case (email, accessLevel) =>
-        email -> AccessEntry(accessLevel, false, false, false)
+        email -> AccessEntry(accessLevel, false, false, false) //todo
       }.toMap
     }.map(result => RequestComplete(StatusCodes.OK, WorkspaceACL(result)))
   }
@@ -1468,7 +1476,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
-    def saveNewWorkspace(workspaceId: String, googleWorkspaceInfo: GoogleWorkspaceInfo, workspaceRequest: WorkspaceRequest, dataAccess: DataAccess): ReadWriteAction[Workspace] = {
+    def saveNewWorkspace(workspaceId: String, workspaceRequest: WorkspaceRequest, dataAccess: DataAccess): ReadWriteAction[Workspace] = {
       val currentDate = DateTime.now
 
       val workspace = Workspace(
@@ -1476,14 +1484,28 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         name = workspaceRequest.name,
         authorizationDomain = workspaceRequest.authorizationDomain.getOrElse(Set.empty),
         workspaceId = workspaceId,
-        bucketName = googleWorkspaceInfo.bucketName,
+        bucketName = s"fc-$workspaceId", //todo: clean this up
         createdDate = currentDate,
         lastModified = currentDate,
         createdBy = userInfo.userEmail.value,
         attributes = workspaceRequest.attributes
       )
 
-      dataAccess.workspaceQuery.save(workspace)
+      //these are the non-owner policies for workspaces
+      val defaultOwnerPolicy = Map("owner" -> SamPolicy(Seq(userInfo.userEmail.value), Seq.empty, Seq("owner")))
+      val defaultWriterPolicy = Map("writer" -> SamPolicy(Seq.empty, Seq.empty, Seq("writer")))
+      val defaultReaderPolicy = Map("reader"-> SamPolicy(Seq.empty, Seq.empty, Seq("reader")))
+
+      val defaultPolicies = defaultOwnerPolicy ++ defaultWriterPolicy ++ defaultReaderPolicy
+
+      dataAccess.workspaceQuery.save(workspace).flatMap { workspace =>
+        for {
+          _ <- DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo))
+          _ <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, "owner"))
+          _ <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, "writer"))
+          _ <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, "reader"))
+        } yield workspace
+      }
     }
 
 
@@ -1492,16 +1514,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None =>
           val workspaceId = UUID.randomUUID.toString
-          for {
-            project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
-            projectOwnerGroupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))) //TODO: use new get email policy endpoint
-//            projectOwnerGroupOE <- dataAccess.rawlsGroupQuery.loadFromEmail(projectOwnerGroupEmail.value)
-//            projectOwnerGroup = projectOwnerGroupOE.collect { case Right(g) => g } getOrElse(throw new RawlsException(s"could not find project owner group for email $projectOwnerGroupEmail"))
-            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, Map.empty)) //TODO: this map should have all of the policy emails for the access levels
-
-            savedWorkspace <- saveNewWorkspace(workspaceId, googleWorkspaceInfo, workspaceRequest, dataAccess)
-            response <- op(SlickWorkspaceContext(savedWorkspace))
-          } yield response
+          saveNewWorkspace(workspaceId, workspaceRequest, dataAccess).flatMap { savedWorkspace =>
+            for {
+              project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
+              projectOwnerGroupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))) //TODO: use new get email policy endpoint
+              policyEmails <- DBIO.from(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map(_.map(policy => WorkspaceAccessLevels.withName(policy.policyName) -> WorkbenchEmail(policy.email)).toMap))
+              googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, policyEmails + (WorkspaceAccessLevels.ProjectOwner -> projectOwnerGroupEmail)))
+              response <- op(SlickWorkspaceContext(savedWorkspace))
+            } yield response
+          }
       }
     }
   }
