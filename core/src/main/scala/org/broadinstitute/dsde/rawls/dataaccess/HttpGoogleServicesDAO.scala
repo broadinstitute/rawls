@@ -15,6 +15,7 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpResponseException, InputStreamContent}
 import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.client.util.Charsets
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.cloudbilling.Cloudbilling
@@ -46,17 +47,21 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard, Retry}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroup}
+import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes
+import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.GoogleCredentialMode
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroup}
 import org.joda.time
 import spray.json._
 
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Future, _}
 import scala.io.Source
-import scala.util.{Success, Try}
+import scala.util.{Random, Success, Try}
 
 class HttpGoogleServicesDAO(
+  groupServiceAccountPool: Array[GoogleCredentialMode],
   useServiceAccountForBuckets: Boolean,
   val clientSecrets: GoogleClientSecrets,
   clientEmail: String,
@@ -1168,14 +1173,40 @@ class HttpGoogleServicesDAO(
   }
 
   private def getGroupServiceAccountCredential: Credential = {
-    new GoogleCredential.Builder()
-      .setTransport(httpTransport)
-      .setJsonFactory(jsonFactory)
-      .setServiceAccountId(clientEmail)
-      .setServiceAccountScopes(directoryScopes)
-      .setServiceAccountUser(subEmail)
-      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
-      .build()
+    val credential = groupServiceAccountPool(Random.nextInt(groupServiceAccountPool.length))
+
+    //support both credential types in the short-term for the sake of backwards compatibility
+    credential match {
+      case jsonCred: GoogleCredentialModes.Json => {
+        val credsFromJson = GoogleCredential.fromStream(new ByteArrayInputStream(jsonCred.json.getBytes(Charsets.UTF_8))).createScoped(directoryScopes.asJava)
+
+        //The following is a silly workaround required because you cannot directly impersonate
+        //another account using a credential built from JSON. See the following discussion:
+        // https://github.com/google/google-api-java-client/issues/1007
+        //This is fixed in a completely re-written version of the Java library but that is too big
+        //of a change to take on now-- hence the silly workaround.
+
+        new GoogleCredential.Builder()
+          .setTransport(credsFromJson.getTransport)
+          .setJsonFactory(credsFromJson.getJsonFactory)
+          .setServiceAccountId(credsFromJson.getServiceAccountId)
+          .setServiceAccountUser(subEmail)
+          .setServiceAccountPrivateKey(credsFromJson.getServiceAccountPrivateKey)
+          .setServiceAccountScopes(credsFromJson.getServiceAccountScopes)
+          .build()
+      }
+      case pem: GoogleCredentialModes.Pem => {
+        new GoogleCredential.Builder()
+          .setTransport(httpTransport)
+          .setJsonFactory(jsonFactory)
+          .setServiceAccountId(clientEmail)
+          .setServiceAccountScopes(directoryScopes)
+          .setServiceAccountUser(subEmail)
+          .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+          .build()
+      }
+      case _ => throw new WorkbenchException("unsupported credential mode")
+    }
   }
 
   def getBucketServiceAccountCredential: Credential = {
