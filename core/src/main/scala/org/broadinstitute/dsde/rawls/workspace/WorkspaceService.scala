@@ -381,6 +381,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  private def getACLInternal(workspaceName: WorkspaceName):
+
   def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     val members = for {
       workspaceId <- loadWorkspaceId(workspaceName)
@@ -438,9 +440,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val reader = aclUpdates.filter(_.accessLevel.compare(WorkspaceAccessLevels.Read) == 0)
     val canShare = aclUpdates.filter(_.canShare.contains(true))
     val canCompute = aclUpdates.filter(_.canCompute.contains(true))
+    val noAccess =
 
     for {
       workspaceId <- loadWorkspaceId(workspaceName)
+      existingPolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo)
+      _ <- {
+        val ownersRemoved = existingPolicies.find(_.policyName.equalsIgnoreCase("owner")).getOrElse()
+        val ownersRemoved = existingPolicies.find(_.policyName.equalsIgnoreCase("owner"))
+        val ownersRemoved = existingPolicies.find(_.policyName.equalsIgnoreCase("owner"))
+      }
+
+
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "owner", SamPolicy(owner.map(_.email), Seq.empty, Seq.empty), userInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "writer", SamPolicy(writer.map(_.email), Seq.empty, Seq.empty), userInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "reader", SamPolicy(reader.map(_.email), Seq.empty, Seq.empty), userInfo)
@@ -448,6 +459,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "canCompute", SamPolicy(canCompute.map(_.email), Seq.empty, Seq.empty), userInfo)
       _ <- Future.traverse(writer) { update => samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, update.email, userInfo) }
     } yield RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Seq.empty, Seq.empty, Seq.empty, Seq.empty))
+  }
+
+  private def sendACLUpdateNotifications() {
+    val notificationMessages = actualChangesToMake collect {
+      // note that we don't send messages to groups
+      case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId, NoAccess.toString, workspaceName, userInfo.userSubjectId)
+      case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId, access.toString, workspaceName, userInfo.userSubjectId)
+    }
+    notificationDAO.fireAndForgetNotifications(notificationMessages)
   }
 
   //TODO: writers can't read any members lower than owners. how will this continue to work?

@@ -3086,29 +3086,6 @@ paths:
               - openid
               - email
               - profile
-  '/register/user':
-     post:
-       responses:
-         '201':
-           description: Successful Request
-           headers:
-            Location:
-              description: The path to the user
-              type: string
-         '500':
-           description: Rawls Internal Error
-           schema:
-             $ref: '#/definitions/ErrorReport'
-       description: Adds a new user to any pending workspaces any sends them a welcome email
-       tags:
-         - users
-       summary: Set up user
-       operationId: setupUser
-       security:
-         - authorization:
-            - openid
-            - email
-            - profile
   '/api/user/refreshToken':
     put:
       responses:
