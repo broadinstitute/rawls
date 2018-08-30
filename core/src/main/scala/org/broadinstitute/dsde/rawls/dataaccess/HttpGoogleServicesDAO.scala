@@ -8,6 +8,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
 import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
@@ -727,11 +728,14 @@ class HttpGoogleServicesDAO(
     // however, the akka-http client is vulnerable to connection-pool exhaustion with HEAD requests; see akka/akka-http#1495.
     // therefore, we make a request to GET /?storageClass. Since all we care about is the 200 vs. 40x status code
     // in the response, this is an equivalent request.
+    // we could switch back to HEAD requests by adding a call to httpResponse.discardEntityBytes().
     val bucketUrl = s"https://$bucketName.storage.googleapis.com/?storageClass"
     val bucketRequest = httpClientUtils.addHeader(RequestBuilding.Get(bucketUrl), Authorization(userInfo.accessToken))
 
     httpClientUtils.executeRequest(http, bucketRequest) map { httpResponse =>
-      logger.info(s"diagnosticBucketRead to $bucketName returned ${httpResponse.status.intValue}")
+      logger.info(s"diagnosticBucketRead to $bucketName returned ${httpResponse.status.intValue} " +
+        s"as user ${userInfo.userEmail.value}, subjectid ${userInfo.userSubjectId.value}, with token hash ${userInfo.accessToken.token.hashCode} " +
+        s"and response entity ${Unmarshal(httpResponse.entity).to[String]}")
       httpResponse.status match {
         case StatusCodes.OK => None
         case x => Some(ErrorReport(x, x.defaultMessage()))
