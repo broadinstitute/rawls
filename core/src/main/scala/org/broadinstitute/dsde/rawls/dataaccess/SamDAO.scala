@@ -95,7 +95,7 @@ object SamProjectRoles extends SamResourceRoles {
   val owner = "owner"
 }
 
-case class SamPolicy(memberEmails: Seq[String], actions: Seq[String], roles: Seq[String])
+case class SamPolicy(memberEmails: Set[String], actions: Set[String], roles: Set[String])
 case class SamPolicyWithName(policyName: String, policy: SamPolicy)
 case class SamPolicyWithNameAndEmail(policyName: String, policy: SamPolicy, email: String)
 case class SamResourceWithPolicies(resourceId: String, policies: Map[String, SamPolicy], authDomain: Set[String])

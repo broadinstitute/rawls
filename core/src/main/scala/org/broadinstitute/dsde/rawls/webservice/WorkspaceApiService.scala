@@ -78,7 +78,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
         } ~
           patch {
             parameter('inviteUsersNotFound.?) { inviteUsersNotFound =>
-              entity(as[Array[WorkspaceACLUpdate]]) { aclUpdate =>
+              entity(as[Set[WorkspaceACLUpdate]]) { aclUpdate =>
                 complete { workspaceServiceConstructor(userInfo).UpdateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean) }
               }
             }

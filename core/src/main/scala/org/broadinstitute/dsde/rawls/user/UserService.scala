@@ -238,8 +238,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.create(project) }
 
       _ <- samDAO.createResource(SamResourceTypeNames.billingProject, billingProjectName.value, ownerUserInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), ownerUserInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), ownerUserInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, workspaceCreatorPolicyName, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), ownerUserInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, canComputeUserPolicyName, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), ownerUserInfo)
       ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, project)
       computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project)
 
@@ -323,8 +323,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
                 case None =>
                   for {
                     _ <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo))
-                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.workspaceCreator)), userInfo))
-                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Seq.empty, Seq.empty, Seq(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
+                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), userInfo))
+                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
                     project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
                   } yield project
 

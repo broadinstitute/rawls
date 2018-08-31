@@ -400,7 +400,7 @@ case class MethodRepoConfigurationExport(
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspace: Workspace,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
-                                 owners: Seq[String],
+                                 owners: Set[String],
                                  public: Option[Boolean])
 
 case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
@@ -409,7 +409,7 @@ case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
                              catalog: Boolean,
                              workspace: Workspace,
                              workspaceSubmissionStats: WorkspaceSubmissionStats,
-                             owners: Seq[String])
+                             owners: Set[String])
 
 case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
 
