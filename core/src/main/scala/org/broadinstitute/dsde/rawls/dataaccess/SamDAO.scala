@@ -30,6 +30,7 @@ trait SamDAO extends ErrorReportable {
   def listPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]]
   def listUserPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]]
   def listUserRolesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[String]]
+  def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, userInfo: UserInfo): Future[SamPolicySyncStatus]
 
   @deprecated
   def createGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit]
@@ -72,6 +73,9 @@ object SamResourceActions {
   val alterGoogleRole = SamResourceAction("alter_google_role")
   val workspaceCanShare = SamResourceAction("can_share")
   val workspaceCanCatalog = SamResourceAction("can_catalog")
+  val workspaceOwn = SamResourceAction("own")
+  val workspaceWrite = SamResourceAction("write")
+  val workspaceRead = SamResourceAction("read")
 }
 
 object SamResourceTypeNames {
@@ -96,6 +100,7 @@ case class SamPolicyWithName(policyName: String, policy: SamPolicy)
 case class SamPolicyWithNameAndEmail(policyName: String, policy: SamPolicy, email: String)
 case class SamResourceWithPolicies(resourceId: String, policies: Map[String, SamPolicy], authDomain: Set[String])
 case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: String)
+case class SamPolicySyncStatus(lastSyncDate: String, email: String)
 
 object SamModelJsonSupport extends JsonSupport {
   implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
@@ -103,4 +108,5 @@ object SamModelJsonSupport extends JsonSupport {
   implicit val SamPolicyWithNameAndEmailFormat = jsonFormat3(SamPolicyWithNameAndEmail)
   implicit val SamResourceWithPoliciesFormat = jsonFormat3(SamResourceWithPolicies)
   implicit val SamResourceIdWithPolicyNameFormat = jsonFormat2(SamResourceIdWithPolicyName)
+  implicit val SamPolicySyncStatusFormat = jsonFormat2(SamPolicySyncStatus)
 }
