@@ -1700,7 +1700,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
 
-      petKey <- samDAO.getDefaultPetServiceAccountKeyForUser(userInfo)
+      petKey <- if (maxAccessLevel >= WorkspaceAccessLevels.Write)
+        samDAO.getPetServiceAccountKeyForUser(workspace.namespace, userInfo.userEmail)
+      else
+        samDAO.getDefaultPetServiceAccountKeyForUser(userInfo)
 
       accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
 
