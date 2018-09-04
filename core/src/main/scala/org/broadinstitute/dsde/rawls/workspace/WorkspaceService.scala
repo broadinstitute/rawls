@@ -58,7 +58,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
   def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)
   def UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateLibraryAttributes(workspaceName, operations)
-  def ListWorkspaces = listWorkspaces()
+  def ListWorkspaces(lite: Boolean) = listWorkspaces(lite: Boolean)
   def ListAllWorkspaces = listAllWorkspaces()
   def GetTags(query: Option[String]) = getTags(query)
   def AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) = asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) }
@@ -115,7 +115,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def AdminListAllActiveSubmissions = asFCAdmin { listAllActiveSubmissions() }
   def AdminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) = adminAbortSubmission(workspaceName,submissionId)
-  def AdminDeleteWorkspace(workspaceName: WorkspaceName) = adminDeleteWorkspace(workspaceName)
   def AdminWorkflowQueueStatusByUser = adminWorkflowQueueStatusByUser()
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[Workspace] =
@@ -189,12 +188,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withWorkspaceContextAndPermissions(workspaceName, accessLevel, dataAccess) { workspaceContext =>
         DBIO.successful(workspaceContext)
       }
-    }
-  }
-
-  def adminDeleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = asFCAdmin {
-    getWorkspaceContext(workspaceName) flatMap { ctx =>
-      deleteWorkspace(workspaceName, ctx)
     }
   }
 
@@ -305,7 +298,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def listWorkspaces(): Future[PerRequestMessage] =
+  def listWorkspaces(lite: Boolean): Future[PerRequestMessage] =
     dataSource.inTransaction ({ dataAccess =>
       val query = for {
         permissionsPairs <- DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
@@ -487,12 +480,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       //invites are still a TODO
       val maintainedEmails = beforeEmails intersect afterEmails
       val removedEmails = beforeEmails -- afterEmails
+      val newEmails = afterEmails -- beforeEmails
 
       //this is bad code
       val noAccess = removedEmails.map(email => WorkspaceACLUpdate(email, WorkspaceAccessLevels.NoAccess))
+      val brandNewAccess = newEmails.map(email => WorkspaceACLUpdate(email, after(email).accessLevel))
+      val changedAccess = maintainedEmails.map(email => WorkspaceACLUpdate(email, after(email).accessLevel))
 
 
-      val usersUpdated = noAccess
+
+
+      val usersUpdated = noAccess ++ brandNewAccess ++ changedAccess
 
       //todo: invites and usersNotFound
       RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersUpdated, Set.empty, Set.empty, Set.empty))
@@ -1580,9 +1578,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           saveNewWorkspace(workspaceId, workspaceRequest, dataAccess).flatMap { savedWorkspace =>
             for {
               project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
-              projectOwnerGroupEmail <- DBIO.from(samDAO.syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner).map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))) //TODO: use new get email policy endpoint
+              projectOwnerGroupEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner, userInfo).map(_.email))
               policyEmails <- DBIO.from(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map(_.map(policy => WorkspaceAccessLevels.withName(policy.policyName) -> WorkbenchEmail(policy.email)).toMap))
-              googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, policyEmails + (WorkspaceAccessLevels.ProjectOwner -> projectOwnerGroupEmail)))
+              googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, policyEmails + (WorkspaceAccessLevels.ProjectOwner -> WorkbenchEmail(projectOwnerGroupEmail))))
               response <- op(SlickWorkspaceContext(savedWorkspace))
             } yield response
           }
@@ -1635,6 +1633,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case WorkspaceAccessLevels.Owner => SamResourceActions.workspaceOwn
       case WorkspaceAccessLevels.Write => SamResourceActions.workspaceWrite
       case WorkspaceAccessLevels.Read => SamResourceActions.workspaceRead
+      case _ => throw new WorkbenchException(s"Unrecognized access level: ${requiredLevel.toString}")
     }
 
     DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo)) flatMap { hasAction =>

@@ -76,7 +76,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   def listUserPoliciesForResource(resourceTypeName: org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName,resourceId: String,userInfo: org.broadinstitute.dsde.rawls.model.UserInfo): scala.concurrent.Future[Set[org.broadinstitute.dsde.rawls.dataaccess.SamPolicyWithName]] = ???
 
   override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, userInfo: UserInfo): Future[SamPolicySyncStatus] = {
-    val url = samServiceURL + s"/api/google/v1/${resourceTypeName.value}/$resourceId/$policyName/sync"
+    val url = samServiceURL + s"/api/google/v1/resource/${resourceTypeName.value}/$resourceId/$policyName/sync"
 
     retry(when401or500) { () =>
       pipeline[SamPolicySyncStatus](userInfo) apply RequestBuilding.Get(url)

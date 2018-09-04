@@ -91,8 +91,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
 
-  def diagnosticBucketWrite(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]]
-
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]
 
   def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
@@ -133,8 +131,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     */
   def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]]
 
-  def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
-  def toUserFromProxy(proxy: String): String
   def toGoogleGroupName(groupName: RawlsGroupName): String
   def toBillingProjectGroupName(billingProjectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = s"PROJECT_${billingProjectName.value}-${role.toString}"
 

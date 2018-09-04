@@ -356,41 +356,5 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- gcsDAO.deleteToken(rawlsUserRef).recover { case e: HttpResponseException if e.getStatusCode == 404 => Unit }
     } yield { Unit }
   }
-
-  private def reduceErrorReports(errorReportOptions: Iterable[Option[ErrorReport]]): Option[ErrorReport] = {
-    val errorReports = errorReportOptions.collect {
-      case Some(errorReport) => errorReport
-    }.toSeq
-
-    errorReports match {
-      case Seq() => None
-      case Seq(single) => Option(single)
-      case many => Option(ErrorReport("multiple errors", errorReports))
-    }
-  }
-
-  /**
-   * handles a Future [ Seq [ Try [ T ] ] ], calling success with the successful result of the tries or failure with any exceptions
-   *
-   * @param futures
-   * @param success
-   * @param failure
-   * @tparam T
-   * @return
-   */
-  private def handleFutures[T, R](futures: Future[Seq[Try[T]]])(success: Seq[T] => R, failure: Seq[Throwable] => R): Future[R] = {
-    futures map { tries =>
-      val exceptions = tries.collect { case Failure(t) => t }
-      if (exceptions.isEmpty) {
-        success(tries.map(_.get))
-      } else {
-        failure(exceptions)
-      }
-    }
-  }
-
-  private def handleException(message: String)(exceptions: Seq[Throwable]): PerRequestMessage = {
-    throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, message, exceptions.map(ErrorReport(_))))
-  }
 }
 

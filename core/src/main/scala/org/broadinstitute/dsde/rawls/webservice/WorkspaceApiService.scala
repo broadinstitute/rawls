@@ -39,7 +39,11 @@ trait WorkspaceApiService extends UserInfoDirectives {
         }
       } ~
         get {
-          complete { workspaceServiceConstructor(userInfo).ListWorkspaces }
+          parameter('lite.?) { lite =>
+            complete {
+              workspaceServiceConstructor(userInfo).ListWorkspaces(lite.getOrElse("false").toBoolean)
+            }
+          }
         }
     } ~
       path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>

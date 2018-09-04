@@ -77,13 +77,6 @@ trait AdminApiService extends UserInfoDirectives {
         complete { userServiceConstructor(userInfo).AdminRemoveLibraryCurator(RawlsUserEmail(userEmail)) }
       }
     } ~
-//    path("admin" / "validate" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
-//      get {
-//        parameters('userSubjectId.?) { (userSubjectId) =>
-//          complete { workspaceServiceConstructor(userInfo).GetWorkspaceStatus(WorkspaceName(workspaceNamespace, workspaceName), userSubjectId) }
-//        }
-//      }
-//    } ~
     path("admin" / "workspaces") {
       get {
         parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) { (nameOption, stringOption, numberOption, booleanOption) =>
@@ -100,11 +93,6 @@ trait AdminApiService extends UserInfoDirectives {
           }
          complete { resultFuture }
         }
-      }
-    } ~
-    path("admin" / "workspaces" / Segment / Segment ) { (workspaceNamespace, workspaceName) =>
-      delete {
-        complete { workspaceServiceConstructor(userInfo).AdminDeleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }
       }
     } ~
     path("admin" / "refreshToken" / Segment ) { userSubjectId =>
