@@ -380,6 +380,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       policyList.find(_.policyName.equalsIgnoreCase(policyName)).getOrElse(throw new WorkbenchException(s"Could not load $policyName policy"))
     }
 
+//    def canShare(accessLevel: WorkspaceAccessLevel, sharers: Set[String]): Boolean = {
+//      (accessLevel >= WorkspaceAccessLevels.Owner)
+//    }
+
     for {
       workspaceId <- loadWorkspaceId(workspaceName)
       currentACL <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo)
@@ -394,9 +398,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val sharers = shareReaderPolicyMembers ++ shareWriterPolicyMembers
 
       //todo: this isn't going to be completely correct just yet. need to take careful consideration of how to factor in canCompute at the billing level
-      val owners = ownerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Owner, pending = false, sharers.contains(email), computePolicyMembers.contains(email)))
-      val writers = writerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Owner, pending = false, sharers.contains(email), computePolicyMembers.contains(email)))
-      val readers = readerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Owner, pending = false, sharers.contains(email), computePolicyMembers.contains(email)))
+      val owners = ownerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Owner, pending = false, true, true))
+      val writers = writerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Write, pending = false, sharers.contains(email), computePolicyMembers.contains(email)))
+      val readers = readerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Read, pending = false, sharers.contains(email), computePolicyMembers.contains(email)))
 
       WorkspaceACL((owners ++ writers ++ readers).toMap)
     }
@@ -446,12 +450,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       workspaceId <- loadWorkspaceId(workspaceName)
       //todo: what if i'm not an owner? we should only try to overwrite the policies that the sharer has access to modify otherwise we'll get 403s
       //todo: handle returning users not found
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "owner", SamPolicy(owner.map(_.email), Set.empty, Set.empty), userInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "writer", SamPolicy(writer.map(_.email), Set.empty, Set.empty), userInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "reader", SamPolicy(reader.map(_.email), Set.empty, Set.empty), userInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "share-write", SamPolicy(canShareWrite.map(_.email), Set.empty, Set.empty), userInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "share-read", SamPolicy(canShareRead.map(_.email), Set.empty, Set.empty), userInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspaceId, "can-compute", SamPolicy(canCompute.map(_.email), Set.empty, Set.empty), userInfo)
+      _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "owner", owner.map(e => WorkbenchEmail(e.email)), userInfo)
+      _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "writer", writer.map(e => WorkbenchEmail(e.email)), userInfo)
+      _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "reader", reader.map(e => WorkbenchEmail(e.email)), userInfo)
+      _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "share-write", canShareWrite.map(e => WorkbenchEmail(e.email)), userInfo)
+      _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "share-read", canShareRead.map(e => WorkbenchEmail(e.email)), userInfo)
+      _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "can-compute", canCompute.map(e => WorkbenchEmail(e.email)), userInfo)
       _ <- Future.traverse(writer) { update => samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, update.email, userInfo) }
       newAcl <- getACLInternal(workspaceName)
     } yield newAcl
@@ -1579,11 +1583,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             for {
               project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
               projectOwnerGroupEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner, userInfo).map(_.email))
-              policyEmails <- DBIO.from(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map(_.map(policy => WorkspaceAccessLevels.withName(policy.policyName) -> WorkbenchEmail(policy.email)).toMap))
+              policyEmails <- DBIO.from(getAccessLevelPolicies(workspaceId).map(_.map(policy => WorkspaceAccessLevels.withName(policy.policyName) -> WorkbenchEmail(policy.email)).toMap))
               googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, policyEmails + (WorkspaceAccessLevels.ProjectOwner -> WorkbenchEmail(projectOwnerGroupEmail))))
               response <- op(SlickWorkspaceContext(savedWorkspace))
             } yield response
           }
+      }
+    }
+  }
+
+  //policies don't map 1-to-1 with access levels, so this is a helper to get only policies that are for access levels
+  private def getAccessLevelPolicies(workspaceId: String): Future[Set[SamPolicyWithNameAndEmail]] = {
+    samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { allPolicies =>
+      allPolicies.filter { policy =>
+        WorkspaceAccessLevels.all.map(_.toString).contains(policy.policyName.toUpperCase) //todo get rid of toUpperCase...
       }
     }
   }

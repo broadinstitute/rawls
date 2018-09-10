@@ -174,6 +174,15 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
+  override def overwritePolicyMembership(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberList: Set[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = {
+    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/${policyName.toLowerCase}/memberEmails"
+
+    Marshal(memberList).to[RequestEntity].flatMap { membershipEntity =>
+      val httpRequest = HttpRequest(PUT, Uri(url), entity = membershipEntity)
+      doSuccessOrFailureRequest(httpRequest, userInfo)
+    }
+  }
+
   override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/${policyName.toLowerCase}/memberEmails/$memberEmail"
     val httpRequest = RequestBuilding.Put(url)

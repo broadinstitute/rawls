@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{Read, Write}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor}
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.openam.{MockUserInfoDirectives, MockUserInfoDirectivesWithUser}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -53,8 +53,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     currentTime(),
     currentTime(),
     "test",
-    Map.empty,
-    Map.empty,
     Map.empty
   )
 
@@ -94,8 +92,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       workbenchMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"))
 
-    val directoryDAO = new MockUserDirectoryDAO
-
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -111,7 +107,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       gcsDAO
     )_
 
-    val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
     val bigQueryDAO = new MockGoogleBigQueryDAO
     val submissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
     val execServiceBatchSize = 3
@@ -353,8 +348,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
     val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
 
-    runAndWait(rawlsUserQuery.createUser(user))
-    runAndWait(rawlsGroupQuery.save(group))
+    runAndWait(samDataSaver.createUser(user))
+    runAndWait(samDataSaver.save(group))
 
     val ownerGroupRef = testData.workspace.accessLevels(WorkspaceAccessLevels.Owner)
     val theOwnerGroup = runAndWait(rawlsGroupQuery.load(ownerGroupRef)).get
@@ -392,7 +387,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val aclAdd = Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Read, None))
     val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromAdd = WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse(user.userSubjectId.value, user.userEmail.value, WorkspaceAccessLevels.Owner), WorkspaceACLUpdateResponse(group.groupName.value, group.groupEmail.value, WorkspaceAccessLevels.Read)), Seq.empty, Seq.empty, Seq.empty)
+    val responseFromAdd = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Owner), WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Read)), Set.empty, Set.empty, Set.empty)
 
     assertResult((StatusCodes.OK, responseFromAdd), "Add ACL shouldn't error") {
       aclAddResponse.response
@@ -416,7 +411,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val aclUpdates = Seq(WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Write, None))
     val aclUpdateResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromUpdate = WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse(group.groupName.value, group.groupEmail.value, WorkspaceAccessLevels.Write)), Seq.empty, Seq.empty, Seq.empty)
+    val responseFromUpdate = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Write)), Set.empty, Set.empty, Set.empty)
 
     assertResult((StatusCodes.OK, responseFromUpdate), "Update ACL shouldn't error") {
       aclUpdateResponse.response
@@ -440,7 +435,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val aclRemove = Seq(WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.NoAccess, None))
     val aclRemoveResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclRemove, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, List[WorkspaceACLUpdateResponseList])]]
-    val responseFromRemove = WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse(group.groupName.value, group.groupEmail.value, WorkspaceAccessLevels.NoAccess)), Seq.empty, Seq.empty, Seq.empty)
+    val responseFromRemove = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.NoAccess)), Set.empty, Set.empty, Set.empty)
 
     assertResult((StatusCodes.OK, responseFromRemove), "Remove ACL shouldn't error") {
       aclRemoveResponse.response
@@ -730,8 +725,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "delete a workspace with succeeded submission" in withTestDataServices { services =>
-    println(runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission))).toSet)
-
     //check that the workspace to be deleted exists
     assertWorkspaceResult(Option(testData.workspaceSuccessfulSubmission)) {
       runAndWait(workspaceQuery.findByName(testData.wsName4))
@@ -741,11 +734,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assertResult(Vector(MethodConfigurationShort("testConfig2",Some("Sample"),AgoraMethod("myNamespace","method-a",1),"dsde"),
       MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
-    }
-
-    //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false, false))) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission))).toSet
     }
 
     //Check if submissions on workspace exist
@@ -771,11 +759,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
     }
 
-    //Check if access levels have been deleted
-    assertResult(Vector()) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
-    }
-
     //Check if submissions on workspace have been deleted
     assertResult(Vector()) {
       runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
@@ -796,11 +779,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
-    }
-
-    //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false, false))) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceFailedSubmission))).toSet
     }
 
     //Check if submissions on workspace exist
@@ -826,11 +804,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
     }
 
-    //Check if access levels have been deleted
-    assertResult(Vector()) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
-    }
-
     //Check if submissions on workspace have been deleted
     assertResult(Vector()) {
       runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
@@ -852,11 +825,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
-    }
-
-    //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false, false))) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSubmittedSubmission))).toSet
     }
 
     //Check if submissions on workspace exist
@@ -882,11 +850,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
     }
 
-    //Check if access levels have been deleted
-    assertResult(Vector()) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
-    }
-
     //Check if submissions on workspace have been deleted
     assertResult(Vector()) {
       runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
@@ -907,11 +870,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
-    }
-
-    //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false, false))) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceMixedSubmissions))).toSet
     }
 
     //Check if submissions on workspace exist
@@ -935,11 +893,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //check if method configs have been deleted
     assertResult(Vector()) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
-    }
-
-    //Check if access levels have been deleted
-    assertResult(Vector()) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
     }
 
     //Check if submissions on workspace have been deleted
