@@ -50,33 +50,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  def getBillingProject(dataSource: SlickDataSource, project: RawlsBillingProject) = runAndWait(rawlsBillingProjectQuery.load(project.projectName))
-
-  def loadUser(user: RawlsUser) = runAndWait(rawlsUserQuery.load(user))
-
-  def assertUserMissing(services: TestApiService, user: RawlsUser): Unit = {
-    assert {
-      loadUser(user).isEmpty
-    }
-    assert {
-      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
-      group.isEmpty || ! group.get.users.contains(user)
-    }
-  }
-
-  def assertUserExists(services: TestApiService, user: RawlsUser): Unit = {
-    assert {
-      loadUser(user).nonEmpty
-    }
-    val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
-    assert {
-      group.isDefined
-    }
-    assert {
-      group.get.users.contains(user)
-    }
-  }
-
   "AdminApi" should "return 200 when listing active submissions" in withConstantTestDataApiServices { services =>
     val expected = Seq(
       ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submissionNoWorkflows),
@@ -332,49 +305,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "get the status of a workspace" in withTestDataApiServices { services =>
-    val testUser = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
-
-    runAndWait(rawlsUserQuery.createUser(testUser))
-
-    Get(s"/admin/validate/${testData.workspace.namespace}/${testData.workspace.name}?userSubjectId=${testUser.userSubjectId.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        val responseStatus = responseAs[WorkspaceStatus]
-        assertResult(WorkspaceName(testData.workspace.namespace, testData.workspace.name)) {
-          responseStatus.workspaceName
-        }
-
-        val expected = Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
-            "WORKSPACE_ACCESS_GROUP: owner@myNamespace@billing-project" -> "FOUND",
-            "WORKSPACE_ACCESS_GROUP: myNamespace-myWorkspace-OWNER" -> "FOUND",
-            "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
-            "WORKSPACE_USER_ACCESS_LEVEL" -> "PROJECT_OWNER",
-            "GOOGLE_ACCESS_GROUP: GROUP_owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
-            "GOOGLE_ACCESS_GROUP: myNamespace-myWorkspace-OWNER@example.com" -> "FOUND",
-            "GOOGLE_ACCESS_GROUP: myNamespace-myWorkspace-WRITER@example.com" -> "FOUND",
-            "GOOGLE_ACCESS_GROUP: myNamespace-myWorkspace-READER@example.com" -> "FOUND",
-            "GOOGLE_BUCKET: aBucket" -> "FOUND",
-            "GOOGLE_USER_ACCESS_LEVEL: GROUP_owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
-            "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
-            "WORKSPACE_ACCESS_GROUP: myNamespace-myWorkspace-WRITER" -> "FOUND",
-            "WORKSPACE_ACCESS_GROUP: myNamespace-myWorkspace-READER" -> "FOUND",
-            "WORKSPACE_INTERSECTION_GROUP: myNamespace-myWorkspace-READER" -> "FOUND",
-            "WORKSPACE_INTERSECTION_GROUP: myNamespace-myWorkspace-WRITER" -> "FOUND",
-            "WORKSPACE_INTERSECTION_GROUP: myNamespace-myWorkspace-OWNER" -> "FOUND",
-            "WORKSPACE_INTERSECTION_GROUP: owner@myNamespace@billing-project" -> "FOUND",
-            "GOOGLE_INTERSECTION_GROUP: GROUP_owner@myNamespace@billing-project@dev.firecloud.org" -> "FOUND",
-            "GOOGLE_INTERSECTION_GROUP: myNamespace-myWorkspace-OWNER@example.com" -> "FOUND",
-            "GOOGLE_INTERSECTION_GROUP: myNamespace-myWorkspace-WRITER@example.com" -> "FOUND",
-            "GOOGLE_INTERSECTION_GROUP: myNamespace-myWorkspace-READER@example.com" -> "FOUND"
-          )
-        assertSameElements(expected, responseStatus.statuses)
-      }
-  }
-
   it should "return 200 when listing all workspaces" in withTestDataApiServices { services =>
     Get(s"/admin/workspaces") ~>
       sealRoute(services.adminRoutes) ~>
@@ -423,30 +353,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     assertResult(None) {
       runAndWait(workspaceQuery.findByName(testData.workspace.toWorkspaceName))
     }
-  }
-
-  it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
-    val workspaceGroupRefs = (testData.workspace.accessLevels.values.toSet ++ testData.workspace.authDomainACLs.values) - testData.workspace.accessLevels(ProjectOwner)
-    workspaceGroupRefs foreach { case groupRef =>
-      assertResult(Option(groupRef)) {
-        runAndWait(rawlsGroupQuery.load(groupRef)) map RawlsGroup.toRef
-      }
-    }
-
-    Delete(s"/admin/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Accepted) {
-          status
-        }
-      }
-
-    workspaceGroupRefs foreach { case groupRef =>
-      assertResult(None) {
-        runAndWait(rawlsGroupQuery.load(groupRef))
-      }
-    }
-
   }
 
   it should "return 200 when querying firecloud statistics with valid dates" in withTestDataApiServices { services =>

@@ -69,26 +69,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
-  def assertUserMissing(services: TestApiService, user: RawlsUser): Unit = {
-    assert {
-      loadUser(user).isEmpty
-    }
-    assert {
-      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
-      group.isEmpty || ! group.get.users.contains(user)
-    }
-  }
-
-  def assertUserExists(services: TestApiService, user: RawlsUser): Unit = {
-    assert {
-      loadUser(user).nonEmpty
-    }
-    assert {
-      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
-      group.isDefined && group.get.users.contains(user)
-    }
-  }
-
   it should "fully create a user and grant them pending access to a workspace" in withMinimalTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
       runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace.workspaceId), testData.userReader.userSubjectId.value, WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Read, None)))
@@ -570,63 +550,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
       val expected = Set(group1, group2, group3) flatMap { g => expectedHttpRequestMetrics("get", s"user.group.redacted", StatusCodes.OK.intValue, 3) }
       assertSubsetOf(expected, capturedMetrics)
     }
-  }
-
-  it should "not get details of a group a user is not a member of" in withTestDataApiServices { services =>
-    val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
-    val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group2))
-
-    runAndWait(rawlsGroupQuery.save(group3))
-    runAndWait(rawlsGroupQuery.save(group2))
-    runAndWait(rawlsGroupQuery.save(group1))
-
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-    Get(s"/user/group/${group3.groupName.value}") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        assertResult(group3.toRawlsGroupShort) { responseAs[RawlsGroupShort] }
-      }
-    Get(s"/user/group/${group2.groupName.value}") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound, Await.result(Unmarshal(responseEntity).to[String], Duration.Inf)) { status }
-      }
-    Get(s"/user/group/${group1.groupName.value}") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) { status }
-      }
-  }
-
-  it should "return groups for a user" in withTestDataApiServices { services =>
-    val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
-    val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group3))
-
-    runAndWait(rawlsGroupQuery.save(group3))
-    runAndWait(rawlsGroupQuery.save(group2))
-    runAndWait(rawlsGroupQuery.save(group1))
-
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-    Get("/user/groups") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = Seq(group3.groupName.value, group1.groupName.value)
-        assertResult(expected) { responseAs[Seq[String]].intersect(expected) }
-      }
-  }
-
-  it should "get not details of a group that does not exist" in withTestDataApiServices { services =>
-    Get("/user/group/blarg") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
   }
 
   it should "return OK for a user who is an admin" in withTestDataApiServices { services =>

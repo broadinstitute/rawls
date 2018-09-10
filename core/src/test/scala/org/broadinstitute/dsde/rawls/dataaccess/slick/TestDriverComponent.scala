@@ -494,23 +494,23 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Seq(Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
 
     //a submission with a failed workflow
-    val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, userOwner.userEmail, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("worklowFailed"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
 
     //a submission with a submitted workflow
-    val submissionSubmitted = Submission(UUID.randomUUID().toString(), testDate, userOwner.userEmail, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionSubmitted = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowSubmitted"), WorkflowStatuses.Submitted, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Submitted, false)
 
     //a submission with an aborted workflow
-    val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, userOwner.userEmail, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowAborted1"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Aborted, false)
 
     //a submission with an aborted workflow
-    val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, userOwner.userEmail, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowAborted2"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Aborted, false)
 
     //a submission with multiple failed and succeeded workflows
-    val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, userOwner.userEmail, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowSuccessful3"), WorkflowStatuses.Succeeded, testDate, Some(sample1.toReference), inputResolutions),
         Workflow(Option("workflowSuccessful4"), WorkflowStatuses.Succeeded, testDate, Some(sample2.toReference), inputResolutions),
         Workflow(Option("worklowFailed1"), WorkflowStatuses.Failed, testDate, Some(sample3.toReference), inputResolutions),
@@ -524,13 +524,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val t2 = new DateTime(2017, 1, 1, 5, 15)
     val t3 = new DateTime(2017, 1, 1, 5, 20)
     val t4 = new DateTime(2017, 1, 1, 5, 30)
-    val outerSubmission = Submission(UUID.randomUUID().toString(), t1, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val outerSubmission = Submission(UUID.randomUUID().toString(), t1, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, t4, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
-    val innerSubmission = Submission(UUID.randomUUID().toString(), t2, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val innerSubmission = Submission(UUID.randomUUID().toString(), t2, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowFailed1"), WorkflowStatuses.Failed, t3, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
 
     // a submission with a submitted workflow and a custom workflow failure mode
-    val submissionWorkflowFailureMode = Submission(UUID.randomUUID().toString(), testDate, userOwner, agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
+    val submissionWorkflowFailureMode = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
       Seq(Workflow(Option("workflowFailureMode"), WorkflowStatuses.Submitted, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Submitted, false,
       Some(WorkflowFailureModes.ContinueWhilePossible))
 

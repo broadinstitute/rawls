@@ -44,14 +44,6 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
         AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
         AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
         AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
-      Map(
-        WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader")),
-        WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName("writer")),
-        WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName("owner"))),
-      Map(
-        WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader")),
-        WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName("writer")),
-        WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName("owner"))),
       false)
 
     assertResult(None) {
@@ -81,11 +73,7 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val updatedWorkspace = workspace.copy(
       attributes = Map(
         AttributeName("default", "attributeString") -> AttributeString("value2"),
-        AttributeName("library", "attributeBool") -> AttributeBoolean(false)),
-      accessLevels = Map(
-        WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader2")),
-        WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName("writer2")),
-        WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName("owner2")))
+        AttributeName("library", "attributeBool") -> AttributeBoolean(false))
     )
 
     assertWorkspaceResult(updatedWorkspace) {
