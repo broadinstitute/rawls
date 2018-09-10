@@ -157,9 +157,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
-    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
-    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
     val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
 
@@ -168,9 +165,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         DBIO.from(samDataSaver.createUser(userOwner)),
         DBIO.from(samDataSaver.createUser(userWriter)),
         DBIO.from(samDataSaver.createUser(userReader)),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "owner", Set(userOwner.userEmail))),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "writer", Set(userWriter.userEmail))),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "reader", Set(userReader.userEmail))),
         workspaceQuery.save(workspace)
       )
     }
@@ -181,9 +178,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
-    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
-    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
     val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty, isLocked = true)
 
@@ -192,9 +186,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         DBIO.from(samDataSaver.createUser(userOwner)),
         DBIO.from(samDataSaver.createUser(userWriter)),
         DBIO.from(samDataSaver.createUser(userReader)),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "owner", Set(userOwner.userEmail))),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "writer", Set(userWriter.userEmail))),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "reader", Set(userReader.userEmail))),
         workspaceQuery.save(workspace)
       )
     }

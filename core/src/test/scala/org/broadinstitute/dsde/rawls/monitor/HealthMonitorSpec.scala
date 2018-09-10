@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model.Subsystems._
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, StatusCheckResponse, SubsystemStatus}
+import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -279,16 +279,6 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
 
   def mockGooglePubSubDAO_noTopics: GooglePubSubDAO = {
     new MockGooglePubSubDAO
-  }
-
-  def mockUserDirectoryDAO: UserDirectoryDAO = {
-    val mockUserDirectoryDAO = new MockUserDirectoryDAO
-    mockUserDirectoryDAO.createUser(new RawlsUserSubjectId("me"), RawlsUserEmail(""))
-    mockUserDirectoryDAO
-  }
-
-  def mockUserDirectoryDAO_noUsers: UserDirectoryDAO = {
-    new MockUserDirectoryDAO
   }
 
   def mockMethodRepoDAO: MethodRepoDAO = {

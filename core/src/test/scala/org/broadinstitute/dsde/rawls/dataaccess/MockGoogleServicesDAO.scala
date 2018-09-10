@@ -11,7 +11,6 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.genomics.model.Operation
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectorySubjectNameSupport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
@@ -26,7 +25,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Success, Try}
 
-class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) with DirectorySubjectNameSupport {
+class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) {
 
   val billingEmail: String = "billing@test.firecloud.org"
   private var token: String = null
@@ -100,41 +99,9 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
-  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, projectOwnerGroup: RawlsGroup, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[GoogleWorkspaceInfo] = {
 
-    def workspaceAccessGroup(workspaceId: String, accessLevel: WorkspaceAccessLevel, users: Set[RawlsUserRef]) = {
-      RawlsGroup(RawlsGroupName(s"${workspaceId}-${accessLevel.toString}"), RawlsGroupEmail(s"$accessLevel@$workspaceId"), users, Set.empty)
-    }
-
-    def intersectionGroup(workspaceId: String, accessLevel: WorkspaceAccessLevel, users: Set[RawlsUserRef]) = {
-      RawlsGroup(RawlsGroupName(s"I_${workspaceId}-${accessLevel.toString}"), RawlsGroupEmail(s"I_$accessLevel@$workspaceId"), users, Set.empty)
-    }
-
-    val accessGroups: Map[WorkspaceAccessLevel, RawlsGroup] = groupAccessLevelsAscending.map { accessLevel =>
-      accessLevel -> (accessLevel match {
-        case WorkspaceAccessLevels.Owner => workspaceAccessGroup(workspaceId, accessLevel, Set(RawlsUser(userInfo)))
-        case WorkspaceAccessLevels.ProjectOwner => projectOwnerGroup
-        case _ => workspaceAccessGroup(workspaceId, accessLevel, Set.empty)
-      })
-    }.toMap
-
-    val intersectionGroups: Option[Map[WorkspaceAccessLevel, RawlsGroup]] = {
-      if(authDomain.isEmpty) None
-      else {
-        Option(groupAccessLevelsAscending.map { accessLevel =>
-          val users: Set[RawlsUserRef] = accessLevel match {
-            case WorkspaceAccessLevels.Owner => Set(RawlsUser(userInfo))
-            case WorkspaceAccessLevels.ProjectOwner => realmProjectOwnerIntersection.getOrElse(Set.empty)
-            case _ => Set.empty
-          }
-          accessLevel -> intersectionGroup(workspaceId, accessLevel, users)
-        }.toMap)
-      }
-    }
-
-    val googleWorkspaceInfo: GoogleWorkspaceInfo = GoogleWorkspaceInfo(s"fc-$workspaceId", accessGroups, intersectionGroups)
-    googleWorkspaceInfo.accessGroupsByLevel.values.foreach(createGoogleGroup(_))
-    googleWorkspaceInfo.intersectionGroupsByLevel.map(_.values.foreach(createGoogleGroup(_)))
+    val googleWorkspaceInfo: GoogleWorkspaceInfo = GoogleWorkspaceInfo(s"fc-$workspaceId", policyGroupsByAccessLevel)
     Future.successful(googleWorkspaceInfo)
   }
 
@@ -147,8 +114,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def getBucket(bucketName: String)(implicit executionContext: ExecutionContext): Future[Option[Bucket]] = Future.successful(Some(new Bucket))
 
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = Future.successful(Some(List.fill(5)(new BucketAccessControl)))
-
-  override def diagnosticBucketWrite(user: RawlsUser, bucketName: String) = Future.successful(None)
 
   override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String) = Future.successful(None)
 
@@ -187,60 +152,15 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     else Future.failed(new RawlsException("Unable to remove user"))
   }
 
-  override def createProxyGroup(user: RawlsUser): Future[Unit] = {
-    mockProxyGroups += (user -> false)
-    Future.successful(())
-  }
-
-  override def deleteProxyGroup(user: RawlsUser): Future[Unit] = {
-    mockProxyGroups -= user
-    Future.successful(())
-  }
-
   def containsProxyGroup(user: RawlsUser) = mockProxyGroups.keySet.contains(user)
-
-  override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = Future.successful(mockProxyGroups += (user -> true))
-
-  override def removeUserFromProxyGroup(user: RawlsUser): Future[Unit] = Future.successful(mockProxyGroups += (user -> false))
-
-  override def isUserInProxyGroup(user: RawlsUser): Future[Boolean] = Future.successful(mockProxyGroups.getOrElse(user, false))
-
-  override def createGoogleGroup(groupRef: RawlsGroupRef): Future[RawlsGroup] = Future {
-    groups.putIfAbsent(groupRef, Set()) match {
-      case Some(_) => throw new RuntimeException(s"group $groupRef already exists")
-      case None =>
-        val group = RawlsGroup(groupRef.groupName, RawlsGroupEmail(toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-        googleGroups.put(group.groupEmail.value, scala.collection.mutable.Set.empty)
-        group
-
-    }
-  }
-  override def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean] = Future.successful(true)
 
   override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] = Future.successful(Some(new Group))
 
   def getBucketUsage(projectName: RawlsBillingProjectName, bucketName: String, maxResults: Option[Long]): Future[BigInt] = Future.successful(42)
 
-  override def deleteGoogleGroup(group: RawlsGroup): Future[Unit] = Future {
-    googleGroups.remove(group.groupEmail.value)
-    groups.remove(group)
-  }
-
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     googleGroups(groupEmail) += emailToAdd
     Future.successful(())
-  }
-
-  override def addMemberToGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]) = Future {
-    groups.get(group) match {
-      case Some(members) =>
-        groups.update(group, members + member)
-        googleGroups(group.groupEmail.value) += (member match {
-          case Left(user) => toProxyFromUser(user.userSubjectId)
-          case Right(groupMember) => toGoogleGroupName(groupMember.groupName)
-        })
-      case None => throw new RuntimeException(s"group $group does not exist")
-    }
   }
 
   override def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit] = {
@@ -248,30 +168,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(())
   }
 
-  override def removeMemberFromGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]) = Future {
-    groups.get(group) match {
-      case Some(members) =>
-        groups.update(group, members - member)
-        googleGroups(group.groupEmail.value) -= (member match {
-          case Left(user) => toProxyFromUser(user.userSubjectId)
-          case Right(groupMember) => toGoogleGroupName(groupMember.groupName)
-        })
-      case None => throw new RuntimeException(s"group $group does not exist")
-    }
-  }
-
-  override def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]] = Future {
-    groups.get(group) map ( _.map {
-      case Left(user) => user.userEmail.value -> Option(Left(RawlsUser.toRef(user)))
-      case Right(groupMember) => groupMember.groupEmail.value -> Option(Right(RawlsGroup.toRef(groupMember)))
-    } toMap)
-  }
-
   def toGoogleGroupName(groupName: RawlsGroupName): String = s"GROUP_${groupName.value}@dev.firecloud.org"
-
-  override def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String = s"PROXY_${userSubjectId}"
-
-  override def toUserFromProxy(proxy: String): String = "joe.biden@whitehouse.gov"
 
   override def getServiceAccountRawlsUser(): Future[RawlsUser] = Future.successful(RawlsUser(RawlsUserSubjectId("12345678000"), RawlsUserEmail("foo@bar.com")))
 
@@ -294,7 +191,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] =
     Future.successful(RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, "opid", false, None, "create"))
 
-  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[RawlsGroupEmail]): Future[Try[Unit]] = {
+  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[WorkbenchEmail]): Future[Try[Unit]] = {
     Future.successful(Success(()))
   }
 
@@ -302,7 +199,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def grantReadAccess(billingProject: RawlsBillingProjectName,
                                bucketName: String,
-                               readers: Set[RawlsGroupEmail]): Future[String] = Future(bucketName)
+                               readers: Set[WorkbenchEmail]): Future[String] = Future(bucketName)
 
   override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = Future.successful {
     Try(projectTemplate.services.map { service =>
