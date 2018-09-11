@@ -151,28 +151,6 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
   }
 
-  it should "find workspaces with all users sub-group access" in withDefaultTestDatabase {
-    val groupRef = UserService.allUsersGroupRef
-    saveRawlsGroup(groupRef.groupName.value, s"${groupRef.groupName.value}@example.com")
-
-    val ws: Workspace = testData.workspace
-    val emptyWorkspacesQuery = workspaceQuery.listWorkspacesWithGroupAccess(Seq(UUID.fromString(ws.workspaceId)), groupRef)
-    val emptyResults = runAndWait(emptyWorkspacesQuery)
-    assert(emptyResults.isEmpty)
-
-    // Assign All Users Group to the current reader level of the workspace
-    val readerAcl = ws.accessLevels(WorkspaceAccessLevels.Read)
-    val newGroup = RawlsGroup(readerAcl.groupName, RawlsGroupEmail(s"${readerAcl.groupName.value}@example.com"), Set.empty, Set(groupRef))
-    runAndWait(rawlsGroupQuery.save(newGroup))
-
-    // Re-querying should now find that workspace
-    val uuid = UUID.fromString(ws.workspaceId)
-    val publicWorkspaceQuery = workspaceQuery.listWorkspacesWithGroupAccess(Seq(uuid), groupRef)
-    val publicResults = runAndWait(publicWorkspaceQuery)
-    assert(publicResults.nonEmpty)
-    assert(publicResults.contains(uuid))
-  }
-
   // bundle to hold methods we'll use across a few tests
   case class PermissionTestMethods(
                getPermission: (RawlsUserSubjectId, SlickWorkspaceContext) => ReadWriteAction[Boolean],

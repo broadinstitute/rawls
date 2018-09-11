@@ -222,7 +222,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
-    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sampleSet1, Option("this.samples"), services)
 
     assertResult(3) {
       submission.workflows.size
@@ -234,7 +234,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
-    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sampleSet1, Option("this.samples"), services)
 
     Get(s"${testData.wsName.path}") ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -482,7 +482,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Queued, DateTime.now, Some(ent.toReference), testData.inputResolutions)
       }
 
-      val sub = createTestSubmission(testData.workspace, testData.agoraMethodConfig, testData.indiv1, user, Seq.empty, Map.empty, Seq.empty, Map.empty).copy(workflows = workflows)
+      val sub = createTestSubmission(testData.workspace, testData.agoraMethodConfig, testData.individual1, user, Seq.empty, Map.empty, Seq.empty, Map.empty).copy(workflows = workflows)
       runAndWait(submissionQuery.create(context, sub))
     }
   }
@@ -609,10 +609,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val workflowId = "8afafe21-2b70-4180-a565-748cb573e10c"
     val workflows = Seq(
       // use the UUID of the workflow that has an output of array(array)
-      Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, Some(testData.indiv1.toReference), Seq.empty)
+      Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, Some(testData.individual1.toReference), Seq.empty)
     )
 
-    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some(testData.indiv1.toReference), workflows, SubmissionStatuses.Done, false)
+    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some(testData.individual1.toReference), workflows, SubmissionStatuses.Done, false)
 
     runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))

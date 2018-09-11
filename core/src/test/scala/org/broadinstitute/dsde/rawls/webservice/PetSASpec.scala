@@ -75,7 +75,7 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq(testData.userProjectOwner.userEmail.value,testWorkspaces.userSAProjectOwner.userEmail.value), Some(false))
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set(testData.userProjectOwner.userEmail.value,testWorkspaces.userSAProjectOwner.userEmail.value), Some(false))
         ){
           val response = responseAs[WorkspaceListResponse]
           WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners, Some(false))
@@ -95,7 +95,7 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceListResponse(WorkspaceAccessLevels.ProjectOwner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq(testData.userProjectOwner.userEmail.value,testWorkspaces.userSAProjectOwner.userEmail.value), Some(false))
+          WorkspaceListResponse(WorkspaceAccessLevels.ProjectOwner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set(testData.userProjectOwner.userEmail.value,testWorkspaces.userSAProjectOwner.userEmail.value), Some(false))
         ){
           val response = responseAs[WorkspaceListResponse]
           WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners, Some(false))
@@ -130,11 +130,11 @@ class PetSASpec extends ApiServiceSpec {
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.createUser(userProjectOwner),
-        rawlsUserQuery.createUser(userOwner),
-        rawlsUserQuery.createUser(userWriter),
-        rawlsUserQuery.createUser(userReader),
-        rawlsUserQuery.createUser(userSAProjectOwner),
+        DBIO.from(samDataSaver.createUser(userProjectOwner)),
+        DBIO.from(samDataSaver.createUser(userOwner)),
+        DBIO.from(samDataSaver.createUser(userWriter)),
+        DBIO.from(samDataSaver.createUser(userReader)),
+        DBIO.from(samDataSaver.createUser(userSAProjectOwner)),
         DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),

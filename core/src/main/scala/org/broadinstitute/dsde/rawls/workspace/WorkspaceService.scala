@@ -303,7 +303,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val query = for {
         permissionsPairs <- DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
         ownerEmails <- DBIO.sequence(permissionsPairs.toSeq.map(p => DBIO.from(getWorkspaceOwners(p.resourceId).map(owners => p.resourceId -> owners)))) //this could be a lot of calls to sam...
-//        publicWorkspaces <- dataAccess.workspaceQuery.listWorkspacesWithGroupAccess(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), UserService.allUsersGroupRef)
+//        publicWorkspaces <- //TODO: query this from sam!
         submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.resourceId)).toSeq)
         workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.resourceId)).toSeq)
       } yield (permissionsPairs, ownerEmails.toMap, submissionSummaryStats, workspaces)
@@ -313,7 +313,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         permissionsPairs.map { permissionsPair =>
           val wsId = UUID.fromString(permissionsPair.resourceId)
           val workspace = workspacesById(permissionsPair.resourceId)
-          val public: Boolean = false //TODO!
+          val public: Boolean = false //TODO see above!
           WorkspaceListResponse(WorkspaceAccessLevels.withName(permissionsPair.accessPolicyName), workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId.toString, Set.empty), Some(public))
         }
       }

@@ -357,7 +357,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         assertResult(Some(testData.sample1)) {
           runAndWait(entityQuery.get(context, "Sample", "sample1"))
         }
-        assertResult(Some(testData.sset1)) {
+        assertResult(Some(testData.sampleSet1)) {
           runAndWait(entityQuery.get(context, "SampleSet", "sset1"))
         }
       }
@@ -555,24 +555,24 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
    */
   it should "get entity subtrees from a list of entities" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      val sampleSet1Paths = Seq(EntityPath(Seq(testData.sset1.toReference)),
-                                EntityPath(Seq(testData.sset1.toReference, testData.sample1.toReference)),
-                                EntityPath(Seq(testData.sset1.toReference, testData.sample1.toReference, testData.aliquot1.toReference)),
-                                EntityPath(Seq(testData.sset1.toReference, testData.sample2.toReference)),
-                                EntityPath(Seq(testData.sset1.toReference, testData.sample3.toReference)),
-                                EntityPath(Seq(testData.sset1.toReference, testData.sample3.toReference, testData.sample1.toReference)))
-      val sampleSet2Paths = Seq(EntityPath(Seq(testData.sset2.toReference)),
-                                EntityPath(Seq(testData.sset2.toReference, testData.sample2.toReference)))
-      val sampleSet3Paths = Seq(EntityPath(Seq(testData.sset3.toReference)),
-                                EntityPath(Seq(testData.sset3.toReference, testData.sample5.toReference)),
-                                EntityPath(Seq(testData.sset3.toReference, testData.sample6.toReference)))
+      val sampleSet1Paths = Seq(EntityPath(Seq(testData.sampleSet1.toReference)),
+                                EntityPath(Seq(testData.sampleSet1.toReference, testData.sample1.toReference)),
+                                EntityPath(Seq(testData.sampleSet1.toReference, testData.sample1.toReference, testData.aliquot1.toReference)),
+                                EntityPath(Seq(testData.sampleSet1.toReference, testData.sample2.toReference)),
+                                EntityPath(Seq(testData.sampleSet1.toReference, testData.sample3.toReference)),
+                                EntityPath(Seq(testData.sampleSet1.toReference, testData.sample3.toReference, testData.sample1.toReference)))
+      val sampleSet2Paths = Seq(EntityPath(Seq(testData.sampleSet2.toReference)),
+                                EntityPath(Seq(testData.sampleSet2.toReference, testData.sample2.toReference)))
+      val sampleSet3Paths = Seq(EntityPath(Seq(testData.sampleSet3.toReference)),
+                                EntityPath(Seq(testData.sampleSet3.toReference, testData.sample5.toReference)),
+                                EntityPath(Seq(testData.sampleSet3.toReference, testData.sample6.toReference)))
 
       val expected = sampleSet1Paths ++ sampleSet2Paths ++ sampleSet3Paths
       assertSameElements(expected, runAndWait(entityQuery.getEntitySubtrees(context, "SampleSet", Set("sset1", "sset2", "sset3", "sampleSetDOESNTEXIST"))))
 
-      val individual2Paths = Seq(EntityPath(Seq(testData.indiv2.toReference)),
-                                 EntityPath(Seq(testData.indiv2.toReference, testData.sset2.toReference)),
-                                 EntityPath(Seq(testData.indiv2.toReference, testData.sset2.toReference, testData.sample2.toReference)))
+      val individual2Paths = Seq(EntityPath(Seq(testData.individual2.toReference)),
+                                 EntityPath(Seq(testData.individual2.toReference, testData.sampleSet2.toReference)),
+                                 EntityPath(Seq(testData.individual2.toReference, testData.sampleSet2.toReference, testData.sample2.toReference)))
       assertSameElements(individual2Paths, runAndWait(entityQuery.getEntitySubtrees(context, "Individual", Set("indiv2"))))
     }
   }
@@ -581,22 +581,22 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "get the full set of entity references from a list of entities" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      val expected = Set(testData.sample1, testData.sample3, testData.pair1, testData.pair2, testData.sset1, testData.ps1, testData.indiv1).map(_.toReference)
+      val expected = Set(testData.sample1, testData.sample3, testData.pair1, testData.pair2, testData.sampleSet1, testData.pairSet1, testData.individual1).map(_.toReference)
       assertSameElements(expected, runAndWait(entityQuery.getAllReferringEntities(context, Set(testData.sample1.toReference))))
 
-      val expected2 = Set(testData.aliquot1, testData.aliquot2, testData.sample1, testData.sample3, testData.pair1, testData.pair2, testData.sset1, testData.ps1, testData.indiv1).map(_.toReference)
+      val expected2 = Set(testData.aliquot1, testData.aliquot2, testData.sample1, testData.sample3, testData.pair1, testData.pair2, testData.sampleSet1, testData.pairSet1, testData.individual1).map(_.toReference)
       assertSameElements(expected2, runAndWait(entityQuery.getAllReferringEntities(context, Set(testData.aliquot1.toReference, testData.aliquot2.toReference))))
     }
   }
 
   it should "not include deleted entities when getting the full set of entity references from a list of entities" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      runAndWait(entityQuery.hide(context, Seq(testData.indiv1.toReference, testData.pair2.toReference)))
+      runAndWait(entityQuery.hide(context, Seq(testData.individual1.toReference, testData.pair2.toReference)))
 
-      val expected = Set(testData.sample1, testData.sample3, testData.pair1, testData.sset1, testData.ps1).map(_.toReference)
+      val expected = Set(testData.sample1, testData.sample3, testData.pair1, testData.sampleSet1, testData.pairSet1).map(_.toReference)
       assertSameElements(expected, runAndWait(entityQuery.getAllReferringEntities(context, Set(testData.sample1.toReference))))
 
-      val expected2 = Set(testData.aliquot1, testData.aliquot2, testData.sample1, testData.sample3, testData.pair1, testData.sset1, testData.ps1).map(_.toReference)
+      val expected2 = Set(testData.aliquot1, testData.aliquot2, testData.sample1, testData.sample3, testData.pair1, testData.sampleSet1, testData.pairSet1).map(_.toReference)
       assertSameElements(expected2, runAndWait(entityQuery.getAllReferringEntities(context, Set(testData.aliquot1.toReference, testData.aliquot2.toReference))))
     }
   }
@@ -813,7 +813,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "delete a set without affecting its component entities" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      assertResult(Some(testData.sset1)) {
+      assertResult(Some(testData.sampleSet1)) {
         runAndWait(entityQuery.get(context, "SampleSet", "sset1"))
       }
       assertResult(Some(testData.sample1)) {
@@ -827,7 +827,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       }
 
       assertResult(1) {
-        runAndWait(entityQuery.hide(context, Seq(testData.sset1.toReference)))
+        runAndWait(entityQuery.hide(context, Seq(testData.sampleSet1.toReference)))
       }
 
       assertResult(None) {

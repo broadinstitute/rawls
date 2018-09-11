@@ -192,119 +192,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "get, grant, revoke all user read access to workspace" in withTestDataApiServices { services =>
-    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
-
-    testData.workspace.accessLevels.values.foreach(services.gcsDAO.createGoogleGroup)
-
-    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) { status }
-      }
-
-    services.gpsDAO.messageLog.clear()
-    Put(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-
-    val group = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
-    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 1))
-
-    Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
-      }
-
-    Delete(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) { status }
-      }
-    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 2))
-
-    Get(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
-      }
-
-  }
-
-  it should "sync group membership" in withTestDataApiServices { services =>
-    val inGoogleGroup = RawlsGroup(
-      RawlsGroupName("google"),
-      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("google"))),
-      Set.empty[RawlsUserRef],
-      Set.empty[RawlsGroupRef])
-    val inBothGroup = RawlsGroup(
-      RawlsGroupName("both"),
-      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("both"))),
-      Set.empty[RawlsUserRef],
-      Set.empty[RawlsGroupRef])
-    val inDbGroup = RawlsGroup(
-      RawlsGroupName("db"),
-      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("db"))),
-      Set.empty[RawlsUserRef],
-      Set.empty[RawlsGroupRef])
-
-    val inGoogleUser = RawlsUser(RawlsUserSubjectId("google"), RawlsUserEmail("google@fc.org"))
-    val inBothUser = RawlsUser(RawlsUserSubjectId("both"), RawlsUserEmail("both@fc.org"))
-    val inDbUser = RawlsUser(RawlsUserSubjectId("db"), RawlsUserEmail("db@fc.org"))
-    val unknownUserInGoogle = RawlsUser(RawlsUserSubjectId("unknown"), RawlsUserEmail("unknown@fc.org"))
-
-    val topGroup = RawlsGroup(
-      RawlsGroupName("synctest"),
-      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("synctest"))),
-      Set[RawlsUserRef](inBothUser, inDbUser),
-      Set[RawlsGroupRef](inBothGroup, inDbGroup))
-
-    Await.result(services.gcsDAO.createGoogleGroup(topGroup), Duration.Inf)
-    Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Right(inGoogleGroup)), Duration.Inf)
-    Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Right(inBothGroup)), Duration.Inf)
-    Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(inGoogleUser)), Duration.Inf)
-    Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(inBothUser)), Duration.Inf)
-    Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(unknownUserInGoogle)), Duration.Inf)
-
-    runAndWait(rawlsUserQuery.createUser(inGoogleUser))
-    runAndWait(rawlsUserQuery.createUser(inBothUser))
-    runAndWait(rawlsUserQuery.createUser(inDbUser))
-
-    runAndWait(rawlsGroupQuery.save(inGoogleGroup))
-    runAndWait(rawlsGroupQuery.save(inBothGroup))
-    runAndWait(rawlsGroupQuery.save(inDbGroup))
-
-    runAndWait(rawlsGroupQuery.save(topGroup))
-
-    Post(s"/admin/groups/${topGroup.groupName.value}/sync") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-
-        val expected = Seq(
-          SyncReportItem("added", inDbUser.userEmail.value, None),
-          SyncReportItem("added", inDbGroup.groupEmail.value, None),
-          SyncReportItem("removed", inGoogleUser.userEmail.value, None),
-          SyncReportItem("removed", inGoogleGroup.groupEmail.value, None),
-          SyncReportItem("removed", unknownUserInGoogle.userEmail.value, None)
-        )
-        assertSameElements(expected, responseAs[SyncReport].items)
-      }
-  }
-
   it should "return 200 when listing all workspaces" in withTestDataApiServices { services =>
     Get(s"/admin/workspaces") ~>
       sealRoute(services.adminRoutes) ~>
@@ -404,12 +291,12 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val testUserStatusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
     withWorkspaceContext(constantData.workspace) { ctx =>
       val testUser = RawlsUser(UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(testSubjectId)))
-      runAndWait(rawlsUserQuery.createUser(testUser))
+      runAndWait(DBIO.from(samDataSaver.createUser(testUser)))
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
       testUserStatusCounts.flatMap { case (st, count) =>
         for (_ <- 0 until count) yield {
-          createTestSubmission(constantData.workspace, constantData.methodConfig, constantData.sset1, testUser,
+          createTestSubmission(constantData.workspace, constantData.methodConfig, constantData.sset1, testUser.userEmail,
             Seq(constantData.sset1), Map(constantData.sset1 -> inputResolutionsList),
             Seq.empty, Map.empty, st)
         }

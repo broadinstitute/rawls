@@ -142,7 +142,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.createUser(user),
+        DBIO.from(samDataSaver.createUser(user)),
         rawlsGroupQuery.save(ownerGroup),
         workspaceQuery.save(workspace),
         withWorkspaceContext(workspace) { context =>
@@ -558,7 +558,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       vStatus
     }
 
-    assertResult(testData.sset1.attributes(AttributeName.withDefaultNS("samples")).asInstanceOf[AttributeEntityReferenceList].list.size) { vData.validEntities.length }
+    assertResult(testData.sampleSet1.attributes(AttributeName.withDefaultNS("samples")).asInstanceOf[AttributeEntityReferenceList].list.size) { vData.validEntities.length }
     assert(vData.invalidEntities.isEmpty)
   }
 
@@ -622,7 +622,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       vStatus
     }
 
-    assertResult(testData.sset1.attributes(AttributeName.withDefaultNS("samples")).asInstanceOf[AttributeEntityReferenceList].list.size-1) { vData.validEntities.length }
+    assertResult(testData.sampleSet1.attributes(AttributeName.withDefaultNS("samples")).asInstanceOf[AttributeEntityReferenceList].list.size-1) { vData.validEntities.length }
     assertResult(1) { vData.invalidEntities.length }
   }
 

@@ -266,6 +266,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
         //The person who submitted the submission, and their token
         petSAJson <- DBIO.from(samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, RawlsUserEmail(submissionRec.submitterEmail)))
+        //TODO TODO TODO very important to somehow look up the subject ID for a user. we wont have the access token when this is happening!
         userCredentials <- DBIO.from(googleServicesDAO.getUserCredentials(fakeSubmitter)).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for $fakeSubmitter")))
 
         //The wdl

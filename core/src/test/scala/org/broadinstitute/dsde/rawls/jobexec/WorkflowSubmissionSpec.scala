@@ -217,7 +217,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitInput
       }
 
-      val token = Await.result(workflowSubmission.googleServicesDAO.getToken(testData.submission1.submitter), Duration.Inf).get
       val petJson = Await.result(workflowSubmission.samDAO.getPetServiceAccountKeyForUser(testData.workspace.namespace, testData.userOwner.userEmail), Duration.Inf)
       assertResult(
         Some(
@@ -437,8 +436,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
 
-      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
-        Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
+      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sampleSet1, testData.userOwner,
+        Seq(testData.sampleSet1), Map(testData.sampleSet1 -> inputResolutionsList),
         Seq.empty, Map.empty)
 
       runAndWait(submissionQuery.create(ctx, submissionList))

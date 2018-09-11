@@ -403,11 +403,11 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   test("workspace attribute expression") {
     withTestWorkspace { workspaceContext =>
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get(AttributeName.withDefaultNS("string")).get)))) {
+      assertResult(Map("sample1" -> TrySuccess(Seq(testData.commonAttributes.get(AttributeName.withDefaultNS("string")).get)))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.string"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get(AttributeName.withDefaultNS("number")).get)))) {
+      assertResult(Map("sample1" -> TrySuccess(Seq(testData.commonAttributes.get(AttributeName.withDefaultNS("number")).get)))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.number"))
       }
 
@@ -517,7 +517,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       assertResult(Set("sample1", "sample2", "sample3")) {
         val ent = runAndWait(entityQuery.get(workspaceContext, "Individual", "indiv1")).get
-        val libraryAttribute = AttributeName("library", "lib_set") -> testData.sset1.toReference
+        val libraryAttribute = AttributeName("library", "lib_set") -> testData.sampleSet1.toReference
         runAndWait(entityQuery.save(workspaceContext, ent.copy(attributes = ent.attributes + libraryAttribute)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Individual", "indiv1", "this.library:lib_set.samples")).map(_.name).toSet
