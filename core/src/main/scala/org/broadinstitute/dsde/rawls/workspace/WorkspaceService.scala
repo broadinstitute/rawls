@@ -485,11 +485,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val maintainedEmails = beforeEmails intersect afterEmails
       val removedEmails = beforeEmails -- afterEmails
       val newEmails = afterEmails -- beforeEmails
+      val invitedEmails = Set.empty
+      val updatedInviteEmails = Set.empty
 
       //this is bad code
       val noAccess = removedEmails.map(email => WorkspaceACLUpdate(email, WorkspaceAccessLevels.NoAccess))
       val brandNewAccess = newEmails.map(email => WorkspaceACLUpdate(email, after(email).accessLevel))
       val changedAccess = maintainedEmails.map(email => WorkspaceACLUpdate(email, after(email).accessLevel))
+      val invitesSent = invitedEmails.map(email => WorkspaceACLUpdate(email, after(email).accessLevel))
+      val invitesUpdated = updatedInviteEmails.map(email => WorkspaceACLUpdate(email, after(email).accessLevel))
 
 
 
@@ -497,7 +501,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val usersUpdated = noAccess ++ brandNewAccess ++ changedAccess
 
       //todo: invites and usersNotFound
-      RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersUpdated, Set.empty, Set.empty, Set.empty))
+      RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersUpdated, invitesSent, invitesUpdated, Set.empty))
     }
   }
 
@@ -1635,6 +1639,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
+    //TODO need to also look up auth domains
     dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
       case Some(workspace) => op(SlickWorkspaceContext(workspace))
