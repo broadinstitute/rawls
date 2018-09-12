@@ -165,9 +165,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         DBIO.from(samDataSaver.createUser(userOwner)),
         DBIO.from(samDataSaver.createUser(userWriter)),
         DBIO.from(samDataSaver.createUser(userReader)),
-        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "owner", Set(userOwner.userEmail))),
-        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "writer", Set(userWriter.userEmail))),
-        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "reader", Set(userReader.userEmail))),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "owner", Set(userOwner.userEmail.value))),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "writer", Set(userWriter.userEmail.value))),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "reader", Set(userReader.userEmail.value))),
         workspaceQuery.save(workspace)
       )
     }
@@ -186,9 +186,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         DBIO.from(samDataSaver.createUser(userOwner)),
         DBIO.from(samDataSaver.createUser(userWriter)),
         DBIO.from(samDataSaver.createUser(userReader)),
-        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "owner", Set(userOwner.userEmail))),
-        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "writer", Set(userWriter.userEmail))),
-        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "reader", Set(userReader.userEmail))),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "owner", Set(userOwner.userEmail.value))),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "writer", Set(userWriter.userEmail.value))),
+        DBIO.from(samDataSaver.createPolicy("workspace", wsName.name, "reader", Set(userReader.userEmail.value))),
         workspaceQuery.save(workspace)
       )
     }
@@ -272,17 +272,24 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val wsInterleaved = WorkspaceName("myNamespace", "myWSToTestInterleavedSubs")
     val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWSToTestWFFailureMode")
 
-    private def saveTestWorkspace(workspace: Workspace, entities: Set[Entity], methodConfigs: Set[MethodConfiguration], submissions: Set[Submission]) = {
+    //startingPolices is a map of policy name to member email. any policies not defined will be automatically created but will be blank
+    //TODO: these futures are fucked right now but im not actually intending for this to work yet, just laying out the skeleton
+    private def saveTestWorkspace(workspace: Workspace, entities: Set[Entity], methodConfigs: Set[MethodConfiguration], submissions: Set[Submission], startingPolicies: Map[String, Set[String]]) = {
       //1. Save the workspace
       runAndWait(workspaceQuery.save(workspace))
 
-      //2. Save all of the data into the workspace
+      //2. Save the workspace policies
+      DBIO.sequence(startingPolicies.map { case (policyName, memberEmails) =>
+        DBIO.from(samDataSaver.createPolicy("workspace", workspace.workspaceId, policyName, memberEmails))
+      })
+
+      //3. Save all of the data into the workspace
       withWorkspaceContext(workspace) { context =>
         DBIO.seq(
           entityQuery.save(context, entities),
           DBIO.sequence(methodConfigs.map(methodConfigurationQuery.create(context, _))),
           DBIO.sequence(submissions.map(submissionQuery.create(context, _))),
-          updateWorkflowExecutionServiceKey("unittestdefault")) //TODO: does anything use anything other than the default?
+          updateWorkflowExecutionServiceKey("unittestdefault")) //TODO: does anything use anything other than unittestdefault?
       }
     }
 
@@ -509,7 +516,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       AttributeName.withDefaultNS("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
-    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", Set.empty, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", commonAttributes)
+//    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", Set.empty, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", commonAttributes)
 
     val (workspace, workspaceGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", commonAttributes, false)
 
@@ -564,55 +571,63 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       //need to wait for these to complete before trying to run tests
       saveTestWorkspace(
         workspace,
-        Set.empty, //todo
+        Set(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, pairSet1, sampleSet1, sampleSet2, sampleSet3, sampleSet4, sampleSetEmpty, individual1, individual2),
         Set(agoraMethodConfig, dockstoreMethodConfig, goodAndBadMethodConfig, methodConfig2, methodConfig3, methodConfigValid, methodConfigDockstore, methodConfigUnparseableInputs, methodConfigUnparseableOutputs, methodConfigUnparseableBoth, methodConfigEmptyOutputs, methodConfigNotAllSamples, methodConfigAttrTypeMixup, methodConfigArrayType, methodConfigEntityless, methodConfigEntityUpdate, methodConfigWorkspaceLibraryUpdate, methodConfigMissingOutputs),
-        Set(submissionTerminateTest, submissionNoWorkflows, submission1, costedSubmission1, submission2, submissionUpdateEntity, submissionUpdateWorkspace)
+        Set(submissionTerminateTest, submissionNoWorkflows, submission1, costedSubmission1, submission2, submissionUpdateEntity, submissionUpdateWorkspace),
+        Map.empty
       )
-      saveTestWorkspace(workspaceWithRealm, Set(extraSample), Set.empty, Set.empty)
-      saveTestWorkspace(workspaceWithMultiGroupAD, Set(extraSample), Set.empty, Set.empty)
-      saveTestWorkspace(workspaceNoSubmissions, Set.empty, Set.empty, Set.empty)
+      saveTestWorkspace(workspaceWithRealm, Set(extraSample), Set.empty, Set.empty, Map.empty)
+      saveTestWorkspace(workspaceWithMultiGroupAD, Set(extraSample), Set.empty, Set.empty, Map.empty)
+      saveTestWorkspace(workspaceNoSubmissions, Set.empty, Set.empty, Set.empty, Map.empty)
       saveTestWorkspace(
         workspaceSuccessfulSubmission,
         Set(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, pairSet1, sampleSet1, sampleSet2, sampleSet3, sampleSet4, sampleSetEmpty, individual1, individual2),
         Set(agoraMethodConfig, methodConfig2),
-        Set(submissionSuccessful1)
+        Set(submissionSuccessful1),
+        Map.empty
       )
       saveTestWorkspace(
         workspaceFailedSubmission,
         Set(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, pairSet1, sampleSet1, sampleSet2, sampleSet3, sampleSet4, sampleSetEmpty, individual1, individual2),
         Set(agoraMethodConfig),
-        Set(submissionFailed)
+        Set(submissionFailed),
+        Map.empty
       )
       saveTestWorkspace(
         workspaceSubmittedSubmission,
         Set(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, pairSet1, sampleSet1, sampleSet2, sampleSet3, sampleSet4, sampleSetEmpty, individual1, individual2),
         Set(agoraMethodConfig),
-        Set(submissionSubmitted)
+        Set(submissionSubmitted),
+        Map.empty
       )
       saveTestWorkspace(
         workspaceTerminatedSubmissions,
         Set(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, pairSet1, sampleSet1, sampleSet2, sampleSet3, sampleSet4, sampleSetEmpty, individual1, individual2),
         Set(agoraMethodConfig),
-        Set(submissionAborted2, submissionSuccessful2)
+        Set(submissionAborted2, submissionSuccessful2),
+        Map.empty
       )
 
       saveTestWorkspace(
         workspaceMixedSubmissions,
         Set(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, pairSet1, sampleSet1, sampleSet2, sampleSet3, sampleSet4, sampleSetEmpty, individual1, individual2),
         Set(agoraMethodConfig),
-        Set(submissionAborted1, submissionMixed)
+        Set(submissionAborted1, submissionMixed),
+        Map.empty
       )
       saveTestWorkspace(
         workspaceInterleavedSubmissions,
         Set(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, pairSet1, sampleSet1, sampleSet2, sampleSet3, sampleSet4, sampleSetEmpty, individual1, individual2),
         Set(agoraMethodConfig),
-        Set(outerSubmission, innerSubmission)
+        Set(outerSubmission, innerSubmission),
+        Map.empty
       )
       saveTestWorkspace(
         workspaceWorkflowFailureMode,
         Set(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, pairSet1, sampleSet1, sampleSet2, sampleSet3, sampleSet4, sampleSetEmpty, individual1, individual2),
         Set(agoraMethodConfig),
-        Set(submissionWorkflowFailureMode)
+        Set(submissionWorkflowFailureMode),
+        Map.empty
       )
 
       DBIO.seq(
@@ -698,9 +713,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
-    val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
-    val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
-    val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
     val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(RawlsUser(userInfo))), Map.empty)
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
@@ -823,9 +835,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
         DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         DBIO.from(samDataSaver.createUser(userWriter)),
         DBIO.from(samDataSaver.createUser(userReader)),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
         workspaceQuery.save(workspace),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(

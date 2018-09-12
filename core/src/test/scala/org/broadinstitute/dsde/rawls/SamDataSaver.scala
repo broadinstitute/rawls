@@ -7,7 +7,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 class SamDataSaver(implicit executionContext: ExecutionContext) {
 
-  case class MockSamPolicy(resourceTypeName: String, resourceId: String, policyName: String, actions: Set[String], roles: Set[String], members: Set[RawlsUserEmail])
+  case class MockSamPolicy(resourceTypeName: String, resourceId: String, policyName: String, actions: Set[String], roles: Set[String], members: Set[String])
 
   private val users: TrieMap[RawlsUserEmail, RawlsUser] = TrieMap()
 
@@ -26,7 +26,7 @@ class SamDataSaver(implicit executionContext: ExecutionContext) {
   }
 
   //also need roles and actions damnit
-  def createPolicy(resourceTypeName: String, resourceId: String, policyName: String, members: Set[RawlsUserEmail]) = Future {
-    policies.put(s"$resourceTypeName/$resourceId/$policyName", members)
+  def createPolicy(resourceTypeName: String, resourceId: String, policyName: String, members: Set[String]) = Future {
+    policies.put(s"$resourceTypeName/$resourceId/$policyName", MockSamPolicy(resourceTypeName, resourceId, policyName, Set.empty, Set.empty, members))
   }
 }
