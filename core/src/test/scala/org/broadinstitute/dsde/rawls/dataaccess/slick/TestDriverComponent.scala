@@ -85,6 +85,28 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     }
   }
 
+  //startingPolices is a map of policy name to member email. any policies not defined will be automatically created but will be blank
+  //TODO: these futures are fucked right now but im not actually intending for this to work yet, just laying out the skeleton
+  private def saveTestWorkspace(billingProjectOwnerPolicy: String, workspace: Workspace, entities: Set[Entity], methodConfigs: Set[MethodConfiguration], submissions: Set[Submission], startingPolicies: Map[String, Set[String]]) = {
+    //1. Save the workspace
+    runAndWait(workspaceQuery.save(workspace))
+
+    //2. Save the workspace policies
+    DBIO.from(samDataSaver.createPolicy("workspace", workspace.workspaceId, "project-owner", Set(billingProjectOwnerPolicy)))
+    DBIO.sequence(startingPolicies.map { case (policyName, memberEmails) =>
+      DBIO.from(samDataSaver.createPolicy("workspace", workspace.workspaceId, policyName, memberEmails))
+    })
+
+    //3. Save all of the data into the workspace
+    withWorkspaceContext(workspace) { context =>
+      DBIO.seq(
+        entityQuery.save(context, entities),
+        DBIO.sequence(methodConfigs.map(methodConfigurationQuery.create(context, _))),
+        DBIO.sequence(submissions.map(submissionQuery.create(context, _))),
+        updateWorkflowExecutionServiceKey("unittestdefault")) //TODO: does anything use anything other than unittestdefault?
+    }
+  }
+
   import driver.api._
 
   def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, rawlsUserEmail: RawlsUserEmail,
@@ -119,38 +141,38 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   def billingProjectFromName(name: String) = (RawlsBillingProject(RawlsBillingProjectName(name), "mockBucketUrl", CreationStatuses.Ready, None, None), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty))
 
-  def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef] = Set.empty) =
-    RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, groups)
+//  def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef] = Set.empty) =
+//    RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, groups)
 
-  def makeWorkspaceWithUsers(usersByLevel: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, Set[RawlsUserRef]], groupsByLevel: Map[WorkspaceAccessLevel, Set[RawlsGroupRef]] = Map(WorkspaceAccessLevels.Owner -> Set.empty, WorkspaceAccessLevels.Write -> Set.empty, WorkspaceAccessLevels.Read -> Set.empty))(project: RawlsBillingProject,
-                    projectOwnerPolicyGroup: RawlsGroup,
-                    name: String,
-                    authDomain: Set[ManagedGroupRef],
-                    workspaceId: String,
-                    bucketName: String,
-                    createdDate: DateTime,
-                    lastModified: DateTime,
-                    createdBy: String,
-                    attributes: AttributeMap,
-                    isLocked: Boolean) = {
-
-    val intersectionGroupsByLevel = if(authDomain.isEmpty) None else {
-      Option(usersByLevel.map { case (level, users) =>
-        level -> makeRawlsGroup(s"${project.projectName.value}-${name}-IG-${level.toString}", users, groupsByLevel(level))
-      } + (ProjectOwner -> makeRawlsGroup(s"${project.projectName.value}-${name}-IG-${ProjectOwner.toString}", projectOwnerPolicyGroup.users, Set.empty)))
-    }
-
-
-    val newAccessGroupsByLevel = usersByLevel.map { case (level, users) =>
-      level -> makeRawlsGroup(s"${project.projectName.value}-${name}-${level.toString}", users, groupsByLevel(level))
-    }
-
-    val accessGroupsByLevel = newAccessGroupsByLevel + (ProjectOwner -> projectOwnerPolicyGroup)
-
-    (Workspace(project.projectName.value, name, authDomain, workspaceId, bucketName, createdDate, createdDate, createdBy, attributes, isLocked),
-//todo: wtf does this return and why
-      intersectionGroupsByLevel.getOrElse(Map.empty).values ++ newAccessGroupsByLevel.values)
-  }
+//  def makeWorkspaceWithUsers(usersByLevel: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, Set[RawlsUserRef]], groupsByLevel: Map[WorkspaceAccessLevel, Set[RawlsGroupRef]] = Map(WorkspaceAccessLevels.Owner -> Set.empty, WorkspaceAccessLevels.Write -> Set.empty, WorkspaceAccessLevels.Read -> Set.empty))(project: RawlsBillingProject,
+//                    projectOwnerPolicyGroup: RawlsGroup,
+//                    name: String,
+//                    authDomain: Set[ManagedGroupRef],
+//                    workspaceId: String,
+//                    bucketName: String,
+//                    createdDate: DateTime,
+//                    lastModified: DateTime,
+//                    createdBy: String,
+//                    attributes: AttributeMap,
+//                    isLocked: Boolean) = {
+//
+//    val intersectionGroupsByLevel = if(authDomain.isEmpty) None else {
+//      Option(usersByLevel.map { case (level, users) =>
+//        level -> makeRawlsGroup(s"${project.projectName.value}-${name}-IG-${level.toString}", users, groupsByLevel(level))
+//      } + (ProjectOwner -> makeRawlsGroup(s"${project.projectName.value}-${name}-IG-${ProjectOwner.toString}", projectOwnerPolicyGroup.users, Set.empty)))
+//    }
+//
+//
+//    val newAccessGroupsByLevel = usersByLevel.map { case (level, users) =>
+//      level -> makeRawlsGroup(s"${project.projectName.value}-${name}-${level.toString}", users, groupsByLevel(level))
+//    }
+//
+//    val accessGroupsByLevel = newAccessGroupsByLevel + (ProjectOwner -> projectOwnerPolicyGroup)
+//
+//    (Workspace(project.projectName.value, name, authDomain, workspaceId, bucketName, createdDate, createdDate, createdBy, attributes, isLocked),
+////todo: wtf does this return and why
+//      intersectionGroupsByLevel.getOrElse(Map.empty).values ++ newAccessGroupsByLevel.values)
+//  }
 
   class EmptyWorkspace() extends TestData {
     val userOwner = RawlsUser(userInfo)
@@ -271,27 +293,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val wsNameConfigCopyDestination = WorkspaceName("myNamespace", "configCopyDestinationWS")
     val wsInterleaved = WorkspaceName("myNamespace", "myWSToTestInterleavedSubs")
     val wsWorkflowFailureMode = WorkspaceName("myNamespace", "myWSToTestWFFailureMode")
-
-    //startingPolices is a map of policy name to member email. any policies not defined will be automatically created but will be blank
-    //TODO: these futures are fucked right now but im not actually intending for this to work yet, just laying out the skeleton
-    private def saveTestWorkspace(workspace: Workspace, entities: Set[Entity], methodConfigs: Set[MethodConfiguration], submissions: Set[Submission], startingPolicies: Map[String, Set[String]]) = {
-      //1. Save the workspace
-      runAndWait(workspaceQuery.save(workspace))
-
-      //2. Save the workspace policies
-      DBIO.sequence(startingPolicies.map { case (policyName, memberEmails) =>
-        DBIO.from(samDataSaver.createPolicy("workspace", workspace.workspaceId, policyName, memberEmails))
-      })
-
-      //3. Save all of the data into the workspace
-      withWorkspaceContext(workspace) { context =>
-        DBIO.seq(
-          entityQuery.save(context, entities),
-          DBIO.sequence(methodConfigs.map(methodConfigurationQuery.create(context, _))),
-          DBIO.sequence(submissions.map(submissionQuery.create(context, _))),
-          updateWorkflowExecutionServiceKey("unittestdefault")) //TODO: does anything use anything other than unittestdefault?
-      }
-    }
 
     /* * * * * * * * * * * * * * * * *
      * METHODS, ETC.
@@ -493,21 +494,23 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val testProject3Groups = generateBillingGroups(testProject3Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userReader)), Map.empty)
     val testProject3 = RawlsBillingProject(testProject3Name, "http://cromwell-auth-url.example.com", CreationStatuses.Ready, None, None)
 
-    val makeWorkspace = makeWorkspaceWithUsers(Map(
-      WorkspaceAccessLevels.Owner -> Set(userOwner),
-      WorkspaceAccessLevels.Write -> Set(userWriter),
-      WorkspaceAccessLevels.Read -> Set(userReader)
-    ))_
-
-    val makeWorkspaceToTestGrant = makeWorkspaceWithUsers(Map(
-      WorkspaceAccessLevels.Owner -> Set(userOwner),
-      WorkspaceAccessLevels.Write -> Set(userWriter),
-      WorkspaceAccessLevels.Read -> Set.empty
-    ),Map(
-      WorkspaceAccessLevels.Owner -> Set.empty,
-      WorkspaceAccessLevels.Write -> Set.empty,
-      WorkspaceAccessLevels.Read -> Set(dbGapAuthorizedUsersGroup.toMembersGroupRef)
-    ))_
+//    val makeWorkspace = makeWorkspaceWithUsers(Map(
+//      WorkspaceAccessLevels.Owner -> Set(userOwner),
+//      WorkspaceAccessLevels.Write -> Set(userWriter),
+//      WorkspaceAccessLevels.Read -> Set(userReader)
+//    ))_
+//
+//    *************************
+//    ************************* want to replicate this test data carefully
+//    val makeWorkspaceToTestGrant = makeWorkspaceWithUsers(Map(
+//      WorkspaceAccessLevels.Owner -> Set(userOwner),
+//      WorkspaceAccessLevels.Write -> Set(userWriter),
+//      WorkspaceAccessLevels.Read -> Set.empty
+//    ),Map(
+//      WorkspaceAccessLevels.Owner -> Set.empty,
+//      WorkspaceAccessLevels.Write -> Set.empty,
+//      WorkspaceAccessLevels.Read -> Set(dbGapAuthorizedUsersGroup.toMembersGroupRef)
+//    ))_
 
     val commonAttributes = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
@@ -518,7 +521,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
 //    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", Set.empty, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", commonAttributes)
 
-    val (workspace, workspaceGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", commonAttributes, false)
+    val workspace = Workspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", commonAttributes, false)
 
     val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", Set.empty, UUID.randomUUID().toString, "aBucket3", currentTime(), currentTime(), "testUser",
       commonAttributes + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)))
@@ -832,7 +835,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     override def save() = {
       DBIO.seq(
         DBIO.from(samDataSaver.createUser(userOwner)),
-        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
+//        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         DBIO.from(samDataSaver.createUser(userWriter)),
         DBIO.from(samDataSaver.createUser(userReader)),
         workspaceQuery.save(workspace),
