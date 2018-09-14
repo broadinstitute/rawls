@@ -126,7 +126,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      gpsDAO,
       notificationDAO,
       samDAO,
       Seq("bigquery.jobUser")
@@ -185,7 +184,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     // for metrics testing
     val sealedInstrumentedRoutes: Route = instrumentRequest {
       sealRoute(adminRoutes ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
-        submissionRoutes ~ userRoutes ~ createUserRoute ~ workspaceRoutes)
+        submissionRoutes ~ userRoutes ~ workspaceRoutes)
     }
   }
 

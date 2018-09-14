@@ -31,8 +31,8 @@ object UserService {
   val canComputeUserPolicyName = "can-compute-user"
   val ownerPolicyName = "owner"
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, gpsDAO, notificationDAO, samDAO, projectOwnerGrantableRoles)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, projectOwnerGrantableRoles)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
@@ -58,14 +58,12 @@ object UserService {
   }
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, gpsDAO: GooglePubSubDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging {
 
   import dataSource.dataAccess.driver.api._
 
   def SetRefreshToken(token: UserRefreshToken) = setRefreshToken(token)
   def GetRefreshTokenDate = getRefreshTokenDate()
-
-  def CreateUser = createUser()
 
   def GetBillingProjectStatus(projectName: RawlsBillingProjectName) = getBillingProjectStatus(projectName)
   def ListBillingProjects = listBillingProjects
@@ -78,9 +76,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def GrantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { grantGoogleRoleToUser(projectName, targetUserEmail, role) }
   def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
   def ListBillingAccounts = listBillingAccounts()
-
-//  def RequestAccessToManagedGroup(groupRef: ManagedGroupRef) = requestAccessToManagedGroup(groupRef)
-//  def SetManagedGroupAccessInstructions(groupRef: ManagedGroupRef, instructions: ManagedGroupAccessInstructions) = asFCAdmin { setManagedGroupAccessInstructions(groupRef, instructions) }
 
   def CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) = startBillingProjectCreation(projectName, billingAccount)
   def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamResourceActions.readPolicies) { getBillingProjectMembers(projectName) }
@@ -111,13 +106,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case t: TokenResponseException =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(t.getStatusCode, t))
     }
-  }
-
-  //Note: As of Sam Phase I, this function only fires off the welcome email and updates pending workspace access
-  //The rest of user registration now takes place in Sam
-  //TODO: move this to orch
-  def createUser(): Future[Unit] = {
-    Future.successful(notificationDAO.fireAndForgetNotification(ActivationNotification(userInfo.userSubjectId)))
   }
 
   def isAdmin(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
