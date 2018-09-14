@@ -166,7 +166,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
 
             withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
-              status shouldBe "Submitted"
               workflows should not be (empty)
               workflows.head
             }
@@ -265,7 +264,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
 
             withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
-              status shouldBe "Submitted"
               workflows should not be (empty)
               workflows.head
             }
