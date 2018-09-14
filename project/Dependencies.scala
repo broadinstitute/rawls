@@ -1,8 +1,8 @@
 import sbt._
 
 object Dependencies {
-  val akkaV = "2.4.19"
-  val akkaHttpV = "10.0.10"
+  val akkaV = "2.4.20" // 2.5.14 works but 2.5.15+ causes an obscure test failure; sticking with 2.4 for now
+  val akkaHttpV = "10.0.14" // can't go to 10.1.x without going to akka 2.5.x
   val slickV = "3.2.1"
 
   val googleV = "1.22.0"
@@ -138,7 +138,6 @@ object Dependencies {
     ravenLogback,
     slick,
     slickHikariCP,
-    akkaHttp,
     akkaHttp,
     swaggerUI,
     commonsJEXL,
