@@ -48,7 +48,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   "BillingApiService" should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
     val (project, projectGroups) = billingProjectFromName("new_project")
-    Await.result(samDataSaver.savePolicyGroups(projectGroups.values.flatten, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
+//    Await.result(samDataSaver.savePolicyGroups(projectGroups.values.flatten, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
 
     val createRequest = CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)
 
@@ -126,7 +126,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when removing a user from a billing project" in withTestDataApiServices { services =>
     val (project, projectGroups) = billingProjectFromName("new_project")
-    Await.result(samDataSaver.savePolicyGroups(projectGroups.values.flatten, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
+//    Await.result(samDataSaver.savePolicyGroups(projectGroups.values.flatten, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
 
     withStatsD {
       val createRequest = CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)

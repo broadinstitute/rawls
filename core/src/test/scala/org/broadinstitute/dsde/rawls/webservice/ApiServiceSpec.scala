@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
-import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor, HealthMonitor}
+import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, HealthMonitor}
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -118,8 +118,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       workbenchMetricBaseName
     ).withDispatcher("submission-monitor-dispatcher"))
 
-    val googleGroupSyncTopic = "test-topic-name"
-
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
 
@@ -129,13 +127,10 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       slickDataSource,
       gcsDAO,
       gpsDAO,
-      googleGroupSyncTopic,
       notificationDAO,
       samDAO,
       Seq("bigquery.jobUser")
     )_
-
-    val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, googleGroupSyncTopic, "test-sub-name", 1, userServiceConstructor))
 
     override val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
@@ -182,7 +177,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
-      googleGroupSyncMonitorSupervisor ! PoisonPill
     }
 
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")

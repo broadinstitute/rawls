@@ -135,9 +135,9 @@ class PetSASpec extends ApiServiceSpec {
         DBIO.from(samDataSaver.createUser(userWriter)),
         DBIO.from(samDataSaver.createUser(userReader)),
         DBIO.from(samDataSaver.createUser(userSAProjectOwner)),
-        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
+//        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
-        DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
+//        DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         workspaceQuery.save(workspace)
       )
     }

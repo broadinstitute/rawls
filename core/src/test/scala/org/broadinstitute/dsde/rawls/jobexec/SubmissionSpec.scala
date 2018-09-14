@@ -143,7 +143,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     override def save() = {
       DBIO.seq(
         DBIO.from(samDataSaver.createUser(user)),
-        rawlsGroupQuery.save(ownerGroup),
+//        rawlsGroupQuery.save(ownerGroup),
         workspaceQuery.save(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
@@ -192,7 +192,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         slickDataSource,
         gcsDAO,
         gpsDAO,
-        "test-topic-name",
         notificationDAO,
         samDAO,
         Seq("bigquery.jobUser")

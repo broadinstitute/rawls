@@ -5,7 +5,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{RawlsGroupMemberListFormat, SyncReportFormat, RawlsBillingProjectTransferFormat, UserInfoFormat}
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{RawlsBillingProjectTransferFormat, RawlsGroupMemberListFormat, SyncReportFormat, UserInfoFormat}
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserListFormat, UserStatusFormat}
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
@@ -18,6 +18,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
@@ -296,7 +297,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
       testUserStatusCounts.flatMap { case (st, count) =>
         for (_ <- 0 until count) yield {
-          createTestSubmission(constantData.workspace, constantData.methodConfig, constantData.sset1, testUser.userEmail,
+          createTestSubmission(constantData.workspace, constantData.methodConfig, constantData.sset1, WorkbenchEmail(testUser.userEmail.value),
             Seq(constantData.sset1), Map(constantData.sset1 -> inputResolutionsList),
             Seq.empty, Map.empty, st)
         }

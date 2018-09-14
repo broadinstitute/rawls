@@ -793,7 +793,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         response()
           .withHeaders(jsonHeader)
           .withBody(
-            s"""{"GROUP_${policyGroupName(SamResourceTypeNames.billingProject.value, project, policy)}@dev.firecloud.org":[{"operation":"added","email":"PROXY_112497091878448096085@dev.test.firecloud.org"},{"operation":"removed","email":"proxy_112497091878448096085@dev.test.firecloud.org"}]}""".stripMargin
+            s"""{"GROUP_placeholder@dev.firecloud.org":[{"operation":"added","email":"PROXY_112497091878448096085@dev.test.firecloud.org"},{"operation":"removed","email":"proxy_112497091878448096085@dev.test.firecloud.org"}]}""".stripMargin
           )
           .withStatusCode(StatusCodes.OK.intValue)
       )

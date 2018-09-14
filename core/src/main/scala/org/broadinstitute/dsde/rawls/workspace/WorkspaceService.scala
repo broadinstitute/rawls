@@ -252,7 +252,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
         getWorkspaceContext(workspaceName) flatMap { ctx =>
           dataSource.inTransaction { dataAccess =>
-            loadWorkspaceId(workspaceName)
             DBIO.from(getMaximumAccessLevel(ctx.workspaceId.toString)) flatMap {maxAccessLevel =>
               withLibraryPermissions(ctx, operations, dataAccess, userInfo, isCurator, maxAccessLevel) {
                 updateWorkspace(operations, dataAccess)(ctx)
@@ -501,6 +500,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val usersUpdated = noAccess ++ brandNewAccess ++ changedAccess
 
       //todo: invites and usersNotFound
+      //todo: need to fire and forget notifications for ACL changes
       RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersUpdated, invitesSent, invitesUpdated, Set.empty))
     }
   }

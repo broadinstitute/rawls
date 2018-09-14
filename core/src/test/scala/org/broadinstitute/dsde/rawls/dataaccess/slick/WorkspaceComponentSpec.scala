@@ -13,21 +13,21 @@ import org.broadinstitute.dsde.rawls.user.UserService
 class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with RawlsTestUtils {
   import driver.api._
 
-  private def saveRawlsGroup(name: String, email: String) = {
-    runAndWait(rawlsGroupQuery.save(RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(email), Set.empty, Set.empty)))
-  }
+//  private def saveRawlsGroup(name: String, email: String) = {
+//    runAndWait(rawlsGroupQuery.save(RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(email), Set.empty, Set.empty)))
+//  }
 
-  private def insertTestGroups: Unit = {
-    saveRawlsGroup("reader", "reader@foo.com")
-    saveRawlsGroup("writer", "writer@foo.com")
-    saveRawlsGroup("owner", "owner@foo.com")
-    saveRawlsGroup("reader2", "reader2@foo.com")
-    saveRawlsGroup("writer2", "writer2@foo.com")
-    saveRawlsGroup("owner2", "owner2@foo.com")
-  }
+//  private def insertTestGroups: Unit = {
+//    saveRawlsGroup("reader", "reader@foo.com")
+//    saveRawlsGroup("writer", "writer@foo.com")
+//    saveRawlsGroup("owner", "owner@foo.com")
+//    saveRawlsGroup("reader2", "reader2@foo.com")
+//    saveRawlsGroup("writer2", "writer2@foo.com")
+//    saveRawlsGroup("owner2", "owner2@foo.com")
+//  }
 
   "WorkspaceComponent" should "crud workspaces" in withEmptyTestDatabase {
-    insertTestGroups
+//    insertTestGroups
 
     val workspaceId: UUID = UUID.randomUUID()
 
@@ -160,86 +160,86 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
               )
 
   // define tests as "testLabel" -> bundle-of-methods
-  val canTests = Map(
-    "canCompute" -> PermissionTestMethods(
-      workspaceQuery.getUserComputePermissions,
-      workspaceQuery.insertUserComputePermissions,
-      workspaceQuery.deleteUserComputePermissions,
-      workspaceQuery.insertGroupComputePermissions
-    ),
-    "canShare" -> PermissionTestMethods(
-      workspaceQuery.getUserSharePermissions,
-      workspaceQuery.insertUserSharePermissions,
-      workspaceQuery.deleteUserSharePermissions,
-      workspaceQuery.insertGroupSharePermissions
-    ),
-    "catalog" -> PermissionTestMethods(
-      workspaceQuery.getUserCatalogPermissions,
-      workspaceQuery.insertUserCatalogPermissions,
-      workspaceQuery.deleteUserCatalogPermissions,
-      workspaceQuery.insertGroupCatalogPermissions
-    )
-  )
+//  val canTests = Map(
+//    "canCompute" -> PermissionTestMethods(
+//      workspaceQuery.getUserComputePermissions,
+//      workspaceQuery.insertUserComputePermissions,
+//      workspaceQuery.deleteUserComputePermissions,
+//      workspaceQuery.insertGroupComputePermissions
+//    ),
+//    "canShare" -> PermissionTestMethods(
+//      workspaceQuery.getUserSharePermissions,
+//      workspaceQuery.insertUserSharePermissions,
+//      workspaceQuery.deleteUserSharePermissions,
+//      workspaceQuery.insertGroupSharePermissions
+//    ),
+//    "catalog" -> PermissionTestMethods(
+//      workspaceQuery.getUserCatalogPermissions,
+//      workspaceQuery.insertUserCatalogPermissions,
+//      workspaceQuery.deleteUserCatalogPermissions,
+//      workspaceQuery.insertGroupCatalogPermissions
+//    )
+//  )
 
   // execute the tests we just defined
-  canTests foreach {
-    case (label, methods) =>
-      it should s"calculate $label permissions" in withMinimalTestDatabase { _ =>
-        val testWs = minimalTestData.workspace
-        val otherWs = minimalTestData.workspace2
-
-        val testUser = RawlsUserRef(RawlsUserSubjectId("111222333"))
-        val otherUser = RawlsUserRef(RawlsUserSubjectId("98989898"))
-        runAndWait(rawlsUserQuery.createUser(RawlsUser(testUser.userSubjectId, RawlsUserEmail(testUser.userSubjectId.value))))
-        runAndWait(rawlsUserQuery.createUser(RawlsUser(otherUser.userSubjectId, RawlsUserEmail(otherUser.userSubjectId.value))))
-
-        val testGroup = RawlsGroupName("targetGroup")
-        val otherGroup = RawlsGroupName("someOtherGroup")
-        runAndWait(rawlsGroupQuery.save(RawlsGroup(testGroup, RawlsGroupEmail(testGroup.value), Set(testUser), Set())))
-        runAndWait(rawlsGroupQuery.save(RawlsGroup(otherGroup, RawlsGroupEmail(otherGroup.value), Set(otherUser), Set())))
-
-        assertResult(Set(RawlsGroupRef(testGroup)), "test fixtures not set up correctly for testUser/testGroup") {
-          runAndWait(rawlsGroupQuery.listGroupsForUser(testUser))
-        }
-
-        assertResult(Set(RawlsGroupRef(otherGroup)), "test fixtures not set up correctly for otherUser/otherGroup") {
-          runAndWait(rawlsGroupQuery.listGroupsForUser(otherUser))
-        }
-
-        def assertPermission(expected: Boolean, clue: String) =
-          assertResult(expected, clue) { runAndWait(methods.getPermission(testUser.userSubjectId, SlickWorkspaceContext(testWs))) }
-
-        // false if no users
-        assertPermission(false, "no users")
-
-        // false if another user has permissions but target user does not
-        runAndWait(methods.insertUserPermission(UUID.fromString(testWs.workspaceId), Seq(otherUser)))
-        assertPermission(false, "other user has permission")
-
-        // false if target user has permissions elsewhere, but not on target workspace
-        runAndWait(methods.insertUserPermission(UUID.fromString(otherWs.workspaceId), Seq(testUser)))
-        assertPermission(false, "target user has permission elsewhere")
-
-        // true if target user has permission
-        runAndWait(methods.insertUserPermission(UUID.fromString(testWs.workspaceId), Seq(testUser)))
-        assertPermission(true, "target user has permission")
-
-        // true if target user has permissions, even if user is in a group that has permissions elsewhere
-        runAndWait(methods.insertGroupPermission(UUID.fromString(otherWs.workspaceId), Seq(RawlsGroupRef(testGroup))))
-        assertPermission(true, "target user has permission and is in a group that has permission elsewhere")
-
-        // false if target user has neither user-table nor group-table permissions, even if target user has group-table permissions elsewhere
-        runAndWait(methods.deleteUserPermission(UUID.fromString(testWs.workspaceId), Seq(testUser)))
-        assertPermission(false, "target user has group permission elsewhere")
-
-        // false even if some other user has group-table permissions
-        runAndWait(methods.insertGroupPermission(UUID.fromString(testWs.workspaceId), Seq(RawlsGroupRef(otherGroup))))
-        assertPermission(false, "other user has group permission")
-
-        // true if user has group-table permissions
-        runAndWait(methods.insertGroupPermission(UUID.fromString(testWs.workspaceId), Seq(RawlsGroupRef(testGroup))))
-        assertPermission(true, "target user has group permission")
-      }
-  }
+//  canTests foreach {
+//    case (label, methods) =>
+//      it should s"calculate $label permissions" in withMinimalTestDatabase { _ =>
+//        val testWs = minimalTestData.workspace
+//        val otherWs = minimalTestData.workspace2
+//
+//        val testUser = RawlsUserRef(RawlsUserSubjectId("111222333"))
+//        val otherUser = RawlsUserRef(RawlsUserSubjectId("98989898"))
+//        runAndWait(rawlsUserQuery.createUser(RawlsUser(testUser.userSubjectId, RawlsUserEmail(testUser.userSubjectId.value))))
+//        runAndWait(rawlsUserQuery.createUser(RawlsUser(otherUser.userSubjectId, RawlsUserEmail(otherUser.userSubjectId.value))))
+//
+//        val testGroup = RawlsGroupName("targetGroup")
+//        val otherGroup = RawlsGroupName("someOtherGroup")
+//        runAndWait(rawlsGroupQuery.save(RawlsGroup(testGroup, RawlsGroupEmail(testGroup.value), Set(testUser), Set())))
+//        runAndWait(rawlsGroupQuery.save(RawlsGroup(otherGroup, RawlsGroupEmail(otherGroup.value), Set(otherUser), Set())))
+//
+//        assertResult(Set(RawlsGroupRef(testGroup)), "test fixtures not set up correctly for testUser/testGroup") {
+//          runAndWait(rawlsGroupQuery.listGroupsForUser(testUser))
+//        }
+//
+//        assertResult(Set(RawlsGroupRef(otherGroup)), "test fixtures not set up correctly for otherUser/otherGroup") {
+//          runAndWait(rawlsGroupQuery.listGroupsForUser(otherUser))
+//        }
+//
+//        def assertPermission(expected: Boolean, clue: String) =
+//          assertResult(expected, clue) { runAndWait(methods.getPermission(testUser.userSubjectId, SlickWorkspaceContext(testWs))) }
+//
+//        // false if no users
+//        assertPermission(false, "no users")
+//
+//        // false if another user has permissions but target user does not
+//        runAndWait(methods.insertUserPermission(UUID.fromString(testWs.workspaceId), Seq(otherUser)))
+//        assertPermission(false, "other user has permission")
+//
+//        // false if target user has permissions elsewhere, but not on target workspace
+//        runAndWait(methods.insertUserPermission(UUID.fromString(otherWs.workspaceId), Seq(testUser)))
+//        assertPermission(false, "target user has permission elsewhere")
+//
+//        // true if target user has permission
+//        runAndWait(methods.insertUserPermission(UUID.fromString(testWs.workspaceId), Seq(testUser)))
+//        assertPermission(true, "target user has permission")
+//
+//        // true if target user has permissions, even if user is in a group that has permissions elsewhere
+//        runAndWait(methods.insertGroupPermission(UUID.fromString(otherWs.workspaceId), Seq(RawlsGroupRef(testGroup))))
+//        assertPermission(true, "target user has permission and is in a group that has permission elsewhere")
+//
+//        // false if target user has neither user-table nor group-table permissions, even if target user has group-table permissions elsewhere
+//        runAndWait(methods.deleteUserPermission(UUID.fromString(testWs.workspaceId), Seq(testUser)))
+//        assertPermission(false, "target user has group permission elsewhere")
+//
+//        // false even if some other user has group-table permissions
+//        runAndWait(methods.insertGroupPermission(UUID.fromString(testWs.workspaceId), Seq(RawlsGroupRef(otherGroup))))
+//        assertPermission(false, "other user has group permission")
+//
+//        // true if user has group-table permissions
+//        runAndWait(methods.insertGroupPermission(UUID.fromString(testWs.workspaceId), Seq(RawlsGroupRef(testGroup))))
+//        assertPermission(true, "target user has group permission")
+//      }
+//  }
 
 }

@@ -21,6 +21,7 @@ import spray.json._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.model.headers._
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.ExecutionContext
 
@@ -134,7 +135,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     val methodConfig = MethodConfiguration("dsde", "testConfig", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(workspaceName.namespace, "method-a", 1))
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, workspaceName)
-    val submissionTemplate = createTestSubmission(workspace, methodConfig, sampleSet, userOwner,
+    val submissionTemplate = createTestSubmission(workspace, methodConfig, sampleSet, WorkbenchEmail(userOwner.userEmail.value),
       Seq(sample1, sample2, sample3), Map(sample1 -> testData.inputResolutions, sample2 -> testData.inputResolutions, sample3 -> testData.inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> testData.inputResolutions2, sample5 -> testData.inputResolutions2, sample6 -> testData.inputResolutions2))
     val submissionSuccess = submissionTemplate.copy(
@@ -160,14 +161,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.createUser(userProjectOwner),
-        rawlsUserQuery.createUser(userOwner),
-        rawlsUserQuery.createUser(userWriter),
-        rawlsUserQuery.createUser(userReader),
-        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
+//        rawlsUserQuery.createUser(userProjectOwner),
+//        rawlsUserQuery.createUser(userOwner),
+//        rawlsUserQuery.createUser(userWriter),
+//        rawlsUserQuery.createUser(userReader),
+//        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
-        DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
+//        DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
+//        DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
 
         workspaceQuery.save(workspace),
         workspaceQuery.save(workspace2),
@@ -326,7 +327,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq(testData.userOwner.userEmail.value), Some(false))
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Set(testData.userOwner.userEmail.value), Some(false))
         ){
           val response = responseAs[WorkspaceListResponse]
           WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners, Some(false))
@@ -428,29 +429,29 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
-    val workspaceGroupRefs = (testData.workspace.accessLevels.values.toSet ++ testData.workspace.authDomainACLs.values) - testData.workspace.accessLevels(ProjectOwner)
-    workspaceGroupRefs foreach { case groupRef =>
-      assertResult(Option(groupRef)) {
-        runAndWait(rawlsGroupQuery.load(groupRef)) map RawlsGroup.toRef
-      }
-    }
-
-    Delete(testData.workspace.path) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.Accepted) {
-          status
-        }
-      }
-
-      workspaceGroupRefs foreach { case groupRef =>
-        assertResult(None) {
-          runAndWait(rawlsGroupQuery.load(groupRef))
-        }
-      }
-
-  }
+//  it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
+//    val workspaceGroupRefs = (testData.workspace.accessLevels.values.toSet ++ testData.workspace.authDomainACLs.values) - testData.workspace.accessLevels(ProjectOwner)
+//    workspaceGroupRefs foreach { case groupRef =>
+//      assertResult(Option(groupRef)) {
+//        runAndWait(rawlsGroupQuery.load(groupRef)) map RawlsGroup.toRef
+//      }
+//    }
+//
+//    Delete(testData.workspace.path) ~>
+//      sealRoute(services.workspaceRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.Accepted) {
+//          status
+//        }
+//      }
+//
+//      workspaceGroupRefs foreach { case groupRef =>
+//        assertResult(None) {
+//          runAndWait(rawlsGroupQuery.load(groupRef))
+//        }
+//      }
+//
+//  }
 
   it should "list workspaces" in withTestWorkspacesApiServices { services =>
     Get("/workspaces") ~>
@@ -462,8 +463,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         val dateTime = currentTime()
         assertResult(Set(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq(testData.userOwner.userEmail.value), Some(false)),
-          WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty, Some(false))
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Set(testData.userOwner.userEmail.value), Some(false)),
+          WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set.empty, Some(false))
         )) {
           responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
         }
@@ -1030,7 +1031,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow an project-owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
     val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
-    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
+//    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
     WorkspaceAccessLevels.all.foreach { accessLevel =>
       Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel, None)))) ~>
         sealRoute(services.workspaceRoutes) ~>
@@ -1042,7 +1043,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow an owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
     val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
-    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
+//    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
     WorkspaceAccessLevels.all.foreach { accessLevel =>
       Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel, None)))) ~>
         sealRoute(services.workspaceRoutes) ~>
@@ -1518,40 +1519,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.Forbidden) {
           status
-        }
-      }
-  }
-
-  it should "use access groups as realmACLs when creating a workspace if there is no realm" in withTestDataApiServices { services =>
-    val request = WorkspaceRequest(
-      namespace = testData.billingProject.projectName.value,
-      name = "newWorkspace",
-      Map.empty
-    )
-
-    def expectedAccessGroups(workspaceId: String) = Map(
-      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProjectGroups(ProjectRoles.Owner).head),
-      WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-OWNER")),
-      WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-WRITER")),
-      WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"$workspaceId-READER"))
-    )
-
-    Post(s"/workspaces", httpJson(request)) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-
-        val ws = responseAs[Workspace]
-        val expected = expectedAccessGroups(ws.workspaceId)
-
-        assertResult(expected) {
-          ws.accessLevels
-        }
-
-        assertResult(expected) {
-          ws.authDomainACLs
         }
       }
   }

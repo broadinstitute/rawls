@@ -21,6 +21,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -251,7 +252,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val sampleSet = Entity("sampleset", "sample_set",
         Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference))))
       val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("dos://foo/bar")), None, "test_input_dos"))
-      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, data.userOwner,
+      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
         Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
 
       runAndWait(entityQuery.save(ctx, sample))
@@ -283,7 +284,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val sampleSet = Entity("sampleset", "sample_set",
         Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference))))
       val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeValueList(Seq(AttributeString("dos://foo/bar")))), None, "test_input_dos"))
-      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, data.userOwner,
+      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
         Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
 
       runAndWait(entityQuery.save(ctx, sample))
@@ -321,7 +322,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         Seq(SubmissionValidationValue(Option(AttributeString(sampleName)), Option("message"), "three_step.cgrep.pattern"))
       }
 
-      val thisSubmission = createTestSubmission(testData.workspace, testData.methodConfigValid, sset, testData.userOwner,
+      val thisSubmission = createTestSubmission(testData.workspace, testData.methodConfigValid, sset, WorkbenchEmail(testData.userOwner.userEmail.value),
         Seq(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6),
         Map(testData.sample1 -> inputResolutions("sample1"), testData.sample2 -> inputResolutions("sample2"),
           testData.sample3 -> inputResolutions("sample3"), testData.sample4 -> inputResolutions("sample4"),
@@ -436,7 +437,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
 
-      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sampleSet1, testData.userOwner,
+      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sampleSet1, WorkbenchEmail(testData.userOwner.userEmail.value),
         Seq(testData.sampleSet1), Map(testData.sampleSet1 -> inputResolutionsList),
         Seq.empty, Map.empty)
 
