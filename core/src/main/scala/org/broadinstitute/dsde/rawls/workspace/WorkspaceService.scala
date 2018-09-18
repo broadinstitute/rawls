@@ -396,7 +396,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       val sharers = shareReaderPolicyMembers ++ shareWriterPolicyMembers
 
-      //todo: this isn't going to be completely correct just yet. need to take careful consideration of how to factor in canCompute at the billing level
+      //todo: this isn't going to be completely correct just yet. need to take careful consideration of how to factor in canCompute at the project level
       val owners = ownerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Owner, pending = false, true, true))
       val writers = writerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Write, pending = false, sharers.contains(email), computePolicyMembers.contains(email)))
       val readers = readerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Read, pending = false, sharers.contains(email), computePolicyMembers.contains(email)))
@@ -412,7 +412,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   //todo uhhh
   def getCatalog(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     loadWorkspaceId(workspaceName).flatMap { workspaceId =>
-      samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "canCatalog", userInfo).map { members => RequestComplete(StatusCodes.OK, members.memberEmails.map(WorkspaceCatalog(_, true)))}
+      samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "can-catalog", userInfo).map { members => RequestComplete(StatusCodes.OK, members.memberEmails.map(WorkspaceCatalog(_, true)))}
     }
   }
 
@@ -435,6 +435,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def overwriteACL(workspaceName: WorkspaceName, aclUpdates: Set[WorkspaceACLUpdate], inviteUsersNotFound: Boolean): Future[WorkspaceACL] = {
     //TODO: take care of the invitation part
 
+    println(s"adding $aclUpdates")
+
     //we need to update 5 policies: owner, writer, reader, canShare, canCompute
     //we get noAccess for free because those will be filtered out entirely and removed during the process of overwriting
     val owner = aclUpdates.filter(_.accessLevel.compare(WorkspaceAccessLevels.Owner) == 0)
@@ -452,8 +454,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "owner", owner.map(e => WorkbenchEmail(e.email)), userInfo)
       _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "writer", writer.map(e => WorkbenchEmail(e.email)), userInfo)
       _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "reader", reader.map(e => WorkbenchEmail(e.email)), userInfo)
-      _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "share-write", canShareWrite.map(e => WorkbenchEmail(e.email)), userInfo)
-      _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "share-read", canShareRead.map(e => WorkbenchEmail(e.email)), userInfo)
+      _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "share-writer", canShareWrite.map(e => WorkbenchEmail(e.email)), userInfo)
+      _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "share-reader", canShareRead.map(e => WorkbenchEmail(e.email)), userInfo)
       _ <- samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, "can-compute", canCompute.map(e => WorkbenchEmail(e.email)), userInfo)
       _ <- Future.traverse(writer) { update => samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, update.email, userInfo) }
       newAcl <- getACLInternal(workspaceName)
@@ -475,6 +477,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val beforeEmails = before.keySet
       val afterEmails = after.keySet
 
+      println(before)
+      println(after)
+
       //TODO: calculate the differences in here and return them in the response list below...
 
       //first, filter out the intersection of the two maps
@@ -488,7 +493,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val updatedInviteEmails = Set.empty
 
       //this is bad code
-      val noAccess = removedEmails.map(email => WorkspaceACLUpdate(email, WorkspaceAccessLevels.NoAccess))
+      val noAccess = aclUpdates.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess)
       val brandNewAccess = newEmails.map(email => WorkspaceACLUpdate(email, after(email).accessLevel))
       val changedAccess = maintainedEmails.map(email => WorkspaceACLUpdate(email, after(email).accessLevel))
       val invitesSent = invitedEmails.map(email => WorkspaceACLUpdate(email, after(email).accessLevel))

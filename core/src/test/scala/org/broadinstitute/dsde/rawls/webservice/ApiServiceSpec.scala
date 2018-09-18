@@ -32,6 +32,7 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.{MethodRepoConfig, SwaggerConfig}
+import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 
 import scala.concurrent.duration._
 
@@ -123,6 +124,10 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val dosResolver = new MarthaDosResolver(mockServer.mockServerBaseUrl)
 
+    //val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
+    val samDAO = new MockSamDAO
+    //most of the time we probably just want a StatelessMockSamDAO that returns true to everything that we ask it
+
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -145,8 +150,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
       MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
       workbenchMetricBaseName = workbenchMetricBaseName)
-
-    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
 
     val healthMonitor = system.actorOf(HealthMonitor.props(
       dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO, executionServiceCluster.readMembers.map(c => c.key->c.dao).toMap,
