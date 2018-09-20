@@ -155,97 +155,97 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  "WorkspaceService" should "add attribute to entity" in withTestDataServices { services =>
+  "WorkspaceService" should "add attribute to entity" in withEmptyTestDataServices { services =>
     assertResult(Some(AttributeString("foo"))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo")))).attributes.get(AttributeName.withDefaultNS("newAttribute"))
     }
   }
 
-  it should "update attribute in entity" in withTestDataServices { services =>
+  it should "update attribute in entity" in withEmptyTestDataServices { services =>
     assertResult(Some(AttributeString("biz"))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("foo"), AttributeString("biz")))).attributes.get(AttributeName.withDefaultNS("foo"))
     }
   }
 
-  it should "remove attribute from entity" in withTestDataServices { services =>
+  it should "remove attribute from entity" in withEmptyTestDataServices { services =>
     assertResult(None) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(RemoveAttribute(AttributeName.withDefaultNS("foo")))).attributes.get(AttributeName.withDefaultNS("foo"))
     }
   }
 
-  it should "add item to existing list in entity" in withTestDataServices { services =>
+  it should "add item to existing list in entity" in withEmptyTestDataServices { services =>
     assertResult(Some(AttributeValueList(attributeList.list :+ AttributeString("new")))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember(AttributeName.withDefaultNS("splat"), AttributeString("new")))).attributes.get(AttributeName.withDefaultNS("splat"))
     }
   }
 
-  it should "add item to non-existing list in entity" in withTestDataServices { services =>
+  it should "add item to non-existing list in entity" in withEmptyTestDataServices { services =>
     assertResult(Some(AttributeValueList(Seq(AttributeString("new"))))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember(AttributeName.withDefaultNS("bob"), AttributeString("new")))).attributes.get(AttributeName.withDefaultNS("bob"))
     }
   }
 
-  it should "throw AttributeUpdateOperationException when trying to create a new empty list by inserting AttributeNull" in withTestDataServices { services =>
+  it should "throw AttributeUpdateOperationException when trying to create a new empty list by inserting AttributeNull" in withEmptyTestDataServices { services =>
     intercept[AttributeUpdateOperationException] {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember(AttributeName.withDefaultNS("nolisthere"), AttributeNull))).attributes.get(AttributeName.withDefaultNS("nolisthere"))
     }
   }
 
-  it should "create empty AttributeEntityReferenceList" in withTestDataServices { services =>
+  it should "create empty AttributeEntityReferenceList" in withEmptyTestDataServices { services =>
     assertResult(Some(AttributeEntityReferenceEmptyList)) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("emptyRefList")))).attributes.get(AttributeName.withDefaultNS("emptyRefList"))
     }
   }
 
-  it should "not wipe existing AttributeEntityReferenceList when calling CreateAttributeEntityReferenceList" in withTestDataServices { services =>
+  it should "not wipe existing AttributeEntityReferenceList when calling CreateAttributeEntityReferenceList" in withEmptyTestDataServices { services =>
     assertResult(Some(s1.attributes(AttributeName.withDefaultNS("refs")))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("refs")))).attributes.get(AttributeName.withDefaultNS("refs"))
     }
   }
 
-  it should "create empty AttributeValueList" in withTestDataServices { services =>
+  it should "create empty AttributeValueList" in withEmptyTestDataServices { services =>
     assertResult(Some(AttributeValueEmptyList)) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(CreateAttributeValueList(AttributeName.withDefaultNS("emptyValList")))).attributes.get(AttributeName.withDefaultNS("emptyValList"))
     }
   }
 
-  it should "not wipe existing AttributeValueList when calling CreateAttributeValueList" in withTestDataServices { services =>
+  it should "not wipe existing AttributeValueList when calling CreateAttributeValueList" in withEmptyTestDataServices { services =>
     assertResult(Some(s1.attributes(AttributeName.withDefaultNS("splat")))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(CreateAttributeValueList(AttributeName.withDefaultNS("splat")))).attributes.get(AttributeName.withDefaultNS("splat"))
     }
   }
 
-  it should "do nothing to existing lists when adding AttributeNull" in withTestDataServices { services =>
+  it should "do nothing to existing lists when adding AttributeNull" in withEmptyTestDataServices { services =>
     assertResult(Some(attributeList)) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember(AttributeName.withDefaultNS("splat"), AttributeNull))).attributes.get(AttributeName.withDefaultNS("splat"))
     }
   }
 
-  it should "remove item from existing listing entity" in withTestDataServices { services =>
+  it should "remove item from existing listing entity" in withEmptyTestDataServices { services =>
     assertResult(Some(AttributeValueList(Seq(AttributeString("b"), AttributeBoolean(true))))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(RemoveListMember(AttributeName.withDefaultNS("splat"), AttributeString("a")))).attributes.get(AttributeName.withDefaultNS("splat"))
     }
   }
 
-  it should "throw AttributeNotFoundException when removing from a list that does not exist" in withTestDataServices { services =>
+  it should "throw AttributeNotFoundException when removing from a list that does not exist" in withEmptyTestDataServices { services =>
     intercept[AttributeNotFoundException] {
       services.workspaceService.applyOperationsToEntity(s1, Seq(RemoveListMember(AttributeName.withDefaultNS("bingo"), AttributeString("a"))))
     }
   }
 
-  it should "throw AttributeUpdateOperationException when remove from an attribute that is not a list" in withTestDataServices { services =>
+  it should "throw AttributeUpdateOperationException when remove from an attribute that is not a list" in withEmptyTestDataServices { services =>
     intercept[AttributeUpdateOperationException] {
       services.workspaceService.applyOperationsToEntity(s1, Seq(RemoveListMember(AttributeName.withDefaultNS("foo"), AttributeString("a"))))
     }
   }
 
-  it should "throw AttributeUpdateOperationException when adding to an attribute that is not a list" in withTestDataServices { services =>
+  it should "throw AttributeUpdateOperationException when adding to an attribute that is not a list" in withEmptyTestDataServices { services =>
     intercept[AttributeUpdateOperationException] {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember(AttributeName.withDefaultNS("foo"), AttributeString("a"))))
     }
   }
 
-  it should "apply attribute updates in order to entity" in withTestDataServices { services =>
+  it should "apply attribute updates in order to entity" in withEmptyTestDataServices { services =>
     assertResult(Some(AttributeString("splat"))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(
         AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo")),

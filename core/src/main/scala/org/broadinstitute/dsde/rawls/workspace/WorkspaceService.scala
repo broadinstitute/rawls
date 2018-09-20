@@ -476,9 +476,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   //TODO: deal with invites
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Set[WorkspaceACLUpdate], inviteUsersNotFound: Boolean): Future[PerRequestMessage] = {
 
-    def determineSharePolicy(proposedAccessLevel: WorkspaceAccessLevel, canCurrently: Boolean, canNow: Option[Boolean]): Option[SamWorkspacePolicyName] = {
+    def determineSharePolicy(proposedAccessLevel: WorkspaceAccessLevel, canCurrently: Boolean, canProposed: Option[Boolean]): Option[SamWorkspacePolicyName] = {
       if(proposedAccessLevel >= WorkspaceAccessLevels.Owner) None //not explicitly needed because it's an action on the owner policy
-      else (canCurrently, canNow) match {
+      else (canCurrently, canProposed) match {
         case (true, None) => Option(shareAccessLevel(proposedAccessLevel))
         case (false, None) => None
         case (_, Some(true)) => Option(shareAccessLevel(proposedAccessLevel))
@@ -486,10 +486,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-    def determineComputePolicy(proposedAccessLevel: WorkspaceAccessLevel, canCurrently: Boolean, canNow: Option[Boolean]): Option[SamWorkspacePolicyName] = {
+    def determineComputePolicy(proposedAccessLevel: WorkspaceAccessLevel, canCurrently: Boolean, canProposed: Option[Boolean]): Option[SamWorkspacePolicyName] = {
       if(proposedAccessLevel < WorkspaceAccessLevels.Write) None
       else if(proposedAccessLevel >= WorkspaceAccessLevels.Owner) Option(SamWorkspacePolicyNames.canCompute)
-      else (canCurrently, canNow) match {
+      else (canCurrently, canProposed) match {
         case (true, None) => Option(SamWorkspacePolicyNames.canCompute)
         case (false, None) if proposedAccessLevel == WorkspaceAccessLevels.Write => Option(SamWorkspacePolicyNames.canCompute)
         case (false, None) => None
