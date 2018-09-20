@@ -370,7 +370,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
     val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
 
-    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", "obama@whitehouse.gov", "invalid")), Duration.Inf)
+    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", userInfo.userEmail.value, "invalid")), Duration.Inf)
     Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
@@ -393,11 +393,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]].response
 
     assertResult(WorkspaceACL(Map(
-      testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
+      userInfo.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
       user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
-      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
-      testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false),
       group.groupEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))), "Add ACL should actually do so") {
       addedACLs
     }
@@ -417,11 +414,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]].response
 
     assertResult(WorkspaceACL(Map(
-      testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
+      userInfo.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
       user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
-      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
-      testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false),
       group.groupEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, true))), "Update ACL should actually do so") {
       updatedACLs
     }
@@ -441,84 +435,81 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]].response
 
     assertResult(WorkspaceACL(Map(
-      testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
-      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
-      testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))), "Remove ACL should actually do so") {
+      userInfo.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
+      user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true))), "Remove ACL should actually do so") {
       removedACLs
     }
   }
-//
-//  it should "allow can share user to share when there are multiple project owners" in withDefaultTestDatabase { datasource: SlickDataSource =>
-//    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-////    runAndWait(rawlsUserQuery.createUser(user))
-//
-//    withServices(datasource, testData.userOwner) { services =>
-//      //add the owner as an owner on the billing project
-//      Await.result(services.userService.addUserToBillingProject(RawlsBillingProjectName(testData.workspace.namespace), ProjectAccessUpdate(testData.userOwner.userEmail.value, ProjectRoles.Owner)), Duration.Inf)
-//
-//      val aCLUpdates = Set(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true)), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)))
-//      val aCLUpdatesResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aCLUpdates, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//
-//      assertResult(StatusCodes.OK) {
-//        aCLUpdatesResponse.response._1
-//      }
-//    }
-//    withServices(datasource, testData.userReader) { services =>
-//      val addRead = Set(
-//        WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
-//        WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
-//        WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)),
-//        WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true), Option(false)),
-//        WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))
-//
-//      val addReadResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, addRead, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//      assertResult(StatusCodes.OK) {
-//        addReadResponse.response._1
-//      }
-//      assertResult(Set(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))) {
-//        addReadResponse.response._2.usersUpdated
-//      }
-//    }
-//  }
-//
-//  it should "return non-existent users during patch ACLs" in withTestDataServices { services =>
-//    val aclUpdates = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
-//    val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//    val responseFromUpdate = WorkspaceACLUpdateResponseList(Set.empty, Set.empty, Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)))
-//
-//    assertResult((StatusCodes.OK, responseFromUpdate), "Add ACL shouldn't error") {
-//      vComplete.response
-//    }
-//
-//    val aclUpdates2 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
-//    val vComplete2 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates2, true), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//    val responseFromUpdate2 = WorkspaceACLUpdateResponseList(Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), Set.empty, Set.empty)
-//
-//    assertResult((StatusCodes.OK, responseFromUpdate2), "Add ACL shouldn't error") {
-//      vComplete2.response
-//    }
-//
-//    val aclUpdates3 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None))
-//    val vComplete3 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates3, true), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//    val responseFromUpdate3 = WorkspaceACLUpdateResponseList(Set.empty, Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None)), Set.empty)
-//
-//    assertResult((StatusCodes.OK, responseFromUpdate3), "Add ACL shouldn't error") {
-//      vComplete3.response
-//    }
-//
-//    assertResult(true, "Changing an invitees access level should return them in the invitesUpdated group") {
-//      vComplete3.response._2.invitesUpdated.size == 1
-//    }
-//
-//    assertResult(true, "Changing an invitees access level shouldn't return them in the usersNotFound group") {
-//      vComplete3.response._2.usersNotFound.size == 0
-//    }
-//  }
+
+  ignore should "allow can share user to share when there are multiple project owners" in withDefaultTestDatabase { datasource: SlickDataSource =>
+    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+//    runAndWait(rawlsUserQuery.createUser(user))
+
+    withServices(datasource, testData.userOwner) { services =>
+      //add the owner as an owner on the billing project
+      Await.result(services.userService.addUserToBillingProject(RawlsBillingProjectName(testData.workspace.namespace), ProjectAccessUpdate(testData.userOwner.userEmail.value, ProjectRoles.Owner)), Duration.Inf)
+
+      val aCLUpdates = Set(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true)), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)))
+      val aCLUpdatesResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aCLUpdates, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+
+      assertResult(StatusCodes.OK) {
+        aCLUpdatesResponse.response._1
+      }
+    }
+    withServices(datasource, testData.userReader) { services =>
+      val addRead = Set(
+        WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
+        WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
+        WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)),
+        WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true), Option(false)),
+        WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))
+
+      val addReadResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, addRead, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+      assertResult(StatusCodes.OK) {
+        addReadResponse.response._1
+      }
+      assertResult(Set(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))) {
+        addReadResponse.response._2.usersUpdated
+      }
+    }
+  }
+
+  ignore should "return non-existent users during patch ACLs" in withTestDataServices { services =>
+    val aclUpdates = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
+    val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+    val responseFromUpdate = WorkspaceACLUpdateResponseList(Set.empty, Set.empty, Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)))
+
+    assertResult((StatusCodes.OK, responseFromUpdate), "Add ACL shouldn't error") {
+      vComplete.response
+    }
+
+    val aclUpdates2 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
+    val vComplete2 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates2, true), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+    val responseFromUpdate2 = WorkspaceACLUpdateResponseList(Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), Set.empty, Set.empty)
+
+    assertResult((StatusCodes.OK, responseFromUpdate2), "Add ACL shouldn't error") {
+      vComplete2.response
+    }
+
+    val aclUpdates3 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None))
+    val vComplete3 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates3, true), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+    val responseFromUpdate3 = WorkspaceACLUpdateResponseList(Set.empty, Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None)), Set.empty)
+
+    assertResult((StatusCodes.OK, responseFromUpdate3), "Add ACL shouldn't error") {
+      vComplete3.response
+    }
+
+    assertResult(true, "Changing an invitees access level should return them in the invitesUpdated group") {
+      vComplete3.response._2.invitesUpdated.size == 1
+    }
+
+    assertResult(true, "Changing an invitees access level shouldn't return them in the usersNotFound group") {
+      vComplete3.response._2.usersNotFound.size == 0
+    }
+  }
 //
 //  it should "invite a user to a workspace" in withTestDataServices { services =>
 //    val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf)
@@ -537,24 +528,30 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 //
 //  }
 //
-//  it should "be case insensitive when adding user/group to workspace" in withTestDataServices { services =>
-//    val vComplete0 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//
-//    val vComplete1 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-//
-//    assert(vComplete1.response._2.acl.toSeq.contains("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false)))
-//
-//    val vComplete2 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("ObAmA@WhiteHouse.Gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//
-//    assertResult(true, "Entering already added user/group with different capitalization should not include them in the invitesUpdated group") {
-//      vComplete2.response._2.invitesUpdated.size == 0
-//    }
-//
-//    assertResult(true, "Entering already added user/group with different capitalization should not include them in the usersNotFound group") {
-//      vComplete2.response._2.usersNotFound.size == 0
-//    }
-//
-//  }
+  it should "be case insensitive when adding user/group to workspace" in withTestDataServices { services =>
+    val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
+    val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
+
+    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", userInfo.userEmail.value, "invalid")), Duration.Inf)
+    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    val vComplete0 = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+
+    val vComplete1 = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
+
+    assert(vComplete1.response._2.acl.toSeq.contains("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, false, true, true))) //TODO: before this was really just testing that we don't create duplicate invites...shouldn't be necessary anymore
+
+    val vComplete2 = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("ObAmA@WhiteHouse.Gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+
+    assertResult(true, "Entering already added user/group with different capitalization should not include them in the invitesUpdated group") {
+      vComplete2.response._2.invitesUpdated.isEmpty
+    }
+
+    assertResult(true, "Entering already added user/group with different capitalization should not include them in the usersNotFound group") {
+      vComplete2.response._2.usersNotFound.isEmpty
+    }
+
+  }
 //
 //  it should "update an existing workspace invitation to change access levels" in withTestDataServices { services =>
 //    val vComplete0 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]

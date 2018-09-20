@@ -88,12 +88,24 @@ object SamResourceTypeNames {
 }
 
 trait SamResourceRoles
+trait SamResourcePolicyNames
 
 object SamProjectRoles extends SamResourceRoles {
   val workspaceCreator = "workspace-creator"
   val batchComputeUser = "batch-compute-user"
   val notebookUser = "notebook-user"
   val owner = "owner"
+}
+
+object SamWorkspacePolicyNames extends SamResourcePolicyNames {
+  case class SamWorkspacePolicyName(value: String)
+
+  val owner = SamWorkspacePolicyName("owner")
+  val writer = SamWorkspacePolicyName("writer")
+  val reader = SamWorkspacePolicyName("reader")
+  val shareWriter = SamWorkspacePolicyName("share-writer")
+  val shareReader = SamWorkspacePolicyName("share-reader")
+  val canCompute = SamWorkspacePolicyName("can-compute")
 }
 
 case class SamPolicy(memberEmails: Set[String], actions: Set[String], roles: Set[String])

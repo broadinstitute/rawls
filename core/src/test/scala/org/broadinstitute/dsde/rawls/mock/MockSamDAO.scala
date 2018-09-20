@@ -54,6 +54,8 @@ class MockSamDAO extends SamDAO {
   }
 
   override def overwritePolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = {
+    println(s"overwriting policy $policyName")
+    println(policies)
     policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
       case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, policy.memberEmails))
       case None => policies.putIfAbsent(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, policy.actions, policy.roles, policy.memberEmails))
@@ -70,10 +72,18 @@ class MockSamDAO extends SamDAO {
   }
 
   override def addUserToPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
+    policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
+      case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, existingPolicy.members ++ Set(memberEmail)))
+      case None => throw new Exception(s"policy $policyName does not exist")
+    }
     Future.successful(())
   }
 
   override def removeUserFromPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
+    policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
+      case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, existingPolicy.members -- Set(memberEmail)))
+      case None => throw new Exception(s"policy $policyName does not exist")
+    }
     Future.successful(())
   }
 
