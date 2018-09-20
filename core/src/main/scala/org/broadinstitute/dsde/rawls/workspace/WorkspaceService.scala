@@ -410,7 +410,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     getACLInternal(workspaceName).map { acl => RequestComplete(StatusCodes.OK, acl)}
   }
 
-  //todo uhhh
+  //todo uhhh????
   def getCatalog(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     loadWorkspaceId(workspaceName).flatMap { workspaceId =>
       samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "can-catalog", userInfo).map { members => RequestComplete(StatusCodes.OK, members.memberEmails.map(WorkspaceCatalog(_, true)))}
@@ -432,16 +432,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield RequestComplete(StatusCodes.OK, WorkspaceCatalogUpdateResponseList(Seq.empty, Seq.empty))
   }
 
-  //TODO: take care of invitations
-  //TODO: handle returning users not found
-  //TODO: what if user isn't an owner? we should only try to overwrite the policies that the sharer has access to modify (avoid 403s)
-  private def overwriteWorkspacePolicies(workspaceName: WorkspaceName, policyNamesWithMembers: Map[String, Set[String]], inviteUsersNotFound: Boolean): Future[Map[String, Set[String]]] = {
-    for {
-      workspaceId <- loadWorkspaceId(workspaceName)
-      _ <- Future.traverse(policyNamesWithMembers) { case (policyName, memberEmails) => samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, policyName, memberEmails.map(WorkbenchEmail), userInfo) }
-      _ <- Future.traverse(policyNamesWithMembers.getOrElse("writer", Set.empty)) { memberEmail => samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, memberEmail, userInfo) }
-    } yield policyNamesWithMembers
-  }
+//  //TODO: take care of invitations
+//  //TODO: handle returning users not found
+//  //TODO: what if user isn't an owner? we should only try to overwrite the policies that the sharer has access to modify (avoid 403s)
+//  private def overwriteWorkspacePolicies(workspaceName: WorkspaceName, policyNamesWithMembers: Map[String, Set[String]], inviteUsersNotFound: Boolean): Future[Map[String, Set[String]]] = {
+//    for {
+//      workspaceId <- loadWorkspaceId(workspaceName)
+//      _ <- Future.traverse(policyNamesWithMembers) { case (policyName, memberEmails) => samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, policyName, memberEmails.map(WorkbenchEmail), userInfo) }
+//      _ <- Future.traverse(policyNamesWithMembers.getOrElse("writer", Set.empty)) { memberEmail => samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, memberEmail, userInfo) }
+//    } yield policyNamesWithMembers
+//  }
 
   private def getWorkspacePolicies(workspaceName: WorkspaceName): Future[Set[SamPolicyWithNameAndEmail]] = {
     for {
@@ -450,17 +450,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield policies
   }
 
-  // 1) find out which policies they were on, 2) remove them from the policies
   def removeUserFromWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], userEmail: WorkbenchEmail): Future[Unit] = {
     val userPolicyNames = existingPolicies.filter(_.policy.memberEmails.contains(userEmail.value)).map(_.policyName)
+
     Future.traverse(userPolicyNames) { policyName => samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo) }.map(_ => ())
   }
 
-  // 1) find out which policies they were already on, 2) add them to new policies, 3) remove them from the old policies
   def addUserToWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], policyNames: Set[String], userEmail: WorkbenchEmail): Future[Unit] = {
-    //find out which policies the user is on
-    //add them to the new policies
-    //remove them from the old policies
     val userPolicyNames = existingPolicies.filter(_.policy.memberEmails.contains(userEmail.value)).map(_.policyName)
 
     for {
@@ -477,6 +473,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @return
    */
   //TODO: need to fire and forget notifications for ACL changes
+  //TODO: deal with invites
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Set[WorkspaceACLUpdate], inviteUsersNotFound: Boolean): Future[PerRequestMessage] = {
 
     def determineSharePolicy(proposedAccessLevel: WorkspaceAccessLevel, canCurrently: Boolean, canNow: Option[Boolean]): Option[SamWorkspacePolicyName] = {
@@ -506,7 +503,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case WorkspaceAccessLevels.Owner => Option(SamWorkspacePolicyNames.owner)
         case WorkspaceAccessLevels.Write => Option(SamWorkspacePolicyNames.writer)
         case WorkspaceAccessLevels.Read => Option(SamWorkspacePolicyNames.reader)
-        case _ => throw new WorkbenchException("how you've managed to get here is a mystery.")
+        case _ => throw new WorkbenchException(s"Invalid access level [$accessLevel].")
       }
     }
 
@@ -514,7 +511,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       accessLevel match {
         case WorkspaceAccessLevels.Write => SamWorkspacePolicyNames.shareWriter
         case WorkspaceAccessLevels.Read => SamWorkspacePolicyNames.shareReader
-        case _ => throw new WorkbenchException("how you've managed to get here is a mystery.")
+        case _ => throw new WorkbenchException(s"Invalid access level [$accessLevel].")
       }
     }
 
@@ -524,16 +521,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         determineAccessLevelPolicy(aclUpdate.accessLevel),
         determineSharePolicy(aclUpdate.accessLevel, userPolicyNames.intersect(Set("share-writer", "share-reader")).nonEmpty, aclUpdate.canShare),
         determineComputePolicy(aclUpdate.accessLevel, userPolicyNames.contains("can-compute"), aclUpdate.canCompute)
-      ).collect {
-        case Some(thing) => thing
-      }
+      ).flatten
     }
 
     val filteredAclUpdates = aclUpdates.filterNot(au => au.accessLevel == WorkspaceAccessLevels.ProjectOwner || au.email.equalsIgnoreCase(userInfo.userEmail.value))//to get rid of project owner changes and the caller altering their own access
 
     getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
       val usersToRemove = filteredAclUpdates.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess)
-      val usersToAdd = filteredAclUpdates -- usersToRemove
+      val usersToAdd = filteredAclUpdates -- usersToRemove //TODO: this *could* include users whose access level remained the same, which is bad
 
       for {
         workspaceId <- loadWorkspaceId(workspaceName)
