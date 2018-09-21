@@ -6,12 +6,16 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.DbResource.dirConfig
 import org.broadinstitute.dsde.rawls.model.{Workflow, WorkflowStatuses}
+import org.scalatest.Assertion
 import org.scalatest.concurrent.PatienceConfiguration.Interval
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Seconds, Span}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.meta.MTable
+
+import scala.collection.immutable
+import scala.concurrent.Future
 
 /**
  * Created by thibault on 6/1/16.
@@ -63,10 +67,11 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
           }
         }
 
-        // now execute the actions.  Can't use runAndWait because that uses the standard dataSource
-        altDataSource.inTransaction { _ =>
-          DBIO.sequence(roundtripCheckActions)
-        }.futureValue(Interval(Span(10, Seconds)))
+        // execute the actions in concurrent transactions and wait for them
+        // can't use runAndWait here because we need to use our altDataSource
+
+        val roundtripCheckFutures = roundtripCheckActions map { a => altDataSource.inTransaction { _ => a } }
+        Future.sequence(roundtripCheckFutures).futureValue(Interval(Span(10, Seconds)))
       }
     }
   }
