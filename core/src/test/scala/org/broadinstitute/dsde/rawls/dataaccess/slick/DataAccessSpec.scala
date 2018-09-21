@@ -62,8 +62,8 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
             insert <- workflowQuery.createWorkflows(context, UUID.fromString(testSubmission.submissionId), Seq(workflow))
             select <- workflowQuery.getByExternalId(wfid, testSubmission.submissionId)
           } yield {
-            insert.head shouldBe workflow
-            select.get shouldBe workflow
+            insert shouldBe Seq(workflow)
+            select shouldBe Some(workflow)
           }
         }
 
