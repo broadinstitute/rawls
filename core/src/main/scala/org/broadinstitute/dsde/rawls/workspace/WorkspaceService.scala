@@ -30,7 +30,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
 import org.broadinstitute.dsde.rawls.dataaccess.SamWorkspacePolicyNames.SamWorkspacePolicyName
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchExceptionWithErrorReport}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -432,22 +432,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield RequestComplete(StatusCodes.OK, WorkspaceCatalogUpdateResponseList(Seq.empty, Seq.empty))
   }
 
-//  //TODO: take care of invitations
-//  //TODO: handle returning users not found
-//  //TODO: what if user isn't an owner? we should only try to overwrite the policies that the sharer has access to modify (avoid 403s)
-//  private def overwriteWorkspacePolicies(workspaceName: WorkspaceName, policyNamesWithMembers: Map[String, Set[String]], inviteUsersNotFound: Boolean): Future[Map[String, Set[String]]] = {
-//    for {
-//      workspaceId <- loadWorkspaceId(workspaceName)
-//      _ <- Future.traverse(policyNamesWithMembers) { case (policyName, memberEmails) => samDAO.overwritePolicyMembership(SamResourceTypeNames.workspace, workspaceId, policyName, memberEmails.map(WorkbenchEmail), userInfo) }
-//      _ <- Future.traverse(policyNamesWithMembers.getOrElse("writer", Set.empty)) { memberEmail => samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, UserService.canComputeUserPolicyName, memberEmail, userInfo) }
-//    } yield policyNamesWithMembers
-//  }
-
   private def getWorkspacePolicies(workspaceName: WorkspaceName): Future[Set[SamPolicyWithNameAndEmail]] = {
     for {
       workspaceId <- loadWorkspaceId(workspaceName)
       policies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo)
     } yield policies
+  }
+
+  def validateUsersExist(userEmails: Set[String]) = {
+    Future.traverse(userEmails) { email =>
+      samDAO.getUserIdInfo(email, userInfo).map {
+        case None => Option(email)
+        case _ => None
+      }
+    }
   }
 
   def removeUserFromWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], userEmail: WorkbenchEmail): Future[Unit] = {
@@ -456,14 +454,27 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     Future.traverse(userPolicyNames) { policyName => samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo) }.map(_ => ())
   }
 
-  def addUserToWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], policyNames: Set[String], userEmail: WorkbenchEmail): Future[Unit] = {
+  def addUserToWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], policyNames: Set[String], userEmail: WorkbenchEmail, inviteUserIfNotFound: Boolean): Future[Unit] = {
     val userPolicyNames = existingPolicies.filter(_.policy.memberEmails.contains(userEmail.value)).map(_.policyName)
 
     for {
+      //TODO not fond of this remove all approach. would be better to just diff the policies and only remove from ones we don't need anymore
       _ <- Future.traverse(userPolicyNames) { policyName => samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo) }
-      _ <- Future.traverse(policyNames) { policyName => samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo)}
+      _ <- Future.traverse(policyNames) { policyName =>
+        samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo) recover {
+          case addError: RawlsExceptionWithErrorReport if addError.errorReport.statusCode.contains(StatusCodes.BadRequest) && inviteUserIfNotFound =>
+            for {
+              _ <- samDAO.inviteUser(userEmail.value, userInfo) recover {
+                case inviteError: RawlsExceptionWithErrorReport if inviteError.errorReport.statusCode.contains(StatusCodes.Conflict) => Future.successful(()) //user was registered underneath us
+              }
+              _ <- samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo)
+            } yield ()
+        }
+      }
     } yield ()
   }
+
+
 
   /**
    * updates acls for a workspace
@@ -526,28 +537,33 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     val filteredAclUpdates = aclUpdates.filterNot(au => au.accessLevel == WorkspaceAccessLevels.ProjectOwner || au.email.equalsIgnoreCase(userInfo.userEmail.value))//to get rid of project owner changes and the caller altering their own access
 
-    getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
-      val usersToRemove = filteredAclUpdates.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess)
-      val usersToAdd = filteredAclUpdates -- usersToRemove //TODO: this *could* include users whose access level remained the same, which is bad
+    validateUsersExist(aclUpdates.map(_.email)).flatMap { missingUsers =>
+      if (missingUsers.flatten.isEmpty) {
+        getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
+          val usersToRemove = filteredAclUpdates.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess)
+          val usersToAdd = filteredAclUpdates -- usersToRemove //TODO: this *could* include users whose access level remained the same, which is bad. will fix...
 
-      for {
-        workspaceId <- loadWorkspaceId(workspaceName)
-        _ <- Future.traverse(usersToRemove) { update => removeUserFromWorkspace(workspaceId, existingPolicies, WorkbenchEmail(update.email)) }
-        _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update).map(_.value), WorkbenchEmail(update.email)) }
-      } yield {
-        RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersToRemove ++ usersToAdd, Set.empty, Set.empty, Set.empty))
+          for {
+            workspaceId <- loadWorkspaceId(workspaceName)
+            _ <- Future.traverse(usersToRemove) { update => removeUserFromWorkspace(workspaceId, existingPolicies, WorkbenchEmail(update.email)) }
+            _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update).map(_.value), WorkbenchEmail(update.email), inviteUsersNotFound) }
+          } yield {
+            RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersToRemove ++ usersToAdd, Set.empty, Set.empty, Set.empty)) //TODO: fill these in
+          }
+        }
       }
+      else Future.successful(RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set.empty, Set.empty, Set.empty, aclUpdates.filter(x => missingUsers.flatten.contains(x.email)))))
     }
   }
 
-  //  private def sendACLUpdateNotifications() {
-  //    val notificationMessages = actualChangesToMake collect {
-  //      // note that we don't send messages to groups
-  //      case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId, NoAccess.toString, workspaceName, userInfo.userSubjectId)
-  //      case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId, access.toString, workspaceName, userInfo.userSubjectId)
-  //    }
-  //    notificationDAO.fireAndForgetNotifications(notificationMessages)
-  //  }
+//  private def sendACLUpdateNotifications(usersAdded: Set[(WorkbenchEmail)]) {
+//    val notificationMessages = actualChangesToMake collect {
+//      // note that we don't send messages to groups
+//      case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId, NoAccess.toString, workspaceName, userInfo.userSubjectId)
+//      case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId, access.toString, workspaceName, userInfo.userSubjectId)
+//    }
+//    notificationDAO.fireAndForgetNotifications(notificationMessages)
+//  }
 
   //TODO: writers can't read any members lower than owners. how will this continue to work?
   //via doug: something similar to the "pester" policy
@@ -1583,7 +1599,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         name = workspaceRequest.name,
         authorizationDomain = workspaceRequest.authorizationDomain.getOrElse(Set.empty),
         workspaceId = workspaceId,
-        bucketName = s"fc-$workspaceId", //TODO: don't build this string here?
+        bucketName = s"fc-$workspaceId",
         createdDate = currentDate,
         lastModified = currentDate,
         createdBy = userInfo.userEmail.value,

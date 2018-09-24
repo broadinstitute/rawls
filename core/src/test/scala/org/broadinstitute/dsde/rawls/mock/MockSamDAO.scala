@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.mock
 
 import akka.http.scaladsl.model.DateTime
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.model.{ManagedGroupAccessResponse, ManagedRoles, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserInfo, UserStatus}
+import org.broadinstitute.dsde.rawls.model.{ManagedGroupAccessResponse, ManagedRoles, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo, UserStatus}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import scala.collection.concurrent.TrieMap
@@ -25,6 +25,8 @@ class MockSamDAO extends SamDAO {
   override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = ???
 
   override def getUserStatus(userInfo: UserInfo): Future[Option[UserStatus]] = ???
+
+  override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Option[UserIdInfo]] = ???
 
   override def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail] = ???
 
@@ -54,7 +56,6 @@ class MockSamDAO extends SamDAO {
   }
 
   override def overwritePolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = {
-    println(s"overwriting policy $policyName")
     println(policies)
     policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
       case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, policy.memberEmails))
@@ -84,6 +85,10 @@ class MockSamDAO extends SamDAO {
       case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, existingPolicy.members -- Set(memberEmail)))
       case None => throw new Exception(s"policy $policyName does not exist")
     }
+    Future.successful(())
+  }
+
+  override def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit] = {
     Future.successful(())
   }
 
