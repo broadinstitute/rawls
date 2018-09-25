@@ -481,11 +481,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * updates acls for a workspace
    * @param workspaceName
    * @param aclUpdates changes to make, if an entry already exists it will be changed to the level indicated in this
-   *                   Seq, use NoAccess to remove an entry, all other preexisting accesses remain unchanged
+   *                   Set, use NoAccess to remove an entry, all other preexisting accesses remain unchanged
    * @return
    */
-  //TODO: need to fire and forget notifications for ACL changes
-  //TODO: deal with invites
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Set[WorkspaceACLUpdate], inviteUsersNotFound: Boolean): Future[PerRequestMessage] = {
 
     def determineSharePolicy(proposedAccessLevel: WorkspaceAccessLevel, canCurrently: Boolean, canProposed: Option[Boolean]): Option[SamWorkspacePolicyName] = {
@@ -536,7 +534,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       ).flatten
     }
 
-    val filteredAclUpdates = aclUpdates.filterNot(au => au.accessLevel == WorkspaceAccessLevels.ProjectOwner || au.email.equalsIgnoreCase(userInfo.userEmail.value))//to get rid of project owner changes and the caller altering their own access
+    //get rid of project owner changes and the caller altering their own access
+    val filteredAclUpdates = aclUpdates.filterNot(au => au.accessLevel == WorkspaceAccessLevels.ProjectOwner || au.email.equalsIgnoreCase(userInfo.userEmail.value))
 
     validateUsersExist(aclUpdates.map(_.email)).flatMap { missingUsers =>
       if (missingUsers.flatten.isEmpty) {
@@ -549,7 +548,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             _ <- Future.traverse(usersToRemove) { update => removeUserFromWorkspace(workspaceId, existingPolicies, WorkbenchEmail(update.email)) }
             _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update).map(_.value), WorkbenchEmail(update.email), inviteUsersNotFound) }
           } yield {
-            sendACLUpdateNotifications(workspaceName, usersToAdd, usersToRemove)
+            sendACLUpdateNotifications(workspaceName, usersToAdd ++ usersToRemove) //we can blindly fire off this future because we don't care about the results and it happens async anyway
             RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersToRemove ++ usersToAdd, Set.empty, Set.empty, Set.empty)) //TODO: fill these in
           }
         }
@@ -558,24 +557,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def sendACLUpdateNotifications(workspaceName: WorkspaceName, usersAdded: Set[WorkspaceACLUpdate], usersRemoved: Set[WorkspaceACLUpdate]) {
-    usersRemoved.map { x =>
-      samDAO.getUserIdInfo(x.email, userInfo).flatMap {
-        case Some(idInfo) => idInfo.googleSubjectId.
-
+  private def sendACLUpdateNotifications(workspaceName: WorkspaceName, usersModified: Set[WorkspaceACLUpdate]) {
+    Future.traverse(usersModified) { accessUpdate =>
+      for {
+        userIdInfo <- samDAO.getUserIdInfo(accessUpdate.email, userInfo)
+      } yield {
+        userIdInfo match {
+          case Some(idInfo) => idInfo.googleSubjectId match {
+            case Some(googleSubjectId) =>
+              if(accessUpdate.accessLevel == WorkspaceAccessLevels.NoAccess)
+                notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(RawlsUserSubjectId(googleSubjectId), NoAccess.toString, workspaceName, userInfo.userSubjectId))
+              else notificationDAO.fireAndForgetNotification(Notifications.WorkspaceAddedNotification(RawlsUserSubjectId(googleSubjectId), accessUpdate.accessLevel.toString, workspaceName, userInfo.userSubjectId))
+          }
+        }
       }
-
-      Notifications.WorkspaceRemovedNotification(googleSubjectId, NoAccess.toString, workspaceName, userInfo.userSubjectId)
     }
-
-
-
-    val notificationMessages = actualChangesToMake collect {
-      // note that we don't send messages to groups
-      case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId, NoAccess.toString, workspaceName, userInfo.userSubjectId)
-      case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId, access.toString, workspaceName, userInfo.userSubjectId)
-    }
-    notificationDAO.fireAndForgetNotifications(notificationMessages)
   }
 
   //TODO: writers can't read any members lower than owners. how will this continue to work?
