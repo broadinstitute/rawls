@@ -15,7 +15,7 @@ trait SamDAO extends ErrorReportable {
   val errorReportSource = ErrorReportSource("sam")
   def registerUser(userInfo: UserInfo): Future[Option[UserStatus]]
   def getUserStatus(userInfo: UserInfo): Future[Option[UserStatus]]
-  def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Option[UserIdInfo]]
+  def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]]
   def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail]
   def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
   def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[String, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit]
