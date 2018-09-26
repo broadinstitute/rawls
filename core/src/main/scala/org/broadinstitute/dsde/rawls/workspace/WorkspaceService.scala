@@ -373,7 +373,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  private def isUserPending(userEmail: String): Future[Boolean] = {
+    samDAO.getUserIdInfo(userEmail, userInfo).map {
+      case Right(Some(x)) => x.googleSubjectId.isEmpty
+      case Right(None) => false
+      case _ => true
+    }
+  }
+
   //TODO: deal with invitations (showing pending) and project owners
+  //todo: this isn't going to be completely correct just yet. need to take careful consideration of how to factor in canCompute at the project level ?
   private def getACLInternal(workspaceName: WorkspaceName): Future[WorkspaceACL] = {
 
     def loadPolicy(policyName: String, policyList: Set[SamPolicyWithNameAndEmail]): SamPolicyWithNameAndEmail = {
@@ -384,7 +393,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 //      (accessLevel >= WorkspaceAccessLevels.Owner)
 //    }
 
-    for {
+    val policyMembers = for {
       workspaceId <- loadWorkspaceId(workspaceName)
       currentACL <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo)
     } yield {
@@ -395,14 +404,23 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val shareWriterPolicyMembers = loadPolicy("share-writer", currentACL).policy.memberEmails
       val computePolicyMembers = loadPolicy("can-compute", currentACL).policy.memberEmails
 
+      (ownerPolicyMembers, writerPolicyMembers, readerPolicyMembers, shareReaderPolicyMembers, shareWriterPolicyMembers, computePolicyMembers)
+    }
+
+    policyMembers.flatMap { case (ownerPolicyMembers, writerPolicyMembers, readerPolicyMembers, shareReaderPolicyMembers, shareWriterPolicyMembers, computePolicyMembers) =>
       val sharers = shareReaderPolicyMembers ++ shareWriterPolicyMembers
 
-      //todo: this isn't going to be completely correct just yet. need to take careful consideration of how to factor in canCompute at the project level and also show PENDING
-      val owners = ownerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Owner, pending = false, true, true))
-      val writers = writerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Write, pending = false, sharers.contains(email), computePolicyMembers.contains(email)))
-      val readers = readerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Read, pending = false, sharers.contains(email), computePolicyMembers.contains(email)))
+      for {
+        ownersPending <- Future.traverse(ownerPolicyMembers) { email => isUserPending(email).map(x => email -> x) }
+        writersPending <- Future.traverse(writerPolicyMembers) { email => isUserPending(email).map(x => email -> x) }
+        readersPending <- Future.traverse(readerPolicyMembers) { email => isUserPending(email).map(x => email -> x) }
+      } yield {
+        val owners = ownerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Owner, ownersPending.toMap.getOrElse(email, true), true, true))
+        val writers = writerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Write, writersPending.toMap.getOrElse(email, true), sharers.contains(email), computePolicyMembers.contains(email)))
+        val readers = readerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Read, readersPending.toMap.getOrElse(email, true), sharers.contains(email), computePolicyMembers.contains(email)))
 
-      WorkspaceACL((owners ++ writers ++ readers).toMap)
+        WorkspaceACL((owners ++ writers ++ readers).toMap)
+      }
     }
   }
 
@@ -454,12 +472,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     Future.traverse(userPolicyNames) { policyName => samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo) }.map(_ => ())
   }
 
-  def addUserToWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], policyNames: Set[String], userEmail: WorkbenchEmail, inviteUserIfNotFound: Boolean): Future[Unit] = {
-    println(s"addUsersToWorkspace: ${userEmail}, $existingPolicies")
+  //TODO: don't construct bucket name here?
+  def addUserToWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], policyNames: Set[String], userEmail: WorkbenchEmail, inviteUserIfNotFound: Boolean, workspaceName: WorkspaceName): Future[Boolean] = {
     val userPolicyNames = existingPolicies.filter(_.policy.memberEmails.contains(userEmail.value)).map(_.policyName)
 
     for {
-      //TODO not fond of this remove all approach because it might be too destructive in certain cases. would probably be better to just diff the policies and only remove from ones we don't need anymore
+      //TODO: the removeAll then addAll approach may be a bit too much
       _ <- Future.traverse(userPolicyNames) { policyName => samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo) }
       _ <- Future.traverse(policyNames) { policyName =>
         samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo) recover {
@@ -468,14 +486,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               actuallyInvited <- samDAO.inviteUser(userEmail.value, userInfo).map(_ => true) recover {
                 case inviteError: RawlsExceptionWithErrorReport if inviteError.errorReport.statusCode.contains(StatusCodes.Conflict) => false //user was registered underneath us
               }
-              _ <- if(actuallyInvited) Future.successful(notificationDAO.fireAndForgetNotifications(Set(Notifications.WorkspaceInvitedNotification(RawlsUserEmail(userEmail.value), userInfo.userSubjectId, WorkspaceName("TO", "DO"), "bucketname!")))) else Future.successful(())
+              _ <- if(actuallyInvited) Future.successful(notificationDAO.fireAndForgetNotifications(Set(Notifications.WorkspaceInvitedNotification(RawlsUserEmail(userEmail.value), userInfo.userSubjectId, workspaceName, s"fc-$workspaceId")))) else Future.successful(false)
               _ <- samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo)
             } yield ()
         }
       }
     } yield ()
   }
-
 
 
   /**
@@ -549,7 +566,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           for {
             workspaceId <- loadWorkspaceId(workspaceName)
             _ <- Future.traverse(usersToRemove) { update => removeUserFromWorkspace(workspaceId, existingPolicies, WorkbenchEmail(update.email)) }
-            _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update).map(_.value), WorkbenchEmail(update.email), inviteUsersNotFound) }
+            _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update).map(_.value), WorkbenchEmail(update.email), inviteUsersNotFound, workspaceName) }
           } yield {
             sendACLUpdateNotifications(workspaceName, usersToAdd ++ usersToRemove) //we can blindly fire off this future because we don't care about the results and it happens async anyway
             RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersToRemove ++ usersToAdd -- usersToInvite, usersToInvite, Set.empty, Set.empty)) //TODO: fill these in
