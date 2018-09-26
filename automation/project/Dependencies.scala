@@ -49,6 +49,8 @@ object Dependencies {
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % "test",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
 
+    "com.github.tomakehurst" % "wiremock" % "2.18.0" % "test",
+
     workbenchModel,
     workbenchMetrics,
     workbenchGoogle,
