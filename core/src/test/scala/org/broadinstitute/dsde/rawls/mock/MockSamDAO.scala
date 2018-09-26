@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.mock
 
-import akka.http.scaladsl.model.DateTime
+import akka.http.scaladsl.model.{DateTime, StatusCodes}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.model.{ManagedGroupAccessResponse, ManagedRoles, RawlsUser, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo, UserStatus}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, ManagedGroupAccessResponse, ManagedRoles, RawlsUser, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo, UserStatus}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import scala.collection.concurrent.TrieMap
@@ -45,6 +46,8 @@ class MockSamDAO extends SamDAO {
     val result = if(users.contains(userEmail)) Right(users.get(userEmail).get)
     else if(groups.contains(userEmail)) Right(None)
     else Left(())
+
+    println(result)
 
 
     Future.successful(result)
@@ -94,12 +97,16 @@ class MockSamDAO extends SamDAO {
   }
 
   override def addUserToPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    println(s"adding $memberEmail to policy $policyName")
-    policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
-      case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, existingPolicy.members ++ Set(memberEmail)))
-      case None => throw new Exception(s"policy $policyName does not exist")
+    if(!users.keys.toSeq.contains(memberEmail) && !groups.keys.toSeq.contains(memberEmail)) {
+      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"user $memberEmail is not registered")))
     }
-    Future.successful(())
+    else {
+      policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
+        case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, existingPolicy.members ++ Set(memberEmail)))
+        case None => throw new Exception(s"policy $policyName does not exist")
+      }
+      Future.successful(())
+    }
   }
 
   override def removeUserFromPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
@@ -111,6 +118,11 @@ class MockSamDAO extends SamDAO {
   }
 
   override def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit] = {
+    val userSubjectId = generateId()
+    users.putIfAbsent(userEmail, Option(UserIdInfo(userSubjectId, userInfo.userEmail.value, None)))
+
+    println(s"invited $userEmail")
+
     Future.successful(())
   }
 

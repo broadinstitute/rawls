@@ -473,7 +473,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   //TODO: don't construct bucket name here?
-  def addUserToWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], policyNames: Set[String], userEmail: WorkbenchEmail, inviteUserIfNotFound: Boolean, workspaceName: WorkspaceName): Future[Boolean] = {
+  def addUserToWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], policyNames: Set[String], userEmail: WorkbenchEmail, inviteUserIfNotFound: Boolean, workspaceName: WorkspaceName): Future[Unit] = {
     val userPolicyNames = existingPolicies.filter(_.policy.memberEmails.contains(userEmail.value)).map(_.policyName)
 
     for {
@@ -557,11 +557,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     validateUsersExist(aclUpdates.map(_.email)).flatMap { missingUsers =>
       if (missingUsers.flatten.isEmpty || inviteUsersNotFound) {
-        println(missingUsers)
         getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
           val usersToInvite = aclUpdates.filter(x => missingUsers.flatten.contains(x.email))
           val usersToRemove = filteredAclUpdates.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess) -- usersToInvite
-          val usersToAdd = filteredAclUpdates -- usersToRemove //TODO: this *could* include users whose access level remained the same, which is bad. will fix...
+          val usersToAdd = filteredAclUpdates -- usersToRemove //TODO: this *could* include users whose access level remained the same, which is kinda bad. will fix...
 
           for {
             workspaceId <- loadWorkspaceId(workspaceName)
@@ -569,11 +568,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update).map(_.value), WorkbenchEmail(update.email), inviteUsersNotFound, workspaceName) }
           } yield {
             sendACLUpdateNotifications(workspaceName, usersToAdd ++ usersToRemove) //we can blindly fire off this future because we don't care about the results and it happens async anyway
-            RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersToRemove ++ usersToAdd -- usersToInvite, usersToInvite, Set.empty, Set.empty)) //TODO: fill these in
+            RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersToRemove ++ usersToAdd -- usersToInvite, usersToInvite, Set.empty))
           }
         }
       }
-      else Future.successful(RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set.empty, Set.empty, Set.empty, aclUpdates.filter(x => missingUsers.flatten.contains(x.email)))))
+      else Future.successful(RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set.empty, Set.empty, aclUpdates.filter(au => missingUsers.flatten.contains(au.email)))))
     }
   }
 
