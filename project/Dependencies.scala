@@ -1,8 +1,8 @@
 import sbt._
 
 object Dependencies {
-  val akkaV = "2.4.20" // 2.5.14 works but 2.5.15+ causes an obscure test failure; sticking with 2.4 for now
-  val akkaHttpV = "10.0.14" // can't go to 10.1.x without going to akka 2.5.x
+  val akkaV = "2.5.16"
+  val akkaHttpV = "10.1.5"
   val slickV = "3.2.1"
 
   val googleV = "1.22.0"
@@ -19,6 +19,7 @@ object Dependencies {
   val excludeAkkaStream =       ExclusionRule(organization = "com.typesafe.akka", name = "akka-stream_2.12")
 
   val akkaActor: ModuleID =         "com.typesafe.akka"   %%  "akka-actor"           % akkaV
+  val akkaStream: ModuleID =        "com.typesafe.akka"   %%  "akka-stream"          % akkaV
   val akkaContrib: ModuleID =       "com.typesafe.akka"   %%  "akka-contrib"         % akkaV
   val akkaSlf4j: ModuleID =         "com.typesafe.akka"   %%  "akka-slf4j"           % akkaV
   val akkaHttp: ModuleID =          "com.typesafe.akka"   %%  "akka-http"            % akkaHttpV           excludeAll(excludeAkkaActor, excludeAkkaStream)
@@ -56,7 +57,7 @@ object Dependencies {
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats"                 % "0.9.0"
-  val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.0.6"
+  val parserCombinators =         "org.scala-lang.modules"        %% "scala-parser-combinators" % "1.1.1"
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "5.1.42"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.5.3"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.2"
@@ -84,6 +85,7 @@ object Dependencies {
     metricsScala,
     metricsStatsd,
     akkaHttp,
+    akkaStream,
     scalatest,
     mockito
   )
@@ -91,6 +93,7 @@ object Dependencies {
   val googleDependencies = metricsDependencies ++ Seq(
     akkaHttpSprayJson,
     akkaHttp,
+    akkaStream,
     akkaActor,
     akkaHttpTestKit,
     scalatest,
@@ -123,6 +126,7 @@ object Dependencies {
     jacksonCore,
     akkaHttpSprayJson,
     akkaHttp,
+    akkaStream,
     jodaTime,
     jodaConvert,
     scalaLogging,
@@ -139,6 +143,7 @@ object Dependencies {
     slick,
     slickHikariCP,
     akkaHttp,
+    akkaStream,
     swaggerUI,
     commonsJEXL,
     cromwellWdl,
