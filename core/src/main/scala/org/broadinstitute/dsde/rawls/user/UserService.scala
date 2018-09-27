@@ -322,7 +322,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     val ownerUserInfo = UserInfo(RawlsUserEmail(xfer.newOwnerEmail), OAuth2BearerToken(xfer.newOwnerToken), 3600, RawlsUserSubjectId("0"))
 
 
-    for {
+    (for {
       _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.create(project) }
 
       _ <- samDAO.createResource(SamResourceTypeNames.billingProject, billingProjectName.value, ownerUserInfo)
@@ -337,6 +337,17 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- gcsDAO.grantReadAccess(billingProjectName, xfer.bucket, Set(ownerGroupEmail, computeUserGroupEmail))
     } yield {
       RequestComplete(StatusCodes.Created)
+    }).recoverWith {
+      case t: Throwable =>
+        // attempt cleanup then rethrow
+        for {
+          _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, ownerUserInfo).recover {
+            case x => logger.debug(s"failure deleting billing project ${project.projectName.value} from sam during error recovery cleanup.", x)
+          }
+          _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(project.projectName) }.recover {
+            case x => logger.debug(s"failure deleting billing project ${project.projectName.value} from rawls db during error recovery cleanup.", x)
+          }
+        } yield throw t
     }
   }
 
