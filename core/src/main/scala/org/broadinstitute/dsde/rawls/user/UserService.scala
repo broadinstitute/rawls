@@ -342,10 +342,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         // attempt cleanup then rethrow
         for {
           _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, ownerUserInfo).recover {
-            case _ => // yum
+            case x => logger.debug(s"failure deleting billing project ${project.projectName.value} from sam during error recovery cleanup.", x)
           }
           _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(project.projectName) }.recover {
-            case _ => // yum
+            case x => logger.debug(s"failure deleting billing project ${project.projectName.value} from rawls db during error recovery cleanup.", x)
           }
         } yield throw t
     }
