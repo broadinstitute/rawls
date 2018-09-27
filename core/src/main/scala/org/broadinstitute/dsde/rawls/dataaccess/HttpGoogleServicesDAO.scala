@@ -1128,9 +1128,12 @@ class HttpGoogleServicesDAO(
       _ <- retryWhen500orGoogleError(() => {
         executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)))
       })
-      _ <- retryWhen500orGoogleError(() => {
+      _ <- retryWithRecoverWhen500orGoogleError(() => {
         executeGoogleRequest(resMgr.projects().delete(projectNameString))
-      })
+      }) {
+        case e: GoogleJsonResponseException if e.getDetails.getCode == 403 && "Cannot delete an inactive project.".equals(e.getDetails.getMessage) => new Empty()
+          // stop trying to delete an already deleted project
+      }
     } yield {
       // nothing
     }
