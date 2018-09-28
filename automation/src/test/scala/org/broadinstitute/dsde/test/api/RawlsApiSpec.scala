@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.test.api
 
+import language.postfixOps
 import java.util.UUID
 
 import akka.actor.ActorSystem
@@ -319,6 +320,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     }
 
     "should label low security bucket" in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentAToken
 
       withCleanBillingProject(studentA) { projectName =>
@@ -332,6 +334,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     }
 
     "should label high security bucket" in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentAToken
 
       withGroup("ad") { realmGroup =>
@@ -341,7 +344,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
               val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
               val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
 
-              bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "high", "ad-" + realmGroup.toLowerCase.take(63) -> null, "ad-" + realmGroup2.toLowerCase.take(63) -> null)
+              bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "high", "ad-" + realmGroup.toLowerCase.take(63) -> "", "ad-" + realmGroup2.toLowerCase.take(63) -> "")
             }
           }
         }

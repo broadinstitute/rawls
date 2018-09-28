@@ -52,7 +52,6 @@ import org.joda.time
 import spray.json._
 
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Future, _}
 import scala.io.Source
@@ -85,6 +84,10 @@ class HttpGoogleServicesDAO(
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
   val API_SERVICE_MANAGEMENT = "ServiceManagement"
   val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
+
+  val SECURITY_LABEL_KEY = "security"
+  val HIGH_SECURITY_LABEL = "high"
+  val LOW_SECURITY_LABEL = "low"
 
   // modify these if we need more granular access in the future
   val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
@@ -217,8 +220,8 @@ class HttpGoogleServicesDAO(
           val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
 
           val labels = authDomain.toList match {
-            case Nil => LowSecurityLabel.label.asJava
-            case ads => (HighSecurityLabel.label ++ ads.map(ad => labelSafeString(ad.membersGroupName.value, "ad-") -> null)).asJava
+            case Nil => Map(SECURITY_LABEL_KEY -> LOW_SECURITY_LABEL)
+            case ads => Map(SECURITY_LABEL_KEY -> HIGH_SECURITY_LABEL) ++ ads.map(ad => labelSafeString(ad.membersGroupName.value, "ad-") -> "")
           }
 
           val bucket = new Bucket().
@@ -1289,10 +1292,3 @@ class HttpGoogleServicesDAO(
 }
 
 class GoogleStorageLogException(message: String) extends RawlsException(message)
-
-sealed trait BucketSecurityLabel {
-  val level: String
-  val label: Map[String, String] = Map("security" -> level)
-}
-case object HighSecurityLabel extends BucketSecurityLabel { val level: String = "high" }
-case object LowSecurityLabel extends BucketSecurityLabel { val level: String = "low" }
