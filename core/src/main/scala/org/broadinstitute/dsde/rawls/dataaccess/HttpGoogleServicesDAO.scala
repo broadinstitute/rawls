@@ -52,6 +52,8 @@ import org.joda.time
 import spray.json._
 
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+import scala.collection.Set
 import scala.concurrent.duration._
 import scala.concurrent.{Future, _}
 import scala.io.Source
@@ -214,11 +216,18 @@ class HttpGoogleServicesDAO(
               newObjectAccessControl("user-" + clientEmail, "OWNER")
 
           val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
+
+          val labels = authDomain.toList match {
+            case Nil => LowSecurityLabel.label.asJava
+            case ads => (HighSecurityLabel.label ++ ads.map(ad => labelSafeString(ad.membersGroupName.value, "ad-") -> null)).asJava
+          }
+
           val bucket = new Bucket().
             setName(bucketName).
             setAcl(bucketAcls).
             setDefaultObjectAcl(defaultObjectAcls).
-            setLogging(logging)
+            setLogging(logging).
+            setLabels(labels)
           val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
           executeGoogleRequest(inserter)
 
@@ -1111,11 +1120,12 @@ class HttpGoogleServicesDAO(
     })
   }
 
-  def labelSafeString(s: String): String = {
+  def labelSafeString(s: String, prefix: String = "fc-"): String = {
     // The google ui says the only valid values for labels are lower case letters and numbers and must start with
     // a letter. Dashes also appear to be acceptable though the ui does not say so.
-    // The fc in front ensures it starts with a lower case letter
-    "fc-" + s.toLowerCase.replaceAll("[^a-z0-9\\-]", "-")
+    // The prefix in front ensures it starts with a lower case letter
+    // It can be at most 63 characters
+    prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-]", "-").take(63)
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {
@@ -1280,3 +1290,10 @@ class HttpGoogleServicesDAO(
 }
 
 class GoogleStorageLogException(message: String) extends RawlsException(message)
+
+sealed trait BucketSecurityLabel {
+  val level: String
+  val label: Map[String, String] = Map("security" -> level)
+}
+case object HighSecurityLabel extends BucketSecurityLabel { val level: String = "high" }
+case object LowSecurityLabel extends BucketSecurityLabel { val level: String = "low" }
