@@ -1123,11 +1123,8 @@ class HttpGoogleServicesDAO(
   }
 
   def labelSafeString(s: String, prefix: String = "fc-"): String = {
-    // The google ui says the only valid values for labels are lower case letters and numbers and must start with
-    // a letter. Dashes also appear to be acceptable though the ui does not say so.
-    // The prefix in front ensures it starts with a lower case letter
-    // It can be at most 63 characters
-    prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-]", "-").take(63)
+    // https://cloud.google.com/compute/docs/labeling-resources#restrictions
+    prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(63)
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {
