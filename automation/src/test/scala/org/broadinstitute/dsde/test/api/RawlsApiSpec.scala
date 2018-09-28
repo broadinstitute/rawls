@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.test.api
 
+import language.postfixOps
 import java.util.UUID
 
 import akka.actor.ActorSystem
@@ -9,12 +10,13 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, Sam}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.dao.Google.googleIamDAO
+import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.fixture._
+import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
-import org.broadinstitute.dsde.workbench.model.google.{GoogleProject, ServiceAccount}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, ServiceAccount}
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
@@ -26,7 +28,7 @@ import scala.concurrent.duration._
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures
+class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
   with CleanUp with RandomUtil with Retry
   with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures {
 
@@ -294,7 +296,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
           // can we also quickly retrieve metadata for a few of the subworkflows?
 
-          Random.shuffle(subworkflowIds.take(10)).foreach { cromwellMetadata(_) }
+          Random.shuffle(subworkflowIds.take(10)).foreach {
+            cromwellMetadata(_)
+          }
 
           // clean up: Abort and wait for one minute or Aborted, whichever comes first
           // Timeout is OK here: just make a best effort
@@ -313,6 +317,38 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
         }
       }
 
+    }
+
+    "should label low security bucket" in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+      implicit val token: AuthToken = studentAToken
+
+      withCleanBillingProject(studentA) { projectName =>
+        withWorkspace(projectName, "rawls-bucket-test") { workspaceName =>
+          val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
+          val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
+
+          bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "low")
+        }
+      }
+    }
+
+    "should label high security bucket" in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+      implicit val token: AuthToken = studentAToken
+
+      withGroup("ad") { realmGroup =>
+        withGroup("ad2") { realmGroup2 =>
+          withCleanBillingProject(studentA) { projectName =>
+            withWorkspace(projectName, "rawls-bucket-test", Set(realmGroup, realmGroup2)) { workspaceName =>
+              val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
+              val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
+
+              bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "high", "ad-" + realmGroup.toLowerCase -> "", "ad-" + realmGroup2.toLowerCase -> "")
+            }
+          }
+        }
+      }
     }
   }
 }

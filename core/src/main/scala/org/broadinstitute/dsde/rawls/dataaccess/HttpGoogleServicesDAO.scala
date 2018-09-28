@@ -85,6 +85,10 @@ class HttpGoogleServicesDAO(
   val API_SERVICE_MANAGEMENT = "ServiceManagement"
   val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
 
+  val SECURITY_LABEL_KEY = "security"
+  val HIGH_SECURITY_LABEL = "high"
+  val LOW_SECURITY_LABEL = "low"
+
   // modify these if we need more granular access in the future
   val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
@@ -214,11 +218,18 @@ class HttpGoogleServicesDAO(
               newObjectAccessControl("user-" + clientEmail, "OWNER")
 
           val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
+
+          val labels = authDomain.toList match {
+            case Nil => Map(SECURITY_LABEL_KEY -> LOW_SECURITY_LABEL)
+            case ads => Map(SECURITY_LABEL_KEY -> HIGH_SECURITY_LABEL) ++ ads.map(ad => labelSafeString(ad.membersGroupName.value, "ad-") -> "")
+          }
+
           val bucket = new Bucket().
             setName(bucketName).
             setAcl(bucketAcls).
             setDefaultObjectAcl(defaultObjectAcls).
-            setLogging(logging)
+            setLogging(logging).
+            setLabels(labels)
           val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
           executeGoogleRequest(inserter)
 
@@ -1111,11 +1122,9 @@ class HttpGoogleServicesDAO(
     })
   }
 
-  def labelSafeString(s: String): String = {
-    // The google ui says the only valid values for labels are lower case letters and numbers and must start with
-    // a letter. Dashes also appear to be acceptable though the ui does not say so.
-    // The fc in front ensures it starts with a lower case letter
-    "fc-" + s.toLowerCase.replaceAll("[^a-z0-9\\-]", "-")
+  def labelSafeString(s: String, prefix: String = "fc-"): String = {
+    // https://cloud.google.com/compute/docs/labeling-resources#restrictions
+    prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(63)
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {
