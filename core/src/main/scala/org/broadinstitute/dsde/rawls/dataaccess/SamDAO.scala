@@ -2,16 +2,16 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
-import org.broadinstitute.dsde.rawls.model.{ErrorReportSource, ErrorReportable, JsonSupport, ManagedGroupAccessResponse, ManagedRoles, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo, UserStatus}
+import org.broadinstitute.dsde.rawls.model.{JsonSupport, ManagedGroupAccessResponse, ManagedRoles, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo, UserStatus}
 import spray.json.DefaultJsonProtocol._
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.model.{ErrorReport, ErrorReportSource, WorkbenchEmail, WorkbenchExceptionWithErrorReport, WorkbenchGroupName}
 
 import scala.concurrent.Future
 
 /**
   * Created by mbemis on 9/11/17.
   */
-trait SamDAO extends ErrorReportable {
+trait SamDAO {
   val errorReportSource = ErrorReportSource("sam")
   def registerUser(userInfo: UserInfo): Future[Option[UserStatus]]
   def getUserStatus(userInfo: UserInfo): Future[Option[UserStatus]]

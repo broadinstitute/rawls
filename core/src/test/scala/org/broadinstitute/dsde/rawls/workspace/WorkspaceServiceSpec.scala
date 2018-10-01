@@ -448,39 +448,39 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-//  it should "allow can share user to share when there are multiple project owners" in withDefaultTestDatabase { datasource: SlickDataSource =>
-//    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-////    runAndWait(rawlsUserQuery.createUser(user))
-//
-//    withServices(datasource, testData.userOwner) { services =>
-//      //add the owner as an owner on the billing project
-//      Await.result(services.userService.addUserToBillingProject(RawlsBillingProjectName(testData.workspace.namespace), ProjectAccessUpdate(testData.userOwner.userEmail.value, ProjectRoles.Owner)), Duration.Inf)
-//
-//      val aCLUpdates = Set(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true)), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)))
-//      val aCLUpdatesResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aCLUpdates, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//
-//      assertResult(StatusCodes.OK) {
-//        aCLUpdatesResponse.response._1
-//      }
-//    }
-//    withServices(datasource, testData.userReader) { services =>
-//      val addRead = Set(
-//        WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
-//        WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
-//        WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)),
-//        WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true), Option(false)),
-//        WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))
-//
-//      val addReadResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, addRead, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//      assertResult(StatusCodes.OK) {
-//        addReadResponse.response._1
-//      }
-//      assertResult(Set(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))) {
-//        addReadResponse.response._2.usersUpdated
-//      }
-//    }
-//  }
-//
+  it should "allow can share user to share when there are multiple project owners" in withDefaultTestDatabase { datasource: SlickDataSource =>
+    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+//    runAndWait(rawlsUserQuery.createUser(user))
+
+    withServices(datasource, testData.userOwner) { services =>
+      //add the owner as an owner on the billing project
+      Await.result(services.userService.addUserToBillingProject(RawlsBillingProjectName(testData.workspace.namespace), ProjectAccessUpdate(testData.userOwner.userEmail.value, ProjectRoles.Owner)), Duration.Inf)
+
+      val aCLUpdates = Set(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true)), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)))
+      val aCLUpdatesResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aCLUpdates, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+
+      assertResult(StatusCodes.OK) {
+        aCLUpdatesResponse.response._1
+      }
+    }
+    withServices(datasource, testData.userReader) { services =>
+      val addRead = Set(
+        WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
+        WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
+        WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)),
+        WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true), Option(false)),
+        WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))
+
+      val addReadResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, addRead, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+      assertResult(StatusCodes.OK) {
+        addReadResponse.response._1
+      }
+      assertResult(Set(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))) {
+        addReadResponse.response._2.usersUpdated
+      }
+    }
+  }
+
   it should "return non-existent users during patch ACLs" in withTestDataServices { services =>
     val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
     val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
@@ -577,23 +577,23 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 //    }
 //
 //  }
-//
-//  it should "update an existing workspace invitation to change access levels" in withTestDataServices { services =>
-//    val vComplete0 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//
-//    val vComplete1 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-//
-//    assert(vComplete1.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false))))
-//
-//    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None)), true), Duration.Inf)
-//
-//    val vComplete2 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-//
-//    assert(vComplete2.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Read, true, false, false))))
-//
-//  }
+
+  it should "update an existing workspace invitation to change access levels" in withTestDataServices { services =>
+    val vComplete0 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+
+    val vComplete1 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
+
+    assert(vComplete1.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false))))
+
+    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None)), true), Duration.Inf)
+
+    val vComplete2 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
+
+    assert(vComplete2.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Read, true, false, false))))
+
+  }
 
   it should "remove a user invite from a workspace" in withTestDataServices { services =>
     val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
@@ -628,389 +628,389 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assert(!vComplete4.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, true, true))))
   }
 
-//  it should "send notification messages to all users on workspace" in withTestDataServices { services =>
-//    val vComplete = Await.result(services.workspaceService.sendChangeNotifications(testData.workspace.toWorkspaceName), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, String)]]
-//
-//    assertResult(StatusCodes.OK, "Notification shouldn't error") {
-//      vComplete.response._1
-//    }
-//
-//    assertResult("4", "Number of notifications sent should match number of users on workspace") {
-//      vComplete.response._2
-//    }
-//
-//  }
-//
-//
-//  it should "retrieve catalog permission" in withTestDataServices { services =>
-//    val vComplete = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]]
-//    val (vStatus, vData) = vComplete.response
-//    assertResult((StatusCodes.OK, Vector.empty)) {
-//      (vStatus, vData.filter(wc => wc.catalog))
-//    }
-//  }
-//
-//  it should "patch Catalog and return updated permissions" in withTestDataServices { services =>
-//    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-//    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-////    runAndWait(rawlsUserQuery.createUser(user))
-////    runAndWait(rawlsGroupQuery.save(group))
-////
-////    services.gcsDAO.createGoogleGroup(group)
-//
-//    //add catalog perm
-//    val catalogUpdateResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
-//      Seq(WorkspaceCatalog("obama@whitehouse.gov", true),WorkspaceCatalog("group@whitehouse.gov", true),WorkspaceCatalog("none@nowhere.gov", true))), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
-//    val expectedResponse = WorkspaceCatalogUpdateResponseList(Seq(
-//      WorkspaceCatalogResponse(user.userSubjectId.value, true),
-//      WorkspaceCatalogResponse(group.groupName.value,true)),Seq("none@nowhere.gov"))
-//
-//    assertResult((StatusCodes.OK, expectedResponse)) {
-//      catalogUpdateResponse.response
-//    }
-//
-//    //check result
-//    val (_, catalogUpdates) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
-//
-//    assertSameElements(Vector(WorkspaceCatalog("obama@whitehouse.gov",true),WorkspaceCatalog("group@whitehouse.gov",true)), catalogUpdates)
-//
-//    //remove catalog perm
-//    val catalogRemoveResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
-//      Seq(WorkspaceCatalog("obama@whitehouse.gov", false),WorkspaceCatalog("group@whitehouse.gov", false),WorkspaceCatalog("none@nowhere.gov", false))), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
-//
-//    assertResult((StatusCodes.OK, Seq("none@nowhere.gov"))) {
-//      (catalogRemoveResponse.response._1, catalogRemoveResponse.response._2.emailsNotFound)
-//    }
-//    assertSameElements(Seq(WorkspaceCatalogResponse("obamaiscool", false),WorkspaceCatalogResponse("test", false)), catalogRemoveResponse.response._2.usersUpdated)
-//
-//    //check result
-//    val (_, catalogRemovals) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
-//
-//    assertResult(Vector.empty){
-//      catalogRemovals
-//    }
-//  }
-//
-//  it should "lock a workspace with terminated submissions" in withTestDataServices { services =>
-//    //check workspace is not locked
-//    assert(!testData.workspaceTerminatedSubmissions.isLocked)
-//
-//    val rqComplete = Await.result(services.workspaceService.lockWorkspace(testData.workspaceTerminatedSubmissions.toWorkspaceName), Duration.Inf)
-//        .asInstanceOf[RequestComplete[StatusCode]]
-//
-//    assertResult(StatusCodes.NoContent) {
-//      rqComplete.response
-//    }
-//
-//    //check workspace is locked
-//    assert {
-//      runAndWait(workspaceQuery.findByName(testData.workspaceTerminatedSubmissions.toWorkspaceName)).head.isLocked
-//    }
-//  }
-//
-//  it should "fail to lock a workspace with active submissions" in withTestDataServices { services =>
-//    //check workspace is not locked
-//    assert(!testData.workspaceMixedSubmissions.isLocked)
-//
-//   val except: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-//     Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)), Duration.Inf)
-//   }
-//
-//    assertResult(StatusCodes.Conflict) {
-//      except.errorReport.statusCode.get
-//    }
-//
-//    assert {
-//      !runAndWait(workspaceQuery.findByName(testData.workspaceMixedSubmissions.toWorkspaceName)).head.isLocked
-//    }
-//  }
-//
-//  it should "delete a workspace with no submissions" in withTestDataServices { services =>
-//    //check that the workspace to be deleted exists
-//    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
-//      runAndWait(workspaceQuery.findByName(testData.wsName3))
-//    }
-//
-//    //delete the workspace
-//    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
-//
-//    //check that the workspace has been deleted
-//    assertResult(None) {
-//      runAndWait(workspaceQuery.findByName(testData.wsName3))
-//    }
-//
-//
-//  }
-//
-//  it should "delete a workspace with succeeded submission" in withTestDataServices { services =>
-//    //check that the workspace to be deleted exists
-//    assertWorkspaceResult(Option(testData.workspaceSuccessfulSubmission)) {
-//      runAndWait(workspaceQuery.findByName(testData.wsName4))
-//    }
-//
-//    //Check method configs to be deleted exist
-//    assertResult(Vector(MethodConfigurationShort("testConfig2",Some("Sample"),AgoraMethod("myNamespace","method-a",1),"dsde"),
-//      MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-//      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
-//    }
-//
-//    //Check if submissions on workspace exist
-//    assertResult(List(testData.submissionSuccessful1)) {
-//      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
-//    }
-//
-//    //Check if entities on workspace exist
-//    assertResult(20) {
-//      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
-//    }
-//
-//    //delete the workspace
-//    Await.result(services.workspaceService.deleteWorkspace(testData.wsName4), Duration.Inf)
-//
-//    //check that the workspace has been deleted
-//    assertResult(None) {
-//      runAndWait(workspaceQuery.findByName(testData.wsName4))
-//    }
-//
-//    //check if method configs have been deleted
-//    assertResult(Vector()) {
-//      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
-//    }
-//
-//    //Check if submissions on workspace have been deleted
-//    assertResult(Vector()) {
-//      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
-//    }
-//
-//    //Check if entities on workspace have been deleted
-//    assertResult(0) {
-//      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
-//    }
-//  }
-//
-//  it should "delete a workspace with failed submission" in withTestDataServices { services =>
-//    //check that the workspace to be deleted exists
-//    assertWorkspaceResult(Option(testData.workspaceFailedSubmission)) {
-//      runAndWait(workspaceQuery.findByName(testData.wsName5))
-//    }
-//
-//    //Check method configs to be deleted exist
-//    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-//      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
-//    }
-//
-//    //Check if submissions on workspace exist
-//    assertResult(List(testData.submissionFailed)) {
-//      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
-//    }
-//
-//    //Check if entities on workspace exist
-//    assertResult(20) {
-//      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
-//    }
-//
-//    //delete the workspace
-//    Await.result(services.workspaceService.deleteWorkspace(testData.wsName5), Duration.Inf)
-//
-//    //check that the workspace has been deleted
-//    assertResult(None) {
-//      runAndWait(workspaceQuery.findByName(testData.wsName5))
-//    }
-//
-//    //check if method configs have been deleted
-//    assertResult(Vector()) {
-//      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
-//    }
-//
-//    //Check if submissions on workspace have been deleted
-//    assertResult(Vector()) {
-//      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
-//    }
-//
-//
-//    //Check if entities on workspace exist
-//    assertResult(0) {
-//      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
-//    }
-//  }
-//
-//  it should "delete a workspace with submitted submission" in withTestDataServices { services =>
-//    //check that the workspace to be deleted exists
-//    assertWorkspaceResult(Option(testData.workspaceSubmittedSubmission)) {
-//      runAndWait(workspaceQuery.findByName(testData.wsName6))
-//    }
-//
-//    //Check method configs to be deleted exist
-//    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-//      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
-//    }
-//
-//    //Check if submissions on workspace exist
-//    assertResult(List(testData.submissionSubmitted)) {
-//      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
-//    }
-//
-//    //Check if entities on workspace exist
-//    assertResult(20) {
-//      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
-//    }
-//
-//    //delete the workspace
-//    Await.result(services.workspaceService.deleteWorkspace(testData.wsName6), Duration.Inf)
-//
-//    //check that the workspace has been deleted
-//    assertResult(None) {
-//      runAndWait(workspaceQuery.findByName(testData.wsName6))
-//    }
-//
-//    //check if method configs have been deleted
-//    assertResult(Vector()) {
-//      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
-//    }
-//
-//    //Check if submissions on workspace have been deleted
-//    assertResult(Vector()) {
-//      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
-//    }
-//
-//    //Check if entities on workspace exist
-//    assertResult(0) {
-//      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
-//    }
-//  }
-//
-//  it should "delete a workspace with mixed submissions" in withTestDataServices { services =>
-//    //check that the workspace to be deleted exists
-//    assertWorkspaceResult(Option(testData.workspaceMixedSubmissions)) {
-//      runAndWait(workspaceQuery.findByName(testData.wsName7))
-//    }
-//
-//    //Check method configs to be deleted exist
-//    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
-//      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
-//    }
-//
-//    //Check if submissions on workspace exist
-//    assertResult(2) {
-//      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions))).length
-//    }
-//
-//    //Check if entities on workspace exist
-//    assertResult(20) {
-//      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
-//    }
-//
-//    //delete the workspace
-//    Await.result(services.workspaceService.deleteWorkspace(testData.wsName7), Duration.Inf)
-//
-//    //check that the workspace has been deleted
-//    assertResult(None) {
-//      runAndWait(workspaceQuery.findByName(testData.wsName7))
-//    }
-//
-//    //check if method configs have been deleted
-//    assertResult(Vector()) {
-//      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
-//    }
-//
-//    //Check if submissions on workspace have been deleted
-//    assertResult(Vector()) {
-//      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
-//    }
-//
-//    //Check if entities on workspace exist
-//    assertResult(0) {
-//      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
-//    }
-//
-//  }
-//
-//  it should "return the correct tags from autocomplete" in withTestDataServices { services =>
-//
-//    // when no tags, return empty set
-//    val res1 = Await.result(services.workspaceService.getTags(Some("notag")), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
-//    assertResult(Vector.empty[WorkspaceTag]) {
-//      res1.response._2
-//    }
-//
-//    // add some tags
-//    Await.result(services.workspaceService.updateWorkspace(testData.wsName,
-//      Seq(AddListMember(AttributeName.withTagsNS, AttributeString("cancer")),
-//        AddListMember(AttributeName.withTagsNS, AttributeString("cantaloupe")))), Duration.Inf)
-//
-//    Await.result(services.workspaceService.updateWorkspace(testData.wsName7,
-//      Seq(
-//        AddListMember(AttributeName.withTagsNS, AttributeString("cantaloupe")),
-//        AddListMember(AttributeName.withTagsNS, AttributeString("buffalo")))), Duration.Inf)
-//
-//    // searching for tag that doesn't exist should return empty set
-//    val res2 = Await.result(services.workspaceService.getTags(Some("notag")), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, Vector[String])]]
-//    assertResult(Vector.empty[String]) {
-//      res2.response._2
-//    }
-//
-//    // searching for tag that does exist should return the tag (query string case doesn't matter)
-//    val res3 = Await.result(services.workspaceService.getTags(Some("bUf")), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
-//    assertResult(Vector(WorkspaceTag("buffalo", 1))) {
-//      res3.response._2
-//    }
-//
-//    val res4 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
-//    assertResult(Vector(WorkspaceTag("cancer", 1))) {
-//      res4.response._2
-//    }
-//
-//    // searching for multiple tag that does exist should return the tags (query string case doesn't matter)
-//    // should be sorted by counts of tags
-//    val res5 = Await.result(services.workspaceService.getTags(Some("cAn")), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
-//    assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("cancer", 1))) {
-//      res5.response._2
-//    }
-//
-//    // searching for with no query should return all tags
-//    val res6 = Await.result(services.workspaceService.getTags(None), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
-//    assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("buffalo", 1), WorkspaceTag("cancer", 1))) {
-//      res6.response._2
-//    }
-//
-//    // remove tags
-//    Await.result(services.workspaceService.updateWorkspace(testData.wsName, Seq(RemoveAttribute(AttributeName.withTagsNS))), Duration.Inf)
-//    Await.result(services.workspaceService.updateWorkspace(testData.wsName7, Seq(RemoveAttribute(AttributeName.withTagsNS))), Duration.Inf)
-//
-//
-//    // make sure that tags no longer exists
-//    val res7 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
-//    assertResult(Vector.empty[WorkspaceTag]) {
-//      res7.response._2
-//    }
-//
-//  }
-//
-//  for ((accessLevel, callCount) <- Seq((Write, 1), (Read, 0))) {
-//    it should s"share billing compute $callCount times when workspace $accessLevel access granted" in withTestDataServices { services =>
-//      import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-//      import WorkspaceACLJsonSupport._
-//      val email = s"${UUID.randomUUID}@bar.com"
-//      val results = RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(email, accessLevel)), Set.empty, Set.empty, Set.empty))
-////      assertResult(results) {
-////        Await.result(services.workspaceService.maybeShareProjectComputePolicy(Future.successful(results), testData.workspace.toWorkspaceName), Duration.Inf)
-////      }
-//
-//      import org.mockserver.model.HttpRequest.request
-//      mockServer.mockServer.verify(request().withMethod("PUT").withPath(s"/api/resource/${SamResourceTypeNames.billingProject.value}/${testData.workspace.namespace}/policies/${UserService.canComputeUserPolicyName}/memberEmails/$email"), VerificationTimes.exactly(callCount))
-//    }
-//  }
+  it should "send notification messages to all users on workspace" in withTestDataServices { services =>
+    val vComplete = Await.result(services.workspaceService.sendChangeNotifications(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, String)]]
+
+    assertResult(StatusCodes.OK, "Notification shouldn't error") {
+      vComplete.response._1
+    }
+
+    assertResult("4", "Number of notifications sent should match number of users on workspace") {
+      vComplete.response._2
+    }
+
+  }
+
+
+  it should "retrieve catalog permission" in withTestDataServices { services =>
+    val vComplete = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]]
+    val (vStatus, vData) = vComplete.response
+    assertResult((StatusCodes.OK, Vector.empty)) {
+      (vStatus, vData.filter(wc => wc.catalog))
+    }
+  }
+
+  it should "patch Catalog and return updated permissions" in withTestDataServices { services =>
+    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+//    runAndWait(rawlsUserQuery.createUser(user))
+//    runAndWait(rawlsGroupQuery.save(group))
+//
+//    services.gcsDAO.createGoogleGroup(group)
+
+    //add catalog perm
+    val catalogUpdateResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
+      Seq(WorkspaceCatalog("obama@whitehouse.gov", true),WorkspaceCatalog("group@whitehouse.gov", true),WorkspaceCatalog("none@nowhere.gov", true))), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
+    val expectedResponse = WorkspaceCatalogUpdateResponseList(Seq(
+      WorkspaceCatalogResponse(user.userSubjectId.value, true),
+      WorkspaceCatalogResponse(group.groupName.value,true)),Seq("none@nowhere.gov"))
+
+    assertResult((StatusCodes.OK, expectedResponse)) {
+      catalogUpdateResponse.response
+    }
+
+    //check result
+    val (_, catalogUpdates) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
+
+    assertSameElements(Vector(WorkspaceCatalog("obama@whitehouse.gov",true),WorkspaceCatalog("group@whitehouse.gov",true)), catalogUpdates)
+
+    //remove catalog perm
+    val catalogRemoveResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
+      Seq(WorkspaceCatalog("obama@whitehouse.gov", false),WorkspaceCatalog("group@whitehouse.gov", false),WorkspaceCatalog("none@nowhere.gov", false))), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
+
+    assertResult((StatusCodes.OK, Seq("none@nowhere.gov"))) {
+      (catalogRemoveResponse.response._1, catalogRemoveResponse.response._2.emailsNotFound)
+    }
+    assertSameElements(Seq(WorkspaceCatalogResponse("obamaiscool", false),WorkspaceCatalogResponse("test", false)), catalogRemoveResponse.response._2.usersUpdated)
+
+    //check result
+    val (_, catalogRemovals) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
+
+    assertResult(Vector.empty){
+      catalogRemovals
+    }
+  }
+
+  it should "lock a workspace with terminated submissions" in withTestDataServices { services =>
+    //check workspace is not locked
+    assert(!testData.workspaceTerminatedSubmissions.isLocked)
+
+    val rqComplete = Await.result(services.workspaceService.lockWorkspace(testData.workspaceTerminatedSubmissions.toWorkspaceName), Duration.Inf)
+        .asInstanceOf[RequestComplete[StatusCode]]
+
+    assertResult(StatusCodes.NoContent) {
+      rqComplete.response
+    }
+
+    //check workspace is locked
+    assert {
+      runAndWait(workspaceQuery.findByName(testData.workspaceTerminatedSubmissions.toWorkspaceName)).head.isLocked
+    }
+  }
+
+  it should "fail to lock a workspace with active submissions" in withTestDataServices { services =>
+    //check workspace is not locked
+    assert(!testData.workspaceMixedSubmissions.isLocked)
+
+   val except: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+     Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)), Duration.Inf)
+   }
+
+    assertResult(StatusCodes.Conflict) {
+      except.errorReport.statusCode.get
+    }
+
+    assert {
+      !runAndWait(workspaceQuery.findByName(testData.workspaceMixedSubmissions.toWorkspaceName)).head.isLocked
+    }
+  }
+
+  it should "delete a workspace with no submissions" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+
+  }
+
+  it should "delete a workspace with succeeded submission" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceSuccessfulSubmission)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName4))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig2",Some("Sample"),AgoraMethod("myNamespace","method-a",1),"dsde"),
+      MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(List(testData.submissionSuccessful1)) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName4), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName4))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+    }
+
+    //Check if entities on workspace have been deleted
+    assertResult(0) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
+    }
+  }
+
+  it should "delete a workspace with failed submission" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceFailedSubmission)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName5))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(List(testData.submissionFailed)) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName5), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName5))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+    }
+
+
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
+    }
+  }
+
+  it should "delete a workspace with submitted submission" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceSubmittedSubmission)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName6))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(List(testData.submissionSubmitted)) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName6), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName6))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
+    }
+  }
+
+  it should "delete a workspace with mixed submissions" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertWorkspaceResult(Option(testData.workspaceMixedSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName7))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(2) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions))).length
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName7), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName7))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findActiveEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
+    }
+
+  }
+
+  it should "return the correct tags from autocomplete" in withTestDataServices { services =>
+
+    // when no tags, return empty set
+    val res1 = Await.result(services.workspaceService.getTags(Some("notag")), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector.empty[WorkspaceTag]) {
+      res1.response._2
+    }
+
+    // add some tags
+    Await.result(services.workspaceService.updateWorkspace(testData.wsName,
+      Seq(AddListMember(AttributeName.withTagsNS, AttributeString("cancer")),
+        AddListMember(AttributeName.withTagsNS, AttributeString("cantaloupe")))), Duration.Inf)
+
+    Await.result(services.workspaceService.updateWorkspace(testData.wsName7,
+      Seq(
+        AddListMember(AttributeName.withTagsNS, AttributeString("cantaloupe")),
+        AddListMember(AttributeName.withTagsNS, AttributeString("buffalo")))), Duration.Inf)
+
+    // searching for tag that doesn't exist should return empty set
+    val res2 = Await.result(services.workspaceService.getTags(Some("notag")), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[String])]]
+    assertResult(Vector.empty[String]) {
+      res2.response._2
+    }
+
+    // searching for tag that does exist should return the tag (query string case doesn't matter)
+    val res3 = Await.result(services.workspaceService.getTags(Some("bUf")), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector(WorkspaceTag("buffalo", 1))) {
+      res3.response._2
+    }
+
+    val res4 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector(WorkspaceTag("cancer", 1))) {
+      res4.response._2
+    }
+
+    // searching for multiple tag that does exist should return the tags (query string case doesn't matter)
+    // should be sorted by counts of tags
+    val res5 = Await.result(services.workspaceService.getTags(Some("cAn")), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("cancer", 1))) {
+      res5.response._2
+    }
+
+    // searching for with no query should return all tags
+    val res6 = Await.result(services.workspaceService.getTags(None), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("buffalo", 1), WorkspaceTag("cancer", 1))) {
+      res6.response._2
+    }
+
+    // remove tags
+    Await.result(services.workspaceService.updateWorkspace(testData.wsName, Seq(RemoveAttribute(AttributeName.withTagsNS))), Duration.Inf)
+    Await.result(services.workspaceService.updateWorkspace(testData.wsName7, Seq(RemoveAttribute(AttributeName.withTagsNS))), Duration.Inf)
+
+
+    // make sure that tags no longer exists
+    val res7 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector.empty[WorkspaceTag]) {
+      res7.response._2
+    }
+
+  }
+
+  for ((accessLevel, callCount) <- Seq((Write, 1), (Read, 0))) {
+    it should s"share billing compute $callCount times when workspace $accessLevel access granted" in withTestDataServices { services =>
+      import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+      import WorkspaceACLJsonSupport._
+      val email = s"${UUID.randomUUID}@bar.com"
+      val results = RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(email, accessLevel)), Set.empty, Set.empty))
+//      assertResult(results) {
+//        Await.result(services.workspaceService.maybeShareProjectComputePolicy(Future.successful(results), testData.workspace.toWorkspaceName), Duration.Inf)
+//      }
+
+      import org.mockserver.model.HttpRequest.request
+      mockServer.mockServer.verify(request().withMethod("PUT").withPath(s"/api/resource/${SamResourceTypeNames.billingProject.value}/${testData.workspace.namespace}/policies/${UserService.canComputeUserPolicyName}/memberEmails/$email"), VerificationTimes.exactly(callCount))
+    }
+  }
 }

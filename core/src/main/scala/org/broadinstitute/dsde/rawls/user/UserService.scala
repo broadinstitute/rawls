@@ -241,6 +241,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
+    println("foo!!!!")
     val policies = projectAccessUpdate.role match {
       case ProjectRoles.Owner => Seq(ownerPolicyName)
       case ProjectRoles.User => Seq(workspaceCreatorPolicyName, canComputeUserPolicyName)

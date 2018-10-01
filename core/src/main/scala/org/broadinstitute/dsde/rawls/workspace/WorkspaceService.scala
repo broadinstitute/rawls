@@ -130,11 +130,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   //looks good
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
+      println(userInfo)
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel =>
-          if (accessLevel < WorkspaceAccessLevels.Read)
+        println(workspaceContext)
+        DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel => //TODO: requireAction(read)
+          if (accessLevel < WorkspaceAccessLevels.Read) {
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+          }
           else {
+            println(accessLevel)
             for {
               catalog <- DBIO.from(getUserCatalogPermissions(workspaceContext.workspaceId.toString))
               canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel))
@@ -163,12 +167,22 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceCanCatalog, userInfo)
   }
 
+  //TODO: should this work off of actions instead of roles?
   def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] = {
+
+    val validRoles = Set("OWNER", "WRITER", "READER")
+
+
     samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { roles =>
-      roles.map(WorkspaceAccessLevels.withName)
+      println(s"ok here $roles")
+      roles.filter(x => validRoles.contains(x.toUpperCase)).map(WorkspaceAccessLevels.withName)
     }.map { roles =>
-      if(roles.isEmpty) WorkspaceAccessLevels.NoAccess
+      println("*****")
+      println(roles)
+      println("*****")
+      val x = if(roles.isEmpty) WorkspaceAccessLevels.NoAccess
       else roles.fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max)
+      x
     }
   }
 
@@ -437,7 +451,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def loadWorkspaceId(workspaceName: WorkspaceName): Future[String] = {
     dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.getWorkspaceId(workspaceName) }.map {
-      case None => throw new WorkbenchException("unable to load workspace")
+      case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "unable to load workspace"))
       case Some(id) => id.toString
     }
   }
@@ -504,6 +518,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    */
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Set[WorkspaceACLUpdate], inviteUsersNotFound: Boolean): Future[PerRequestMessage] = {
 
+    println(aclUpdates)
+
     def determineSharePolicy(proposedAccessLevel: WorkspaceAccessLevel, canCurrently: Boolean, canProposed: Option[Boolean]): Option[SamWorkspacePolicyName] = {
       if(proposedAccessLevel >= WorkspaceAccessLevels.Owner) None //not explicitly needed because it's an action on the owner policy
       else (canCurrently, canProposed) match {
@@ -556,11 +572,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val filteredAclUpdates = aclUpdates.filterNot(au => au.accessLevel == WorkspaceAccessLevels.ProjectOwner || au.email.equalsIgnoreCase(userInfo.userEmail.value))
 
     validateUsersExist(aclUpdates.map(_.email)).flatMap { missingUsers =>
+      println(missingUsers)
+      println("******")
       if (missingUsers.flatten.isEmpty || inviteUsersNotFound) {
         getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
           val usersToInvite = aclUpdates.filter(x => missingUsers.flatten.contains(x.email))
           val usersToRemove = filteredAclUpdates.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess) -- usersToInvite
           val usersToAdd = filteredAclUpdates -- usersToRemove //TODO: this *could* include users whose access level remained the same, which is kinda bad. will fix...
+
+          println(usersToInvite)
+          println(usersToRemove)
+          println(usersToAdd)
 
           for {
             workspaceId <- loadWorkspaceId(workspaceName)
@@ -595,10 +617,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   //TODO: writers can't read any members lower than owners. how will this continue to work?
   //via doug: something similar to the "pester" policy
-
-
-  //can potentially implement this from scratch. check the users access, then read the policies to get all of the emails. then we can fire and forget the emails from here
+  //TODO: actually re-implement this
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    Future.successful(RequestComplete(StatusCodes.OK))
+
+
 //    val getUsers = {
 //      dataSource.inTransaction{ dataAccess =>
 //        withWorkspaceContext(workspaceName, dataAccess) {workspaceContext =>
@@ -618,14 +641,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 //      RequestComplete(StatusCodes.OK, numMessages)
 //    }
 
-    Future.successful(RequestComplete(StatusCodes.OK)) //todo: actually re-implement
 
   }
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
+        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner) {
           dataAccess.submissionQuery.list(workspaceContext).flatMap { submissions =>
             if (!submissions.forall(_.status.isTerminated)) {
               DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace $workspaceName, so it cannot be locked.")))
@@ -640,7 +662,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def unlockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
+        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner) {
           dataAccess.workspaceQuery.unlock(workspaceContext.workspace.toWorkspaceName).map(_ => RequestComplete(StatusCodes.NoContent))
         }
       }
@@ -1561,7 +1583,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     for {
       bucketName <- dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Write, dataAccess) {
+          requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Write) {
             DBIO.successful(workspaceContext.workspace.bucketName)
           }
         }
@@ -1714,9 +1736,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield response
   }
 
+  //TODO: i want to break the sam call out of the DB transaction
   private def withWorkspaceContextAndPermissions[T](workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
     withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-      requireAccess(workspaceContext.workspace, accessLevel, dataAccess) { op(workspaceContext) }
+      requireAccess(workspaceContext.workspace, accessLevel) { op(workspaceContext) }
     }
   }
 
@@ -1728,13 +1751,22 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def requireAccess[T](workspace: Workspace, requiredLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
+  private def loadWorkspaceContext(workspaceName: WorkspaceName, dataAccess: DataAccess): ReadAction[SlickWorkspaceContext] = {
+    dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+      case Some(workspace) => DBIO.successful(SlickWorkspaceContext(workspace))
+    }
+  }
+
+  private def requireAccess[T](workspace: Workspace, requiredLevel: WorkspaceAccessLevel)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
     val requiredAction = requiredLevel match {
       case WorkspaceAccessLevels.Owner => SamResourceActions.workspaceOwn
       case WorkspaceAccessLevels.Write => SamResourceActions.workspaceWrite
       case WorkspaceAccessLevels.Read => SamResourceActions.workspaceRead
       case _ => throw new WorkbenchException(s"Unrecognized access level: ${requiredLevel.toString}")
     }
+
+    println(requiredAction)
 
     DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo)) flatMap { hasAction =>
       if(hasAction) {
@@ -1748,8 +1780,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def requireAccessIgnoreLock[T](workspace: Workspace, requiredLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    requireAccess(workspace.copy(isLocked = false), requiredLevel, dataAccess)(op)
+  private def requireAccessIgnoreLock[T](workspace: Workspace, requiredLevel: WorkspaceAccessLevel)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
+    requireAccess(workspace.copy(isLocked = false), requiredLevel)(op)
   }
 
   private def requireComputePermission[T](workspace: Workspace, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
@@ -1768,6 +1800,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
   }
+
+//  private def requireCanSharePermission[T](workspaceId: UUID)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
+//    DBIO.from(samDAO.userHasAction())
+//  }
 
   private def withEntity[T](workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[T]): ReadWriteAction[T] = {
     dataAccess.entityQuery.get(workspaceContext, entityType, entityName) flatMap {

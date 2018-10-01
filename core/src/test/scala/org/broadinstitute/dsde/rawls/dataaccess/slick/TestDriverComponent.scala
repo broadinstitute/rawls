@@ -119,7 +119,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     )
   }
 
-  def billingProjectFromName(name: String) = (RawlsBillingProject(RawlsBillingProjectName(name), "mockBucketUrl", CreationStatuses.Ready, None, None), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty))
+  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef] = Set.empty) =
     RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, groups)

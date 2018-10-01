@@ -1,20 +1,14 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.UUID
-
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, RawlsBillingProjectRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.user.UserService
-import org.scalatest.path
-import akka.http.scaladsl.model.{HttpMethods, StatusCodes, Uri}
 import spray.json.DefaultJsonProtocol._
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -40,27 +34,29 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   def createProject(project: RawlsBillingProject, owner: RawlsUser = testData.userOwner): Unit = {
-    import driver.api._
     val projectWithOwner = project.copy()
 
     runAndWait(rawlsBillingProjectQuery.create(projectWithOwner))
   }
 
+  private def createTestBillingProject(services: TestApiService, project: RawlsBillingProject, ownerUserInfo: UserInfo) = {
+    val policies = Map(
+      "workspace-creator" -> SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)),
+      "can-compute-user" -> SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)),
+      "owner" -> SamPolicy(Set(ownerUserInfo.userEmail.value), Set.empty, Set(SamProjectRoles.owner))
+    )
+
+    Await.result(services.samDAO.createResourceFull(SamResourceTypeNames.billingProject, project.projectName.value, policies, Set.empty, ownerUserInfo), Duration.Inf)
+    runAndWait(rawlsBillingProjectQuery.create(project))
+  }
+
   "BillingApiService" should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
-    val (project, projectGroups) = billingProjectFromName("new_project")
-//    Await.result(samDataSaver.savePolicyGroups(projectGroups.values.flatten, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
+    val project = billingProjectFromName("new_project")
 
-    val createRequest = CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)
+    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
+    Await.result(services.samDAO.registerUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346"))), Duration.Inf)
 
-    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
-
-    Post(s"/billing", httpJson(createRequest)) ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
+    createTestBillingProject(services, project, userInfo)
 
     Put(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -80,17 +76,24 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when adding a user to a non-owned billing project" in withTestDataApiServices { services =>
-    val (project, projectGroups) = billingProjectFromName("no_access")
+    val project = billingProjectFromName("no_access")
+
+    val readerUserInfo = UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347"))
+
+    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
+    Await.result(services.samDAO.registerUser(readerUserInfo), Duration.Inf)
+
+    createTestBillingProject(services, project, readerUserInfo)
 
     withStatsD {
-      Put(s"/billing/${project.projectName.value}/user/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+      Put(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
           }
         }
 
-      Put(s"/billing/${project.projectName.value}/owner/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
+      Put(s"/billing/${project.projectName.value}/owner/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.Forbidden) {
             status
@@ -103,7 +106,11 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
-    val (project, projectGroups) = billingProjectFromName("no_access")
+    val project = billingProjectFromName("no_access")
+
+    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
+
+    createTestBillingProject(services, project, userInfo)
 
     Put(s"/billing/${project.projectName.value}/nobody") ~>
       sealRoute(services.billingRoutes) ~>
@@ -115,6 +122,8 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when adding a user to a nonexistent project" in withTestDataApiServices { services =>
+    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
+
     Put(s"/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
@@ -125,8 +134,10 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when removing a user from a billing project" in withTestDataApiServices { services =>
-    val (project, projectGroups) = billingProjectFromName("new_project")
-//    Await.result(samDataSaver.savePolicyGroups(projectGroups.values.flatten, SamResourceTypeNames.billingProject.value, project.projectName.value), Duration.Inf)
+    val project = billingProjectFromName("new_project")
+
+    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
+    Await.result(services.samDAO.registerUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346"))), Duration.Inf)
 
     withStatsD {
       val createRequest = CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)
@@ -162,7 +173,14 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when removing a user from a non-owned billing project" in withTestDataApiServices { services =>
-    val (project, projectGroups) = billingProjectFromName("no_access")
+    val project = billingProjectFromName("no_access")
+
+    val writerUserInfo = UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346"))
+
+    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
+    Await.result(services.samDAO.registerUser(writerUserInfo), Duration.Inf)
+
+    createTestBillingProject(services, project, writerUserInfo)
 
     Delete(s"/billing/${project.projectName.value}/owner/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -174,7 +192,11 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 400 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
-    val (project, projectGroups) = billingProjectFromName("test_good")
+    val project = billingProjectFromName("test_good")
+
+    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
+
+    createTestBillingProject(services, project, userInfo)
 
     Delete(s"/billing/${project.projectName.value}/user/nobody") ~>
       sealRoute(services.billingRoutes) ~>
@@ -186,6 +208,9 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when removing a user from a nonexistent billing project" in withTestDataApiServices { services =>
+
+    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
+
     Delete(s"/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
@@ -197,6 +222,8 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when creating a project with accessible billing account" in withTestDataApiServices { services =>
     val projectName = RawlsBillingProjectName("test_good")
+
+    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
 
     Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
       sealRoute(services.billingRoutes) ~>
@@ -259,7 +286,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when listing billing project members as owner" in withTestDataApiServices { services =>
-    val (project, projectGroups) = billingProjectFromName("test_good")
+    val project = billingProjectFromName("test_good")
 
     Get(s"/billing/${project.projectName.value}/members") ~>
       sealRoute(services.billingRoutes) ~>
@@ -274,7 +301,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when listing billing project members as non-owner" in withTestDataApiServices { services =>
-    val (project, projectGroups) = billingProjectFromName("no_access")
+    val project = billingProjectFromName("no_access")
 
     Get(s"/billing/${project.projectName.value}/members") ~>
       sealRoute(services.billingRoutes) ~>

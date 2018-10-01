@@ -1,16 +1,18 @@
 package org.broadinstitute.dsde.rawls.mock
 
 import akka.http.scaladsl.model.{DateTime, StatusCodes}
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, ManagedGroupAccessResponse, ManagedRoles, RawlsUser, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo, UserStatus}
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
+import org.broadinstitute.dsde.rawls.model.{ManagedGroupAccessResponse, ManagedRoles, RawlsUser, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo, UserStatus}
+import org.broadinstitute.dsde.workbench.model.{ErrorReport, ErrorReportSource, WorkbenchEmail, WorkbenchExceptionWithErrorReport, WorkbenchGroupName}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
 class MockSamDAO extends SamDAO {
+
+  implicit override val errorReportSource = ErrorReportSource("sam")
 
   case class MockSamPolicy(resourceTypeName: String, resourceId: String, policyName: String, actions: Set[String], roles: Set[String], members: Set[String])
 
@@ -25,7 +27,13 @@ class MockSamDAO extends SamDAO {
 
   private def generateId(): String = java.util.UUID.randomUUID().toString
 
-
+  val roleActions = Map(
+    "billing-project/owner" -> Set("create_workspace", "alter_policies", "read_policies", "launch_batch_compute", "list_notebook_cluster", "launch_notebook_cluster", "sync_notebook_cluster", "delete_notebook_cluster", "alter_google_role"),
+    "billing-project/workspace-creator" -> Set("create_workspace", "share_policy::can-compute-user", "read_policy::can-compute-user"),
+    "workspace/owner" -> Set("delete", "read_policies", "share_policy::owner", "share_policy::writer", "share_policy::reader", "own", "write", "read", "compute", "share_policy::can-compute"),
+    "workspace/writer" -> Set("read_policy::owner", "write", "read"),
+    "workspace/reader" -> Set("read_policy::owner", "read")
+  )
 
   private def resourceKey(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String) = s"${resourceTypeName.value}/$resourceId"
   private def policyKey(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String) = s"${resourceTypeName.value}/$resourceId/$policyName"
@@ -47,13 +55,12 @@ class MockSamDAO extends SamDAO {
     else if(groups.contains(userEmail)) Right(None)
     else Left(())
 
-    println(result)
-
-
     Future.successful(result)
   }
 
-  override def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail] = ???
+  override def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail] = {
+    Future.successful(WorkbenchEmail(s"PROXY_${userInfo.userSubjectId}@firecloud.biz"))
+  }
 
   override def createResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = {
     resources.put(resourceKey(resourceTypeName, resourceId), Set(policyKey(resourceTypeName, resourceId, "owner")))
@@ -72,7 +79,27 @@ class MockSamDAO extends SamDAO {
   }
 
   override def userHasAction(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, action: SamResourceActions.SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
-    Future.successful(true)
+    println("inside of userHasAction")
+    val policiesForResource = resources.get(resourceKey(resourceTypeName, resourceId))
+    println(policiesForResource)
+
+    val policiesForUser = policiesForResource.get.filter(x => policies(x).members.contains(userInfo.userEmail.value))
+    println(policiesForUser)
+
+    val actionsForUser = policiesForUser.flatMap(x => policies(x).actions)
+    println(actionsForUser)
+
+
+    println(policiesForResource)
+    println(policiesForUser)
+    println(actionsForUser)
+
+    val rolesForUser = policiesForUser.flatMap(x => policies(x).roles)
+    val actionsForRoles = rolesForUser.flatMap(x => roleActions.getOrElse(s"${resourceTypeName.value}/$x", Set.empty))
+
+    println(actionsForUser.contains(action.value) || actionsForRoles.contains(action.value))
+
+    Future.successful(actionsForUser.contains(action.value) || actionsForRoles.contains(action.value))
   }
 
   override def getPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String, userInfo: UserInfo): Future[SamPolicy] = {
@@ -97,31 +124,39 @@ class MockSamDAO extends SamDAO {
   }
 
   override def addUserToPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    if(!users.keys.toSeq.contains(memberEmail) && !groups.keys.toSeq.contains(memberEmail)) {
-      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"user $memberEmail is not registered")))
-    }
-    else {
-      policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
-        case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, existingPolicy.members ++ Set(memberEmail)))
-        case None => throw new Exception(s"policy $policyName does not exist")
+    userHasAction(resourceTypeName, resourceId, SamResourceAction(s"share_policy::$policyName"), userInfo).map { hasAction =>
+      if (hasAction) {
+        if (!users.keys.toSeq.contains(memberEmail) && !groups.keys.toSeq.contains(memberEmail)) {
+          Future.failed(new WorkbenchExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"user $memberEmail is not registered")))
+        }
+        else {
+          policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
+            case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, existingPolicy.members ++ Set(memberEmail)))
+            case None => throw new Exception(s"policy $policyName does not exist")
+          }
+          Future.successful(())
+        }
       }
-      Future.successful(())
+      else Future.failed(new Exception("You lack permission"))
     }
   }
 
   override def removeUserFromPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
-      case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, existingPolicy.members -- Set(memberEmail)))
-      case None => throw new Exception(s"policy $policyName does not exist")
+    userHasAction(resourceTypeName, resourceId, SamResourceAction(s"share_policy::$policyName"), userInfo).map { hasAction =>
+      if (hasAction) {
+        policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
+          case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, existingPolicy.members -- Set(memberEmail)))
+          case None => throw new Exception(s"policy $policyName does not exist")
+        }
+        Future.successful(())
+      }
+      else Future.failed(new Exception("You lack permission"))
     }
-    Future.successful(())
   }
 
   override def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit] = {
     val userSubjectId = generateId()
     users.putIfAbsent(userEmail, Option(UserIdInfo(userSubjectId, userInfo.userEmail.value, None)))
-
-    println(s"invited $userEmail")
 
     Future.successful(())
   }
@@ -139,7 +174,7 @@ class MockSamDAO extends SamDAO {
   }
 
   override def listPoliciesForResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]] = {
-    val policyNames = resources.getOrElse(resourceKey(resourceTypeName, resourceId), Set.empty)
+    val policyNames = resources.getOrElse(resourceKey(resourceTypeName, resourceId), throw new WorkbenchExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
     val loadedPolicies = policyNames.map(policies.get).map(_.get).map(x => SamPolicyWithNameAndEmail(x.policyName, SamPolicy(x.members, x.actions, x.roles), x.policyName))
 
     Future.successful(loadedPolicies)
@@ -150,7 +185,16 @@ class MockSamDAO extends SamDAO {
   }
 
   override def listUserRolesForResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[String]] = {
-    Future.successful(Set.empty)
+    val policiesForResource = resources.get(resourceKey(resourceTypeName, resourceId))
+    val policiesForUser = policiesForResource.get.filter(x => policies(x).members.contains(userInfo.userEmail.value))
+
+    val rolesForUser = policiesForUser.flatMap(x => policies(x).roles)
+
+    println("in sam dao")
+    println(rolesForUser)
+    println("out sam dao")
+
+    Future.successful(rolesForUser)
   }
 
   override def getPolicySyncStatus(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String, userInfo: UserInfo): Future[SamPolicySyncStatus] = {
@@ -170,7 +214,9 @@ class MockSamDAO extends SamDAO {
     Future.successful(List.empty)
   }
 
-  override def getGroupEmail(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[WorkbenchEmail] = ???
+  override def getGroupEmail(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[WorkbenchEmail] = {
+    Future.successful(WorkbenchEmail(groupName.value))
+  }
 
   override def listManagedGroups(userInfo: UserInfo): Future[List[ManagedGroupAccessResponse]] = {
     Future.successful(List.empty)
