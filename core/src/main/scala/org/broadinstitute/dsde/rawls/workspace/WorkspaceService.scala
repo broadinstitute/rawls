@@ -130,18 +130,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   //looks good
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
-      println(userInfo)
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        println(workspaceContext)
         DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel => //TODO: requireAction(read)
           if (accessLevel < WorkspaceAccessLevels.Read) {
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
           }
           else {
-            println(accessLevel)
             for {
               catalog <- DBIO.from(getUserCatalogPermissions(workspaceContext.workspaceId.toString))
-              canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel))
+              canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel))
               canCompute <- DBIO.from(getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel))
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
               owners <- DBIO.from(getWorkspaceOwners(workspaceContext.workspaceId.toString))
@@ -158,9 +155,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.launchBatchCompute, userInfo)
   }
 
-  def getUserSharePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] = {
+  def getUserSharePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel, accessLevelToShareWith: WorkspaceAccessLevel): Future[Boolean] = {
     if(userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
-    else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceCanShare, userInfo)
+    else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.sharePolicy(accessLevelToShareWith.toString.toLowerCase), userInfo)
   }
 
   def getUserCatalogPermissions(workspaceId: String): Future[Boolean] = {
@@ -172,14 +169,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     val validRoles = Set("OWNER", "WRITER", "READER")
 
-
     samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { roles =>
-      println(s"ok here $roles")
       roles.filter(x => validRoles.contains(x.toUpperCase)).map(WorkspaceAccessLevels.withName)
     }.map { roles =>
-      println("*****")
-      println(roles)
-      println("*****")
       val x = if(roles.isEmpty) WorkspaceAccessLevels.NoAccess
       else roles.fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max)
       x
@@ -508,7 +500,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield ()
   }
 
-
   /**
    * updates acls for a workspace
    * @param workspaceName
@@ -517,8 +508,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @return
    */
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Set[WorkspaceACLUpdate], inviteUsersNotFound: Boolean): Future[PerRequestMessage] = {
+    val maxLevelSharingWith = aclUpdates.map(_.accessLevel).fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max)
 
-    println(aclUpdates)
+    if (aclUpdates.map(_.email).size < aclUpdates.size) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Only 1 entry per email allowed."))
+    }
 
     def determineSharePolicy(proposedAccessLevel: WorkspaceAccessLevel, canCurrently: Boolean, canProposed: Option[Boolean]): Option[SamWorkspacePolicyName] = {
       if(proposedAccessLevel >= WorkspaceAccessLevels.Owner) None //not explicitly needed because it's an action on the owner policy
@@ -571,30 +565,26 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     //get rid of project owner changes and the caller altering their own access
     val filteredAclUpdates = aclUpdates.filterNot(au => au.accessLevel == WorkspaceAccessLevels.ProjectOwner || au.email.equalsIgnoreCase(userInfo.userEmail.value))
 
-    validateUsersExist(aclUpdates.map(_.email)).flatMap { missingUsers =>
-      println(missingUsers)
-      println("******")
-      if (missingUsers.flatten.isEmpty || inviteUsersNotFound) {
-        getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
-          val usersToInvite = aclUpdates.filter(x => missingUsers.flatten.contains(x.email))
-          val usersToRemove = filteredAclUpdates.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess) -- usersToInvite
-          val usersToAdd = filteredAclUpdates -- usersToRemove //TODO: this *could* include users whose access level remained the same, which is kinda bad. will fix...
+    requireSharePermission(workspaceName, maxLevelSharingWith) {
+      validateUsersExist(aclUpdates.map(_.email)).flatMap { missingUsers =>
+        if (missingUsers.flatten.isEmpty || inviteUsersNotFound) {
+          getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
+            val usersToInvite = aclUpdates.filter(x => missingUsers.flatten.contains(x.email))
+            val usersToRemove = filteredAclUpdates.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess) -- usersToInvite
+            val usersToAdd = filteredAclUpdates -- usersToRemove //TODO: this *could* include users whose access level remained the same, which is kinda bad. will fix...
 
-          println(usersToInvite)
-          println(usersToRemove)
-          println(usersToAdd)
-
-          for {
-            workspaceId <- loadWorkspaceId(workspaceName)
-            _ <- Future.traverse(usersToRemove) { update => removeUserFromWorkspace(workspaceId, existingPolicies, WorkbenchEmail(update.email)) }
-            _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update).map(_.value), WorkbenchEmail(update.email), inviteUsersNotFound, workspaceName) }
-          } yield {
-            sendACLUpdateNotifications(workspaceName, usersToAdd ++ usersToRemove) //we can blindly fire off this future because we don't care about the results and it happens async anyway
-            RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersToRemove ++ usersToAdd -- usersToInvite, usersToInvite, Set.empty))
+            for {
+              workspaceId <- loadWorkspaceId(workspaceName)
+              _ <- Future.traverse(usersToRemove) { update => removeUserFromWorkspace(workspaceId, existingPolicies, WorkbenchEmail(update.email)) }
+              _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update).map(_.value), WorkbenchEmail(update.email), inviteUsersNotFound, workspaceName) }
+            } yield {
+              sendACLUpdateNotifications(workspaceName, usersToAdd ++ usersToRemove) //we can blindly fire off this future because we don't care about the results and it happens async anyway
+              RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersToRemove ++ usersToAdd -- usersToInvite, usersToInvite, Set.empty))
+            }
           }
         }
+        else Future.successful(RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set.empty, Set.empty, aclUpdates.filter(au => missingUsers.flatten.contains(au.email)))))
       }
-      else Future.successful(RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set.empty, Set.empty, aclUpdates.filter(au => missingUsers.flatten.contains(au.email)))))
     }
   }
 
@@ -1593,7 +1583,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       RequestComplete(BucketUsageResponse(usage))
     }
   }
-  
+
   def getGenomicsOperation(workspaceName: WorkspaceName, jobId: String): Future[PerRequestMessage] = {
     // First check the workspace context and permissions in a DB transaction.
     // We don't need any DB information beyond that, so just return Unit on success.
@@ -1751,13 +1741,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def loadWorkspaceContext(workspaceName: WorkspaceName, dataAccess: DataAccess): ReadAction[SlickWorkspaceContext] = {
-    dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-      case Some(workspace) => DBIO.successful(SlickWorkspaceContext(workspace))
-    }
-  }
-
   private def requireAccess[T](workspace: Workspace, requiredLevel: WorkspaceAccessLevel)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
     val requiredAction = requiredLevel match {
       case WorkspaceAccessLevels.Owner => SamResourceActions.workspaceOwn
@@ -1766,17 +1749,47 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case _ => throw new WorkbenchException(s"Unrecognized access level: ${requiredLevel.toString}")
     }
 
-    println(requiredAction)
-
-    DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo)) flatMap { hasAction =>
-      if(hasAction) {
-        if((requiredLevel > WorkspaceAccessLevels.Read) && workspace.isLocked)
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
-        else codeBlock
+    DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo)) flatMap { hasRequiredLevel =>
+      DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamResourceActions.workspaceRead, userInfo)) flatMap { canRead =>
+        if(canRead && hasRequiredLevel) {
+          if(workspace.isLocked)
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
+          else codeBlock
+        }
+        else if(canRead) {
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+        }
+        else {
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+        }
       }
-        //todo: i think this case gets handled by sam: sam would 404 if we ask for an action and user can't see resource? maybe should catch that here and bubble up the message below
-//      else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
-      else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+    }
+  }
+
+  private def requireSharePermission[T](workspaceName: WorkspaceName, requiredLevel: WorkspaceAccessLevel)(op: => Future[T]): Future[T] = {
+    loadWorkspaceId(workspaceName).flatMap { workspaceId =>
+      getMaximumAccessLevel(workspaceId).flatMap { accessLevel =>
+        if(accessLevel <= WorkspaceAccessLevels.NoAccess) {
+          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+        }
+        else {
+          getUserSharePermissions(workspaceId, accessLevel, requiredLevel).flatMap { canShare =>
+            if(!canShare && accessLevel >= WorkspaceAccessLevels.NoAccess) Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspaceName))))
+            else if(canShare && accessLevel >= requiredLevel) op
+            else if(canShare && accessLevel < requiredLevel) Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the access level of users with higher access than yourself.")))
+            else Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the permissions on this workspace.")))
+          }
+        }
+//        else if(accessLevel < requiredLevel) {
+//          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the access level of users with higher access than yourself.")))
+//        }
+//        else {
+//          getUserSharePermissions(workspaceId, accessLevel, requiredLevel).flatMap { canShare =>
+//            if(canShare) op
+//            else Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the permissions on this workspace.")))
+//          }
+//        }
+      }
     }
   }
 

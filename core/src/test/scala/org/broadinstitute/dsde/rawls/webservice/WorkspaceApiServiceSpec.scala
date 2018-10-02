@@ -68,12 +68,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 //    }
   }
 
-  def withTestDataApiServices[T](testCode: TestApiService2 => T): T = {
-    withDefaultTestDatabase { dataSource: SlickDataSource =>
-      withApiServices(dataSource)(testCode)
-    }
-  }
-
   def withEmptyWorkspaceApiServices[T](testCode: TestApiService2 => T): T = {
     withCustomTestDatabase(new EmptyWorkspace) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
@@ -733,7 +727,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 //    }
 //  }
 
-  it should "return 409 Conflict on clone if the destination already exists" in withTestDataApiServices { services =>
+  it should "return 409 Conflict on clone if the destination already exists" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
     createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
 
@@ -759,7 +753,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when requesting an ACL from an existing workspace" in withTestDataApiServices { services =>
+  it should "return 200 when requesting an ACL from an existing workspace" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
     createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
 
@@ -810,7 +804,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "modifying a workspace acl should modify the workspace last modified date" in withTestDataApiServices { services =>
+  it should "modifying a workspace acl should modify the workspace last modified date" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
     createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
 
@@ -835,7 +829,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
+  it should "return 404 when replacing an ACL on a non-existent workspace" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
     val nonExistent = WorkspaceName("xyzzy", "plugh")
 
@@ -853,7 +847,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   // Get Workspace requires READ access.  Accept if OWNER, WRITE, READ; Reject if NO ACCESS
 
-  it should "allow an project-owner-access user to get a workspace" in withTestDataApiServices { services =>
+  it should "allow an project-owner-access user to get a workspace" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
     val withProjectOwnerAccess = services.withUser(projectOwnerUserInfo.userEmail.value)
 
@@ -880,7 +874,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow an owner-access user to get a workspace" in withTestDataApiServices { services =>
+  it should "allow an owner-access user to get a workspace" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
 
     Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
@@ -905,7 +899,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow a write-access user to get a workspace" in withTestDataApiServices { services =>
+  it should "allow a write-access user to get a workspace" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
     val withWriteAccess = services.withUser(writerUserInfo.userEmail.value)
 
@@ -940,7 +934,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow a read-access user to get a workspace" in withTestDataApiServices { services =>
+  it should "allow a read-access user to get a workspace" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
     val withReadAccess = services.withUser(readerUserInfo.userEmail.value)
 
@@ -975,7 +969,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow a no-access user to get a workspace" in withTestDataApiServices { services =>
+  it should "not allow a no-access user to get a workspace" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
     val withNoAccess = services.withUser(readerUserInfo.userEmail.value) //it'll be the default reader user but we won't add them to the workspace
 
@@ -1003,7 +997,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   // Update Workspace requires WRITE access.  Accept if OWNER or WRITE; Reject if READ or NO ACCESS
 
-  it should "allow an project-owner-access user to update a workspace" in withTestDataApiServices { services =>
+  it should "allow an project-owner-access user to update a workspace" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
     val withProjectOwnerAccess = services.withUser(projectOwnerUserInfo.userEmail.value)
 
@@ -1030,7 +1024,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "check that an update to a workspace modifies the last modified date" in withTestDataApiServices { services =>
+  it should "check that an update to a workspace modifies the last modified date" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
 
     Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
@@ -1072,7 +1066,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow an owner-access user to update a workspace" in withTestDataApiServices { services =>
+  it should "allow an owner-access user to update a workspace" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
 
     Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
@@ -1097,7 +1091,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow a write-access user to update a workspace" in withTestDataApiServices { services =>
+  it should "allow a write-access user to update a workspace" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
     val withWriterAccess = services.withUser(writerUserInfo.userEmail.value)
 
@@ -1123,7 +1117,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) { status }
       }
 
-    Patch(s"${defaultWorkspace.toWorkspaceName.path}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
+    Patch(s"${defaultWorkspace.path}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(withWriterAccess.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1132,9 +1126,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow a read-access user to update a workspace" in withTestDataApiServices { services =>
+  it should "not allow a read-access user to update a workspace" in withEmptyWorkspaceApiServices { services =>
     val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
-    val withReaderAccess = services.withUser(writerUserInfo.userEmail.value)
+    val withReaderAccess = services.withUser(readerUserInfo.userEmail.value)
 
     Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
     Await.result(withOwnerAccess.samDAO.registerUser(readerUserInfo), Duration.Inf)
@@ -1166,80 +1160,123 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
-//
-//  it should "not allow a no-access user to update a workspace" in withTestDataApiServicesAndUser("no-access") { services =>
-//    Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.NotFound) {
-//          status
-//        }
-//      }
-//  }
-//
-//  // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
-//
-//  it should "allow a project-owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
-//    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.OK ) { status }
-//      }
-//
-//    Get(s"${testData.workspace.path}/acl") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.OK ) { status }
-//        responseAs[WorkspaceACL].acl should contain (testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))
-//      }
-//  }
-//
-//  it should "allow an owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-//    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.OK ) { status }
-//      }
-//
-//    Get(s"${testData.workspace.path}/acl") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.OK ) { status }
-//        responseAs[WorkspaceACL].acl should contain (testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))
-//      }
-//  }
-//
-//  it should "not allow ACL updates with a member specified twice" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-//    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.BadRequest ) { status }
-//      }
-//  }
-//
-//  it should "not allow an project-owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
-//    val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
-////    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
-//    WorkspaceAccessLevels.all.foreach { accessLevel =>
-//      Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel, None)))) ~>
-//        sealRoute(services.workspaceRoutes) ~>
-//        check {
-//          assertResult(StatusCodes.BadRequest) { status }
-//        }
-//    }
-//  }
-//
-//  it should "not allow an owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-//    val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
-////    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
-//    WorkspaceAccessLevels.all.foreach { accessLevel =>
-//      Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel, None)))) ~>
-//        sealRoute(services.workspaceRoutes) ~>
-//        check {
-//          assertResult(StatusCodes.BadRequest) { status }
-//        }
-//    }
-//  }
+
+  it should "not allow a no-access user to update a workspace" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+    val withNoAccess = services.withUser(readerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(readerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    Patch(s"${defaultWorkspace.path}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
+      sealRoute(withNoAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
+
+  it should "allow a project-owner-access user to update an ACL" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+    val withProjectOwnerAccess = services.withUser(projectOwnerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(projectOwnerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(writerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    Patch(s"${defaultWorkspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+      sealRoute(withProjectOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK ) { status }
+      }
+
+    Get(s"${defaultWorkspace.path}/acl") ~>
+      sealRoute(withProjectOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK ) { status }
+        responseAs[WorkspaceACL].acl should contain (testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))
+      }
+  }
+
+  it should "allow an owner-access user to update an ACL" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(writerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    Patch(s"${defaultWorkspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK ) { status }
+      }
+
+    Get(s"${defaultWorkspace.path}/acl") ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK ) { status }
+        responseAs[WorkspaceACL].acl should contain (testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))
+      }
+  }
+
+  it should "not allow ACL updates with a member specified twice" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(writerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    Patch(s"${defaultWorkspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest ) { status }
+      }
+  }
 //
 //  it should "not allow an owner-access user to downgrade project owner ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
 //    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
@@ -1264,32 +1301,100 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 //        assertResult(StatusCodes.BadRequest) { status }
 //      }
 //  }
-//
-//  it should "not allow a write-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
-//    Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.Forbidden) { status }
-//      }
-//  }
-//
-//  it should "not allow a read-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
-//    import WorkspaceACLJsonSupport._
-//    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.Forbidden) { status }
-//      }
-//  }
-//
-//  it should "not allow a no-access user to update an ACL" in withTestDataApiServicesAndUser("no-access") { services =>
-//    Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.NotFound) { status }
-//      }
-//  }
-//
+
+  it should "not allow a write-access user to update an ACL" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+    val withWriterAccess = services.withUser(writerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(writerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    val addWriter = Seq(WorkspaceACLUpdate(writerUserInfo.userEmail.value, WorkspaceAccessLevels.Write, None, None))
+
+    Patch(s"${defaultWorkspace.path}/acl", addWriter) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+
+    Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
+      sealRoute(withWriterAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
+      }
+  }
+
+  it should "not allow a read-access user to update an ACL" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+    val withReaderAccess = services.withUser(readerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(writerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(readerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    val addReader = Seq(WorkspaceACLUpdate(readerUserInfo.userEmail.value, WorkspaceAccessLevels.Read, None, None))
+
+    Patch(s"${defaultWorkspace.path}/acl", addReader) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+
+    import WorkspaceACLJsonSupport._
+    Patch(s"${defaultWorkspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+      sealRoute(withReaderAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
+      }
+  }
+
+  it should "not allow a no-access user to update an ACL" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+    val withNoAccess = services.withUser(readerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(readerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    Patch(s"${defaultWorkspace.path}/acl", httpJsonEmpty) ~>
+      sealRoute(withNoAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
 //  it should "allow an owner to grant share permissions to a non-owner" in withTestDataApiServicesAndUser("owner-access") { services =>
 //    import WorkspaceACLJsonSupport._
 //    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
@@ -1726,103 +1831,253 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 //        assertResult(StatusCodes.NotFound) { status }
 //      }
 //  }
-//
-//  it should "return 404 when requesting bucket size for a non-existent workspace" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
-//    Get(s"${testWorkspaces.workspace.copy(name = "DNE").path}/bucketUsage") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.NotFound) { status }
-//      }
-//  }
-//
-//  it should "return 404 when a no-access user requests bucket usage" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
-//    Get(s"${testWorkspaces.workspace.path}/bucketUsage") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.NotFound) {
-//          status
-//        }
-//      }
-//  }
-//
-//  it should "not allow a reader-access user to request bucket usage" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
-//    Get(s"${testWorkspaces.workspace.path}/bucketUsage") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.Forbidden) {
-//          status
-//        }
-//      }
-//  }
-//
-//  for (access <- Seq("owner-access", "writer-access")) {
-//    it should s"return 200 when workspace with $access requests bucket usage for an existing workspace" in withTestWorkspacesApiServicesAndUser(access) { services =>
-//      Get(s"${testWorkspaces.workspace.path}/bucketUsage") ~>
-//        sealRoute(services.workspaceRoutes) ~>
-//        check {
-//          assertResult(StatusCodes.OK) {
-//            status
-//          }
-//          assertResult(BucketUsageResponse(BigInt(42))) {
-//            responseAs[BucketUsageResponse]
-//          }
-//        }
-//    }
-//  }
-//
-//  it should "return 200 when reading a Google Genomics operation" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
-//    withStatsD {
-//      Get(s"${testWorkspaces.workspace.path}/genomics/operations/dummy-job-id") ~> services.sealedInstrumentedRoutes ~>
-//        check {
-//          assertResult(StatusCodes.OK) {
-//            status
-//          }
-//          // message returned by MockGoogleServicesDAO
-//          assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
-//            responseAs[JsObject]
-//          }
-//        }
-//    } { capturedMetrics =>
-//      val wsPathForRequestMetrics = "workspaces.redacted.redacted.genomics.operations.redacted"
-//      val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
-//      assertSubsetOf(expected, capturedMetrics)
-//    }
-//  }
-//
-//  it should "return 404 when reading a Google Genomics operation for a non-existent workspace" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
-//    Get(s"${testWorkspaces.workspace.copy(name = "bogus").path}/genomics/operations/dummy-job-id") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.NotFound) {
-//          status
-//        }
-//      }
-//  }
-//
-//  it should "return 404 when reading a Google Genomics operation for a non-existent job" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
-//    Get(s"${testWorkspaces.workspace.path}/genomics/operations/bogus") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.NotFound) {
-//          status
-//        }
-//      }
-//  }
-//
-//  it should "return 404 when reading a Google Genomics operation for a user with no access" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
-//    Get(s"${testWorkspaces.workspace.path}/genomics/operations/dummy-job-id") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.NotFound) {
-//          status
-//        }
-//      }
-//  }
-//
+
+  it should "return 404 when requesting bucket size for a non-existent workspace" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+
+//    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Get(s"${defaultWorkspace.toWorkspaceName.copy(name = "DNE").path}/bucketUsage") ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "return 404 when a no-access user requests bucket usage" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+    val withNoAccess = services.withUser(readerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(readerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    Get(s"${defaultWorkspace.path}/bucketUsage") ~>
+      sealRoute(withNoAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "not allow a reader-access user to request bucket usage" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+    val withReaderAccess = services.withUser(readerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(readerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    val addReader = Seq(WorkspaceACLUpdate(readerUserInfo.userEmail.value, WorkspaceAccessLevels.Read, None, None))
+
+    Patch(s"${defaultWorkspace.path}/acl", addReader) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+
+    Get(s"${defaultWorkspace.path}/bucketUsage") ~>
+      sealRoute(withReaderAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+
+  }
+
+  it should s"return 200 when workspace with writer access requests bucket usage for an existing workspace" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+    val withWriterAccess = services.withUser(writerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(writerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    val addWriter = Seq(WorkspaceACLUpdate(writerUserInfo.userEmail.value, WorkspaceAccessLevels.Write, None, None))
+
+    Patch(s"${defaultWorkspace.path}/acl", addWriter) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+
+    Get(s"${defaultWorkspace.path}/bucketUsage") ~>
+      sealRoute(withWriterAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(BucketUsageResponse(BigInt(42))) {
+          responseAs[BucketUsageResponse]
+        }
+      }
+  }
+
+  it should s"return 200 when workspace with owner accessrequests bucket usage for an existing workspace" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    Get(s"${defaultWorkspace.path}/bucketUsage") ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(BucketUsageResponse(BigInt(42))) {
+          responseAs[BucketUsageResponse]
+        }
+      }
+  }
+
+  it should "return 200 when reading a Google Genomics operation" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+    val withReaderAccess = services.withUser(readerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(readerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    val addReader = Seq(WorkspaceACLUpdate(readerUserInfo.userEmail.value, WorkspaceAccessLevels.Read, None, None))
+
+    Patch(s"${defaultWorkspace.path}/acl", addReader) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+
+    withStatsD {
+      Get(s"${defaultWorkspace.path}/genomics/operations/dummy-job-id") ~> withReaderAccess.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          // message returned by MockGoogleServicesDAO
+          assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
+            responseAs[JsObject]
+          }
+        }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = "workspaces.redacted.redacted.genomics.operations.redacted"
+      val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a non-existent workspace" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+
+    Get(s"${defaultWorkspace.toWorkspaceName.copy(name = "bogus").path}/genomics/operations/dummy-job-id") ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a non-existent job" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+
+    Get(s"${defaultWorkspace.path}/genomics/operations/bogus") ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a user with no access" in withEmptyWorkspaceApiServices { services =>
+    val withOwnerAccess = services.withUser(ownerUserInfo.userEmail.value)
+    val withNoAccess = services.withUser(readerUserInfo.userEmail.value)
+
+    Await.result(withOwnerAccess.samDAO.registerUser(ownerUserInfo), Duration.Inf)
+    Await.result(withOwnerAccess.samDAO.registerUser(readerUserInfo), Duration.Inf)
+
+    createTestBillingProject(withOwnerAccess, defaultProject, projectOwnerUserInfo, Set(ownerUserInfo))
+
+    Post(s"/workspaces", httpJson(defaultWorkspace)) ~>
+      sealRoute(withOwnerAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)
+      }
+
+    Get(s"${defaultWorkspace.path}/genomics/operations/dummy-job-id") ~>
+      sealRoute(withNoAccess.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
 //  it should "prevent user without compute permission from creating submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
 //    testCreateSubmission(dataSource, Option(false), StatusCodes.Forbidden)
 //  }
-//
+
 //  it should "allow user with explicit compute permission to create submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
 //    testCreateSubmission(dataSource, Option(true), StatusCodes.Created)
 //  }

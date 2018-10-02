@@ -79,25 +79,14 @@ class MockSamDAO extends SamDAO {
   }
 
   override def userHasAction(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, action: SamResourceActions.SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
-    println("inside of userHasAction")
     val policiesForResource = resources.get(resourceKey(resourceTypeName, resourceId))
-    println(policiesForResource)
 
     val policiesForUser = policiesForResource.get.filter(x => policies(x).members.contains(userInfo.userEmail.value))
-    println(policiesForUser)
 
     val actionsForUser = policiesForUser.flatMap(x => policies(x).actions)
-    println(actionsForUser)
-
-
-    println(policiesForResource)
-    println(policiesForUser)
-    println(actionsForUser)
 
     val rolesForUser = policiesForUser.flatMap(x => policies(x).roles)
     val actionsForRoles = rolesForUser.flatMap(x => roleActions.getOrElse(s"${resourceTypeName.value}/$x", Set.empty))
-
-    println(actionsForUser.contains(action.value) || actionsForRoles.contains(action.value))
 
     Future.successful(actionsForUser.contains(action.value) || actionsForRoles.contains(action.value))
   }
@@ -189,10 +178,6 @@ class MockSamDAO extends SamDAO {
     val policiesForUser = policiesForResource.get.filter(x => policies(x).members.contains(userInfo.userEmail.value))
 
     val rolesForUser = policiesForUser.flatMap(x => policies(x).roles)
-
-    println("in sam dao")
-    println(rolesForUser)
-    println("out sam dao")
 
     Future.successful(rolesForUser)
   }
