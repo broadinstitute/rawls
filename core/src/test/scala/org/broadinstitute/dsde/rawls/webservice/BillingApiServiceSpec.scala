@@ -28,7 +28,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
   
   def withCleanApiServices[T](testCode: TestApiService => T): T = {
-    withCustomTestDatabase(new NoData) { dataSource: SlickDataSource =>
+    withCustomTestDatabase(emptyData) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }

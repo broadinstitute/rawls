@@ -552,31 +552,27 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   }
 
-  TODO: this test really just tests something that's in Sam so it doesn't really belong here anymore?
-  it should "be case insensitive when adding user/group to workspace" in withTestDataServices { services =>
-    val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
-    val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
-
-    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", userInfo.userEmail.value, "invalid")), Duration.Inf)
-    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-
-    val vComplete0 = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-
-    val vComplete1 = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-
-    assert(vComplete1.response._2.acl.toSeq.contains("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, false, true, true))) //TODO: before this was really just testing that we don't create duplicate invites...shouldn't be necessary anymore
-
-    val vComplete2 = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("ObAmA@WhiteHouse.Gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-
-    assertResult(true, "Entering already added user/group with different capitalization should not include them in the invitesUpdated group") {
-      vComplete2.response._2.invitesUpdated.isEmpty
-    }
-
-    assertResult(true, "Entering already added user/group with different capitalization should not include them in the usersNotFound group") {
-      vComplete2.response._2.usersNotFound.isEmpty
-    }
-
-  }
+  //TODO: this test really just tests something that's in Sam so it doesn't really belong here anymore?
+//  it should "be case insensitive when adding user/group to workspace" in withTestDataServices { services =>
+//    val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
+//    val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
+//
+//    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", userInfo.userEmail.value, "invalid")), Duration.Inf)
+//    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+//
+//    val vComplete0 = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+//
+//    val vComplete1 = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
+//
+//    assert(vComplete1.response._2.acl.toSeq.contains("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, false, true, true))) //TODO: before this was really just testing that we don't create duplicate invites...shouldn't be necessary anymore
+//
+//    val vComplete2 = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("ObAmA@WhiteHouse.Gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+//
+//    assertResult(true, "Entering already added user/group with different capitalization should not include them in the usersNotFound group") {
+//      vComplete2.response._2.usersNotFound.isEmpty
+//    }
+//
+//  }
 
   it should "update an existing workspace invitation to change access levels" in withTestDataServices { services =>
     val testWorkspaceName = WorkspaceName("test-project", "test-workspace")

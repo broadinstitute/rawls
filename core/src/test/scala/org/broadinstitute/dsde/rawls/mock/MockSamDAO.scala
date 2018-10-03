@@ -50,7 +50,6 @@ class MockSamDAO extends SamDAO {
   }
 
   override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]] = {
-    println(s"looking up $userEmail")
     val result = if(users.contains(userEmail)) Right(users.get(userEmail).get)
     else if(groups.contains(userEmail)) Right(None)
     else Left(())
@@ -115,8 +114,6 @@ class MockSamDAO extends SamDAO {
   }
 
   override def addUserToPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: String, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    println(s"adding user $memberEmail to $policyName")
-    println(policies)
     if(resources(resourceKey(resourceTypeName, resourceId)).isEmpty) {
       Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "resource not found")))
     }
@@ -132,7 +129,6 @@ class MockSamDAO extends SamDAO {
                 case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, existingPolicy.members ++ Set(memberEmail)))
                 case None => throw new Exception(s"policy $policyName does not exist")
               }
-              println(policies)
               Future.successful(())
             }
           }
@@ -168,12 +164,8 @@ class MockSamDAO extends SamDAO {
   }
 
   override def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit] = {
-    println(s"inviting $userEmail")
-
     val userSubjectId = generateId()
     users.putIfAbsent(userEmail, Option(UserIdInfo(userSubjectId, userInfo.userEmail.value, None)))
-
-    println(users)
 
     Future.successful(())
   }

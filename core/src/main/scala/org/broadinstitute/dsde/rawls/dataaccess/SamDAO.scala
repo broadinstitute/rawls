@@ -75,7 +75,7 @@ object SamResourceActions {
   val readPolicies = SamResourceAction("read_policies")
   val alterGoogleRole = SamResourceAction("alter_google_role")
   def sharePolicy(policy: String) = SamResourceAction(s"share_policy::$policy")
-  val workspaceCanCatalog = SamResourceAction("can_catalog")
+  val workspaceCanCatalog = SamResourceAction("catalog")
   val workspaceOwn = SamResourceAction("own")
   val workspaceWrite = SamResourceAction("write")
   val workspaceRead = SamResourceAction("read")

@@ -48,19 +48,16 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  class TestApiService2(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO, samDAO: MockSamDAO)(implicit val executionContext: ExecutionContext) {
+  class TestApiServiceWithUser(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO, samDAO: MockSamDAO)(implicit val executionContext: ExecutionContext) {
     def withUser(user: String) = {
-      println(user)
-      val x = TestApiService(dataSource, user, gcsDAO, gpsDAO, samDAO)
-      x.samDAO.getGroupEmail(WorkbenchGroupName("foo"), ownerUserInfo)
-      x
+      TestApiService(dataSource, user, gcsDAO, gpsDAO, samDAO)
     }
   }
 
   case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO, override val samDAO: MockSamDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
 
-  def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService2 => T): T = {
-    val apiService = new TestApiService2(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO, new MockSamDAO)
+  def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiServiceWithUser => T): T = {
+    val apiService = new TestApiServiceWithUser(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO, new MockSamDAO)
     try {
       testCode(apiService)
     } //finally {
@@ -68,8 +65,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 //    }
   }
 
-  def withEmptyWorkspaceApiServices[T](testCode: TestApiService2 => T): T = {
-    withCustomTestDatabase(new EmptyWorkspace) { dataSource: SlickDataSource =>
+  def withEmptyWorkspaceApiServices[T](testCode: TestApiServiceWithUser => T): T = {
+    withCustomTestDatabase(emptyData) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
