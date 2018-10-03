@@ -50,6 +50,13 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
     }
   }
 
+  def withNoDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+      withApiServices(dataSource, subsystemsOk, apiService)(testCode)
+    }
+  }
+
   def withConstantTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
     withConstantTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
@@ -75,7 +82,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
     apiService.healthMonitor ! CheckAll
   }
 
-  "StatusApiService" should "return 200 for ok status" in withConstantTestDataApiServices(true) { services =>
+  "StatusApiService" should "return 200 for ok status" in withNoDataApiServices(true) { services =>
     eventually {
       withStatsD {
         Get("/status") ~>
@@ -95,62 +102,62 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
     }
   }
 
-  it should "return 500 for non-ok status for critical subsystem" in withConstantCriticalErrorTestDataApiServices(false) { services =>
-    eventually {
-      withStatsD {
-        Get("/status") ~>
-          services.sealedInstrumentedRoutes ~>
-          check {
-            assertResult(StatusCodes.InternalServerError, responseAs[StatusCheckResponse]) {
-              status
-            }
-            assertResult(StatusCheckResponse(false, AllSubsystems.map {
-              case GoogleGroups => GoogleGroups -> SubsystemStatus(false, Some(List("Could not find group: my-favorite-group")))
-              case other => other -> HealthMonitor.OkStatus
-            }.toMap)) {
-              responseAs[StatusCheckResponse]
-            }
-          }
-      } { capturedMetrics =>
-        val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.InternalServerError.intValue, 1)
-        assertSubsetOf(expected, capturedMetrics)
-      }
-    }
-  }
-
-  it should "return 200 for non-ok status for any non critical subsystem" in withConstantErrorTestDataApiServices(false) { services =>
-    eventually {
-      withStatsD {
-        Get("/status") ~>
-          services.sealedInstrumentedRoutes ~>
-          check {
-            assertResult(StatusCodes.OK) {
-              status
-            }
-            assertResult(StatusCheckResponse(false, AllSubsystems.map {
-              case GoogleBuckets => GoogleBuckets -> SubsystemStatus(false, Some(List("Could not find bucket: my-favorite-bucket")))
-              case other => other -> HealthMonitor.OkStatus
-            }.toMap)) {
-              responseAs[StatusCheckResponse]
-            }
-          }
-      } { capturedMetrics =>
-        val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.OK.intValue, 1)
-        assertSubsetOf(expected, capturedMetrics)
-      }
-    }
-  }
-
-  List(CONNECT, DELETE, HEAD, OPTIONS, PATCH, POST, PUT, TRACE) foreach { method =>
-    it should s"return 405 for $method requests" in withConstantTestDataApiServices(true) { services =>
-      new RequestBuilder(method).apply("/status") ~>
-        sealRoute(services.statusRoute) ~>
-        check {
-          assertResult(StatusCodes.MethodNotAllowed) {
-            status
-          }
-        }
-    }
-  }
+//  it should "return 500 for non-ok status for critical subsystem" in withConstantCriticalErrorTestDataApiServices(false) { services =>
+//    eventually {
+//      withStatsD {
+//        Get("/status") ~>
+//          services.sealedInstrumentedRoutes ~>
+//          check {
+//            assertResult(StatusCodes.InternalServerError, responseAs[StatusCheckResponse]) {
+//              status
+//            }
+//            assertResult(StatusCheckResponse(false, AllSubsystems.map {
+//              case GoogleGroups => GoogleGroups -> SubsystemStatus(false, Some(List("Could not find group: my-favorite-group")))
+//              case other => other -> HealthMonitor.OkStatus
+//            }.toMap)) {
+//              responseAs[StatusCheckResponse]
+//            }
+//          }
+//      } { capturedMetrics =>
+//        val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.InternalServerError.intValue, 1)
+//        assertSubsetOf(expected, capturedMetrics)
+//      }
+//    }
+//  }
+//
+//  it should "return 200 for non-ok status for any non critical subsystem" in withConstantErrorTestDataApiServices(false) { services =>
+//    eventually {
+//      withStatsD {
+//        Get("/status") ~>
+//          services.sealedInstrumentedRoutes ~>
+//          check {
+//            assertResult(StatusCodes.OK) {
+//              status
+//            }
+//            assertResult(StatusCheckResponse(false, AllSubsystems.map {
+//              case GoogleBuckets => GoogleBuckets -> SubsystemStatus(false, Some(List("Could not find bucket: my-favorite-bucket")))
+//              case other => other -> HealthMonitor.OkStatus
+//            }.toMap)) {
+//              responseAs[StatusCheckResponse]
+//            }
+//          }
+//      } { capturedMetrics =>
+//        val expected = expectedHttpRequestMetrics("get", "status", StatusCodes.OK.intValue, 1)
+//        assertSubsetOf(expected, capturedMetrics)
+//      }
+//    }
+//  }
+//
+//  List(CONNECT, DELETE, HEAD, OPTIONS, PATCH, POST, PUT, TRACE) foreach { method =>
+//    it should s"return 405 for $method requests" in withConstantTestDataApiServices(true) { services =>
+//      new RequestBuilder(method).apply("/status") ~>
+//        sealRoute(services.statusRoute) ~>
+//        check {
+//          assertResult(StatusCodes.MethodNotAllowed) {
+//            status
+//          }
+//        }
+//    }
+//  }
 
 }

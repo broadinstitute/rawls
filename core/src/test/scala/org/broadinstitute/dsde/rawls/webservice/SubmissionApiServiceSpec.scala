@@ -23,7 +23,7 @@ import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.testkit.RouteTestTimeout
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 
 /**
@@ -585,15 +585,16 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "count workflows ahead of the user when the user is in the queue" in withTestDataApiServices { services =>
-    val otherUser1 = RawlsUser(RawlsUserSubjectId("subj-id-1"), RawlsUserEmail("new.email1@example.net"))
-    val otherUser2 = RawlsUser(RawlsUserSubjectId("subj-id-2"), RawlsUserEmail("new.email2@example.net"))
+    val otherUser1 = UserInfo(RawlsUserEmail("new.email1@example.net"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("subj-id-1"))
+    val otherUser2 = UserInfo(RawlsUserEmail("new.email2@example.net"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("subj-id-2"))
 
-//    runAndWait(rawlsUserQuery.createUser(otherUser1))
-//    runAndWait(rawlsUserQuery.createUser(otherUser2))
+    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
+    Await.result(services.samDAO.registerUser(otherUser1), Duration.Inf)
+    Await.result(services.samDAO.registerUser(otherUser2), Duration.Inf)
 
-    addWorkflowsToQueue(otherUser1, 5)
+    addWorkflowsToQueue(RawlsUser(otherUser1), 5)
     addWorkflowsToQueue(RawlsUser(userInfo), 20)
-    addWorkflowsToQueue(otherUser2, 10)
+    addWorkflowsToQueue(RawlsUser(otherUser2), 10)
 
     val status = getQueueStatus(services.submissionRoutes)
     assertResult(Some(35)) {

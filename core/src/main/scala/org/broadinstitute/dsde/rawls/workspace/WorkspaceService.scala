@@ -416,6 +416,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     policyMembers.flatMap { case (ownerPolicyMembers, writerPolicyMembers, readerPolicyMembers, shareReaderPolicyMembers, shareWriterPolicyMembers, computePolicyMembers) =>
       val sharers = shareReaderPolicyMembers ++ shareWriterPolicyMembers
 
+      println(ownerPolicyMembers)
+
       for {
         ownersPending <- Future.traverse(ownerPolicyMembers) { email => isUserPending(email).map(x => email -> x) }
         writersPending <- Future.traverse(writerPolicyMembers) { email => isUserPending(email).map(x => email -> x) }
@@ -609,8 +611,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   //via doug: something similar to the "pester" policy
   //TODO: actually re-implement this
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    Future.successful(RequestComplete(StatusCodes.OK))
 
+    Future.successful(RequestComplete(StatusCodes.OK))
 
 //    val getUsers = {
 //      dataSource.inTransaction{ dataAccess =>
@@ -1275,7 +1277,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] = {
     withSubmissionParameters(workspaceName, submissionRequest) {
       (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode]) =>
-        requireComputePermission(workspaceContext.workspace, dataAccess) {
+        requireComputePermission(workspaceContext.workspace) {
           val submissionId: UUID = UUID.randomUUID()
           val submissionEntityOpt = if(header.entityType.isEmpty) { None } else { Some(AttributeEntityReference(entityType = submissionRequest.entityType.get, entityName = submissionRequest.entityName.get)) }
 
@@ -1741,6 +1743,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  //TODO: i don't want this to deal with ReadWriteActions anymore but there's a lot of DBIO and Futures tangled up so for the moment I am leaving it
   private def requireAccess[T](workspace: Workspace, requiredLevel: WorkspaceAccessLevel)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
     val requiredAction = requiredLevel match {
       case WorkspaceAccessLevels.Owner => SamResourceActions.workspaceOwn
@@ -1780,15 +1783,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             else Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the permissions on this workspace.")))
           }
         }
-//        else if(accessLevel < requiredLevel) {
-//          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the access level of users with higher access than yourself.")))
-//        }
-//        else {
-//          getUserSharePermissions(workspaceId, accessLevel, requiredLevel).flatMap { canShare =>
-//            if(canShare) op
-//            else Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the permissions on this workspace.")))
-//          }
-//        }
       }
     }
   }
@@ -1797,7 +1791,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     requireAccess(workspace.copy(isLocked = false), requiredLevel)(op)
   }
 
-  private def requireComputePermission[T](workspace: Workspace, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
+  private def requireComputePermission[T](workspace: Workspace)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
     DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamResourceActions.launchBatchCompute, userInfo)) flatMap { projectCanCompute =>
       if (!projectCanCompute) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
       else {

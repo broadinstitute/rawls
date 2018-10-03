@@ -154,6 +154,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       intersectionGroupsByLevel.getOrElse(Map.empty).values ++ newAccessGroupsByLevel.values)
   }
 
+  class NoData() extends TestData {
+    override def save() = {
+      DBIO.successful(())
+    }
+  }
+
   class EmptyWorkspace() extends TestData {
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo(RawlsUserEmail("writer-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
