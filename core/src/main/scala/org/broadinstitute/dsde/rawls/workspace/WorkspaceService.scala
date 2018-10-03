@@ -132,14 +132,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel => //TODO: requireAction(read)
+        DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel =>
           if (accessLevel < WorkspaceAccessLevels.Read) {
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
           }
           else {
             for {
               catalog <- DBIO.from(getUserCatalogPermissions(workspaceContext.workspaceId.toString))
-              canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel))
+              canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel)) //convoluted but accessLevel for both params because user would max share with their own access level
               canCompute <- DBIO.from(getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel))
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
               owners <- DBIO.from(getWorkspaceOwners(workspaceContext.workspaceId.toString))
@@ -165,17 +165,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceCanCatalog, userInfo)
   }
 
-  //TODO: should this work off of actions instead of roles?
+  //TODO: project owner needs to be accounted for here.
   def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] = {
-
-    val validRoles = Set("OWNER", "WRITER", "READER")
-
-    samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { roles =>
-      roles.filter(x => validRoles.contains(x.toUpperCase)).map(WorkspaceAccessLevels.withName)
-    }.map { roles =>
-      val x = if(roles.isEmpty) WorkspaceAccessLevels.NoAccess
-      else roles.fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max)
-      x
+    for {
+      isOwner <- samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceOwn, userInfo).map(x => if(x) Some(WorkspaceAccessLevels.Owner) else None)
+      isWriter <- if(isOwner.nonEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceWrite, userInfo)map(x => if(x) Some(WorkspaceAccessLevels.Write) else None) else Future.successful(None)
+      isReader <- if(isOwner.nonEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceRead, userInfo)map(x => if(x) Some(WorkspaceAccessLevels.Read) else None) else Future.successful(None)
+    } yield {
+      Seq(isOwner, isWriter, isReader).flatten.headOption.getOrElse(WorkspaceAccessLevels.NoAccess)
     }
   }
 
@@ -1721,7 +1718,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield response
   }
 
-  //TODO: i want to break the sam call out of the DB transaction
   private def withWorkspaceContextAndPermissions[T](workspaceName: WorkspaceName, requiredAction: SamResourceAction, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
     withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
       requireAccess(workspaceContext.workspace, requiredAction) { op(workspaceContext) }
@@ -1736,15 +1732,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  //TODO: i don't want this to deal with ReadWriteActions anymore but there's a lot of DBIO and Futures tangled up so for the moment I am leaving it
   private def requireAccess[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
-//    val requiredAction = requiredLevel match {
-//      case WorkspaceAccessLevels.Owner => SamResourceActions.workspaceOwn
-//      case WorkspaceAccessLevels.Write => SamResourceActions.workspaceWrite
-//      case WorkspaceAccessLevels.Read => SamResourceActions.workspaceRead
-//      case _ => throw new WorkbenchException(s"Unrecognized access level: ${requiredLevel.toString}")
-//    }
-
     DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo)) flatMap { hasRequiredLevel =>
       DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamResourceActions.workspaceRead, userInfo)) flatMap { canRead =>
         if(canRead && hasRequiredLevel) {
