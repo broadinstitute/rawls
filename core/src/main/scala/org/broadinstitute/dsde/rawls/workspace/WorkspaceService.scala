@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.UUID
 
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -27,16 +27,15 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import org.joda.time.DateTime
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
+import akka.http.scaladsl.model.{StatusCodes, Uri}
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
 import org.broadinstitute.dsde.rawls.dataaccess.SamWorkspacePolicyNames.SamWorkspacePolicyName
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
@@ -128,7 +127,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  //looks good
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
@@ -138,13 +136,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           }
           else {
             for {
-              catalog <- DBIO.from(getUserCatalogPermissions(workspaceContext.workspaceId.toString))
-              canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel)) //convoluted but accessLevel for both params because user would max share with their own access level
+              canCatalog <- DBIO.from(getUserCatalogPermissions(workspaceContext.workspaceId.toString))
+              canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel)) //convoluted but accessLevel for both params because user could at most share with their own access level
               canCompute <- DBIO.from(getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel))
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
               owners <- DBIO.from(getWorkspaceOwners(workspaceContext.workspaceId.toString))
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, catalog, workspaceContext.workspace, stats, owners))
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, canCatalog, workspaceContext.workspace, stats, owners))
             }
           }
         }
@@ -165,12 +163,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceCanCatalog, userInfo)
   }
 
-  //TODO: project owner needs to be accounted for here.
   def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] = {
     for {
-      isOwner <- samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceOwn, userInfo).map(x => if(x) Some(WorkspaceAccessLevels.Owner) else None)
-      isWriter <- if(isOwner.nonEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceWrite, userInfo)map(x => if(x) Some(WorkspaceAccessLevels.Write) else None) else Future.successful(None)
-      isReader <- if(isOwner.nonEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceRead, userInfo)map(x => if(x) Some(WorkspaceAccessLevels.Read) else None) else Future.successful(None)
+      isOwner <- samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceOwn, userInfo).map(hasAction => if(hasAction) Some(WorkspaceAccessLevels.Owner) else None)
+      isWriter <- if(isOwner.nonEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceWrite, userInfo).map(hasAction => if(hasAction) Some(WorkspaceAccessLevels.Write) else None) else Future.successful(None)
+      isReader <- if(isOwner.nonEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceRead, userInfo).map(hasAction => if(hasAction) Some(WorkspaceAccessLevels.Read) else None) else Future.successful(None)
     } yield {
       Seq(isOwner, isWriter, isReader).flatten.headOption.getOrElse(WorkspaceAccessLevels.NoAccess)
     }
@@ -226,9 +223,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceId)
         _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceId)
 
-        // Delete resource in sam
-        _ <- DBIO.from(samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, userInfo))
-
         // Delete the workspace
         _ <- dataAccess.workspaceQuery.delete(workspaceName)
 
@@ -241,6 +235,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
     for {
       workflowsToAbort <- deletionFuture
+
+      // Delete resource in sam outside of DB transaction
+      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, userInfo)
 
       // Abort running workflows
       aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) }
@@ -302,12 +299,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def listWorkspaces(lite: Boolean): Future[PerRequestMessage] =
+  def listWorkspaces(lite: Boolean): Future[PerRequestMessage] = //TODO: use lite
     dataSource.inTransaction ({ dataAccess =>
       val query = for {
         permissionsPairs <- DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
-        ownerEmails <- DBIO.sequence(permissionsPairs.toSeq.map(p => DBIO.from(getWorkspaceOwners(p.resourceId).map(owners => p.resourceId -> owners)))) //this could be a lot of calls to sam...
-//        publicWorkspaces <- //TODO: query this from sam!
+        ownerEmails <- DBIO.sequence(permissionsPairs.toSeq.map(p => DBIO.from(getWorkspaceOwners(p.resourceId).map(owners => p.resourceId -> owners)))) //TODO: this could be a lot of calls to sam...
         submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.resourceId)).toSeq)
         workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.resourceId)).toSeq)
       } yield (permissionsPairs, ownerEmails.toMap, submissionSummaryStats, workspaces)
@@ -317,8 +313,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         permissionsPairs.map { permissionsPair =>
           val wsId = UUID.fromString(permissionsPair.resourceId)
           val workspace = workspacesById(permissionsPair.resourceId)
-          val public: Boolean = false //TODO see above!
-          WorkspaceListResponse(WorkspaceAccessLevels.withName(permissionsPair.accessPolicyName), workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId.toString, Set.empty), Some(public))
+          WorkspaceListResponse(WorkspaceAccessLevels.withName(permissionsPair.accessPolicyName), workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId.toString, Set.empty), permissionsPair.public)
         }
       }
 
@@ -385,7 +380,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  //TODO: deal with project owners
+  //TODO: deal with project owners -- possibly not needed anymore
   private def getACLInternal(workspaceName: WorkspaceName): Future[WorkspaceACL] = {
 
     def loadPolicy(policyName: String, policyList: Set[SamPolicyWithNameAndEmail]): SamPolicyWithNameAndEmail = {
@@ -402,6 +397,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val shareReaderPolicyMembers = loadPolicy("share-reader", currentACL).policy.memberEmails
       val shareWriterPolicyMembers = loadPolicy("share-writer", currentACL).policy.memberEmails
       val computePolicyMembers = loadPolicy("can-compute", currentACL).policy.memberEmails
+      //note: can-catalog is a policy on the side and is not a part of the core workspace ACL so we won't load it
 
       (ownerPolicyMembers, writerPolicyMembers, readerPolicyMembers, shareReaderPolicyMembers, shareWriterPolicyMembers, computePolicyMembers)
     }
@@ -1652,9 +1648,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val shareReaderPolicy = "share-reader"-> SamPolicy(Set.empty, Set.empty, Set("share-reader"))
             val shareWriterPolicy = "share-writer"-> SamPolicy(Set.empty, Set.empty, Set("share-writer"))
             val canComputePolicy = "can-compute"-> SamPolicy(Set.empty, Set.empty, Set("can-compute"))
-            val canCatalogPolicy = "can-catalog"-> SamPolicy(Set.empty, Set.empty, Set("can-catalog"))
+            //val canCatalogPolicy = "can-catalog"-> SamPolicy(Set.empty, Set.empty, Set("can-catalog"))
 
-            val defaultPolicies = Map(projectOwnerPolicy, ownerPolicy, writerPolicy, readerPolicy, shareReaderPolicy, shareWriterPolicy, canComputePolicy, canCatalogPolicy)
+            val defaultPolicies = Map(projectOwnerPolicy, ownerPolicy, writerPolicy, readerPolicy, shareReaderPolicy, shareWriterPolicy, canComputePolicy)//, canCatalogPolicy)
 
             DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo)).map(_ => defaultPolicies)
           }

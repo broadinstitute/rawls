@@ -114,7 +114,7 @@ case class SamPolicy(memberEmails: Set[String], actions: Set[String], roles: Set
 case class SamPolicyWithName(policyName: String, policy: SamPolicy)
 case class SamPolicyWithNameAndEmail(policyName: String, policy: SamPolicy, email: String)
 case class SamResourceWithPolicies(resourceId: String, policies: Map[String, SamPolicy], authDomain: Set[String])
-case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: String)
+case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: String, authDomains: Set[String], missingAuthDomains: Set[String], public: Option[Boolean])
 case class SamPolicySyncStatus(lastSyncDate: String, email: String)
 
 object SamModelJsonSupport extends JsonSupport {
@@ -122,6 +122,6 @@ object SamModelJsonSupport extends JsonSupport {
   implicit val SamPolicyWithNameFormat = jsonFormat2(SamPolicyWithName)
   implicit val SamPolicyWithNameAndEmailFormat = jsonFormat3(SamPolicyWithNameAndEmail)
   implicit val SamResourceWithPoliciesFormat = jsonFormat3(SamResourceWithPolicies)
-  implicit val SamResourceIdWithPolicyNameFormat = jsonFormat2(SamResourceIdWithPolicyName)
+  implicit val SamResourceIdWithPolicyNameFormat = jsonFormat5(SamResourceIdWithPolicyName)
   implicit val SamPolicySyncStatusFormat = jsonFormat2(SamPolicySyncStatus)
 }

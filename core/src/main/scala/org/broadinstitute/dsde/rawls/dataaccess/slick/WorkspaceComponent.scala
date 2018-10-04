@@ -299,7 +299,7 @@ trait WorkspaceComponent {
       } yield {
         val attributesByWsId = workspaceAttributeQuery.unmarshalAttributes(workspaceAttributeRecs)
         workspaceRecs.map { workspaceRec =>
-          unmarshalWorkspace(workspaceRec, Seq.empty, attributesByWsId.getOrElse(workspaceRec.id, Map.empty), Map.empty, Map.empty) //TODO
+          unmarshalWorkspaceSansAuthDomains(workspaceRec, Seq.empty, attributesByWsId.getOrElse(workspaceRec.id, Map.empty), Map.empty, Map.empty) //TODO
         }
       }
     }
@@ -308,7 +308,7 @@ trait WorkspaceComponent {
       WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)
     }
 
-    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, authDomain: Seq[String], attributes: AttributeMap, accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], authDomainACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
+    private def unmarshalWorkspaceSansAuthDomains(workspaceRec: WorkspaceRecord, authDomain: Seq[String], attributes: AttributeMap, accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], authDomainACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
       val authDomainRefs = authDomain.map(name => ManagedGroupRef(RawlsGroupName(name)))
       Workspace(workspaceRec.namespace, workspaceRec.name, authDomainRefs.toSet, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked)
     }
