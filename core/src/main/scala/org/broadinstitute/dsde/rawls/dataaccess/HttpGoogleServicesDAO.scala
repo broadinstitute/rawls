@@ -1253,10 +1253,13 @@ class HttpGoogleServicesDAO(
       .build().setFromTokenResponse(new TokenResponse().setRefreshToken(refreshToken))
   }
 
-  def getAccessTokenUsingJson(saKey: String) : Future[String] = Future {
-    val keyStream = new ByteArrayInputStream(saKey.getBytes)
-    val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(storageScopes)
-    credential.refreshAccessToken.getTokenValue
+  def getAccessTokenUsingJson(saKey: String) : Future[String] = {
+    implicit val service = GoogleInstrumentedService.OAuth
+    retryWhen500orGoogleError(() => {
+      val keyStream = new ByteArrayInputStream(saKey.getBytes)
+      val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(storageScopes)
+      credential.refreshAccessToken.getTokenValue
+    })
   }
 
   def getServiceAccountRawlsUser(): Future[RawlsUser] = {
