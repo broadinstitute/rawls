@@ -344,6 +344,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
               val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
               val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
 
+              bucketName should startWith("fc-secure-")
               bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "high", "ad-" + realmGroup.toLowerCase -> "", "ad-" + realmGroup2.toLowerCase -> "")
             }
           }
