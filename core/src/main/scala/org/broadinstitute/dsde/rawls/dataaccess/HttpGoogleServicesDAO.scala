@@ -137,7 +137,7 @@ class HttpGoogleServicesDAO(
     executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
-  private def getBucketName(workspaceId: String, secure: Boolean) = s"${groupsPrefix}-${if(secure) "secure-"}${workspaceId}"
+  private def getBucketName(workspaceId: String, secure: Boolean) = s"${groupsPrefix}-${if(secure) "secure-" else ""}${workspaceId}"
 
   override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, projectOwnerGroup: RawlsGroup, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], authDomainProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
 
