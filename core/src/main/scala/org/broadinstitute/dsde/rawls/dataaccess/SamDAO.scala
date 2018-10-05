@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
+import org.broadinstitute.dsde.rawls.dataaccess.SamWorkspacePolicyNames.SamWorkspacePolicyName
 import org.broadinstitute.dsde.rawls.model.{JsonSupport, ManagedGroupAccessResponse, ManagedRoles, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo, UserStatus}
 import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.workbench.model.{ErrorReport, ErrorReportSource, WorkbenchEmail, WorkbenchExceptionWithErrorReport, WorkbenchGroupName}
@@ -18,7 +19,7 @@ trait SamDAO {
   def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]]
   def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail]
   def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
-  def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[String, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit]
+  def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamWorkspacePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit]
   def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
   def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean]
   def getPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, userInfo: UserInfo): Future[SamPolicy]
@@ -102,12 +103,14 @@ object SamProjectRoles extends SamResourceRoles {
 object SamWorkspacePolicyNames extends SamResourcePolicyNames {
   case class SamWorkspacePolicyName(value: String)
 
+  val projectOwner = SamWorkspacePolicyName("project-owner")
   val owner = SamWorkspacePolicyName("owner")
   val writer = SamWorkspacePolicyName("writer")
   val reader = SamWorkspacePolicyName("reader")
   val shareWriter = SamWorkspacePolicyName("share-writer")
   val shareReader = SamWorkspacePolicyName("share-reader")
   val canCompute = SamWorkspacePolicyName("can-compute")
+  val canCatalog = SamWorkspacePolicyName("can-catalog")
 }
 
 case class SamPolicy(memberEmails: Set[String], actions: Set[String], roles: Set[String])

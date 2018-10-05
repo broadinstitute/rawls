@@ -406,11 +406,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val sharers = shareReaderPolicyMembers ++ shareWriterPolicyMembers
 
       for {
-        ownersPending <- Future.traverse(ownerPolicyMembers) { email => isUserPending(email).map(x => email -> x) }
-        writersPending <- Future.traverse(writerPolicyMembers) { email => isUserPending(email).map(x => email -> x) }
-        readersPending <- Future.traverse(readerPolicyMembers) { email => isUserPending(email).map(x => email -> x) }
+        ownersPending <- Future.traverse(ownerPolicyMembers) { email => isUserPending(email).map(pending => email -> pending) }
+        writersPending <- Future.traverse(writerPolicyMembers) { email => isUserPending(email).map(pending => email -> pending) }
+        readersPending <- Future.traverse(readerPolicyMembers) { email => isUserPending(email).map(pending => email -> pending) }
       } yield {
-        val owners = ownerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Owner, ownersPending.toMap.getOrElse(email, true), true, true)) //API_CHANGE: pending owners used to show as false for canShare and canCompute. they now show true. this is more accurate
+        val owners = ownerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Owner, ownersPending.toMap.getOrElse(email, true), true, true)) //API_CHANGE: pending owners used to show as false for canShare and canCompute. they now show true. this is more accurate anyway
         val writers = writerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Write, writersPending.toMap.getOrElse(email, true), sharers.contains(email), computePolicyMembers.contains(email)))
         val readers = readerPolicyMembers.map(email => email -> AccessEntry(WorkspaceAccessLevels.Read, readersPending.toMap.getOrElse(email, true), sharers.contains(email), computePolicyMembers.contains(email)))
 
@@ -557,7 +557,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       validateUsersExist(aclUpdates.map(_.email)).flatMap { missingUsers =>
         if (missingUsers.flatten.isEmpty || inviteUsersNotFound) {
           getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
-            val usersToInvite = aclUpdates.filter(x => missingUsers.flatten.contains(x.email))
+            val usersToInvite = aclUpdates.filter(aclUpdate => missingUsers.flatten.contains(aclUpdate.email))
             val usersToRemove = filteredAclUpdates.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess) -- usersToInvite
             val usersToAdd = filteredAclUpdates -- usersToRemove //TODO: this *could* include users whose access level remained the same, which is kinda bad. will fix...
 
@@ -1637,24 +1637,24 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         attributes = workspaceRequest.attributes
       )
 
-      dataAccess.workspaceQuery.save(workspace).flatMap { workspace =>
+      dataAccess.workspaceQuery.save(workspace).flatMap { _ =>
         for {
           projectOwnerEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, "owner", userInfo))
           policies <- {
-            val projectOwnerPolicy = "project-owner" -> SamPolicy(Set(projectOwnerEmail.email), Set.empty, Set("owner"))
-            val ownerPolicy = "owner" -> SamPolicy(Set(userInfo.userEmail.value), Set.empty, Set("owner"))
-            val writerPolicy = "writer" -> SamPolicy(Set.empty, Set.empty, Set("writer"))
-            val readerPolicy = "reader"-> SamPolicy(Set.empty, Set.empty, Set("reader"))
-            val shareReaderPolicy = "share-reader"-> SamPolicy(Set.empty, Set.empty, Set("share-reader"))
-            val shareWriterPolicy = "share-writer"-> SamPolicy(Set.empty, Set.empty, Set("share-writer"))
-            val canComputePolicy = "can-compute"-> SamPolicy(Set.empty, Set.empty, Set("can-compute"))
-            //val canCatalogPolicy = "can-catalog"-> SamPolicy(Set.empty, Set.empty, Set("can-catalog"))
+            val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(projectOwnerEmail.email), Set.empty, Set("owner"))
+            val ownerPolicy = SamWorkspacePolicyNames.owner -> SamPolicy(Set(userInfo.userEmail.value), Set.empty, Set("owner"))
+            val writerPolicy = SamWorkspacePolicyNames.writer -> SamPolicy(Set.empty, Set.empty, Set("writer"))
+            val readerPolicy = SamWorkspacePolicyNames.reader -> SamPolicy(Set.empty, Set.empty, Set("reader"))
+            val shareReaderPolicy = SamWorkspacePolicyNames.shareReader -> SamPolicy(Set.empty, Set.empty, Set("share-reader"))
+            val shareWriterPolicy = SamWorkspacePolicyNames.shareReader -> SamPolicy(Set.empty, Set.empty, Set("share-writer"))
+            val canComputePolicy = SamWorkspacePolicyNames.canCompute -> SamPolicy(Set.empty, Set.empty, Set("can-compute"))
+            val canCatalogPolicy = SamWorkspacePolicyNames.canCatalog -> SamPolicy(Set.empty, Set.empty, Set("can-catalog"))
 
-            val defaultPolicies = Map(projectOwnerPolicy, ownerPolicy, writerPolicy, readerPolicy, shareReaderPolicy, shareWriterPolicy, canComputePolicy)//, canCatalogPolicy)
+            val defaultPolicies = Map(projectOwnerPolicy, ownerPolicy, writerPolicy, readerPolicy, shareReaderPolicy, shareWriterPolicy, canComputePolicy, canCatalogPolicy)
 
             DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo)).map(_ => defaultPolicies)
           }
-          _ <- DBIO.from(Future.traverse(policies.toSeq) { case (policyName, _) => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName) })
+          _ <- DBIO.from(Future.traverse(policies.toSeq) { case (policyName, _) => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName.value) })
         } yield workspace
       }
     }
@@ -1722,6 +1722,24 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   //TODO: need to also look up auth domains
   private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
+//    for {
+//      workspaceId <- DBIO.from(loadWorkspaceId(workspaceName))
+//      resourceOpt <- DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo).map(_.filter(_.resourceId.equalsIgnoreCase(workspaceId)).headOption))
+//    } yield {
+//      val authDomain = resourceOpt match {
+//        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Unable to load workspace $workspaceName"))
+//        case Some(resource) => resource.missingAuthDomains ++ resource.authDomains //need to return _all_ of the group names in the auth domain
+//      }
+//
+//      dataAccess.workspaceQuery.findByName(workspaceName).map {
+//        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Unable to load workspace $workspaceName"))
+//        case Some(ws) => Workspace(ws.namespace, ws.name, authDomain.map(x => ManagedGroupRef(RawlsGroupName(x))), ws.workspaceId, ws.bucketName, ws.createdDate, ws.lastModified, ws.createdBy, ws.attributes, ws.isLocked)
+//      }
+//    }
+//
+//
+//
+
     dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
       case Some(workspace) => op(SlickWorkspaceContext(workspace))

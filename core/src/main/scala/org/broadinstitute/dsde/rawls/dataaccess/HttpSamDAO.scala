@@ -25,6 +25,7 @@ import spray.json.{DefaultJsonProtocol, JsBoolean, JsValue, JsonParser, JsonPrin
 import DefaultJsonProtocol._
 import akka.http.scaladsl.client.RequestBuilding
 import akka.stream.Materializer
+import org.broadinstitute.dsde.rawls.dataaccess.SamWorkspacePolicyNames.SamWorkspacePolicyName
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -91,10 +92,10 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[String, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = {
+  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamWorkspacePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}"
 
-    val httpRequest = RequestBuilding.Post(url, SamResourceWithPolicies(resourceId, policies, authDomain))
+    val httpRequest = RequestBuilding.Post(url, SamResourceWithPolicies(resourceId, policies.map(x => x._1.value -> x._2), authDomain))
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
