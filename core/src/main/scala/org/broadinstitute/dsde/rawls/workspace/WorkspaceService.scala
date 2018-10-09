@@ -316,7 +316,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           val workspace = workspacesById(permissionsPair.resourceId)
           val accessLevel = if(permissionsPair.missingAuthDomains.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withName(permissionsPair.accessPolicyName)
           //TODO using the access policy name as the access level is not desirable but this also prevents n=numWorkspaces calls from being initiated
-          WorkspaceListResponse(accessLevel, workspace.copy(authorizationDomain = (permissionsPair.missingAuthDomains ++ permissionsPair.authDomains).map(x => ManagedGroupRef(RawlsGroupName(x)))), submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId.toString, Set.empty), permissionsPair.public)
+          WorkspaceListResponse(accessLevel, workspace.copy(authorizationDomain = permissionsPair.authDomains.map(groupName => ManagedGroupRef(RawlsGroupName(groupName)))), submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId.toString, Set.empty), permissionsPair.public)
         }
       }
 
@@ -383,11 +383,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  //TODO: deal with project owners -- possibly not needed anymore
+  //API_CHANGE: project owners no longer returned (because it would just show a policy and not everyone can read the members of that policy)
   private def getACLInternal(workspaceName: WorkspaceName): Future[WorkspaceACL] = {
 
-    def loadPolicy(policyName: String, policyList: Set[SamPolicyWithNameAndEmail]): SamPolicyWithNameAndEmail = {
-      policyList.find(_.policyName.equalsIgnoreCase(policyName)).getOrElse(throw new WorkbenchException(s"Could not load $policyName policy"))
+    def loadPolicy(policyName: SamWorkspacePolicyName, policyList: Set[SamPolicyWithNameAndEmail]): SamPolicyWithNameAndEmail = {
+      policyList.find(_.policyName.value.equalsIgnoreCase(policyName.value)).getOrElse(throw new WorkbenchException(s"Could not load $policyName policy"))
     }
 
     val policyMembers = for {
@@ -395,12 +395,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       currentACL <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo)
     } yield {
       println(currentACL)
-      val ownerPolicyMembers = loadPolicy("owner", currentACL).policy.memberEmails
-      val writerPolicyMembers = loadPolicy("writer", currentACL).policy.memberEmails
-      val readerPolicyMembers = loadPolicy("reader", currentACL).policy.memberEmails
-      val shareReaderPolicyMembers = loadPolicy("share-reader", currentACL).policy.memberEmails
-      val shareWriterPolicyMembers = loadPolicy("share-writer", currentACL).policy.memberEmails
-      val computePolicyMembers = loadPolicy("can-compute", currentACL).policy.memberEmails
+      val ownerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.owner, currentACL).policy.memberEmails
+      val writerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.writer, currentACL).policy.memberEmails
+      val readerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.reader, currentACL).policy.memberEmails
+      val shareReaderPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareReader, currentACL).policy.memberEmails
+      val shareWriterPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareWriter, currentACL).policy.memberEmails
+      val computePolicyMembers = loadPolicy(SamWorkspacePolicyNames.canCompute, currentACL).policy.memberEmails
       //note: can-catalog is a policy on the side and is not a part of the core workspace ACL so we won't load it
 
       (ownerPolicyMembers, writerPolicyMembers, readerPolicyMembers, shareReaderPolicyMembers, shareWriterPolicyMembers, computePolicyMembers)
@@ -549,8 +549,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val userPolicyNames = existingPolicies.filter(_.policy.memberEmails.contains(aclUpdate.email)).map(_.policyName)
       Set(
         determineAccessLevelPolicy(aclUpdate.accessLevel),
-        determineSharePolicy(aclUpdate.accessLevel, userPolicyNames.intersect(Set("share-writer", "share-reader")).nonEmpty, aclUpdate.canShare),
-        determineComputePolicy(aclUpdate.accessLevel, userPolicyNames.contains("can-compute"), aclUpdate.canCompute)
+        determineSharePolicy(aclUpdate.accessLevel, userPolicyNames.intersect(Set(SamWorkspacePolicyNames.shareWriter.value, SamWorkspacePolicyNames.shareReader.value)).nonEmpty, aclUpdate.canShare),
+        determineComputePolicy(aclUpdate.accessLevel, userPolicyNames.contains(SamWorkspacePolicyNames.canCompute.value), aclUpdate.canCompute)
       ).flatten
     }
 
@@ -1673,7 +1673,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             for {
               project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
               projectOwnerGroupEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner, userInfo).map(_.email))
-              policyEmails <- DBIO.from(getAccessLevelPolicies(workspaceId).map(_.map(policy => WorkspaceAccessLevels.withName(policy.policyName) -> WorkbenchEmail(policy.email)).toMap))
+              policyEmails <- DBIO.from(getAccessLevelPolicies(workspaceId).map(_.map(policy => WorkspaceAccessLevels.withName(policy.policyName.value) -> WorkbenchEmail(policy.email)).toMap))
               googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, policyEmails + (WorkspaceAccessLevels.ProjectOwner -> WorkbenchEmail(projectOwnerGroupEmail))))
               response <- op(SlickWorkspaceContext(savedWorkspace))
             } yield response
@@ -1686,7 +1686,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def getAccessLevelPolicies(workspaceId: String): Future[Set[SamPolicyWithNameAndEmail]] = {
     samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { allPolicies =>
       allPolicies.filter { policy =>
-        WorkspaceAccessLevels.all.map(_.toString).contains(policy.policyName.toUpperCase) //TODO: get rid of toUpperCase...
+        WorkspaceAccessLevels.all.map(_.toString).contains(policy.policyName.value.toUpperCase) //TODO: get rid of toUpperCase...
       }
     }
   }
@@ -1734,7 +1734,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo).map(_.filter(_.resourceId.equalsIgnoreCase(wsSansAD.workspaceId)).headOption)).flatMap {
         case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
         case Some(ws) =>
-          val authDomain = (ws.authDomains ++ ws.missingAuthDomains).map(x => ManagedGroupRef(RawlsGroupName(x)))
+          val authDomain = ws.authDomains.map(groupName => ManagedGroupRef(RawlsGroupName(groupName)))
           op(SlickWorkspaceContext(wsSansAD.copy(authorizationDomain = authDomain)))
       }
     }

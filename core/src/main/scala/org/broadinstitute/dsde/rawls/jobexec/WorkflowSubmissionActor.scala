@@ -251,9 +251,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       else None
 
     val workflowBatchFuture = dataSource.inTransaction { dataAccess =>
-
-      val fakeSubmitter = RawlsUser(RawlsUserSubjectId("1111111"), RawlsUserEmail("foo-bar@baz.bar")) //TODO!
-
       for {
         //Load a bunch of things we'll need to reconstruct information:
         //The list of workflows in this submission
@@ -266,15 +263,20 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
         //The person who submitted the submission, and their token
         petSAJson <- DBIO.from(samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, RawlsUserEmail(submissionRec.submitterEmail)))
-        //TODO TODO TODO very important to somehow look up the subject ID for a user. we wont have the access token when this is happening!
-        userCredentials <- DBIO.from(googleServicesDAO.getUserCredentials(fakeSubmitter)).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for $fakeSubmitter")))
+
+        userIdInfo <- DBIO.from(samDAO.getUserIdInfo(submissionRec.submitterEmail,  UserInfo.buildFromTokens(credential))).map {
+          case Right(Some(userIdInfo)) => userIdInfo.googleSubjectId.getOrElse(throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}"))
+          case _ => throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}")
+        }
+
+        userCredentials <- DBIO.from(googleServicesDAO.getUserCredentials(RawlsUserRef(RawlsUserSubjectId(userIdInfo)))).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}")))
 
         //The wdl
         methodConfig <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId).map(_.get)
 
         wdl <- getWdl(methodConfig, userCredentials)
       } yield {
-        val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, fakeSubmitter, petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
+        val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, RawlsUser(RawlsUserSubjectId(userIdInfo), RawlsUserEmail(submissionRec.submitterEmail)), petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
 
         val wfInputsBatch = workflowBatch map { wf =>
           val methodProps = wf.inputResolutions map {
