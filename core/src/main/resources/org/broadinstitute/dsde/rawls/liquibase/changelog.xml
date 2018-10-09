@@ -64,4 +64,5 @@
     <include file="changesets/20180425_optional_root_entity.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20180716_cromwell_backend_per_project.xml" relativeToChangelogFile="true"/>
     <!--<include file="changesets/20180920_submitter_email.xml" relativeToChangelogFile="true"/>-->
+    <!--<include file="changesets/20181009_drop_extra_perm_fks.xml" relativeToChangelogFile="true"/>-->
 </databaseChangeLog>
