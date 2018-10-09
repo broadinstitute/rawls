@@ -166,8 +166,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] = {
     for {
       isOwner <- samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceOwn, userInfo).map(hasAction => if(hasAction) Some(WorkspaceAccessLevels.Owner) else None)
-      isWriter <- if(isOwner.nonEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceWrite, userInfo).map(hasAction => if(hasAction) Some(WorkspaceAccessLevels.Write) else None) else Future.successful(None)
-      isReader <- if(isOwner.nonEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceRead, userInfo).map(hasAction => if(hasAction) Some(WorkspaceAccessLevels.Read) else None) else Future.successful(None)
+      isWriter <- if(isOwner.isEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceWrite, userInfo).map(hasAction => if(hasAction) Some(WorkspaceAccessLevels.Write) else None) else Future.successful(None)
+      isReader <- if(isWriter.isEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamResourceActions.workspaceRead, userInfo).map(hasAction => if(hasAction) Some(WorkspaceAccessLevels.Read) else None) else Future.successful(None)
     } yield {
       Seq(isOwner, isWriter, isReader).flatten.headOption.getOrElse(WorkspaceAccessLevels.NoAccess)
     }
@@ -299,7 +299,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def listWorkspaces(lite: Boolean): Future[PerRequestMessage] = //TODO: use lite
+  def listWorkspaces(lite: Boolean): Future[PerRequestMessage] = //TODO: actually use lite param if it proves that owners call is too slow
+  //todo: we've got some sam calls within this transaction. break them out!
     dataSource.inTransaction ({ dataAccess =>
       val query = for {
         permissionsPairs <- DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
@@ -313,7 +314,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         permissionsPairs.map { permissionsPair =>
           val wsId = UUID.fromString(permissionsPair.resourceId)
           val workspace = workspacesById(permissionsPair.resourceId)
-          WorkspaceListResponse(WorkspaceAccessLevels.withName(permissionsPair.accessPolicyName), workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId.toString, Set.empty), permissionsPair.public)
+          val accessLevel = if(permissionsPair.missingAuthDomains.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withName(permissionsPair.accessPolicyName)
+          //TODO using the access policy name as the access level is not desirable but this also prevents n=numWorkspaces calls from being initiated
+          WorkspaceListResponse(accessLevel, workspace.copy(authorizationDomain = (permissionsPair.missingAuthDomains ++ permissionsPair.authDomains).map(x => ManagedGroupRef(RawlsGroupName(x)))), submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId.toString, Set.empty), permissionsPair.public)
         }
       }
 
@@ -391,6 +394,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       workspaceId <- loadWorkspaceId(workspaceName)
       currentACL <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo)
     } yield {
+      println(currentACL)
       val ownerPolicyMembers = loadPolicy("owner", currentACL).policy.memberEmails
       val writerPolicyMembers = loadPolicy("writer", currentACL).policy.memberEmails
       val readerPolicyMembers = loadPolicy("reader", currentACL).policy.memberEmails
@@ -1646,7 +1650,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val writerPolicy = SamWorkspacePolicyNames.writer -> SamPolicy(Set.empty, Set.empty, Set("writer"))
             val readerPolicy = SamWorkspacePolicyNames.reader -> SamPolicy(Set.empty, Set.empty, Set("reader"))
             val shareReaderPolicy = SamWorkspacePolicyNames.shareReader -> SamPolicy(Set.empty, Set.empty, Set("share-reader"))
-            val shareWriterPolicy = SamWorkspacePolicyNames.shareReader -> SamPolicy(Set.empty, Set.empty, Set("share-writer"))
+            val shareWriterPolicy = SamWorkspacePolicyNames.shareWriter -> SamPolicy(Set.empty, Set.empty, Set("share-writer"))
             val canComputePolicy = SamWorkspacePolicyNames.canCompute -> SamPolicy(Set.empty, Set.empty, Set("can-compute"))
             val canCatalogPolicy = SamWorkspacePolicyNames.canCatalog -> SamPolicy(Set.empty, Set.empty, Set("can-catalog"))
 
@@ -1720,29 +1724,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  //TODO: need to also look up auth domains
   private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
-//    for {
-//      workspaceId <- DBIO.from(loadWorkspaceId(workspaceName))
-//      resourceOpt <- DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo).map(_.filter(_.resourceId.equalsIgnoreCase(workspaceId)).headOption))
-//    } yield {
-//      val authDomain = resourceOpt match {
-//        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Unable to load workspace $workspaceName"))
-//        case Some(resource) => resource.missingAuthDomains ++ resource.authDomains //need to return _all_ of the group names in the auth domain
-//      }
-//
-//      dataAccess.workspaceQuery.findByName(workspaceName).map {
-//        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Unable to load workspace $workspaceName"))
-//        case Some(ws) => Workspace(ws.namespace, ws.name, authDomain.map(x => ManagedGroupRef(RawlsGroupName(x))), ws.workspaceId, ws.bucketName, ws.createdDate, ws.lastModified, ws.createdBy, ws.attributes, ws.isLocked)
-//      }
-//    }
-//
-//
-//
+    val workspaceSansAuthDomain = dataAccess.workspaceQuery.findByName(workspaceName) map {
+      case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
+      case Some(workspace) => workspace
+    }
 
-    dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-      case Some(workspace) => op(SlickWorkspaceContext(workspace))
+    workspaceSansAuthDomain.flatMap { wsSansAD =>
+      DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo).map(_.filter(_.resourceId.equalsIgnoreCase(wsSansAD.workspaceId)).headOption)).flatMap {
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
+        case Some(ws) =>
+          val authDomain = (ws.authDomains ++ ws.missingAuthDomains).map(x => ManagedGroupRef(RawlsGroupName(x)))
+          op(SlickWorkspaceContext(wsSansAD.copy(authorizationDomain = authDomain)))
+      }
     }
   }
 
