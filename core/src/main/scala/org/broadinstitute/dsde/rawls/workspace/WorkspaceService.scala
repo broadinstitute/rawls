@@ -255,8 +255,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         getWorkspaceContext(workspaceName) flatMap { ctx =>
           dataSource.inTransaction { dataAccess =>
             DBIO.from(getMaximumAccessLevel(ctx.workspaceId.toString)) flatMap {maxAccessLevel =>
-              withLibraryPermissions(ctx, operations, dataAccess, userInfo, isCurator, maxAccessLevel) {
-                updateWorkspace(operations, dataAccess)(ctx)
+              DBIO.from(getUserSharePermissions(ctx.workspace.workspaceId, maxAccessLevel, maxAccessLevel)) flatMap { canShare =>
+                DBIO.from(getUserCatalogPermissions(ctx.workspace.workspaceId)) flatMap { canCatalog =>
+                  withLibraryPermissions(ctx, operations, dataAccess, userInfo, isCurator, maxAccessLevel, canShare, canCatalog) {
+                    updateWorkspace(operations, dataAccess)(ctx)
+                  }
+                }
               }
             }
           }
@@ -429,7 +433,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def getCatalog(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     loadWorkspaceId(workspaceName).flatMap { workspaceId =>
-      samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "can-catalog", userInfo).map { members => RequestComplete(StatusCodes.OK, members.memberEmails.map(WorkspaceCatalog(_, true)))}
+      samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog.value, userInfo).map { members => RequestComplete(StatusCodes.OK, members.memberEmails.map(WorkspaceCatalog(_, true)))}
     }
   }
 
@@ -444,7 +448,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def updateCatalog(workspaceName: WorkspaceName, input: Seq[WorkspaceCatalog]): Future[PerRequestMessage] = {
     for {
       workspaceId <- loadWorkspaceId(workspaceName)
-      _ <- Future.traverse(input) { user => samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, "can-catalog", user.email, userInfo) }
+      _ <- Future.traverse(input) { user => samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog.value, user.email, userInfo) }
     } yield RequestComplete(StatusCodes.OK, input.map(change => WorkspaceCatalogUpdateResponseList(Seq.empty, Seq.empty)))
   }
 
@@ -1788,7 +1792,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock
           else DBIO.from(samDAO.listUserPoliciesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)) flatMap { policies =>
             val policyNames = policies.map(_.policyName)
-            if (policyNames.contains("can-compute")) codeBlock
+            if (policyNames.contains(SamWorkspacePolicyNames.canCompute.value)) codeBlock
             else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
             else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
           }

@@ -133,28 +133,6 @@ class HttpGoogleServicesDAO(
 
   override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[GoogleWorkspaceInfo] = {
 
-    // we do not make a special access group for project owners because the only member would be a single group
-    // we will just use that group directly and avoid potential google problems with a group being in too many groups
-//    val accessGroupRefsByLevel: Map[WorkspaceAccessLevel, RawlsGroupRef] = groupAccessLevelsAscending.filterNot(_ == ProjectOwner).map { accessLevel =>
-//      (accessLevel, RawlsGroupRef(RawlsGroupName(workspaceAccessGroupName(workspaceId, accessLevel))))
-//    }.toMap
-
-
-    //TODO: I think this is sam logic now
-//    def insertAuthDomainProjectOwnerIntersection: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
-//      val projectOwnerGroup = groupsByAccess(WorkspaceAccessLevels.ProjectOwner)
-//      val inserts = Future.traverse(authDomainProjectOwnerIntersection.getOrElse(Set.empty)) { userRef =>
-//        addEmailToGoogleGroup(projectOwnerGroup.groupEmail.value, toProxyFromUser(userRef.userSubjectId))
-//      }
-//
-//      inserts.map { _ =>
-//        groupsByAccess.map {
-//          case (ProjectOwner, group) => ProjectOwner -> group.copy(users = authDomainProjectOwnerIntersection.getOrElse(Set.empty))
-//          case otherwise => otherwise
-//        }
-//      }
-//    }
-
     def insertBucket: Map[WorkspaceAccessLevel, WorkbenchEmail] => Future[String] = { policyGroupsByAccessLevel =>
       implicit val service = GoogleInstrumentedService.Storage
       val bucketName = getBucketName(workspaceId)
@@ -215,11 +193,6 @@ class HttpGoogleServicesDAO(
     // setupWorkspace main logic
 
     val bucketInsertion = for {
-//      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember map { _ + (ProjectOwner -> projectOwnerGroup) }
-//      intersectionGroups <- intersectionGroupTries match {
-//        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertAuthDomainProjectOwnerIntersection map { Option(_) }
-//        case None => Future.successful(None)
-//      }
       bucketName <- insertBucket(policyGroupsByAccessLevel)
       _ <- insertInitialStorageLog(bucketName)
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)

@@ -23,16 +23,13 @@ trait LibraryPermissionsSupport extends RoleSupport {
                              dataAccess: DataAccess,
                              userInfo: UserInfo,
                              isCurator: Boolean,
-                             userLevel: WorkspaceAccessLevel)
+                             userLevel: WorkspaceAccessLevel,
+                             canShare: Boolean,
+                             canCatalog: Boolean)
                             (op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
     val names = operations.map(attribute => attribute.name)
-//    for {
-//      canShare <- Future.successful(true) //dataAccess.workspaceQuery.getUserSharePermissions(userInfo.userSubjectId, ctx) TODO: call sam for this
-//      hasCatalogOnly <- Future.successful(true) //dataAccess.workspaceQuery.getUserCatalogPermissions(userInfo.userSubjectId, ctx) //TODO: call sam for this?
-//      result <- getPermissionChecker(names, isCurator, canShare, hasCatalogOnly, userLevel)(op)
-//    } yield result
 
-    op //TODO!
+    getPermissionChecker(names, isCurator, canShare, canCatalog, userLevel)(op) //todo: what was hasCatalogOnly vs canCatalog? they appear to be the same
   }
 
   def getPermissionChecker(names: Seq[AttributeName], isCurator: Boolean, canShare: Boolean, hasCatalogOnly: Boolean, userLevel: WorkspaceAccessLevel): ((=> ReadWriteAction[Workspace]) => ReadWriteAction[Workspace]) = {
