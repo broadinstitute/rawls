@@ -1707,7 +1707,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
 
-      resultsForPet <- gcsDAO.diagnosticBucketRead(UserInfo(userInfo.userEmail, OAuth2BearerToken(accessToken), 60, userInfo.userSubjectId), workspace.bucketName)
+      (petEmail, petSubjectId) = petKey.parseJson match {
+        case JsObject(fields) => (RawlsUserEmail(fields("client_email").toString), RawlsUserSubjectId(fields("client_id").toString))
+        case _ => throw new RawlsException("pet service account key was not a json object")
+      }
+
+      resultsForPet <- gcsDAO.diagnosticBucketRead(UserInfo(petEmail, OAuth2BearerToken(accessToken), 60, petSubjectId), workspace.bucketName)
     } yield {
       resultsForPet match {
         case None => RequestComplete(StatusCodes.OK)
