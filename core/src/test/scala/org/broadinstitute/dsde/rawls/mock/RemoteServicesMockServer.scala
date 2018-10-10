@@ -1023,7 +1023,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       response()
         .withHeaders(jsonHeader)
         .withBody(
-          """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com"}""".stripMargin
+          """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}""".stripMargin
         )
         .withStatusCode(StatusCodes.Created.intValue)
     )
@@ -1036,7 +1036,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       response()
         .withHeaders(jsonHeader)
         .withBody(
-          """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com"}""".stripMargin
+          """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}""".stripMargin
         )
         .withStatusCode(StatusCodes.OK.intValue)
     )
