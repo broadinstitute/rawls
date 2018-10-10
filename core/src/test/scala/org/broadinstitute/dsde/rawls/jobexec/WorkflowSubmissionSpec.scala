@@ -230,7 +230,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             testData.wsName.namespace,
             testData.userOwner.userEmail.value,
             "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com",
-            """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com"}""",
+            """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}""",
             testData.billingProject.cromwellAuthBucketUrl,
             s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
             Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
