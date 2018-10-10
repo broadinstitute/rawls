@@ -87,6 +87,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
         case Complete(resp) =>
           val logLevel: LogLevel = resp.status.intValue / 100 match {
             case 5 => Logging.ErrorLevel
+            case 4 => Logging.InfoLevel
             case _ => Logging.DebugLevel
           }
           entityAsString(resp.entity).map(data => LogEntry(s"${req.method} ${req.uri}: ${resp.status} entity: $data", logLevel))
