@@ -68,9 +68,9 @@ class MockSamDAO extends SamDAO {
     Future.successful(())
   }
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policiez: Map[SamWorkspacePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = {
-    resources.put(resourceKey(resourceTypeName, resourceId), policiez.map(p => policyKey(resourceTypeName, resourceId, p._1.value)).toSet)
-    policiez.map{case (policyName, policy) => policies.put(policyKey(resourceTypeName, resourceId, policyName.value), MockSamPolicy(resourceTypeName.value, resourceId, policyName.value, policy.actions, policy.roles, policy.memberEmails))}
+  override def createResourceFull(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policiez: Map[String, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = {
+    resources.put(resourceKey(resourceTypeName, resourceId), policiez.map(p => policyKey(resourceTypeName, resourceId, p._1)).toSet)
+    policiez.map{case (policyName, policy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, policy.actions, policy.roles, policy.memberEmails))}
     Future.successful(())
   }
 

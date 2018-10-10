@@ -19,7 +19,7 @@ trait SamDAO {
   def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]]
   def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail]
   def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
-  def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamWorkspacePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit]
+  def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[String, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit]
   def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
   def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean]
   def getPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: String, userInfo: UserInfo): Future[SamPolicy]
@@ -100,8 +100,10 @@ object SamProjectRoles extends SamResourceRoles {
   val owner = "owner"
 }
 
+trait SamResourcePolicyName
+
 object SamWorkspacePolicyNames extends SamResourcePolicyNames {
-  case class SamWorkspacePolicyName(value: String)
+  case class SamWorkspacePolicyName(value: String) extends SamResourcePolicyName
 
   val projectOwner = SamWorkspacePolicyName("project-owner")
   val owner = SamWorkspacePolicyName("owner")
@@ -111,6 +113,8 @@ object SamWorkspacePolicyNames extends SamResourcePolicyNames {
   val shareReader = SamWorkspacePolicyName("share-reader")
   val canCompute = SamWorkspacePolicyName("can-compute")
   val canCatalog = SamWorkspacePolicyName("can-catalog")
+
+
 }
 
 case class SamPolicy(memberEmails: Set[String], actions: Set[String], roles: Set[String])

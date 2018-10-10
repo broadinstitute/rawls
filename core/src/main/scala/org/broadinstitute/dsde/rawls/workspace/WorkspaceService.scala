@@ -1649,14 +1649,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         for {
           projectOwnerEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, "owner", userInfo))
           policies <- {
-            val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(projectOwnerEmail.email), Set.empty, Set("owner"))
-            val ownerPolicy = SamWorkspacePolicyNames.owner -> SamPolicy(Set(userInfo.userEmail.value), Set.empty, Set("owner"))
-            val writerPolicy = SamWorkspacePolicyNames.writer -> SamPolicy(Set.empty, Set.empty, Set("writer"))
-            val readerPolicy = SamWorkspacePolicyNames.reader -> SamPolicy(Set.empty, Set.empty, Set("reader"))
-            val shareReaderPolicy = SamWorkspacePolicyNames.shareReader -> SamPolicy(Set.empty, Set.empty, Set("share-reader"))
-            val shareWriterPolicy = SamWorkspacePolicyNames.shareWriter -> SamPolicy(Set.empty, Set.empty, Set("share-writer"))
-            val canComputePolicy = SamWorkspacePolicyNames.canCompute -> SamPolicy(Set.empty, Set.empty, Set("can-compute"))
-            val canCatalogPolicy = SamWorkspacePolicyNames.canCatalog -> SamPolicy(Set.empty, Set.empty, Set("can-catalog"))
+            val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner.value -> SamPolicy(Set(projectOwnerEmail.email), Set.empty, Set("owner"))
+            val ownerPolicy = SamWorkspacePolicyNames.owner.value -> SamPolicy(Set(userInfo.userEmail.value), Set.empty, Set("owner"))
+            val writerPolicy = SamWorkspacePolicyNames.writer.value -> SamPolicy(Set.empty, Set.empty, Set("writer"))
+            val readerPolicy = SamWorkspacePolicyNames.reader.value -> SamPolicy(Set.empty, Set.empty, Set("reader"))
+            val shareReaderPolicy = SamWorkspacePolicyNames.shareReader.value -> SamPolicy(Set.empty, Set.empty, Set("share-reader"))
+            val shareWriterPolicy = SamWorkspacePolicyNames.shareWriter.value -> SamPolicy(Set.empty, Set.empty, Set("share-writer"))
+            val canComputePolicy = SamWorkspacePolicyNames.canCompute.value -> SamPolicy(Set.empty, Set.empty, Set("can-compute"))
+            val canCatalogPolicy = SamWorkspacePolicyNames.canCatalog.value -> SamPolicy(Set.empty, Set.empty, Set("can-catalog"))
 
             val defaultPolicies = Map(projectOwnerPolicy, ownerPolicy, writerPolicy, readerPolicy, shareReaderPolicy, shareWriterPolicy, canComputePolicy, canCatalogPolicy)
 
