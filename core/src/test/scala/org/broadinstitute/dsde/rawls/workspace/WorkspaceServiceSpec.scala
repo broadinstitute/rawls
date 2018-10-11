@@ -77,7 +77,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-//    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
     val samDAO = new MockSamDAO
     val gpsDAO = new MockGooglePubSubDAO
 
@@ -1015,7 +1014,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 //      }
 
       import org.mockserver.model.HttpRequest.request
-      mockServer.mockServer.verify(request().withMethod("PUT").withPath(s"/api/resource/${SamResourceTypeNames.billingProject.value}/${testData.workspace.namespace}/policies/${UserService.canComputeUserPolicyName}/memberEmails/$email"), VerificationTimes.exactly(callCount))
+      mockServer.mockServer.verify(request().withMethod("PUT").withPath(s"/api/resource/${SamResourceTypeNames.billingProject.value}/${testData.workspace.namespace}/policies/${SamBillingProjectPolicyNames.canComputeUser}/memberEmails/$email"), VerificationTimes.exactly(callCount))
     }
   }
 }

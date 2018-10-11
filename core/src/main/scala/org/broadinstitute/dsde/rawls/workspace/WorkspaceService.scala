@@ -29,7 +29,6 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
-import org.broadinstitute.dsde.rawls.dataaccess.SamWorkspacePolicyNames.SamWorkspacePolicyName
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException}
 import spray.json.DefaultJsonProtocol._
@@ -174,7 +173,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getWorkspaceOwners(workspaceId: String): Future[Set[String]] = {
-    samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, "owner", userInfo).map(_.memberEmails)
+    samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.owner, userInfo).map(_.memberEmails)
   }
 
   def getWorkspaceContext(workspaceName: WorkspaceName): Future[SlickWorkspaceContext] = {
@@ -433,7 +432,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def getCatalog(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     loadWorkspaceId(workspaceName).flatMap { workspaceId =>
-      samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog.value, userInfo).map { members => RequestComplete(StatusCodes.OK, members.memberEmails.map(WorkspaceCatalog(_, true)))}
+      samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, userInfo).map { members => RequestComplete(StatusCodes.OK, members.memberEmails.map(WorkspaceCatalog(_, true)))}
     }
   }
 
@@ -448,7 +447,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def updateCatalog(workspaceName: WorkspaceName, input: Seq[WorkspaceCatalog]): Future[PerRequestMessage] = {
     for {
       workspaceId <- loadWorkspaceId(workspaceName)
-      _ <- Future.traverse(input) { user => samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog.value, user.email, userInfo) }
+      _ <- Future.traverse(input) { user => samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, user.email, userInfo) }
     } yield RequestComplete(StatusCodes.OK, input.map(change => WorkspaceCatalogUpdateResponseList(Seq.empty, Seq.empty)))
   }
 
@@ -471,16 +470,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def removeUserFromWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], userEmail: WorkbenchEmail): Future[Unit] = {
     val userPolicyNames = existingPolicies.filter(_.policy.memberEmails.contains(userEmail.value)).map(_.policyName)
 
-    Future.traverse(userPolicyNames) { policyName => samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo) }.map(_ => ())
+    Future.traverse(userPolicyNames) { policyName => samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyName(policyName), userEmail.value, userInfo) }.map(_ => ())
   }
 
   //TODO: don't construct bucket name here?
-  def addUserToWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], policyNames: Set[String], userEmail: WorkbenchEmail, inviteUserIfNotFound: Boolean, workspaceName: WorkspaceName): Future[Unit] = {
+  def addUserToWorkspace(workspaceId: String, existingPolicies: Set[SamPolicyWithNameAndEmail], policyNames: Set[SamWorkspacePolicyName], userEmail: WorkbenchEmail, inviteUserIfNotFound: Boolean, workspaceName: WorkspaceName): Future[Unit] = {
     val userPolicyNames = existingPolicies.filter(_.policy.memberEmails.contains(userEmail.value)).map(_.policyName)
 
     for {
       //TODO: the removeAll then addAll approach may be a bit too much
-      _ <- Future.traverse(userPolicyNames) { policyName => samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo) }
+      _ <- Future.traverse(userPolicyNames) { policyName => samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyName(policyName), userEmail.value, userInfo) }
       _ <- Future.traverse(policyNames) { policyName =>
         samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, policyName, userEmail.value, userInfo) recover {
           case addError: RawlsExceptionWithErrorReport if addError.errorReport.statusCode.contains(StatusCodes.BadRequest) && inviteUserIfNotFound =>
@@ -572,7 +571,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             for {
               workspaceId <- loadWorkspaceId(workspaceName)
               _ <- Future.traverse(usersToRemove) { update => removeUserFromWorkspace(workspaceId, existingPolicies, WorkbenchEmail(update.email)) }
-              _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update).map(_.value), WorkbenchEmail(update.email), inviteUsersNotFound, workspaceName) }
+              _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update), WorkbenchEmail(update.email), inviteUsersNotFound, workspaceName) }
             } yield {
               sendACLUpdateNotifications(workspaceName, usersToAdd ++ usersToRemove) //we can blindly fire off this future because we don't care about the results and it happens async anyway
               RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersToRemove ++ usersToAdd -- usersToInvite, usersToInvite, Set.empty)) //API_CHANGE: no longer return invitesUpdated because you technically can't do that anymore...
@@ -1647,22 +1646,22 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       dataAccess.workspaceQuery.save(workspace).flatMap { _ =>
         for {
-          projectOwnerEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, "owner", userInfo))
+          projectOwnerEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo))
           policies <- {
-            val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner.value -> SamPolicy(Set(projectOwnerEmail.email), Set.empty, Set("owner"))
-            val ownerPolicy = SamWorkspacePolicyNames.owner.value -> SamPolicy(Set(userInfo.userEmail.value), Set.empty, Set("owner"))
-            val writerPolicy = SamWorkspacePolicyNames.writer.value -> SamPolicy(Set.empty, Set.empty, Set("writer"))
-            val readerPolicy = SamWorkspacePolicyNames.reader.value -> SamPolicy(Set.empty, Set.empty, Set("reader"))
-            val shareReaderPolicy = SamWorkspacePolicyNames.shareReader.value -> SamPolicy(Set.empty, Set.empty, Set("share-reader"))
-            val shareWriterPolicy = SamWorkspacePolicyNames.shareWriter.value -> SamPolicy(Set.empty, Set.empty, Set("share-writer"))
-            val canComputePolicy = SamWorkspacePolicyNames.canCompute.value -> SamPolicy(Set.empty, Set.empty, Set("can-compute"))
-            val canCatalogPolicy = SamWorkspacePolicyNames.canCatalog.value -> SamPolicy(Set.empty, Set.empty, Set("can-catalog"))
+            val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(projectOwnerEmail.email), Set.empty, Set("owner"))
+            val ownerPolicy = SamWorkspacePolicyNames.owner -> SamPolicy(Set(userInfo.userEmail.value), Set.empty, Set("owner"))
+            val writerPolicy = SamWorkspacePolicyNames.writer -> SamPolicy(Set.empty, Set.empty, Set("writer"))
+            val readerPolicy = SamWorkspacePolicyNames.reader -> SamPolicy(Set.empty, Set.empty, Set("reader"))
+            val shareReaderPolicy = SamWorkspacePolicyNames.shareReader -> SamPolicy(Set.empty, Set.empty, Set("share-reader"))
+            val shareWriterPolicy = SamWorkspacePolicyNames.shareWriter -> SamPolicy(Set.empty, Set.empty, Set("share-writer"))
+            val canComputePolicy = SamWorkspacePolicyNames.canCompute -> SamPolicy(Set.empty, Set.empty, Set("can-compute"))
+            val canCatalogPolicy = SamWorkspacePolicyNames.canCatalog -> SamPolicy(Set.empty, Set.empty, Set("can-catalog"))
 
             val defaultPolicies = Map(projectOwnerPolicy, ownerPolicy, writerPolicy, readerPolicy, shareReaderPolicy, shareWriterPolicy, canComputePolicy, canCatalogPolicy)
 
             DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo)).map(_ => defaultPolicies)
           }
-          _ <- DBIO.from(Future.traverse(policies.toSeq) { case (policyName, _) => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName.value) })
+          _ <- DBIO.from(Future.traverse(policies.toSeq) { case (policyName, _) => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName) })
         } yield workspace
       }
     }
@@ -1676,7 +1675,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           saveNewWorkspace(workspaceId, workspaceRequest, dataAccess).flatMap { savedWorkspace =>
             for {
               project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
-              projectOwnerGroupEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, project.get.projectName.value, SamProjectRoles.owner, userInfo).map(_.email))
+              projectOwnerGroupEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, project.get.projectName.value, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))
               policyEmails <- DBIO.from(getAccessLevelPolicies(workspaceId).map(_.map(policy => WorkspaceAccessLevels.withName(policy.policyName.value) -> WorkbenchEmail(policy.email)).toMap))
               googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, policyEmails + (WorkspaceAccessLevels.ProjectOwner -> WorkbenchEmail(projectOwnerGroupEmail))))
               response <- op(SlickWorkspaceContext(savedWorkspace))

@@ -15,7 +15,7 @@ import akka.http.scaladsl.model.StatusCodes
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceStatusFormat
 import DefaultJsonProtocol._
-import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames
+import org.broadinstitute.dsde.rawls.dataaccess.{SamBillingProjectPolicyNames, SamResourceTypeNames}
 import org.broadinstitute.dsde.rawls.user.UserService
 
 import scala.concurrent.duration.FiniteDuration
@@ -783,7 +783,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     for {
       project <- Seq("myNamespace", "arbitrary", "project1", "project2", "project3")
-      policy <- Seq(UserService.canComputeUserPolicyName, UserService.workspaceCreatorPolicyName, UserService.ownerPolicyName)
+      policy <- Seq(SamBillingProjectPolicyNames.canComputeUser, SamBillingProjectPolicyNames.workspaceCreator, SamBillingProjectPolicyNames.owner)
     } yield {
       mockServer.when(
         request()

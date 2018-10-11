@@ -107,9 +107,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   def generateBillingGroups(projectName: RawlsBillingProjectName, users: Map[ProjectRoles.ProjectRole, Set[RawlsUserRef]], subGroups: Map[ProjectRoles.ProjectRole, Set[RawlsGroupRef]]): Map[ProjectRoles.ProjectRole, Seq[RawlsGroup]] = {
     val gcsDAO = new MockGoogleServicesDAO("foo")
 
-    val ownerName = RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, UserService.ownerPolicyName))
-    val wsCreatorName = RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, UserService.workspaceCreatorPolicyName))
-    val computeUserName = RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, UserService.canComputeUserPolicyName))
+    val ownerName = RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, SamBillingProjectPolicyNames.owner.value))
+    val wsCreatorName = RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, SamBillingProjectPolicyNames.workspaceCreator.value))
+    val computeUserName = RawlsGroupName(policyGroupName(SamResourceTypeNames.billingProject.value, projectName.value, SamBillingProjectPolicyNames.canComputeUser.value))
 
     Map(
       ProjectRoles.Owner -> Seq(RawlsGroup(ownerName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(ownerName)), users.getOrElse(ProjectRoles.Owner, Set.empty), subGroups.getOrElse(ProjectRoles.Owner, Set.empty))),

@@ -41,9 +41,9 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   private def createTestBillingProject(services: TestApiService, project: RawlsBillingProject, ownerUserInfo: UserInfo) = {
     val policies = Map(
-      "workspace-creator" -> SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)),
-      "can-compute-user" -> SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)),
-      "owner" -> SamPolicy(Set(ownerUserInfo.userEmail.value), Set.empty, Set(SamProjectRoles.owner))
+      SamBillingProjectPolicyNames.workspaceCreator -> SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)),
+      SamBillingProjectPolicyNames.canComputeUser -> SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)),
+      SamBillingProjectPolicyNames.owner -> SamPolicy(Set(ownerUserInfo.userEmail.value), Set.empty, Set(SamProjectRoles.owner))
     )
 
     Await.result(services.samDAO.createResourceFull(SamResourceTypeNames.billingProject, project.projectName.value, policies, Set.empty, ownerUserInfo), Duration.Inf)

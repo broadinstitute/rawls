@@ -7,8 +7,6 @@ import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.Notifications._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -17,19 +15,16 @@ import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchExceptionWithErrorReport, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 /**
  * Created by dvoet on 10/27/15.
  */
 object UserService {
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
-  val workspaceCreatorPolicyName = "workspace-creator"
-  val canComputeUserPolicyName = "can-compute-user"
-  val ownerPolicyName = "owner"
 
   def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String])(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
     new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, projectOwnerGrantableRoles)
@@ -38,13 +33,13 @@ object UserService {
 
   def getGoogleProjectOwnerGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
-      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamProjectRoles.owner)
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectPolicyNames.owner)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
   }
 
   def getComputeUserGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
-      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, UserService.canComputeUserPolicyName)
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectPolicyNames.canComputeUser)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
   }
 
@@ -226,8 +221,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.create(project) }
 
       _ <- samDAO.createResource(SamResourceTypeNames.billingProject, billingProjectName.value, ownerUserInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, workspaceCreatorPolicyName, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), ownerUserInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, canComputeUserPolicyName, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), ownerUserInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), ownerUserInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), ownerUserInfo)
       ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, project)
       computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project)
 
@@ -242,8 +237,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
     val policies = projectAccessUpdate.role match {
-      case ProjectRoles.Owner => Seq(ownerPolicyName)
-      case ProjectRoles.User => Seq(workspaceCreatorPolicyName, canComputeUserPolicyName)
+      case ProjectRoles.Owner => Seq(SamBillingProjectPolicyNames.owner)
+      case ProjectRoles.User => Seq(SamBillingProjectPolicyNames.workspaceCreator, SamBillingProjectPolicyNames.canComputeUser)
     }
 
     for {
@@ -256,8 +251,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def removeUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
     val policy = projectAccessUpdate.role match {
-      case ProjectRoles.Owner => ownerPolicyName
-      case ProjectRoles.User => workspaceCreatorPolicyName
+      case ProjectRoles.Owner => SamBillingProjectPolicyNames.owner
+      case ProjectRoles.User => SamBillingProjectPolicyNames.workspaceCreator
     }
 
     for {
@@ -313,8 +308,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
                 case None =>
                   for {
                     _ <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo))
-                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, workspaceCreatorPolicyName, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), userInfo))
-                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, canComputeUserPolicyName, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
+                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), userInfo))
+                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
                     project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
                   } yield project
 
