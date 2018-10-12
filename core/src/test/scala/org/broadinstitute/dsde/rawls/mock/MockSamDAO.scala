@@ -2,9 +2,7 @@ package org.broadinstitute.dsde.rawls.mock
 
 import akka.http.scaladsl.model.{DateTime, StatusCodes}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
-import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
-import org.broadinstitute.dsde.rawls.dataaccess.{SamResourcePolicyName, _}
+import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
@@ -35,8 +33,8 @@ class MockSamDAO extends SamDAO {
     "workspace/reader" -> Set("read_policy::owner", "read")
   )
 
-  private def resourceKey(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String) = s"${resourceTypeName.value}/$resourceId"
-  private def policyKey(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName) = s"${resourceTypeName.value}/$resourceId/${policyName.value}"
+  private def resourceKey(resourceTypeName: SamResourceTypeName, resourceId: String) = s"${resourceTypeName.value}/$resourceId"
+  private def policyKey(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName) = s"${resourceTypeName.value}/$resourceId/${policyName.value}"
 
 
   override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = {
@@ -62,23 +60,23 @@ class MockSamDAO extends SamDAO {
     Future.successful(WorkbenchEmail(s"PROXY_${userInfo.userSubjectId}@firecloud.biz"))
   }
 
-  override def createResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = {
-    resources.put(resourceKey(resourceTypeName, resourceId), Set(policyKey(resourceTypeName, resourceId, SamWorkspacePolicyNames.owner))) //we are using the workspace policy name here but really it doesn't matter which one because all of the resources types we currently use have "owner" as their default owner name
-    policies.put(policyKey(resourceTypeName, resourceId, SamWorkspacePolicyName("owner")), MockSamPolicy(resourceTypeName.value, resourceId, SamWorkspacePolicyNames.owner, Set.empty, Set("owner"), Set(userInfo.userEmail.value)))
+  override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = {
+    resources.put(resourceKey(resourceTypeName, resourceId), Set(policyKey(resourceTypeName, resourceId, SamResourcePolicyName("owner"))))
+    policies.put(policyKey(resourceTypeName, resourceId, SamResourcePolicyName("owner")), MockSamPolicy(resourceTypeName.value, resourceId, SamWorkspacePolicyNames.owner, Set.empty, Set("owner"), Set(userInfo.userEmail.value)))
     Future.successful(())
   }
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policiez: Map[_ <: SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = {
+  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policiez: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = {
     resources.put(resourceKey(resourceTypeName, resourceId), policiez.map(p => policyKey(resourceTypeName, resourceId, p._1)).toSet)
     policiez.map{case (policyName, policy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, policy.actions, policy.roles, policy.memberEmails))}
     Future.successful(())
   }
 
-  override def deleteResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = {
+  override def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = {
     Future.successful(())
   }
 
-  override def userHasAction(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, action: SamResourceActions.SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
+  override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
     if(resources.getOrElse(resourceKey(resourceTypeName, resourceId), Set.empty).isEmpty) {
       Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "resource not found")))
     }
@@ -93,12 +91,12 @@ class MockSamDAO extends SamDAO {
     }
   }
 
-  override def getPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicy] = {
+  override def getPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicy] = {
     val policy = policies(policyKey(resourceTypeName, resourceId, policyName))
     Future.successful(SamPolicy(policy.members, policy.actions, policy.roles))
   }
 
-  override def overwritePolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = {
+  override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = {
     policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
       case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, policy.memberEmails))
       case None => policies.putIfAbsent(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, policy.actions, policy.roles, policy.memberEmails))
@@ -106,7 +104,7 @@ class MockSamDAO extends SamDAO {
     Future.successful(())
   }
 
-  override def overwritePolicyMembership(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberList: Set[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = {
+  override def overwritePolicyMembership(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberList: Set[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = {
     policies.get(policyKey(resourceTypeName, resourceId, policyName)) match {
       case Some(existingPolicy) => policies.put(policyKey(resourceTypeName, resourceId, policyName), MockSamPolicy(resourceTypeName.value, resourceId, policyName, existingPolicy.actions, existingPolicy.roles, memberList.map(_.value)))
       case None => throw new Exception(s"policy $policyName does not exist")
@@ -114,7 +112,7 @@ class MockSamDAO extends SamDAO {
     Future.successful(())
   }
 
-  override def addUserToPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
+  override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
     if(resources(resourceKey(resourceTypeName, resourceId)).isEmpty) {
       Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "resource not found")))
     }
@@ -139,7 +137,7 @@ class MockSamDAO extends SamDAO {
     }
   }
 
-  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
+  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
     if (resources(resourceKey(resourceTypeName, resourceId)).isEmpty) {
       Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "resource not found")))
     }
@@ -181,23 +179,23 @@ class MockSamDAO extends SamDAO {
 
   override def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = {
     val policyNames = resources.getOrElse(resourceKey(resourceTypeName, resourceId), throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
-    val loadedPolicies = policyNames.map(policies.get).map(_.get).map(x => SamPolicyWithName(x.policyName.value, SamPolicy(x.members, x.actions, x.roles)))
+    val loadedPolicies = policyNames.map(policies.get).map(_.get).map(x => SamPolicyWithName(x.policyName, SamPolicy(x.members, x.actions, x.roles)))
 
     Future.successful(loadedPolicies)
   }
 
   override def listPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]] = {
     val policyNames = resources.getOrElse(resourceKey(resourceTypeName, resourceId), throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
-    val loadedPolicies = policyNames.map(policies.get).map(_.get).map(x => SamPolicyWithNameAndEmail(x.policyName.value, SamPolicy(x.members, x.actions, x.roles), x.policyName.value))
+    val loadedPolicies = policyNames.map(policies.get).map(_.get).map(x => SamPolicyWithNameAndEmail(x.policyName, SamPolicy(x.members, x.actions, x.roles), x.policyName.value))
 
     Future.successful(loadedPolicies)
   }
 
-  override def listUserPoliciesForResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = {
+  override def listUserPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = {
     Future.successful(Set.empty)
   }
 
-  override def listUserRolesForResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[String]] = {
+  override def listUserRolesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[String]] = {
     val policiesForResource = resources.get(resourceKey(resourceTypeName, resourceId))
     val policiesForUser = policiesForResource.get.filter(x => policies(x).members.contains(userInfo.userEmail.value))
 
@@ -206,7 +204,7 @@ class MockSamDAO extends SamDAO {
     Future.successful(rolesForUser)
   }
 
-  override def getPolicySyncStatus(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus] = {
+  override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus] = {
     Future.successful(SamPolicySyncStatus(DateTime.now.toString(), policyName.value))
   }
 
