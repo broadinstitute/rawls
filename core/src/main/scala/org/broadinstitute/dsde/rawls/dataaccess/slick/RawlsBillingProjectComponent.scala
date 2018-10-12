@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames
 import org.broadinstitute.dsde.rawls.model._
 
 case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String])

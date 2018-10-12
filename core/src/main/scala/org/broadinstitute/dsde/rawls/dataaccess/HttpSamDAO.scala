@@ -13,11 +13,10 @@ import akka.stream.Materializer
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.SamModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, ManagedGroupAccessResponse, ManagedRoles, RawlsUserEmail, SyncReportItem, UserIdInfo, UserInfo, UserStatus, WorkspaceJsonSupport}
+import org.broadinstitute.dsde.rawls.model.SamModelJsonSupport._
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUserEmail, SamPolicy, SamPolicySyncStatus, SamPolicyWithName, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceIdWithPolicyName, SamResourcePolicyName, SamResourceTypeName, SamResourceWithPolicies, SyncReportItem, UserIdInfo, UserInfo, UserStatus, WorkspaceJsonSupport}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard, Retry}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.WorkbenchEmailFormat
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
