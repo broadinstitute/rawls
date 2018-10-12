@@ -598,12 +598,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  //TODO: writers can't read any members lower than owners. how will this continue to work?
-  //via doug: something similar to the "pester" policy
-  //TODO: actually re-implement this
+  //TODO: Re-implement this in coordination with GAWB-3849
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
 
-    Future.successful(RequestComplete(StatusCodes.OK))
+    Future.successful(RequestComplete(StatusCodes.InternalServerError))
 
 //    val getUsers = {
 //      dataSource.inTransaction{ dataAccess =>
@@ -623,8 +621,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 //      notificationDAO.fireAndForgetNotifications(notificationMessages)
 //      RequestComplete(StatusCodes.OK, numMessages)
 //    }
-
-
   }
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
