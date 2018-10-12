@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.UUID
 
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -301,29 +301,40 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def listWorkspaces(lite: Boolean): Future[PerRequestMessage] = //TODO: actually use lite param if it proves that owners call is too slow
-  //todo: we've got some sam calls within this transaction. break them out!
-    dataSource.inTransaction ({ dataAccess =>
-      val query = for {
-        permissionsPairs <- DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
-        ownerEmails <- DBIO.sequence(permissionsPairs.toSeq.map(p => DBIO.from(getWorkspaceOwners(p.resourceId).map(owners => p.resourceId -> owners)))) //TODO: this could be a lot of calls to sam...
-        submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.resourceId)).toSeq)
-        workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.resourceId)).toSeq)
-      } yield (permissionsPairs, ownerEmails.toMap, submissionSummaryStats, workspaces)
+  def listWorkspaces(lite: Boolean): Future[PerRequestMessage] = {
+    for {
+      workspacePolicies <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
+      result <- dataSource.inTransaction({ dataAccess =>
+        val query = for {
+          ownerEmails <- DBIO.sequence(workspacePolicies.toSeq.map(p => DBIO.from(getWorkspaceOwners(p.resourceId).map(owners => p.resourceId -> owners)))) //TODO: this could be a lot of calls to sam...
+          submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(workspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
+          workspaces <- dataAccess.workspaceQuery.listByIds(workspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
+        } yield (ownerEmails.toMap, submissionSummaryStats, workspaces)
 
-      val results = query.map { case (permissionsPairs, ownerEmails, submissionSummaryStats, workspaces) =>
-        val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
-        permissionsPairs.map { permissionsPair =>
-          val wsId = UUID.fromString(permissionsPair.resourceId)
-          val workspace = workspacesById(permissionsPair.resourceId)
-          val accessLevel = if(permissionsPair.missingAuthDomains.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withName(permissionsPair.accessPolicyName.value)
-          //TODO using the access policy name as the access level is not desirable but this also prevents n=numWorkspaces calls from being initiated
-          WorkspaceListResponse(accessLevel, workspace.copy(authorizationDomain = permissionsPair.authDomains.map(groupName => ManagedGroupRef(RawlsGroupName(groupName)))), submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId.toString, Set.empty).map(_.value), permissionsPair.public)
+        val results = query.map { case (ownerEmails, submissionSummaryStats, workspaces) =>
+          val policiesByWorkspaceId = workspacePolicies.groupBy(_.resourceId).map { case (workspaceId, policies) =>
+            workspaceId -> policies.reduce { (p1, p2) =>
+              SamResourceIdWithPolicyName(
+                p1.resourceId,
+                model.SamResourcePolicyName(max(WorkspaceAccessLevels.withPolicyName(p1.accessPolicyName.value).getOrElse(NoAccess), WorkspaceAccessLevels.withPolicyName(p2.accessPolicyName.value).getOrElse(NoAccess)).toString),
+                p1.authDomains ++ p2.authDomains,
+                p1.missingAuthDomains ++ p2.missingAuthDomains,
+                for(p1pub <- p1.public; p2pub <- p2.public) yield p1pub || p2pub
+              )
+            }
+          }
+          workspaces.map { workspace =>
+            val wsId = UUID.fromString(workspace.workspaceId)
+            val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
+            val accessLevel = if (workspacePolicy.missingAuthDomains.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withName(workspacePolicy.accessPolicyName.value)
+            WorkspaceListResponse(accessLevel, workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId.toString, Set.empty).map(_.value), workspacePolicy.public, workspacePolicy.authDomains.map(groupName => ManagedGroupRef(RawlsGroupName(groupName))))
+          }
         }
-      }
 
-      results.map { responses => RequestComplete(StatusCodes.OK, responses) }
-    }, TransactionIsolation.ReadCommitted)
+        results.map { responses => RequestComplete(StatusCodes.OK, responses) }
+      }, TransactionIsolation.ReadCommitted)
+    } yield result
+  }
 
   private def getWorkspaceSubmissionStats(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[WorkspaceSubmissionStats] = {
     // listSubmissionSummaryStats works against a sequence of workspaces; we call it just for this one workspace
@@ -338,22 +349,24 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
         dataSource.inTransaction { dataAccess =>
           withWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read, dataAccess) { sourceWorkspaceContext =>
-            withClonedAuthDomain(sourceWorkspaceContext, destWorkspaceRequest) { newAuthDomain =>
+            DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspace.workspaceId)).flatMap { sourceAuthDomains =>
+              withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
 
-              // add to or replace current attributes, on an individual basis
-              val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
+                // add to or replace current attributes, on an individual basis
+                val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
 
-              withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), dataAccess) { destWorkspaceContext =>
-                dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-                  dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
-                    val inserts = methodConfigShorts.map { methodConfigShort =>
-                      dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
-                        dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), dataAccess) { destWorkspaceContext =>
+                  dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+                    dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                      val inserts = methodConfigShorts.map { methodConfigShort =>
+                        dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                          dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                        }
                       }
-                    }
-                    DBIO.seq(inserts: _*)
-                  } andThen {
-                  DBIO.successful(destWorkspaceContext.workspace)
+                      DBIO.seq(inserts: _*)
+                    } andThen {
+                    DBIO.successful(destWorkspaceContext.workspace)
+                  }
                 }
               }
             }
@@ -363,16 +376,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def withClonedAuthDomain[T](sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Set[ManagedGroupRef]) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  private def withClonedAuthDomain[T](sourceWorkspaceADs: Set[ManagedGroupRef], destWorkspaceADs: Set[ManagedGroupRef])(op: (Set[ManagedGroupRef]) => ReadWriteAction[T]): ReadWriteAction[T] = {
     // if the source has an auth domain, the dest must also have that auth domain as a subset
     // otherwise, the caller may choose to add to the auth domain
-    val sourceWorkspaceADs = sourceWorkspaceContext.workspace.authorizationDomain
-    val destWorkspaceADs = destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)
-
     if(sourceWorkspaceADs.subsetOf(destWorkspaceADs)) op(sourceWorkspaceADs ++ destWorkspaceADs)
     else {
       val missingGroups = sourceWorkspaceADs -- destWorkspaceADs
-      val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has an Authorization Domain containing the groups ${missingGroups.map(_.membersGroupName.value).mkString(", ")}, which are missing on the destination workspace"
+      val errorMsg = s"Source workspace has an Authorization Domain containing the groups ${missingGroups.map(_.membersGroupName.value).mkString(", ")}, which are missing on the destination workspace"
       DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
     }
   }
@@ -651,29 +661,30 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, SamWorkspaceActions.write, dataAccess) { destWorkspaceContext =>
         withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,SamWorkspaceActions.read, dataAccess) { sourceWorkspaceContext =>
-          authDomainCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
-            val entityNames = entityCopyDef.entityNames
-            val entityType = entityCopyDef.entityType
-            val copyResults = dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
-            copyResults.map { response =>
-              if(response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntities)) RequestComplete(StatusCodes.Created, response)
-              else RequestComplete(StatusCodes.Conflict, response)
+          for {
+            sourceAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspace.workspaceId))
+            destAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWorkspaceContext.workspace.workspaceId))
+            result <- authDomainCheck(sourceAD.toSet, destAD.toSet) flatMap { _ =>
+              val entityNames = entityCopyDef.entityNames
+              val entityType = entityCopyDef.entityType
+              val copyResults = dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
+              copyResults.map { response =>
+                if (response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntities)) RequestComplete(StatusCodes.Created, response)
+                else RequestComplete(StatusCodes.Conflict, response)
+              }
             }
-          }
+          } yield result
         }
       }
     }
 
   // can't use withClonedAuthDomain because the Auth Domain -> no Auth Domain logic is different
-  private def authDomainCheck(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
+  private def authDomainCheck(sourceWorkspaceADs: Set[String], destWorkspaceADs: Set[String]): ReadWriteAction[Boolean] = {
     // if the source has any auth domains, the dest must also *at least* have those auth domains
-    val sourceWorkspaceADs = sourceWorkspaceContext.workspace.authorizationDomain
-    val destWorkspaceADs = destWorkspaceContext.workspace.authorizationDomain
-
     if(sourceWorkspaceADs.subsetOf(destWorkspaceADs)) DBIO.successful(true)
     else {
       val missingGroups = sourceWorkspaceADs -- destWorkspaceADs
-      val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has an Authorization Domain containing the groups ${missingGroups.map(_.membersGroupName.value).mkString(", ")}, which are missing on the destination workspace"
+      val errorMsg = s"Source workspace has an Authorization Domain containing the groups ${missingGroups.mkString(", ")}, which are missing on the destination workspace"
       DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
     }
   }
@@ -1629,7 +1640,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val workspace = Workspace(
         namespace = workspaceRequest.namespace,
         name = workspaceRequest.name,
-        authorizationDomain = workspaceRequest.authorizationDomain.getOrElse(Set.empty),
         workspaceId = workspaceId,
         bucketName = s"fc-$workspaceId",
         createdDate = currentDate,
@@ -1722,18 +1732,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
-    val workspaceSansAuthDomain = dataAccess.workspaceQuery.findByName(workspaceName) map {
+    dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
       case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
-      case Some(workspace) => workspace
-    }
-
-    workspaceSansAuthDomain.flatMap { wsSansAD =>
-      DBIO.from(samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo).map(_.filter(_.resourceId.equalsIgnoreCase(wsSansAD.workspaceId)).headOption)).flatMap {
-        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
-        case Some(ws) =>
-          val authDomain = ws.authDomains.map(groupName => ManagedGroupRef(RawlsGroupName(groupName)))
-          op(SlickWorkspaceContext(wsSansAD.copy(authorizationDomain = authDomain)))
-      }
+      case Some(workspace) => op(SlickWorkspaceContext(workspace))
     }
   }
 

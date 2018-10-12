@@ -56,11 +56,11 @@ class PetSASpec extends ApiServiceSpec {
         }
         assertResult(newWorkspace) {
           val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, None)
         }
         assertResult(newWorkspace) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, None)
         }
       }
   }
@@ -75,10 +75,10 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set(testData.userProjectOwner.userEmail.value,testWorkspaces.userSAProjectOwner.userEmail.value), Some(false))
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set(testData.userProjectOwner.userEmail.value,testWorkspaces.userSAProjectOwner.userEmail.value), Some(false), Set.empty)
         ){
           val response = responseAs[WorkspaceListResponse]
-          WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners, Some(false))
+          WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners, Some(false), Set.empty)
         }
       }
   }
@@ -95,10 +95,10 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceListResponse(WorkspaceAccessLevels.ProjectOwner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set(testData.userProjectOwner.userEmail.value,testWorkspaces.userSAProjectOwner.userEmail.value), Some(false))
+          WorkspaceListResponse(WorkspaceAccessLevels.ProjectOwner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set(testData.userProjectOwner.userEmail.value,testWorkspaces.userSAProjectOwner.userEmail.value), Some(false), Set.empty)
         ){
           val response = responseAs[WorkspaceListResponse]
-          WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners, Some(false))
+          WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners, Some(false), Set.empty)
         }
       }
   }
@@ -122,11 +122,11 @@ class PetSASpec extends ApiServiceSpec {
 
     val workspace1Id = UUID.randomUUID().toString
     val makeWorkspace1 = makeWorkspaceWithUsers(Map(
-      WorkspaceAccessLevels.Owner -> Set(userProjectOwner,userSAProjectOwner),
-      WorkspaceAccessLevels.Write -> Set(userWriter),
-      WorkspaceAccessLevels.Read -> Set(userReader)
-    ))_
-    val (workspace, workspaceGroups) = makeWorkspace1(billingProject, billingProjectGroups(ProjectRoles.Owner).head, workspaceName.name, Set.empty, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
+          WorkspaceAccessLevels.Owner -> Set(userProjectOwner,userSAProjectOwner),
+          WorkspaceAccessLevels.Write -> Set(userWriter),
+          WorkspaceAccessLevels.Read -> Set(userReader)
+        ))_
+    val (workspace) = makeWorkspace1(billingProject, billingProjectGroups(ProjectRoles.Owner).head, workspaceName.name, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
 
     override def save() = {
       DBIO.seq(

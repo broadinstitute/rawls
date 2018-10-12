@@ -25,4 +25,11 @@
         <dropForeignKeyConstraint baseTableName="WORKSPACE_USER_COMPUTE" constraintName="FK_USER_COMPUTE_PERMS_WS"/>
     </changeSet>
 
+    <changeSet logicalFilePath="dummy" author="dvoet" id="drop_FK_AUTH_DOMAIN_WS">
+        <dropForeignKeyConstraint baseTableName="WORKSPACE_AUTH_DOMAIN" constraintName="FK_AUTH_DOMAIN_WS"/>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="dvoet" id="drop_FK_WS_ACCESS_WORKSPACE">
+        <dropForeignKeyConstraint baseTableName="WORKSPACE_ACCESS" constraintName="FK_WS_ACCESS_WORKSPACE"/>
+    </changeSet>
 </databaseChangeLog>

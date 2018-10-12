@@ -1642,9 +1642,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(Set(testData.realm2)) {
-          responseAs[Workspace].authorizationDomain
-        }
       }
 
     val destWorkspaceWrongRealmName = wrongRealmCloneRequest.toWorkspaceName
@@ -1685,9 +1682,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(authDomain) {
-          responseAs[Workspace].authorizationDomain
-        }
       }
 
     val destCloneRequest = WorkspaceRequest(namespace = testData.workspaceWithRealm.namespace, name = "copy_of_source_ws", Map.empty, Option(authDomain))
@@ -1696,9 +1690,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.Created) {
           status
-        }
-        assertResult(authDomain) {
-          responseAs[Workspace].authorizationDomain
         }
       }
 
@@ -1770,7 +1761,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set())
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set())
 
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
 
     val numEntities = 100
     val vocab1Strings = Map(0 -> "foo", 1 -> "bar", 2 -> "baz")

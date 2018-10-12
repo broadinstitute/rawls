@@ -220,4 +220,6 @@ class MockSamDAO extends SamDAO {
   override def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String] = ???
 
   override def getStatus(): Future[SubsystemStatus] = ???
+
+  override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String): Future[Seq[String]] = ???
 }

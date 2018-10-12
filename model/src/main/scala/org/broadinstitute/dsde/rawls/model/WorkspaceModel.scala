@@ -93,7 +93,6 @@ case class WorkspaceRequest (
 case class Workspace(
                       namespace: String,
                       name: String,
-                      authorizationDomain: Set[ManagedGroupRef],
                       workspaceId: String,
                       bucketName: String,
                       createdDate: DateTime,
@@ -401,7 +400,8 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspace: Workspace,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
                                  owners: Set[String],
-                                 public: Option[Boolean])
+                                 public: Option[Boolean],
+                                 authorizationDomain: Set[ManagedGroupRef])
 
 case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
                              canShare: Boolean,
@@ -532,7 +532,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
 
-  implicit val WorkspaceFormat = jsonFormat10(Workspace)
+  implicit val WorkspaceFormat = jsonFormat9(Workspace)
 
 //  implicit val WorkspaceLiteFormat = jsonFormat10(WorkspaceLite)
 
@@ -610,7 +610,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 
-  implicit val WorkspaceListResponseFormat = jsonFormat5(WorkspaceListResponse)
+  implicit val WorkspaceListResponseFormat = jsonFormat6(WorkspaceListResponse)
 
   implicit val WorkspaceResponseFormat = jsonFormat7(WorkspaceResponse)
 

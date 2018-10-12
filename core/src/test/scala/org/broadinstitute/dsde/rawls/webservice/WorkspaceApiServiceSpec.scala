@@ -101,11 +101,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(defaultWorkspace) {
           val ws = runAndWait(workspaceQuery.findByName(defaultWorkspace.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty))
         }
         assertResult(defaultWorkspace) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(ws.authorizationDomain))
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty))
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(defaultWorkspace.path))))) {
@@ -214,10 +214,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, Workspace(defaultWorkspace.namespace, defaultWorkspace.name, Set.empty, "", "", dateTime, dateTime, "owner-access", Map.empty,false), WorkspaceSubmissionStats(None,None,0), Set("owner-access"), Some(false))
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, Workspace(defaultWorkspace.namespace, defaultWorkspace.name, "", "", dateTime, dateTime, "owner-access", Map.empty,false), WorkspaceSubmissionStats(None,None,0), Set("owner-access"), Some(false), Set.empty)
         ){
           val response = responseAs[WorkspaceListResponse]
-          WorkspaceListResponse(response.accessLevel, response.workspace.copy(workspaceId = "", bucketName = "", createdDate = dateTime, lastModified = dateTime), response.workspaceSubmissionStats, response.owners, Some(false))
+          WorkspaceListResponse(response.accessLevel, response.workspace.copy(workspaceId = "", bucketName = "", createdDate = dateTime, lastModified = dateTime), response.workspaceSubmissionStats, response.owners, Some(false), Set.empty)
         }
       }
   }

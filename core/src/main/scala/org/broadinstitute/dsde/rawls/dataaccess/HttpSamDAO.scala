@@ -251,4 +251,6 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
     serviceAccountCreds.getAccessToken
   }
+
+  override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String): Future[Seq[String]] = ???
 }

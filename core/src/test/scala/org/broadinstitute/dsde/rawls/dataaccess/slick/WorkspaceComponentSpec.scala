@@ -34,7 +34,6 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val workspace: Workspace = Workspace(
       "test_namespace",
       "test_name",
-      Set.empty,
       workspaceId.toString,
       "bucketname",
       currentTime(),

@@ -17,7 +17,7 @@ import scala.concurrent.duration.Duration
 class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with AttributeComponent with RawlsTestUtils {
   import driver.api._
 
-  val workspace = Workspace("broad-dsde-test", "test-workspace", Set.empty, UUID.randomUUID().toString, "fake-bucket", DateTime.now, DateTime.now, "biden", Map.empty, false)
+  val workspace = Workspace("broad-dsde-test", "test-workspace", UUID.randomUUID().toString, "fake-bucket", DateTime.now, DateTime.now, "biden", Map.empty, false)
   val workspaceId = UUID.fromString(workspace.workspaceId)
 
   // we don't know the IDs because it autoincrements
@@ -338,7 +338,6 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val workspace = Workspace(
       "test_namespace",
       "test_name",
-      Set.empty,
       workspaceId.toString,
       "bucketname",
       currentTime(),
@@ -377,7 +376,6 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val workspace = Workspace(
       "test_namespace",
       "test_name",
-      Set.empty,
       workspaceId.toString,
       "bucketname",
       currentTime(),
@@ -477,7 +475,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
 
     val workspace2ID = UUID.randomUUID()
-    val workspace2 = Workspace("broad-dsde-test", "test-tag-workspace", Set.empty, workspace2ID.toString, "fake-bucket", DateTime.now, DateTime.now, "testuser", Map.empty, false)
+    val workspace2 = Workspace("broad-dsde-test", "test-tag-workspace", workspace2ID.toString, "fake-bucket", DateTime.now, DateTime.now, "testuser", Map.empty, false)
     runAndWait(workspaceQuery.save(workspace2))
     runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("cancer")))
     runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("buffalo")))

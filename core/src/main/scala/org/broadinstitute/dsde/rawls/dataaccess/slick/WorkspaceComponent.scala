@@ -299,7 +299,7 @@ trait WorkspaceComponent {
       } yield {
         val attributesByWsId = workspaceAttributeQuery.unmarshalAttributes(workspaceAttributeRecs)
         workspaceRecs.map { workspaceRec =>
-          unmarshalWorkspaceSansAuthDomain(workspaceRec, attributesByWsId.getOrElse(workspaceRec.id, Map.empty))
+          unmarshalWorkspace(workspaceRec, attributesByWsId.getOrElse(workspaceRec.id, Map.empty))
         }
       }
     }
@@ -308,8 +308,8 @@ trait WorkspaceComponent {
       WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)
     }
 
-    private def unmarshalWorkspaceSansAuthDomain(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace = {
-      Workspace(workspaceRec.namespace, workspaceRec.name, Set.empty, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked)
+    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace = {
+      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked)
     }
   }
 

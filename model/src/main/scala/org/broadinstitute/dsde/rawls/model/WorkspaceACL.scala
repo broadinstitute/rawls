@@ -5,6 +5,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 
+import scala.util.Try
+
 case class AccessEntry(accessLevel: WorkspaceAccessLevel, pending: Boolean, canShare: Boolean, canCompute: Boolean)
 
 case class WorkspaceACL(acl: Map[String, AccessEntry])
@@ -60,6 +62,10 @@ object WorkspaceAccessLevels {
       case accessLevel if accessLevel.equalsIgnoreCase("NO ACCESS") => NoAccess
       case _ => throw new RawlsException(s"invalid WorkspaceAccessLevel [${s}]")
     }
+  }
+
+  def withPolicyName(policyName: String): Option[WorkspaceAccessLevel] = {
+    Try(withName(policyName.replace("-", "_"))).toOption
   }
 
   def max(a: WorkspaceAccessLevel, b: WorkspaceAccessLevel): WorkspaceAccessLevel = {

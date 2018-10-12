@@ -649,7 +649,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner, userOwner), ProjectRoles.User -> Set.empty), Map.empty)
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
 
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
 
     val numSamples = 10000
 
