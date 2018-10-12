@@ -14,8 +14,6 @@ import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SamModelJsonSupport._
-import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
-import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
@@ -93,7 +91,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[_ <: SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}"
 
-    val httpRequest = RequestBuilding.Post(url, SamResourceWithPolicies(resourceId, policies.map(x => x._1.value -> x._2), authDomain))
+    val httpRequest = RequestBuilding.Post(url, SamResourceWithPolicies(resourceId, policies.map(x => x._1 -> x._2), authDomain))
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
@@ -240,68 +238,12 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
   //managed group apis
 
-  override def createGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}"
-    val httpRequest = RequestBuilding.Post(url)
-
-    doSuccessOrFailureRequest(httpRequest, userInfo)
-  }
-
-  override def deleteGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}"
-    val httpRequest = RequestBuilding.Delete(url)
-
-    doSuccessOrFailureRequest(httpRequest, userInfo)
-  }
-
-  override def listGroupPolicyEmails(groupName: WorkbenchGroupName, policyName: ManagedRoles.ManagedRole, userInfo: UserInfo): Future[List[WorkbenchEmail]] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}/${policyName.toString.toLowerCase}"
-
-    retry(when401or500) { () => pipeline[List[WorkbenchEmail]](userInfo) apply RequestBuilding.Get(url) }
-  }
-
-  override def getGroupEmail(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[WorkbenchEmail] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}"
-
-    retry(when401or500) { () => pipeline[WorkbenchEmail](userInfo) apply RequestBuilding.Get(url) }
-  }
-
-  override def listManagedGroups(userInfo: UserInfo): Future[List[ManagedGroupAccessResponse]] = {
-    val url = samServiceURL + s"/api/groups"
-
-    retry(when401or500) { () => pipeline[List[ManagedGroupAccessResponse]](userInfo) apply RequestBuilding.Get(url) }
-  }
-
-
-  override def addUserToManagedGroup(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmail: WorkbenchEmail, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}/${role.toString.toLowerCase}/${memberEmail.value}"
-    val httpRequest = RequestBuilding.Put(url)
-
-    doSuccessOrFailureRequest(httpRequest, userInfo)
-  }
-
-  override def removeUserFromManagedGroup(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmail: WorkbenchEmail, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}/${role.toString.toLowerCase}/${memberEmail.value}"
-    val httpRequest = RequestBuilding.Delete(url)
-
-    doSuccessOrFailureRequest(httpRequest, userInfo)
-  }
-
-  override def overwriteManagedGroupMembership(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmails: Seq[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}/${role.toString.toLowerCase}"
-    val httpRequest = RequestBuilding.Put(url, memberEmails)
-
-    doSuccessOrFailureRequest(httpRequest, userInfo)
-  }
-
-
   override def requestAccessToManagedGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = {
     val url = samServiceURL + s"/api/group/${groupName.value}/requestAccess"
     val httpRequest = RequestBuilding.Post(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
-
 
   private def getServiceAccountAccessToken = {
     val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)

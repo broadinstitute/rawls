@@ -210,39 +210,6 @@ class MockSamDAO extends SamDAO {
     Future.successful(SamPolicySyncStatus(DateTime.now.toString(), policyName.value))
   }
 
-  override def createGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = Future {
-    groups.putIfAbsent(groupName.value, Set(userInfo.userEmail.value))
-  }
-
-  override def deleteGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = Future {
-    groups.remove(groupName.value)
-    Future.successful(())
-  }
-
-  override def listGroupPolicyEmails(groupName: WorkbenchGroupName, policyName: ManagedRoles.ManagedRole, userInfo: UserInfo): Future[List[WorkbenchEmail]] = {
-    Future.successful(List.empty)
-  }
-
-  override def getGroupEmail(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[WorkbenchEmail] = {
-    Future.successful(WorkbenchEmail(groupName.value))
-  }
-
-  override def listManagedGroups(userInfo: UserInfo): Future[List[ManagedGroupAccessResponse]] = {
-    Future.successful(List.empty)
-  }
-
-  override def addUserToManagedGroup(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmail: WorkbenchEmail, userInfo: UserInfo): Future[Unit] = {
-    Future.successful(())
-  }
-
-  override def removeUserFromManagedGroup(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmail: WorkbenchEmail, userInfo: UserInfo): Future[Unit] = {
-    Future.successful(())
-  }
-
-  override def overwriteManagedGroupMembership(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmails: Seq[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = {
-    Future.successful(())
-  }
-
   override def requestAccessToManagedGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = {
     Future.successful(())
   }

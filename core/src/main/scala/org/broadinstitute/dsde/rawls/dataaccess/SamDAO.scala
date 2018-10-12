@@ -1,10 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
-import org.broadinstitute.dsde.rawls.dataaccess.SamResourceTypeNames.SamResourceTypeName
 import org.broadinstitute.dsde.rawls.model.{JsonSupport, ManagedGroupAccessResponse, ManagedRoles, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo, UserStatus}
+import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
+import org.broadinstitute.dsde.workbench.model._
 import spray.json.DefaultJsonProtocol._
-import org.broadinstitute.dsde.workbench.model.{ErrorReport, ErrorReportSource, WorkbenchEmail, WorkbenchExceptionWithErrorReport, WorkbenchGroupName}
+import spray.json.{JsString, JsValue, RootJsonFormat}
 
 import scala.concurrent.Future
 
@@ -36,25 +36,6 @@ trait SamDAO {
   def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus]
 
   @deprecated
-  def createGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit]
-  @deprecated
-  def deleteGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit]
-
-  @deprecated
-  def listGroupPolicyEmails(groupName: WorkbenchGroupName, policyName: ManagedRoles.ManagedRole, userInfo: UserInfo): Future[List[WorkbenchEmail]]
-  @deprecated
-  def getGroupEmail(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[WorkbenchEmail]
-  @deprecated
-  def listManagedGroups(userInfo: UserInfo): Future[List[ManagedGroupAccessResponse]]
-
-  @deprecated
-  def addUserToManagedGroup(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmail: WorkbenchEmail, userInfo: UserInfo): Future[Unit]
-  @deprecated
-  def removeUserFromManagedGroup(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmail: WorkbenchEmail, userInfo: UserInfo): Future[Unit]
-  @deprecated
-  def overwriteManagedGroupMembership(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmails: Seq[WorkbenchEmail], userInfo: UserInfo): Future[Unit]
-
-  @deprecated
   def requestAccessToManagedGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit]
 
   /**
@@ -66,68 +47,99 @@ trait SamDAO {
   def getStatus(): Future[SubsystemStatus]
 }
 
-object SamResourceActions {
-  case class SamResourceAction(value: String)
+/*
+  Resource type names
+ */
 
+case class SamResourceTypeName(value: String)
+
+object SamResourceTypeNames {
+  val billingProject = SamResourceTypeName("billing-project")
+  val managedGroup = SamResourceTypeName("managed-group")
+  val workspace = SamResourceTypeName("workspace")
+}
+
+/*
+  Resource roles
+ */
+
+case class SamResourceRole(value: String) extends ValueObject
+
+object SamWorkspaceRoles {
+  val owner = SamResourceRole("owner")
+  val writer = SamResourceRole("writer")
+  val reader = SamResourceRole("reader")
+  val shareWriter = SamResourceRole("share-writer")
+  val shareReader = SamResourceRole("share-reader")
+  val canCompute = SamResourceRole("can-compute")
+  val canCatalog = SamResourceRole("can-catalog")
+}
+
+object SamProjectRoles {
+  val workspaceCreator = SamResourceRole("workspace-creator")
+  val batchComputeUser = SamResourceRole("batch-compute-user")
+  val notebookUser = SamResourceRole("notebook-user")
+  val owner = SamResourceRole("owner")
+}
+
+/*
+  Resource action
+ */
+
+case class SamResourceAction(value: String) extends ValueObject
+
+object SamWorkspaceActions {
+  val catalog = SamResourceAction("catalog")
+  val own = SamResourceAction("own")
+  val write = SamResourceAction("write")
+  val read = SamResourceAction("read")
+  def sharePolicy(policy: String) = SamResourceAction(s"share_policy::$policy")
+}
+
+object SamBillingProjectActions {
   val createWorkspace = SamResourceAction("create_workspace")
   val launchBatchCompute = SamResourceAction("launch_batch_compute")
   val alterPolicies = SamResourceAction("alter_policies")
   val readPolicies = SamResourceAction("read_policies")
   val alterGoogleRole = SamResourceAction("alter_google_role")
   def sharePolicy(policy: String) = SamResourceAction(s"share_policy::$policy")
-  val workspaceCanCatalog = SamResourceAction("catalog")
-  val workspaceOwn = SamResourceAction("own")
-  val workspaceWrite = SamResourceAction("write")
-  val workspaceRead = SamResourceAction("read")
 }
 
-object SamResourceTypeNames {
-  case class SamResourceTypeName(value: String)
+/*
+  Resource policy names
+ */
 
-  val billingProject = SamResourceTypeName("billing-project")
-  val managedGroup = SamResourceTypeName("managed-group")
-  val workspace = SamResourceTypeName("workspace")
-}
-
-trait SamResourceRoles
-trait SamResourcePolicyNames
-
-object SamProjectRoles extends SamResourceRoles {
-  val workspaceCreator = "workspace-creator"
-  val batchComputeUser = "batch-compute-user"
-  val notebookUser = "notebook-user"
-  val owner = "owner"
-}
-
-sealed trait SamResourcePolicyName { val value: String }
-case class SamWorkspacePolicyName(value: String) extends SamResourcePolicyName
-case class SamBillingProjectPolicyName(value: String) extends SamResourcePolicyName
+case class SamResourcePolicyName(value: String) extends ValueObject
 
 object SamWorkspacePolicyNames {
-  val projectOwner = SamWorkspacePolicyName("project-owner")
-  val owner = SamWorkspacePolicyName("owner")
-  val writer = SamWorkspacePolicyName("writer")
-  val reader = SamWorkspacePolicyName("reader")
-  val shareWriter = SamWorkspacePolicyName("share-writer")
-  val shareReader = SamWorkspacePolicyName("share-reader")
-  val canCompute = SamWorkspacePolicyName("can-compute")
-  val canCatalog = SamWorkspacePolicyName("can-catalog")
+  val projectOwner = SamResourcePolicyName("project-owner")
+  val owner = SamResourcePolicyName("owner")
+  val writer = SamResourcePolicyName("writer")
+  val reader = SamResourcePolicyName("reader")
+  val shareWriter = SamResourcePolicyName("share-writer")
+  val shareReader = SamResourcePolicyName("share-reader")
+  val canCompute = SamResourcePolicyName("can-compute")
+  val canCatalog = SamResourcePolicyName("can-catalog")
 }
 
 object SamBillingProjectPolicyNames {
-  val owner = SamBillingProjectPolicyName("owner")
-  val workspaceCreator = SamBillingProjectPolicyName("workspace-creator")
-  val canComputeUser = SamBillingProjectPolicyName("can-compute-user")
+  val owner = SamResourcePolicyName("owner")
+  val workspaceCreator = SamResourcePolicyName("workspace-creator")
+  val canComputeUser = SamResourcePolicyName("can-compute-user")
 }
 
-case class SamPolicy(memberEmails: Set[String], actions: Set[String], roles: Set[String])
-case class SamPolicyWithName(policyName: String, policy: SamPolicy)
-case class SamPolicyWithNameAndEmail(policyName: String, policy: SamPolicy, email: String)
-case class SamResourceWithPolicies(resourceId: String, policies: Map[String, SamPolicy], authDomain: Set[String])
-case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: String, authDomains: Set[String], missingAuthDomains: Set[String], public: Option[Boolean])
-case class SamPolicySyncStatus(lastSyncDate: String, email: String)
+case class SamPolicy(memberEmails: Set[WorkbenchEmail], actions: Set[SamResourceAction], roles: Set[SamResourceRole])
+case class SamPolicyWithName(policyName: SamResourcePolicyName, policy: SamPolicy)
+case class SamPolicyWithNameAndEmail(policyName: SamResourcePolicyName, policy: SamPolicy, email: WorkbenchEmail)
+case class SamResourceWithPolicies(resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String])
+case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: SamResourcePolicyName, authDomains: Set[String], missingAuthDomains: Set[String], public: Option[Boolean])
+case class SamPolicySyncStatus(lastSyncDate: String, email: WorkbenchEmail)
 
 object SamModelJsonSupport extends JsonSupport {
+  implicit val SamResourcePolicyNameFormat = ValueObjectFormat(SamResourcePolicyName)
+  implicit val SamResourceActionFormat = ValueObjectFormat(SamResourceAction)
+  implicit val SamResourceRoleFormat = ValueObjectFormat(SamResourceRole)
+
   implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
   implicit val SamPolicyWithNameFormat = jsonFormat2(SamPolicyWithName)
   implicit val SamPolicyWithNameAndEmailFormat = jsonFormat3(SamPolicyWithNameAndEmail)

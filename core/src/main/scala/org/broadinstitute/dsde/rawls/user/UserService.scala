@@ -66,14 +66,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def AdminRegisterBillingProject(xfer: RawlsBillingProjectTransfer) = asFCAdmin { registerBillingProject(xfer) }
   def AdminUnregisterBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { unregisterBillingProject(projectName, ownerInfo) }
 
-  def AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) = requireProjectAction(projectName, SamResourceActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) }
-  def RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) = requireProjectAction(projectName, SamResourceActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) }
-  def GrantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { grantGoogleRoleToUser(projectName, targetUserEmail, role) }
-  def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamResourceActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
+  def AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) = requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) }
+  def RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) = requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) }
+  def GrantGoogleRoleToUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamBillingProjectActions.alterGoogleRole) { grantGoogleRoleToUser(projectName, targetUserEmail, role) }
+  def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamBillingProjectActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
   def ListBillingAccounts = listBillingAccounts()
 
   def CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) = startBillingProjectCreation(projectName, billingAccount)
-  def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamResourceActions.readPolicies) { getBillingProjectMembers(projectName) }
+  def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamBillingProjectActions.readPolicies) { getBillingProjectMembers(projectName) }
 
   def AdminDeleteRefreshToken(userRef: RawlsUserRef) = asFCAdmin { deleteRefreshToken(userRef) }
 
@@ -82,7 +82,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def AdminAddLibraryCurator(userEmail: RawlsUserEmail) = asFCAdmin { addLibraryCurator(userEmail) }
   def AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) = asFCAdmin { removeLibraryCurator(userEmail) }
 
-  def requireProjectAction(projectName: RawlsBillingProjectName, action: SamResourceActions.SamResourceAction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+  def requireProjectAction(projectName: RawlsBillingProjectName, action: SamResourceAction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, userInfo).flatMap {
       case true => op
       case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a project owner.")))
@@ -166,8 +166,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       projectDetailsByName <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))) }
     } yield {
       resourceIdsWithPolicyNames.collect {
-        case SamResourceIdWithPolicyName(resourceId, "owner", _, _, _) => (resourceId, ProjectRoles.Owner)
-        case SamResourceIdWithPolicyName(resourceId, "workspace-creator", _, _, _) => (resourceId, ProjectRoles.User)
+        case SamResourceIdWithPolicyName(resourceId, SamBillingProjectPolicyNames.owner, _, _, _) => (resourceId, ProjectRoles.Owner)
+        case SamResourceIdWithPolicyName(resourceId, SamBillingProjectPolicyNames.workspaceCreator, _, _, _) => (resourceId, ProjectRoles.User)
       }.flatMap { case (resourceId, role) =>
         projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
           RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
@@ -182,11 +182,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     samDAO.getResourcePolicies(SamResourceTypeNames.billingProject, projectName.value, userInfo).map { policies =>
       for {
         (role, policy) <- policies.collect {
-          case SamPolicyWithName("owner", policy) => (ProjectRoles.Owner, policy)
-          case SamPolicyWithName("workspace-creator", policy) => (ProjectRoles.User, policy)
+          case SamPolicyWithName(SamBillingProjectPolicyNames.owner, policy) => (ProjectRoles.Owner, policy)
+          case SamPolicyWithName(SamBillingProjectPolicyNames.workspaceCreator, policy) => (ProjectRoles.User, policy)
         }
         email <- policy.memberEmails
-      } yield RawlsBillingProjectMember(RawlsUserEmail(email), role)
+      } yield RawlsBillingProjectMember(RawlsUserEmail(email.value), role)
     }.map(RequestComplete(_))
   }
 
