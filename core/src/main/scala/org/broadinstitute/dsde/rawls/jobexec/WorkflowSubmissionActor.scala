@@ -294,16 +294,16 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         }
 
         //yield the things we're going to submit to Cromwell
-        (wdl, wfRecs, wfInputsBatch, wfOpts, collectDosUris(workflowBatch))
+        (wdl, wfRecs, wfInputsBatch, wfOpts, collectDosUris(workflowBatch), userCredentials)
       }
     }
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
-      (wdl, workflowRecs, wfInputsBatch, wfOpts, dosUris) <- workflowBatchFuture
+      (wdl, workflowRecs, wfInputsBatch, wfOpts, dosUris, userCredentials) <- workflowBatchFuture
       dosServiceAccounts <- resolveDosUriServiceAccounts(dosUris)
       _ <- if (dosServiceAccounts.isEmpty) Future.successful(false) else googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(wfOpts.google_project), Map(requesterPaysRole -> dosServiceAccounts.map("user:"+_).toList))
-      workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), UserInfo.buildFromTokens(credential))
+      workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), UserInfo.buildFromTokens(userCredentials))
     } yield {
       // call to submitWorkflows returns a tuple:
       val executionServiceKey = workflowSubmitResult._1

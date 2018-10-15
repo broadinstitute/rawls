@@ -1262,6 +1262,15 @@ class HttpGoogleServicesDAO(
     })
   }
 
+  def getUserInfoUsingJson(saKey: String): Future[UserInfo] = {
+    implicit val service = GoogleInstrumentedService.OAuth
+    retryWhen500orGoogleError(() => {
+      val keyStream = new ByteArrayInputStream(saKey.getBytes)
+      val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(storageScopes)
+      UserInfo.buildFromTokens(credential)
+    })
+  }
+
   def getServiceAccountRawlsUser(): Future[RawlsUser] = {
     getRawlsUserForCreds(getBucketServiceAccountCredential)
   }
