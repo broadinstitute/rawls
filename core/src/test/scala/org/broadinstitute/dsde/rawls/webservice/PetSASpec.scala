@@ -56,11 +56,11 @@ class PetSASpec extends ApiServiceSpec {
         }
         assertResult(newWorkspace) {
           val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, None)
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty))
         }
         assertResult(newWorkspace) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, None)
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty))
         }
       }
   }
@@ -115,29 +115,16 @@ class PetSASpec extends ApiServiceSpec {
     val userSAProjectOwnerUserInfo = UserInfo(RawlsUserEmail("project-owner-access-sa@abc.iam.gserviceaccount.com"), OAuth2BearerToken("SA-but-not-pet-token"), 123, RawlsUserSubjectId("123456789876543210202"))
     val userSAProjectOwner = RawlsUser(userSAProjectOwnerUserInfo)
 
-    val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName("ns"), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set.empty), Map.empty)
     val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), "testBucketUrl", CreationStatuses.Ready, None, None)
 
     val workspaceName = WorkspaceName(billingProject.projectName.value, "testworkspace")
 
     val workspace1Id = UUID.randomUUID().toString
-    val makeWorkspace1 = makeWorkspaceWithUsers(Map(
-          WorkspaceAccessLevels.Owner -> Set(userProjectOwner,userSAProjectOwner),
-          WorkspaceAccessLevels.Write -> Set(userWriter),
-          WorkspaceAccessLevels.Read -> Set(userReader)
-        ))_
-    val (workspace) = makeWorkspace1(billingProject, billingProjectGroups(ProjectRoles.Owner).head, workspaceName.name, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
+    val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
 
     override def save() = {
       DBIO.seq(
-        DBIO.from(samDataSaver.createUser(userProjectOwner)),
-        DBIO.from(samDataSaver.createUser(userOwner)),
-        DBIO.from(samDataSaver.createUser(userWriter)),
-        DBIO.from(samDataSaver.createUser(userReader)),
-        DBIO.from(samDataSaver.createUser(userSAProjectOwner)),
-//        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
         rawlsBillingProjectQuery.create(billingProject),
-//        DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         workspaceQuery.save(workspace)
       )
     }

@@ -66,8 +66,6 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
 
     override def save() = {
       DBIO.seq(
-//        rawlsUserQuery.createUser(user),
-//        rawlsGroupQuery.save(ownerGroup),
         workspaceQuery.save(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(

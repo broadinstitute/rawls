@@ -23,7 +23,7 @@ import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.testkit.RouteTestTimeout
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 /**
@@ -223,7 +223,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
-    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sampleSet1, Option("this.samples"), services)
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
     assertResult(3) {
       submission.workflows.size
@@ -235,7 +235,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
-    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sampleSet1, Option("this.samples"), services)
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
     Get(s"${testData.wsName.path}") ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -483,7 +483,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Queued, DateTime.now, Some(ent.toReference), testData.inputResolutions)
       }
 
-      val sub = createTestSubmission(testData.workspace, testData.agoraMethodConfig, testData.individual1, WorkbenchEmail(user.userEmail.value), Seq.empty, Map.empty, Seq.empty, Map.empty).copy(workflows = workflows)
+      val sub = createTestSubmission(testData.workspace, testData.agoraMethodConfig, testData.indiv1, WorkbenchEmail(user.userEmail.value), Seq.empty, Map.empty, Seq.empty, Map.empty).copy(workflows = workflows)
       runAndWait(submissionQuery.create(context, sub))
     }
   }
@@ -569,9 +569,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val otherUser1 = RawlsUser(RawlsUserSubjectId("subj-id-1"), RawlsUserEmail("new.email1@example.net"))
     val otherUser2 = RawlsUser(RawlsUserSubjectId("subj-id-2"), RawlsUserEmail("new.email2@example.net"))
 
-//    runAndWait(rawlsUserQuery.createUser(otherUser1))
-//    runAndWait(rawlsUserQuery.createUser(otherUser2))
-
     addWorkflowsToQueue(otherUser1, 5)
     addWorkflowsToQueue(otherUser2, 10)
 
@@ -587,10 +584,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "count workflows ahead of the user when the user is in the queue" in withTestDataApiServices { services =>
     val otherUser1 = UserInfo(RawlsUserEmail("new.email1@example.net"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("subj-id-1"))
     val otherUser2 = UserInfo(RawlsUserEmail("new.email2@example.net"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("subj-id-2"))
-
-    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
-    Await.result(services.samDAO.registerUser(otherUser1), Duration.Inf)
-    Await.result(services.samDAO.registerUser(otherUser2), Duration.Inf)
 
     addWorkflowsToQueue(RawlsUser(otherUser1), 5)
     addWorkflowsToQueue(RawlsUser(userInfo), 20)
@@ -611,10 +604,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val workflowId = "8afafe21-2b70-4180-a565-748cb573e10c"
     val workflows = Seq(
       // use the UUID of the workflow that has an output of array(array)
-      Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, Some(testData.individual1.toReference), Seq.empty)
+      Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, Some(testData.indiv1.toReference), Seq.empty)
     )
 
-    val testSubmission = Submission(UUID.randomUUID.toString, testDate, WorkbenchEmail(testData.userOwner.userEmail.value), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some(testData.individual1.toReference), workflows, SubmissionStatuses.Done, false)
+    val testSubmission = Submission(UUID.randomUUID.toString, testDate, WorkbenchEmail(testData.userOwner.userEmail.value), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some(testData.indiv1.toReference), workflows, SubmissionStatuses.Done, false)
 
     runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))
@@ -646,7 +639,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set())
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set())
-    val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner, userOwner), ProjectRoles.User -> Set.empty), Map.empty)
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
 
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
@@ -660,13 +652,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       import driver.api._
 
       DBIO.seq(
-//        rawlsUserQuery.createUser(userProjectOwner),
-//        rawlsUserQuery.createUser(userOwner),
-//        rawlsGroupQuery.save(ownerGroup),
-//        rawlsGroupQuery.save(writerGroup),
-//        rawlsGroupQuery.save(readerGroup),
-//        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
-        rawlsBillingProjectQuery.create(billingProject),
         workspaceQuery.save(workspace),
         entityQuery.save(SlickWorkspaceContext(workspace), lotsOfSamples :+ sampleSet)
       )

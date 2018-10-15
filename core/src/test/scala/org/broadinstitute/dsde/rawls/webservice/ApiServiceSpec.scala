@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
 import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, HealthMonitor}
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
@@ -32,7 +32,6 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.{MethodRepoConfig, SwaggerConfig}
-import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 
 import scala.concurrent.duration._
 
@@ -119,14 +118,12 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       workbenchMetricBaseName
     ).withDispatcher("submission-monitor-dispatcher"))
 
+    val googleGroupSyncTopic = "test-topic-name"
+
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
 
     val dosResolver = new MarthaDosResolver(mockServer.mockServerBaseUrl)
-
-    //val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
-    val samDAO = new MockSamDAO
-    //most of the time we probably just want a StatelessMockSamDAO that returns true to everything that we ask it
 
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
@@ -135,6 +132,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       samDAO,
       Seq("bigquery.jobUser")
     )_
+
 
     override val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
@@ -150,6 +148,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
       MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
       workbenchMetricBaseName = workbenchMetricBaseName)
+
+    val samDAO = new MockSamDAO(dataSource)
 
     val healthMonitor = system.actorOf(HealthMonitor.props(
       dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO, executionServiceCluster.readMembers.map(c => c.key->c.dao).toMap,

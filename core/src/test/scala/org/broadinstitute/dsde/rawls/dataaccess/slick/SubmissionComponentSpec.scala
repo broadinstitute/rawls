@@ -20,7 +20,7 @@ import scala.concurrent.duration.Duration
 class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
   import driver.api._
 
-  private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.individual1, WorkbenchEmail(testData.userOwner.userEmail.value),
+  private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
     Seq(testData.sample1, testData.sample2, testData.sample3), Map(
       testData.sample1 -> Seq(
         SubmissionValidationValue(Option(AttributeString("value1a")), Option("message1a"), "test_input_name"),
@@ -35,7 +35,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       testData.sample4 -> testData.inputResolutions2,
       testData.sample5 -> testData.inputResolutions2,
       testData.sample6 -> testData.inputResolutions2))
-  private val submission4 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.individual1, WorkbenchEmail(testData.userOwner.userEmail.value),
+  private val submission4 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
     Seq(testData.sample1, testData.sample2, testData.sample3), Map(
       testData.sample1 -> testData.inputResolutions,
       testData.sample2 -> testData.inputResolutions,
@@ -47,19 +47,19 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   val inputResolutionsList = Seq(SubmissionValidationValue(Option(
     AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
-  private val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sampleSet1, WorkbenchEmail(testData.userOwner.userEmail.value),
-    Seq(testData.sampleSet1), Map(testData.sampleSet1 -> inputResolutionsList),
+  private val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, WorkbenchEmail(testData.userOwner.userEmail.value),
+    Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
     Seq.empty, Map.empty)
 
   val inputResolutionsListEmpty = Seq(SubmissionValidationValue(Option(
     AttributeValueList(Seq())), Option("message4"), "test_input_name4"))
-  private val submissionListEmpty = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sampleSet1, WorkbenchEmail(testData.userOwner.userEmail.value),
-    Seq(testData.sampleSet1), Map(testData.sampleSet1 -> inputResolutionsListEmpty),
+  private val submissionListEmpty = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, WorkbenchEmail(testData.userOwner.userEmail.value),
+    Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsListEmpty),
     Seq.empty, Map.empty)
 
   val inputResolutionsAttrEmptyList = Seq(SubmissionValidationValue(Option(AttributeValueEmptyList), Option("message4"), "test_input_name4"))
-  private val submissionAttrEmptyList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sampleSet1, WorkbenchEmail(testData.userOwner.userEmail.value),
-    Seq(testData.sampleSet1), Map(testData.sampleSet1 -> inputResolutionsAttrEmptyList),
+  private val submissionAttrEmptyList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, WorkbenchEmail(testData.userOwner.userEmail.value),
+    Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsAttrEmptyList),
     Seq.empty, Map.empty)
 
   "SubmissionComponent" should "save, get, list, and delete a submission status" in withDefaultTestDatabase {
@@ -274,8 +274,8 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
 
-      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sampleSet1, WorkbenchEmail(testData.userOwner.userEmail.value),
-        Seq(testData.sampleSet1), Map(testData.sampleSet1 -> inputResolutionsList),
+      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, WorkbenchEmail(testData.userOwner.userEmail.value),
+        Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
         Seq.empty, Map.empty)
 
       runAndWait(submissionQuery.create(ctx, submissionList))
@@ -311,8 +311,8 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     withWorkspaceContext(testData.workspace) { ctx =>
       statusCounts.flatMap { case (st, count) =>
         for (_ <- 0 until count) yield {
-          createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sampleSet1, WorkbenchEmail(testData.userOwner.userEmail.value),
-            Seq(testData.sampleSet1), Map(testData.sampleSet1 -> inputResolutionsList),
+          createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, WorkbenchEmail(testData.userOwner.userEmail.value),
+            Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
             Seq.empty, Map.empty, st)
         }
       }.foreach { sub =>
@@ -334,11 +334,10 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val testUserStatusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
     withWorkspaceContext(testData.workspace) { ctx =>
       val testUser = RawlsUser(UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(testUserId)))
-//      runAndWait(rawlsUserQuery.createUser(testUser))
       testUserStatusCounts.flatMap { case (st, count) =>
         for (_ <- 0 until count) yield {
-          createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sampleSet1, WorkbenchEmail(testUser.userEmail.value),
-            Seq(testData.sampleSet1), Map(testData.sampleSet1 -> inputResolutionsList),
+          createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, WorkbenchEmail(testUser.userEmail.value),
+            Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
             Seq.empty, Map.empty, st)
         }
       }.foreach { sub =>

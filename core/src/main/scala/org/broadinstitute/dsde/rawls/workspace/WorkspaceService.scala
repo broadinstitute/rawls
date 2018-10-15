@@ -47,7 +47,7 @@ object WorkspaceService {
   }
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, trackDetailedSubmissionMetrics: Boolean)(implicit protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, trackDetailedSubmissionMetrics: Boolean)(implicit protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
 
   import dataSource.dataAccess.driver.api._
@@ -162,12 +162,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] = {
-    for {
-      isOwner <- samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.own, userInfo).map(hasAction => if(hasAction) Some(WorkspaceAccessLevels.Owner) else None)
-      isWriter <- if(isOwner.isEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.write, userInfo).map(hasAction => if(hasAction) Some(WorkspaceAccessLevels.Write) else None) else Future.successful(None)
-      isReader <- if(isWriter.isEmpty) samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.read, userInfo).map(hasAction => if(hasAction) Some(WorkspaceAccessLevels.Read) else None) else Future.successful(None)
-    } yield {
-      Seq(isOwner, isWriter, isReader).flatten.headOption.getOrElse(WorkspaceAccessLevels.NoAccess)
+    samDAO.getResourcePolicies(SamResourceTypeNames.workspace, workspaceId, userInfo).map { policies =>
+      policies.flatMap(p => WorkspaceAccessLevels.withPolicyName(p.policyName.value)).fold(WorkspaceAccessLevels.NoAccess)(max)
     }
   }
 
@@ -251,15 +247,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
       tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
         getWorkspaceContext(workspaceName) flatMap { ctx =>
-          dataSource.inTransaction { dataAccess =>
-            DBIO.from(getMaximumAccessLevel(ctx.workspaceId.toString)) flatMap {maxAccessLevel =>
-              DBIO.from(getUserSharePermissions(ctx.workspace.workspaceId, maxAccessLevel, maxAccessLevel)) flatMap { canShare =>
-                DBIO.from(getUserCatalogPermissions(ctx.workspace.workspaceId)) flatMap { canCatalog =>
-                  withLibraryPermissions(ctx, operations, dataAccess, userInfo, isCurator, maxAccessLevel, canShare, canCatalog) {
-                    updateWorkspace(operations, dataAccess)(ctx)
-                  }
-                }
-              }
+          withLibraryPermissions(ctx, operations, userInfo, isCurator) {
+            dataSource.inTransaction { dataAccess =>
+              updateWorkspace(operations, dataAccess)(ctx)
             }
           }
         } map { ws =>
@@ -568,27 +558,37 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     //get rid of project owner changes and the caller altering their own access
     val filteredAclUpdates = aclUpdates.filterNot(au => au.accessLevel == WorkspaceAccessLevels.ProjectOwner || au.email.equalsIgnoreCase(userInfo.userEmail.value))
 
-    requireSharePermission(workspaceName, maxLevelSharingWith) {
-      validateUsersExist(aclUpdates.map(_.email)).flatMap { missingUsers =>
-        if (missingUsers.flatten.isEmpty || inviteUsersNotFound) {
-          getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
-            val usersToInvite = aclUpdates.filter(aclUpdate => missingUsers.flatten.contains(aclUpdate.email))
-            val usersToRemove = filteredAclUpdates.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess) -- usersToInvite
-            val usersToAdd = filteredAclUpdates -- usersToRemove //TODO: this *could* include users whose access level remained the same, which is kinda bad. will fix...
+    validateUsersExist(aclUpdates.map(_.email)).flatMap { missingUsers =>
+      if (missingUsers.flatten.isEmpty || inviteUsersNotFound) {
+        getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
+          val usersToInvite = aclUpdates.filter(aclUpdate => missingUsers.flatten.contains(aclUpdate.email))
+          val usersToRemove = filteredAclUpdates.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess) -- usersToInvite
+          val usersToAdd = filteredAclUpdates -- usersToRemove //TODO: this *could* include users whose access level remained the same, which is kinda bad. will fix...
 
-            for {
-              workspaceId <- loadWorkspaceId(workspaceName)
-              _ <- Future.traverse(usersToRemove) { update => removeUserFromWorkspace(workspaceId, existingPolicies, WorkbenchEmail(update.email)) }
-              _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update), WorkbenchEmail(update.email), inviteUsersNotFound, workspaceName) }
-            } yield {
-              sendACLUpdateNotifications(workspaceName, usersToAdd ++ usersToRemove) //we can blindly fire off this future because we don't care about the results and it happens async anyway
-              RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersToRemove ++ usersToAdd -- usersToInvite, usersToInvite, Set.empty)) //API_CHANGE: no longer return invitesUpdated because you technically can't do that anymore...
-            }
+          for {
+            workspaceId <- loadWorkspaceId(workspaceName)
+            _ <- Future.traverse(usersToRemove) { update => removeUserFromWorkspace(workspaceId, existingPolicies, WorkbenchEmail(update.email)) }
+            _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update), WorkbenchEmail(update.email), inviteUsersNotFound, workspaceName) }
+            _ <- maybeShareProjectComputePolicy(usersToAdd, workspaceName)
+
+          } yield {
+            sendACLUpdateNotifications(workspaceName, usersToAdd ++ usersToRemove) //we can blindly fire off this future because we don't care about the results and it happens async anyway
+            RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(usersToRemove ++ usersToAdd -- usersToInvite, usersToInvite, Set.empty)) //API_CHANGE: no longer return invitesUpdated because you technically can't do that anymore...
           }
         }
-        else Future.successful(RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set.empty, Set.empty, aclUpdates.filter(au => missingUsers.flatten.contains(au.email)))))
       }
+      else Future.successful(RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set.empty, Set.empty, aclUpdates.filter(au => missingUsers.flatten.contains(au.email)))))
     }
+  }
+
+  // called from test harness
+  private[workspace] def maybeShareProjectComputePolicy(usersToAdd: Set[WorkspaceACLUpdate], workspaceName: WorkspaceName): Future[Unit] = {
+    val newWriterEmails = usersToAdd.collect {
+      case WorkspaceACLUpdate(email, WorkspaceAccessLevels.Write, _, _) => email
+    }
+    Future.traverse(newWriterEmails) { email =>
+      samDAO.addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, SamBillingProjectPolicyNames.canComputeUser, email, userInfo)
+    }.map(_ => ())
   }
 
   private def sendACLUpdateNotifications(workspaceName: WorkspaceName, usersModified: Set[WorkspaceACLUpdate]) {

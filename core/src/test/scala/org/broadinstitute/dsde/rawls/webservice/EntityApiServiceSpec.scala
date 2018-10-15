@@ -1691,6 +1691,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
+// TODO figure out how to test that clones workspaces have the right AD
+//        assertResult(authDomain) {
+//          responseAs[Workspace].authorizationDomain
+//        }
       }
 
     Post(s"/workspaces/${srcWorkspaceName.namespace}/${srcWorkspaceName.name}/entities", httpJson(z1)) ~>
@@ -1788,10 +1792,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       import driver.api._
 
       DBIO.seq(
-//        rawlsUserQuery.createUser(userOwner),
-//        rawlsGroupQuery.save(ownerGroup),
-//        rawlsGroupQuery.save(writerGroup),
-//        rawlsGroupQuery.save(readerGroup),
         workspaceQuery.save(workspace),
         entityQuery.save(SlickWorkspaceContext(workspace), entities)
       )

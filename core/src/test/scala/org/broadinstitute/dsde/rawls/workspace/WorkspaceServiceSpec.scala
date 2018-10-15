@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{Read, Write}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.openam.{MockUserInfoDirectives, MockUserInfoDirectivesWithUser}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -29,7 +30,6 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
-import org.broadinstitute.dsde.workbench.model.WorkbenchGroupName
 
 import scala.concurrent.duration.{Duration, FiniteDuration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -72,11 +72,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
     lazy val userService: UserService = userServiceConstructor(userInfo1)
 
+
     def actorRefFactory = system
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-    val samDAO = new MockSamDAO
+    val samDAO = new MockSamDAO(dataSource)
     val gpsDAO = new MockGooglePubSubDAO
 
     val notificationTopic = "test-notification-topic"
@@ -139,12 +140,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  def withEmptyTestDataServices[T](testCode: TestApiService => T): T = {
-    withEmptyTestDatabase { dataSource: SlickDataSource =>
-      withServices(dataSource, testData.userOwner)(testCode)
-    }
-  }
-
   private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
     val apiService = new TestApiService(dataSource, user)
     try {
@@ -154,97 +149,97 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  "WorkspaceService" should "add attribute to entity" in withEmptyTestDataServices { services =>
+  "WorkspaceService" should "add attribute to entity" in withTestDataServices { services =>
     assertResult(Some(AttributeString("foo"))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo")))).attributes.get(AttributeName.withDefaultNS("newAttribute"))
     }
   }
 
-  it should "update attribute in entity" in withEmptyTestDataServices { services =>
+  it should "update attribute in entity" in withTestDataServices { services =>
     assertResult(Some(AttributeString("biz"))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("foo"), AttributeString("biz")))).attributes.get(AttributeName.withDefaultNS("foo"))
     }
   }
 
-  it should "remove attribute from entity" in withEmptyTestDataServices { services =>
+  it should "remove attribute from entity" in withTestDataServices { services =>
     assertResult(None) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(RemoveAttribute(AttributeName.withDefaultNS("foo")))).attributes.get(AttributeName.withDefaultNS("foo"))
     }
   }
 
-  it should "add item to existing list in entity" in withEmptyTestDataServices { services =>
+  it should "add item to existing list in entity" in withTestDataServices { services =>
     assertResult(Some(AttributeValueList(attributeList.list :+ AttributeString("new")))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember(AttributeName.withDefaultNS("splat"), AttributeString("new")))).attributes.get(AttributeName.withDefaultNS("splat"))
     }
   }
 
-  it should "add item to non-existing list in entity" in withEmptyTestDataServices { services =>
+  it should "add item to non-existing list in entity" in withTestDataServices { services =>
     assertResult(Some(AttributeValueList(Seq(AttributeString("new"))))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember(AttributeName.withDefaultNS("bob"), AttributeString("new")))).attributes.get(AttributeName.withDefaultNS("bob"))
     }
   }
 
-  it should "throw AttributeUpdateOperationException when trying to create a new empty list by inserting AttributeNull" in withEmptyTestDataServices { services =>
+  it should "throw AttributeUpdateOperationException when trying to create a new empty list by inserting AttributeNull" in withTestDataServices { services =>
     intercept[AttributeUpdateOperationException] {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember(AttributeName.withDefaultNS("nolisthere"), AttributeNull))).attributes.get(AttributeName.withDefaultNS("nolisthere"))
     }
   }
 
-  it should "create empty AttributeEntityReferenceList" in withEmptyTestDataServices { services =>
+  it should "create empty AttributeEntityReferenceList" in withTestDataServices { services =>
     assertResult(Some(AttributeEntityReferenceEmptyList)) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("emptyRefList")))).attributes.get(AttributeName.withDefaultNS("emptyRefList"))
     }
   }
 
-  it should "not wipe existing AttributeEntityReferenceList when calling CreateAttributeEntityReferenceList" in withEmptyTestDataServices { services =>
+  it should "not wipe existing AttributeEntityReferenceList when calling CreateAttributeEntityReferenceList" in withTestDataServices { services =>
     assertResult(Some(s1.attributes(AttributeName.withDefaultNS("refs")))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("refs")))).attributes.get(AttributeName.withDefaultNS("refs"))
     }
   }
 
-  it should "create empty AttributeValueList" in withEmptyTestDataServices { services =>
+  it should "create empty AttributeValueList" in withTestDataServices { services =>
     assertResult(Some(AttributeValueEmptyList)) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(CreateAttributeValueList(AttributeName.withDefaultNS("emptyValList")))).attributes.get(AttributeName.withDefaultNS("emptyValList"))
     }
   }
 
-  it should "not wipe existing AttributeValueList when calling CreateAttributeValueList" in withEmptyTestDataServices { services =>
+  it should "not wipe existing AttributeValueList when calling CreateAttributeValueList" in withTestDataServices { services =>
     assertResult(Some(s1.attributes(AttributeName.withDefaultNS("splat")))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(CreateAttributeValueList(AttributeName.withDefaultNS("splat")))).attributes.get(AttributeName.withDefaultNS("splat"))
     }
   }
 
-  it should "do nothing to existing lists when adding AttributeNull" in withEmptyTestDataServices { services =>
+  it should "do nothing to existing lists when adding AttributeNull" in withTestDataServices { services =>
     assertResult(Some(attributeList)) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember(AttributeName.withDefaultNS("splat"), AttributeNull))).attributes.get(AttributeName.withDefaultNS("splat"))
     }
   }
 
-  it should "remove item from existing listing entity" in withEmptyTestDataServices { services =>
+  it should "remove item from existing listing entity" in withTestDataServices { services =>
     assertResult(Some(AttributeValueList(Seq(AttributeString("b"), AttributeBoolean(true))))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(RemoveListMember(AttributeName.withDefaultNS("splat"), AttributeString("a")))).attributes.get(AttributeName.withDefaultNS("splat"))
     }
   }
 
-  it should "throw AttributeNotFoundException when removing from a list that does not exist" in withEmptyTestDataServices { services =>
+  it should "throw AttributeNotFoundException when removing from a list that does not exist" in withTestDataServices { services =>
     intercept[AttributeNotFoundException] {
       services.workspaceService.applyOperationsToEntity(s1, Seq(RemoveListMember(AttributeName.withDefaultNS("bingo"), AttributeString("a"))))
     }
   }
 
-  it should "throw AttributeUpdateOperationException when remove from an attribute that is not a list" in withEmptyTestDataServices { services =>
+  it should "throw AttributeUpdateOperationException when remove from an attribute that is not a list" in withTestDataServices { services =>
     intercept[AttributeUpdateOperationException] {
       services.workspaceService.applyOperationsToEntity(s1, Seq(RemoveListMember(AttributeName.withDefaultNS("foo"), AttributeString("a"))))
     }
   }
 
-  it should "throw AttributeUpdateOperationException when adding to an attribute that is not a list" in withEmptyTestDataServices { services =>
+  it should "throw AttributeUpdateOperationException when adding to an attribute that is not a list" in withTestDataServices { services =>
     intercept[AttributeUpdateOperationException] {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember(AttributeName.withDefaultNS("foo"), AttributeString("a"))))
     }
   }
 
-  it should "apply attribute updates in order to entity" in withEmptyTestDataServices { services =>
+  it should "apply attribute updates in order to entity" in withTestDataServices { services =>
     assertResult(Some(AttributeString("splat"))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(
         AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("foo")),
@@ -343,17 +338,22 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "retrieve ACLs" in withTestDataServices { services =>
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
-    Await.result(services.samDAO.registerUser(UserInfo(user.userEmail, OAuth2BearerToken(""), 3600, user.userSubjectId)), Duration.Inf)
+    //Really annoying setup. I'm trying to avoid using the patch function to test get, so I have to poke
+    //ACLs into the workspace manually.
 
-    val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
-    val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
+// TODO: inject the following setup into the sam dao instead
+//    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+//    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+//
+//    runAndWait(rawlsUserQuery.createUser(user))
+//    runAndWait(rawlsGroupQuery.save(group))
+//
+//    val ownerGroupRef = testData.workspace.accessLevels(WorkspaceAccessLevels.Owner)
+//    val theOwnerGroup = runAndWait(rawlsGroupQuery.load(ownerGroupRef)).get
+//    val replacementOwnerGroup = theOwnerGroup.copy(users = theOwnerGroup.users + user, subGroups = theOwnerGroup.subGroups + group)
+//    runAndWait(rawlsGroupQuery.save(replacementOwnerGroup))
 
-    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", userInfo.userEmail.value, "invalid")), Duration.Inf)
-    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-
-    val vComplete = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf)
+    val vComplete = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
     val (vStatus, vData) = vComplete.response
 
@@ -361,31 +361,24 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       vStatus
     }
 
-    //todo: why does it return both access levels??????
     assertResult(WorkspaceACL(Map(
+      testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
       testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true)))) {
+      "obama@whitehouse.gov" -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
+      "group@whitehouse.gov" -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
+      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
+      testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)))) {
       vData
     }
   }
 
-  it should "patch ACLs and return updated acls" in withEmptyTestDataServices { services =>
+  it should "patch ACLs and return updated acls" in withTestDataServices { services =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
     val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
 
-    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
-    Await.result(services.samDAO.registerUser(UserInfo(user.userEmail, OAuth2BearerToken(""), 3600, user.userSubjectId)), Duration.Inf)
-    Await.result(services.samDAO.createGroup(WorkbenchGroupName(group.groupEmail.value), userInfo), Duration.Inf)
-
-    val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
-    val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
-
-    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", userInfo.userEmail.value, "invalid")), Duration.Inf)
-    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-
     //add ACL
     val aclAdd = Set(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Read, None))
-    val aclAddResponse = Await.result(services.workspaceService.updateACL(testWorkspaceName, aclAdd, false), Duration.Inf)
+    val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
     val responseFromAdd = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Owner), WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Read)), Set.empty, Set.empty)
 
@@ -394,19 +387,22 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //check result
-    val (_, addedACLs) = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]].response
+    val (_, addedACLs) = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
+    .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]].response
 
     assertResult(WorkspaceACL(Map(
-      userInfo.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
+      testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
+      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
       user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
+      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
+      testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false),
       group.groupEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))), "Add ACL should actually do so") {
       addedACLs
     }
 
     //update ACL
     val aclUpdates = Set(WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Write, None))
-    val aclUpdateResponse = Await.result(services.workspaceService.updateACL(testWorkspaceName, aclUpdates, false), Duration.Inf)
+    val aclUpdateResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
     val responseFromUpdate = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Write)), Set.empty, Set.empty)
 
@@ -415,19 +411,22 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //check result
-    val (_, updatedACLs) = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf)
+    val (_, updatedACLs) = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]].response
 
     assertResult(WorkspaceACL(Map(
-      userInfo.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
+      testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
+      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
       user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
+      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
+      testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false),
       group.groupEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, true))), "Update ACL should actually do so") {
       updatedACLs
     }
 
     //remove ACL
     val aclRemove = Set(WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.NoAccess, None))
-    val aclRemoveResponse = Await.result(services.workspaceService.updateACL(testWorkspaceName, aclRemove, false), Duration.Inf)
+    val aclRemoveResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclRemove, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, List[WorkspaceACLUpdateResponseList])]]
     val responseFromRemove = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.NoAccess)), Set.empty, Set.empty)
 
@@ -436,19 +435,21 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //check result
-    val (_, removedACLs) = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf)
+    val (_, removedACLs) = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]].response
 
     assertResult(WorkspaceACL(Map(
-      userInfo.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
-      user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true))), "Remove ACL should actually do so") {
+      testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
+      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
+      user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
+      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
+      testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))), "Remove ACL should actually do so") {
       removedACLs
     }
   }
 
   it should "allow can share user to share when there are multiple project owners" in withDefaultTestDatabase { datasource: SlickDataSource =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-//    runAndWait(rawlsUserQuery.createUser(user))
 
     withServices(datasource, testData.userOwner) { services =>
       //add the owner as an owner on the billing project
@@ -473,21 +474,15 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       assertResult(StatusCodes.OK) {
         addReadResponse.response._1
       }
-      assertResult(Set(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))) {
+      assertResult(Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))) {
         addReadResponse.response._2.usersUpdated
       }
     }
   }
 
   it should "return non-existent users during patch ACLs" in withTestDataServices { services =>
-    val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
-    val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
-
-    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", userInfo.userEmail.value, "invalid")), Duration.Inf)
-    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-
     val aclUpdates = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
-    val vComplete = Await.result(services.workspaceService.updateACL(testWorkspaceName, aclUpdates, false), Duration.Inf)
+    val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
     val responseFromUpdate = WorkspaceACLUpdateResponseList(Set.empty, Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)))
 
@@ -496,7 +491,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     val aclUpdates2 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
-    val vComplete2 = Await.result(services.workspaceService.updateACL(testWorkspaceName, aclUpdates2, true), Duration.Inf)
+    val vComplete2 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates2, true), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
     val responseFromUpdate2 = WorkspaceACLUpdateResponseList(Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), Set.empty)
 
@@ -505,20 +500,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     val aclUpdates3 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None))
-    val vComplete3 = Await.result(services.workspaceService.updateACL(testWorkspaceName, aclUpdates3, true), Duration.Inf)
+    val vComplete3 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates3, true), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromUpdate3 = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None)), Set.empty, Set.empty)
+    val responseFromUpdate3 = WorkspaceACLUpdateResponseList(Set.empty, Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None)))
 
     assertResult((StatusCodes.OK, responseFromUpdate3), "Add ACL shouldn't error") {
       vComplete3.response
-    }
-
-    assertResult(true, "Changing an invitees access level should return them in the usersUpdated group") {
-      vComplete3.response._2.usersUpdated.size == 1
-    }
-
-    assertResult(true, "Changing an invitees access level should not return them in the invitesSent group") {
-      vComplete3.response._2.invitesSent.size == 0
     }
 
     assertResult(true, "Changing an invitees access level shouldn't return them in the usersNotFound group") {
@@ -527,14 +514,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "invite a user to a workspace" in withTestDataServices { services =>
-    val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
-    val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
-
-    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
-    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", userInfo.userEmail.value, "invalid")), Duration.Inf)
-    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-
-    val vComplete = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf)
+    val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
 
     assertResult(StatusCodes.OK, "Invite user shouldn't error") {
@@ -543,55 +523,39 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     assert(vComplete.response._2.invitesSent.contains(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)))
 
-    val vComplete3 = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf)
+    val vComplete3 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
 
-    assert(vComplete3.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, true, true)))) //TODO?: this is a subtle change in Phase 4: a pending Owner will have implicit canCompute and canShare set to true instead of false
+    assert(vComplete3.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false))))
 
   }
 
-  //TODO: this test really just tests something that's in Sam so it doesn't really belong here anymore?
-//  it should "be case insensitive when adding user/group to workspace" in withTestDataServices { services =>
-//    val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
-//    val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
-//
-//    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", userInfo.userEmail.value, "invalid")), Duration.Inf)
-//    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-//
-//    val vComplete0 = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//
-//    val vComplete1 = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-//
-//    assert(vComplete1.response._2.acl.toSeq.contains("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, false, true, true))) //TODO: before this was really just testing that we don't create duplicate invites...shouldn't be necessary anymore
-//
-//    val vComplete2 = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("ObAmA@WhiteHouse.Gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-//
-//    assertResult(true, "Entering already added user/group with different capitalization should not include them in the usersNotFound group") {
-//      vComplete2.response._2.usersNotFound.isEmpty
-//    }
-//
-//  }
+  it should "be case insensitive when adding user/group to workspace" in withTestDataServices { services =>
+    val vComplete0 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+
+    val vComplete1 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
+
+    assert(vComplete1.response._2.acl.toSeq.contains("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false)))
+
+    val vComplete2 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("ObAmA@WhiteHouse.Gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+
+    assertResult(true, "Entering already added user/group with different capitalization should not include them in the usersNotFound group") {
+      vComplete2.response._2.usersNotFound.size == 0
+    }
+
+  }
 
   it should "update an existing workspace invitation to change access levels" in withTestDataServices { services =>
-    val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
-    val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
+    val vComplete0 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
 
-    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
-    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", userInfo.userEmail.value, "invalid")), Duration.Inf)
-    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-
-    val vComplete0 = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-
-    println(vComplete0)
-
-    val vComplete1 = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf)
+    val vComplete1 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
 
-    assert(vComplete1.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, true, true))))
+    assert(vComplete1.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false))))
 
-    Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None)), true), Duration.Inf)
+    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None)), true), Duration.Inf)
 
-    val vComplete2 = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf)
+    val vComplete2 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
 
     assert(vComplete2.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Read, true, false, false))))
@@ -599,39 +563,32 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "remove a user invite from a workspace" in withTestDataServices { services =>
-    val testWorkspaceName = WorkspaceName("test-project", "test-workspace")
-    val workspaceRequest = WorkspaceRequest(testWorkspaceName.namespace, testWorkspaceName.name, Map.empty, None)
-
-    Await.result(services.samDAO.registerUser(userInfo), Duration.Inf)
-    Await.result(services.userService.registerBillingProject(RawlsBillingProjectTransfer("test-project", "fc-bla", userInfo.userEmail.value, "invalid")), Duration.Inf)
-    Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-
-    val vComplete = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf)
+    val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
 
     assertResult(StatusCodes.OK, "Invite user shouldn't error") {
       vComplete.response._1
     }
 
-    val vComplete2 = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf)
+    val vComplete2 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
 
-    assert(vComplete2.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, true, true))))
+    assert(vComplete2.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false))))
 
-    val vComplete3 = Await.result(services.workspaceService.updateACL(testWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.NoAccess, None)), true), Duration.Inf)
+    val vComplete3 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.NoAccess, None)), true), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
 
     assertResult(StatusCodes.OK, "Remove invite shouldn't error") {
       vComplete3.response._1
     }
 
-    val vComplete4 = Await.result(services.workspaceService.getACL(testWorkspaceName), Duration.Inf)
+    val vComplete4 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
 
-    assert(!vComplete4.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, true, true))))
+    assert(!vComplete4.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false))))
   }
 
-  ignore should "send notification messages to all users on workspace" in withTestDataServices { services =>
+  it should "send notification messages to all users on workspace" in withTestDataServices { services =>
     val vComplete = Await.result(services.workspaceService.sendChangeNotifications(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, String)]]
 
@@ -646,7 +603,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
 
-  ignore should "retrieve catalog permission" in withTestDataServices { services =>
+  it should "retrieve catalog permission" in withTestDataServices { services =>
     val vComplete = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]]
     val (vStatus, vData) = vComplete.response
@@ -655,13 +612,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  ignore should "patch Catalog and return updated permissions" in withTestDataServices { services =>
+  it should "patch Catalog and return updated permissions" in withTestDataServices { services =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
     val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-//    runAndWait(rawlsUserQuery.createUser(user))
-//    runAndWait(rawlsGroupQuery.save(group))
-//
-//    services.gcsDAO.createGoogleGroup(group)
 
     //add catalog perm
     val catalogUpdateResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
@@ -1004,13 +957,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   for ((accessLevel, callCount) <- Seq((Write, 1), (Read, 0))) {
     it should s"share billing compute $callCount times when workspace $accessLevel access granted" in withTestDataServices { services =>
-      import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-      import WorkspaceACLJsonSupport._
       val email = s"${UUID.randomUUID}@bar.com"
-      val results = RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(email, accessLevel)), Set.empty, Set.empty))
-//      assertResult(results) {
-//        Await.result(services.workspaceService.maybeShareProjectComputePolicy(Future.successful(results), testData.workspace.toWorkspaceName), Duration.Inf)
-//      }
+      val results = Set(WorkspaceACLUpdate(email, accessLevel))
+      Await.result(services.workspaceService.maybeShareProjectComputePolicy(results, testData.workspace.toWorkspaceName), Duration.Inf)
 
       import org.mockserver.model.HttpRequest.request
       mockServer.mockServer.verify(request().withMethod("PUT").withPath(s"/api/resource/${SamResourceTypeNames.billingProject.value}/${testData.workspace.namespace}/policies/${SamBillingProjectPolicyNames.canComputeUser}/memberEmails/$email"), VerificationTimes.exactly(callCount))

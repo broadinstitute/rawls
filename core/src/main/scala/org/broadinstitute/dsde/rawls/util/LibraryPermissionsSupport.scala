@@ -2,11 +2,11 @@ package org.broadinstitute.dsde.rawls.util
 
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import slick._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspaceAccessLevels, _}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, _}
 import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
 
 import scala.collection.Set
 import scala.concurrent.Future
@@ -15,32 +15,28 @@ import scala.concurrent.Future
   * Created by ahaessly on 3/31/17.
   */
 trait LibraryPermissionsSupport extends RoleSupport {
+  val samDAO: SamDAO
   final val publishedFlag = AttributeName.withLibraryNS("published")
   final val discoverableWSAttribute = AttributeName.withLibraryNS("discoverableByGroups")
 
   def withLibraryPermissions(ctx: SlickWorkspaceContext,
                              operations: Seq[AttributeUpdateOperation],
-                             dataAccess: DataAccess,
                              userInfo: UserInfo,
-                             isCurator: Boolean,
-                             userLevel: WorkspaceAccessLevel,
-                             canShare: Boolean,
-                             canCatalog: Boolean)
-                            (op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
+                             isCurator: Boolean)
+                            (op: => Future[Workspace]): Future[Workspace] = {
     val names = operations.map(attribute => attribute.name)
 
-    getPermissionChecker(names, isCurator, canShare, canCatalog, userLevel)(op) //todo: what was hasCatalogOnly vs canCatalog? they appear to be the same
+    getPermissionChecker(names, isCurator, ctx.workspace.workspaceId)(op)
   }
 
-  def getPermissionChecker(names: Seq[AttributeName], isCurator: Boolean, canShare: Boolean, hasCatalogOnly: Boolean, userLevel: WorkspaceAccessLevel): ((=> ReadWriteAction[Workspace]) => ReadWriteAction[Workspace]) = {
-    val hasCatalog = hasCatalogOnly && userLevel >= WorkspaceAccessLevels.Read
+  def getPermissionChecker(names: Seq[AttributeName], isCurator: Boolean, workspaceId: String): ((=> Future[Workspace]) => Future[Workspace]) = {
     // need to combine multiple delete and add ops when changing discoverable attribute
     names.distinct match {
-      case Seq(`publishedFlag`) => changePublishedChecker(isCurator, hasCatalog, userLevel) _
-      case Seq(`discoverableWSAttribute`) => changeDiscoverabilityChecker(canShare, hasCatalog, userLevel) _
+      case Seq(`publishedFlag`) => changePublishedChecker(isCurator, workspaceId) _
+      case Seq(`discoverableWSAttribute`) => changeDiscoverabilityChecker(workspaceId) _
       case x if x.contains(publishedFlag) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Unsupported parameter - can't modify published with other attributes"))
-      case x if x.contains(discoverableWSAttribute) => changeDiscoverabilityAndMetadataChecker(canShare, hasCatalog, userLevel) _
-      case _ => changeMetadataChecker(hasCatalog, userLevel) _
+      case x if x.contains(discoverableWSAttribute) => changeDiscoverabilityAndMetadataChecker(workspaceId) _
+      case _ => changeMetadataChecker(workspaceId) _
     }
   }
 
@@ -56,30 +52,48 @@ trait LibraryPermissionsSupport extends RoleSupport {
     }
   }
 
-  private def maybeExecuteOp(canModify: Boolean, cantModifyMessage: String, op: => ReadWriteAction[Workspace]) = {
-    if (canModify) op
-    else throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, cantModifyMessage))
+  private def maybeExecuteOp(canModify: Future[Boolean], cantModifyMessage: String, op: => Future[Workspace]) = {
+    canModify.flatMap {
+      case true => op
+      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, cantModifyMessage)))
+    }
   }
 
-  def canChangeMetadata(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean =
-    maxLevel >= WorkspaceAccessLevels.Write || hasCatalog
-  def canChangeDiscoverability(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean =
-    maxLevel >= WorkspaceAccessLevels.Owner || canShare || hasCatalog
-  def canChangePublished(isCurator: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel): Boolean =
-    isCurator && (maxLevel >= WorkspaceAccessLevels.Owner || hasCatalog)
+  def hasAnyAction(workspaceId: String, actions: SamResourceAction*): Future[Boolean] = {
+    Future.traverse(actions) { action =>
+      samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, action, userInfo)
+    }.map(_.contains(true))
+  }
+
+  def canChangeMetadata(workspaceId: String): Future[Boolean] =
+    hasAnyAction(workspaceId, SamResourceActions.workspaceWrite, SamResourceActions.workspaceCanCatalog)
+
+  def canChangeDiscoverability(workspaceId: String): Future[Boolean] =
+    hasAnyAction(workspaceId,
+      SamResourceActions.workspaceOwn,
+      SamResourceActions.workspaceCanCatalog,
+      SamResourceActions.sharePolicy(SamWorkspacePolicyNames.shareWriter.value),
+      SamResourceActions.sharePolicy(SamWorkspacePolicyNames.shareReader.value))
+
+  def canChangePublished(isCurator: Boolean, workspaceId: String): Future[Boolean] =
+    if (!isCurator) {
+      Future.successful(false)
+    } else {
+      hasAnyAction(workspaceId, SamResourceActions.workspaceOwn, SamResourceActions.workspaceCanCatalog)
+    }
 
 
-  def changeMetadataChecker(hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] =
-    maybeExecuteOp(canChangeMetadata(hasCatalog, maxLevel), "You must have write+ or catalog with read permissions.", op)
+  def changeMetadataChecker(workspaceId: String)(op: => Future[Workspace]): Future[Workspace] =
+    maybeExecuteOp(canChangeMetadata(workspaceId), "You must have write+ or catalog with read permissions.", op)
 
-  def changeDiscoverabilityChecker(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] =
-    maybeExecuteOp(canChangeDiscoverability(canShare, hasCatalog, maxLevel), "You must be an owner or have catalog or share permissions.", op)
+  def changeDiscoverabilityChecker(workspaceId: String)(op: => Future[Workspace]): Future[Workspace] =
+    maybeExecuteOp(canChangeDiscoverability(workspaceId), "You must be an owner or have catalog or share permissions.", op)
 
-  def changePublishedChecker(isCurator: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] =
-    maybeExecuteOp(canChangePublished(isCurator, hasCatalog, maxLevel), "You must be a curator and either be an owner or have catalog with read+.", op)
+  def changePublishedChecker(isCurator: Boolean, workspaceId: String)(op: => Future[Workspace]): Future[Workspace] =
+    maybeExecuteOp(canChangePublished(isCurator, workspaceId), "You must be a curator and either be an owner or have catalog with read+.", op)
 
-  def changeDiscoverabilityAndMetadataChecker(canShare: Boolean, hasCatalog: Boolean, maxLevel: WorkspaceAccessLevels.WorkspaceAccessLevel)(op: => ReadWriteAction[Workspace]): ReadWriteAction[Workspace] = {
-    val canDo = canChangeMetadata(hasCatalog, maxLevel) && canChangeDiscoverability(canShare, hasCatalog, maxLevel)
+  def changeDiscoverabilityAndMetadataChecker(workspaceId: String)(op: => Future[Workspace]): Future[Workspace] = {
+    val canDo = Future.sequence(Seq(canChangeMetadata(workspaceId), canChangeDiscoverability(workspaceId))).map(_.forall(identity))
     maybeExecuteOp(canDo, "You must be an owner or have catalog with read permissions.", op)
   }
 }

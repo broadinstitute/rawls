@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch, WorkflowBatch}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -38,7 +38,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
   val mockServer = RemoteServicesMockServer()
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-  val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, mockGoogleServicesDAO.getPreparedMockGoogleCredential())
+  val mockSamDAO = new MockSamDAO(slickDataSource)
   val mockDosResolver: DosResolver = (v: String) => Future.successful(v.replaceFirst("dos://", "gs://"))
 
   /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
@@ -437,8 +437,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
 
-      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sampleSet1, WorkbenchEmail(testData.userOwner.userEmail.value),
-        Seq(testData.sampleSet1), Map(testData.sampleSet1 -> inputResolutionsList),
+      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, WorkbenchEmail(testData.userOwner.userEmail.value),
+        Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
         Seq.empty, Map.empty)
 
       runAndWait(submissionQuery.create(ctx, submissionList))

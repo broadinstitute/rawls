@@ -62,7 +62,6 @@ class NotificationSpec extends ApiServiceSpec {
 
   it should "be sent for add and remove from workspace" in withTestDataApiServices { services =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-//    runAndWait(DBIO.from(samDataSaver.createUser(user)))
 
     //add ACL
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>

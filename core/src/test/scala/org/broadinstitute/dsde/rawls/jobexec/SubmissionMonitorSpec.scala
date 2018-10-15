@@ -336,7 +336,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))), this))
 
-    assertResult(Seq(testData.individual1.copy(attributes = testData.individual1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeString("result"))))) {
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
@@ -347,9 +347,9 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val mcUpdateEntityLibraryOutputs = MethodConfiguration("ns", "testConfig12", Some("Sample"), Map(), Map(), Map("o1_lib" -> AttributeString("this.library:foo")), AgoraMethod("ns-config", "meth1", 1))
 
-    val subUpdateEntityLibraryOutputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryOutputs, testData.individual1, WorkbenchEmail(testData.userOwner.userEmail.value),
-      Seq(testData.individual1), Map(testData.individual1 -> testData.inputResolutions),
-      Seq(testData.individual2), Map(testData.individual2 -> testData.inputResolutions2))
+    val subUpdateEntityLibraryOutputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryOutputs, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
+      Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
+      Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
     withWorkspaceContext(testData.workspace) { context =>
       runAndWait(methodConfigurationQuery.create(context, mcUpdateEntityLibraryOutputs))
@@ -362,7 +362,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1_lib" -> Left(AttributeString("result")))))), this))
 
     val expectedOut = Map(AttributeName("library", "foo") -> AttributeString("result"))
-    assertResult(Seq(testData.individual1.copy(attributes = testData.individual1.attributes ++ expectedOut))) {
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes ++ expectedOut))) {
       subUpdateEntityLibraryOutputs.workflows.map { wf =>
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
@@ -370,9 +370,9 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val mcUpdateEntityLibraryInputs = MethodConfiguration("ns", "testConfig11", Some("Sample"), Map(), Map("i_lib" -> AttributeString("this.library:foo")), Map("o2_lib" -> AttributeString("this.library:bar")), AgoraMethod("ns-config", "meth1", 1))
 
-    val subUpdateEntityLibraryInputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryInputs, testData.individual1, WorkbenchEmail(testData.userOwner.userEmail.value),
-      Seq(testData.individual1), Map(testData.individual1 -> testData.inputResolutions),
-      Seq(testData.individual2), Map(testData.individual2 -> testData.inputResolutions2))
+    val subUpdateEntityLibraryInputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryInputs, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
+      Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
+      Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
     withWorkspaceContext(testData.workspace) { context =>
       runAndWait(methodConfigurationQuery.create(context, mcUpdateEntityLibraryInputs))
@@ -385,7 +385,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     runAndWait(monitor2.handleOutputs(workflowRecs2.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o2_lib" -> Left(AttributeString("result2")))))), this))
 
     val expectedIn = Map(AttributeName("library", "bar") -> AttributeString("result2"))
-    assertResult(Seq(testData.individual1.copy(attributes = testData.individual1.attributes ++ expectedOut ++ expectedIn))) {
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes ++ expectedOut ++ expectedIn))) {
       subUpdateEntityLibraryOutputs.workflows.map { wf =>
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
@@ -445,7 +445,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       await(monitor.handleStatusResponses(ExecutionServiceStatusResponse(workflowsRecs.map(r => scala.util.Success(Option((r.copy(status = status.toString), Option(ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result"))))))))))))
     }
 
-    assertResult(Seq(testData.individual1.copy(attributes = testData.individual1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeString("result"))))) {
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
@@ -468,9 +468,9 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val mcUnboundExpr = MethodConfiguration("ns", "testConfig12", Some("Sample"), Map(), Map(), outputExpressions, AgoraMethod("ns-config", "meth1", 1))
 
-    val subUnboundExpr = createTestSubmission(testData.workspace, mcUnboundExpr, testData.individual1, WorkbenchEmail(testData.userOwner.userEmail.value),
-      Seq(testData.individual1), Map(testData.individual1 -> testData.inputResolutions),
-      Seq(testData.individual2), Map(testData.individual2 -> testData.inputResolutions2))
+    val subUnboundExpr = createTestSubmission(testData.workspace, mcUnboundExpr, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
+      Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
+      Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
     withWorkspaceContext(testData.workspace) { context =>
       runAndWait(methodConfigurationQuery.create(context, mcUnboundExpr))
@@ -483,14 +483,14 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     runAndWait(monitor.handleOutputs(Seq((workflowRec, ExecutionServiceOutputs(workflowRec.externalId.get, execOutputs))), this))
 
     // only the bound attribute was updated
-    assertResult(Seq(testData.individual1.copy(attributes = testData.individual1.attributes + expectedAttributeUpdate))) {
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + expectedAttributeUpdate))) {
       subUnboundExpr.workflows.map { wf =>
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
       }
     }
 
     val resultWorkflow = withWorkspaceContext(testData.workspace) { context =>
-      runAndWait(workflowQuery.get(context, subUnboundExpr.submissionId, testData.individual1.entityType, testData.individual1.name))
+      runAndWait(workflowQuery.get(context, subUnboundExpr.submissionId, testData.indiv1.entityType, testData.indiv1.name))
     }.get
 
     // the workflow status was not changed
@@ -521,9 +521,9 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     badExprs foreach { badExpr =>
       val mcBadExprs = MethodConfiguration("ns", "testConfig12", Some("Sample"), Map(), Map(), Map("bad1" -> AttributeString(badExpr)), AgoraMethod("ns-config", "meth1", 1))
 
-      val subBadExprs = createTestSubmission(testData.workspace, mcBadExprs, testData.individual1, WorkbenchEmail(testData.userOwner.userEmail.value),
-        Seq(testData.individual1), Map(testData.individual1 -> testData.inputResolutions),
-        Seq(testData.individual2), Map(testData.individual2 -> testData.inputResolutions2))
+      val subBadExprs = createTestSubmission(testData.workspace, mcBadExprs, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
+        Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
+        Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
       withWorkspaceContext(testData.workspace) { context =>
         runAndWait(methodConfigurationQuery.create(context, mcBadExprs))
@@ -536,14 +536,14 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("bad1" -> Left(AttributeString("result")))))), this))
 
       // the entity was not updated
-      assertResult(Seq(testData.individual1)) {
+      assertResult(Seq(testData.indiv1)) {
         subBadExprs.workflows.map { wf =>
           runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
         }
       }
 
       val resultWorkflow = withWorkspaceContext(testData.workspace) { context =>
-        runAndWait(workflowQuery.get(context, subBadExprs.submissionId, testData.individual1.entityType, testData.individual1.name))
+        runAndWait(workflowQuery.get(context, subBadExprs.submissionId, testData.indiv1.entityType, testData.indiv1.name))
       }.get
 
       // the workflow was marked as failed
@@ -676,8 +676,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val subKeys = (1 to numSubmissions).map ( subNum => AttributeName.fromDelimitedName(s"sub_$subNum") )
 
     withWorkspaceContext(manySubmissionsTestData.workspace) { ctx =>
-      val indiv1 = runAndWait(entityQuery.get(ctx, testData.individual1.entityType, testData.individual1.name)).get
-      val indiv2 = runAndWait(entityQuery.get(ctx, testData.individual2.entityType, testData.individual2.name)).get
+      val indiv1 = runAndWait(entityQuery.get(ctx, testData.indiv1.entityType, testData.indiv1.name)).get
+      val indiv2 = runAndWait(entityQuery.get(ctx, testData.indiv2.entityType, testData.indiv2.name)).get
 
       indiv1.attributes.keys.filter(an => an.name.startsWith("sub_")) should contain theSameElementsAs subKeys
       indiv2.attributes.keys.filter(an => an.name.startsWith("sub_")) should contain theSameElementsAs subKeys
@@ -689,8 +689,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     val (submissions, methodConfigs) = (1 to numSubmissions).map { subNumber =>
       val methodConfig = testData.methodConfigEntityUpdate.copy(name = s"this.sub_$subNumber", outputs = Map("o1" -> AttributeString(s"this.sub_$subNumber")))
-      val testSub = createTestSubmission(testData.workspace, methodConfig, testData.individual1, WorkbenchEmail(testData.userOwner.userEmail.value),
-        Seq(testData.individual1, testData.individual2), Map(testData.individual1 -> testData.inputResolutions, testData.individual2 -> testData.inputResolutions),
+      val testSub = createTestSubmission(testData.workspace, methodConfig, testData.indiv1, WorkbenchEmail(testData.userOwner.userEmail.value),
+        Seq(testData.indiv1, testData.indiv2), Map(testData.indiv1 -> testData.inputResolutions, testData.indiv2 -> testData.inputResolutions),
         Seq(), Map())
 
       (testSub, methodConfig)
@@ -700,7 +700,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       super.save() flatMap { _ =>
         withWorkspaceContext(workspace) { ctx =>
           DBIO.seq(
-            entityQuery.save(ctx, Seq(testData.aliquot1, testData.aliquot2, testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sample8, testData.pair1, testData.pair2, testData.pairSet1, testData.sampleSet1, testData.sampleSet2, testData.sampleSet3, testData.sampleSet4, testData.sampleSetEmpty, testData.individual1, testData.individual2)),
+            entityQuery.save(ctx, Seq(testData.aliquot1, testData.aliquot2, testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sample8, testData.pair1, testData.pair2, testData.ps1, testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.sset_empty, testData.indiv1, testData.indiv2)),
             DBIO.sequence(methodConfigs.map(m => methodConfigurationQuery.create(ctx, m)).toSeq),
             DBIO.sequence(submissions.map(s => submissionQuery.create(ctx, s)).toSeq),
             updateWorkflowExecutionServiceKey("unittestdefault")
