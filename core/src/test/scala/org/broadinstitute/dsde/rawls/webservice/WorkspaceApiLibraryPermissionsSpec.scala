@@ -8,16 +8,13 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
-import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
-import spray.json._
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.duration.Duration
@@ -94,14 +91,13 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
     val apiService = new TestApiService(dataSource, libTest.user.userEmail.value, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
       override val samDAO = new MockSamDAO(dataSource) {
 
-        override def userHasAction(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, action: SamResourceActions.SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
+        override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
           val result = action match {
-            case SamResourceActions.workspaceCanCatalog => libTest.catalog
-            case SamResourceActions.alterPolicies => libTest.canShare
+            case SamWorkspaceActions.catalog => libTest.catalog
             case SamResourceAction(actionName) if actionName.startsWith("share_policy::") => libTest.canShare
-            case SamResourceActions.workspaceOwn => libTest.accessLevel >= WorkspaceAccessLevels.Owner
-            case SamResourceActions.workspaceWrite => libTest.accessLevel >= WorkspaceAccessLevels.Write
-            case SamResourceActions.workspaceRead => libTest.accessLevel >= WorkspaceAccessLevels.Read
+            case SamWorkspaceActions.own => libTest.accessLevel >= WorkspaceAccessLevels.Owner
+            case SamWorkspaceActions.write => libTest.accessLevel >= WorkspaceAccessLevels.Write
+            case SamWorkspaceActions.read => libTest.accessLevel >= WorkspaceAccessLevels.Read
             case _ => true
           }
           Future.successful(result)

@@ -128,7 +128,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccess(workspaceContext.workspace, SamResourceActions.workspaceRead) {
+        requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
           DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel =>
             for {
               canCatalog <- DBIO.from(getUserCatalogPermissions(workspaceContext.workspaceId.toString))
@@ -1767,9 +1767,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamBillingProjectActions.launchBatchCompute, userInfo)) flatMap { projectCanCompute =>
       if (!projectCanCompute) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
       else {
-        DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamResourceActions.launchBatchCompute, userInfo)) flatMap { launchBatchCompute =>
+        DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.compute, userInfo)) flatMap { launchBatchCompute =>
           if (launchBatchCompute) codeBlock
-          else DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamResourceActions.workspaceRead, userInfo)) flatMap { workspaceRead =>
+          else DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, userInfo)) flatMap { workspaceRead =>
             if (workspaceRead) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
             else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
           }

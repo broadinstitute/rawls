@@ -4,7 +4,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, StatusCheckResponse}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, SamBillingProjectPolicyNames, SamResourceTypeNames, StatusCheckResponse}
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
@@ -15,10 +15,6 @@ import akka.http.scaladsl.model.StatusCodes
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceStatusFormat
 import DefaultJsonProtocol._
-import org.broadinstitute.dsde.rawls.dataaccess.{SamBillingProjectPolicyNames, SamResourceTypeNames}
-import org.broadinstitute.dsde.rawls.user.UserService
-
-import scala.concurrent.duration.FiniteDuration
 
 /**
  * Mock server interface for the methods repo and execution service.

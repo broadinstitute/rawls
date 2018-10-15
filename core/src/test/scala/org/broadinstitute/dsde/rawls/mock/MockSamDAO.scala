@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.mock
 
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ManagedGroupAccessResponse, ManagedRoles, RawlsUserEmail, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo, UserStatus}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -15,47 +15,47 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail] = ???
 
-  override def createResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = ???
+  override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = ???
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policies: Map[_ <: SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = ???
+  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = ???
 
-  override def deleteResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = ???
+  override def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = ???
 
-  override def userHasAction(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, action: SamResourceActions.SamResourceAction, userInfo: UserInfo): Future[Boolean] = Future.successful(true)
+  override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = Future.successful(true)
 
-  override def getPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicy] = Future.successful(SamPolicy(Set.empty, Set.empty, Set.empty))
+  override def getPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicy] = Future.successful(SamPolicy(Set.empty, Set.empty, Set.empty))
 
-  override def overwritePolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = ???
+  override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = ???
 
-  override def overwritePolicyMembership(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberList: Set[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = ???
+  override def overwritePolicyMembership(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberList: Set[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = ???
 
-  override def addUserToPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = Future.successful(())
+  override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = Future.successful(())
 
-  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = Future.successful(())
+  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = Future.successful(())
 
   override def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit] = ???
 
-  override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] = ???
+  override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] = ???
 
-  override def getPoliciesForType(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
+  override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
     resourceTypeName match {
-      case SamResourceTypeNames.workspace =>
+      case workspace =>
         dataSource.inTransaction { dataaccess =>
           dataaccess.workspaceQuery.listAll()
-        }.map(_.map(workspace => SamResourceIdWithPolicyName(workspace.workspaceId, SamWorkspacePolicyNames.owner.value, Set.empty, Set.empty, None)).toSet)
+        }.map(_.map(workspace => SamResourceIdWithPolicyName(workspace.workspaceId, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, None)).toSet)
 
-      case SamResourceTypeNames.billingProject =>
+      case billingProject =>
         dataSource.inTransaction { dataaccess =>
           dataaccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Ready)
-        }.map(_.map(project => SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.owner.value, Set.empty, Set.empty, None)).toSet)
+        }.map(_.map(project => SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.owner, Set.empty, Set.empty, None)).toSet)
 
       case _ => Future.successful(Set.empty)
     }
   }
 
-  override def getResourcePolicies(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = Future.successful(Set(SamPolicyWithName(SamWorkspacePolicyNames.owner.value, SamPolicy(Set.empty, Set.empty, Set.empty))))
+  override def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = Future.successful(Set(SamPolicyWithName(SamWorkspacePolicyNames.owner, SamPolicy(Set.empty, Set.empty, Set.empty))))
 
-  override def listPoliciesForResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]] = Future.successful(
+  override def listPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]] = Future.successful(
     Set(SamWorkspacePolicyNames.projectOwner,
       SamWorkspacePolicyNames.owner,
       SamWorkspacePolicyNames.shareReader,
@@ -65,32 +65,16 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
       SamWorkspacePolicyNames.reader,
       SamWorkspacePolicyNames.writer).map( policyName =>
 
-      SamPolicyWithNameAndEmail(policyName.value, SamPolicy(Set.empty, Set.empty, Set.empty), policyName.value + "@example.com")
+      SamPolicyWithNameAndEmail(policyName, SamPolicy(Set.empty, Set.empty, Set.empty), WorkbenchEmail(policyName.value + "@example.com"))
     ))
 
-  override def listUserPoliciesForResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = ???
+  override def listUserPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = ???
 
-  override def listUserRolesForResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[String]] = ???
+  override def listUserRolesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[String]] = ???
 
-  override def getPolicySyncStatus(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus] = ???
+  override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus] = ???
 
-  override def getResourceAuthDomain(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String): Future[Seq[String]] = ???
-
-  override def createGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = ???
-
-  override def deleteGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = ???
-
-  override def listGroupPolicyEmails(groupName: WorkbenchGroupName, policyName: ManagedRoles.ManagedRole, userInfo: UserInfo): Future[List[WorkbenchEmail]] = ???
-
-  override def getGroupEmail(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[WorkbenchEmail] = ???
-
-  override def listManagedGroups(userInfo: UserInfo): Future[List[ManagedGroupAccessResponse]] = ???
-
-  override def addUserToManagedGroup(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmail: WorkbenchEmail, userInfo: UserInfo): Future[Unit] = ???
-
-  override def removeUserFromManagedGroup(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmail: WorkbenchEmail, userInfo: UserInfo): Future[Unit] = ???
-
-  override def overwriteManagedGroupMembership(groupName: WorkbenchGroupName, role: ManagedRoles.ManagedRole, memberEmails: Seq[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = ???
+  override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String): Future[Seq[String]] = ???
 
   override def requestAccessToManagedGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = ???
 

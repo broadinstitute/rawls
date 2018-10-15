@@ -2,11 +2,9 @@ package org.broadinstitute.dsde.rawls.util
 
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
-import slick._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, _}
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.dataaccess.SamResourceActions.SamResourceAction
 
 import scala.collection.Set
 import scala.concurrent.Future
@@ -66,20 +64,20 @@ trait LibraryPermissionsSupport extends RoleSupport {
   }
 
   def canChangeMetadata(workspaceId: String): Future[Boolean] =
-    hasAnyAction(workspaceId, SamResourceActions.workspaceWrite, SamResourceActions.workspaceCanCatalog)
+    hasAnyAction(workspaceId, SamWorkspaceActions.write, SamWorkspaceActions.catalog)
 
   def canChangeDiscoverability(workspaceId: String): Future[Boolean] =
     hasAnyAction(workspaceId,
-      SamResourceActions.workspaceOwn,
-      SamResourceActions.workspaceCanCatalog,
-      SamResourceActions.sharePolicy(SamWorkspacePolicyNames.shareWriter.value),
-      SamResourceActions.sharePolicy(SamWorkspacePolicyNames.shareReader.value))
+      SamWorkspaceActions.own,
+      SamWorkspaceActions.catalog,
+      SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.shareWriter.value),
+      SamWorkspaceActions.sharePolicy(SamWorkspacePolicyNames.shareReader.value))
 
   def canChangePublished(isCurator: Boolean, workspaceId: String): Future[Boolean] =
     if (!isCurator) {
       Future.successful(false)
     } else {
-      hasAnyAction(workspaceId, SamResourceActions.workspaceOwn, SamResourceActions.workspaceCanCatalog)
+      hasAnyAction(workspaceId, SamWorkspaceActions.own, SamWorkspaceActions.catalog)
     }
 
 
