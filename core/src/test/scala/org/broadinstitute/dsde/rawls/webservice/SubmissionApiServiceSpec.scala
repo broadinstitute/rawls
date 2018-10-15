@@ -240,7 +240,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.wsName.path}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
       }
 
   }

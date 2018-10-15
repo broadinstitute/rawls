@@ -128,11 +128,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel =>
-          if (accessLevel < WorkspaceAccessLevels.Read) {
-            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-          }
-          else {
+        requireAccess(workspaceContext.workspace, SamResourceActions.workspaceRead) {
+          DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel =>
             for {
               canCatalog <- DBIO.from(getUserCatalogPermissions(workspaceContext.workspaceId.toString))
               canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel)) //convoluted but accessLevel for both params because user could at most share with their own access level
@@ -1756,24 +1753,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def requireSharePermission[T](workspaceName: WorkspaceName, requiredLevel: WorkspaceAccessLevel)(op: => Future[T]): Future[T] = {
-    loadWorkspaceId(workspaceName).flatMap { workspaceId =>
-      getMaximumAccessLevel(workspaceId).flatMap { accessLevel =>
-        if(accessLevel <= WorkspaceAccessLevels.NoAccess) {
-          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-        }
-        else {
-          getUserSharePermissions(workspaceId, accessLevel, requiredLevel).flatMap { canShare =>
-            if(!canShare && accessLevel >= WorkspaceAccessLevels.NoAccess) Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspaceName))))
-            else if(canShare && accessLevel >= requiredLevel) op
-            else if(canShare && accessLevel < requiredLevel) Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the access level of users with higher access than yourself.")))
-            else Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the permissions on this workspace.")))
-          }
-        }
-      }
-    }
-  }
-
   private def requireAccessIgnoreLock[T](workspace: Workspace, requiredAction: SamResourceAction)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
     requireAccess(workspace.copy(isLocked = false), requiredAction)(op)
   }
@@ -1782,12 +1761,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamBillingProjectActions.launchBatchCompute, userInfo)) flatMap { projectCanCompute =>
       if (!projectCanCompute) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
       else {
-        DBIO.from(getMaximumAccessLevel(workspace.workspaceId)) flatMap { userLevel =>
-          if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock
-          else DBIO.from(samDAO.listUserPoliciesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)) flatMap { policies =>
-            val policyNames = policies.map(_.policyName)
-            if (policyNames.contains(SamWorkspacePolicyNames.canCompute)) codeBlock
-            else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+        DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamResourceActions.launchBatchCompute, userInfo)) flatMap { launchBatchCompute =>
+          if (launchBatchCompute) codeBlock
+          else DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamResourceActions.workspaceRead, userInfo)) flatMap { workspaceRead =>
+            if (workspaceRead) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
             else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
           }
         }
