@@ -498,8 +498,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @return
    */
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Set[WorkspaceACLUpdate], inviteUsersNotFound: Boolean): Future[PerRequestMessage] = {
-    val maxLevelSharingWith = aclUpdates.map(_.accessLevel).fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max)
-
     if (aclUpdates.map(_.email).size < aclUpdates.size) {
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Only 1 entry per email allowed."))
     }
@@ -564,6 +562,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
           for {
             workspaceId <- loadWorkspaceId(workspaceName)
+            _ <- Future.traverse(usersToInvite) { invite =>
+              for {
+                _ <- samDAO.inviteUser(invite.email, userInfo)
+                maybeWorkspace <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.findByName(workspaceName) }
+                workspace = maybeWorkspace.getOrElse(throw new RawlsException(s"workspace $workspaceName not found"))
+                inviteNotification = Notifications.WorkspaceInvitedNotification(RawlsUserEmail(invite.email), userInfo.userSubjectId, workspaceName, workspace.bucketName)
+              } yield inviteNotification
+            }.map(inviteNotifications => notificationDAO.fireAndForgetNotifications(inviteNotifications))
             _ <- Future.traverse(usersToRemove) { update => removeUserFromWorkspace(workspaceId, existingPolicies, WorkbenchEmail(update.email)) }
             _ <- Future.traverse(usersToAdd) { update => addUserToWorkspace(workspaceId, existingPolicies, aclUpdateToPolicyNames(existingPolicies, update), WorkbenchEmail(update.email), inviteUsersNotFound, workspaceName) }
             _ <- maybeShareProjectComputePolicy(usersToAdd, workspaceName)

@@ -11,7 +11,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getUserStatus(userInfo: UserInfo): Future[Option[UserStatus]] = ???
 
-  override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]] = ???
+  override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]] = Future.successful(Right(Option(UserIdInfo(userInfo.userSubjectId.value, userEmail, Option(userInfo.userSubjectId.value)))))
 
   override def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail] = ???
 
@@ -29,9 +29,9 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def overwritePolicyMembership(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberList: Set[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = ???
 
-  override def addUserToPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = ???
+  override def addUserToPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = Future.successful(())
 
-  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = ???
+  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = Future.successful(())
 
   override def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit] = ???
 
@@ -55,7 +55,18 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getResourcePolicies(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = Future.successful(Set(SamPolicyWithName(SamWorkspacePolicyNames.owner.value, SamPolicy(Set.empty, Set.empty, Set.empty))))
 
-  override def listPoliciesForResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]] = ???
+  override def listPoliciesForResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]] = Future.successful(
+    Set(SamWorkspacePolicyNames.projectOwner,
+      SamWorkspacePolicyNames.owner,
+      SamWorkspacePolicyNames.shareReader,
+      SamWorkspacePolicyNames.shareWriter,
+      SamWorkspacePolicyNames.canCatalog,
+      SamWorkspacePolicyNames.canCompute,
+      SamWorkspacePolicyNames.reader,
+      SamWorkspacePolicyNames.writer).map( policyName =>
+
+      SamPolicyWithNameAndEmail(policyName.value, SamPolicy(Set.empty, Set.empty, Set.empty), policyName.value + "@example.com")
+    ))
 
   override def listUserPoliciesForResource(resourceTypeName: SamResourceTypeNames.SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = ???
 
@@ -87,5 +98,5 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String] = Future.successful("""{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com"}""")
 
-  override def getStatus(): Future[SubsystemStatus] = ???
+  override def getStatus(): Future[SubsystemStatus] = Future.successful(SubsystemStatus(true, None))
 }
