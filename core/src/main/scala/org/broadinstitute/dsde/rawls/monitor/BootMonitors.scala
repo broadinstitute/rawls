@@ -36,7 +36,7 @@ object BootMonitors extends LazyLogging {
 
     //Boot submission monitor supervisor
     val submissionMonitorConfig = conf.getConfig("submissionmonitor")
-    startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
+    startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, samDAO, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
 
     //Boot workflow submission actors
     startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole)
@@ -60,10 +60,12 @@ object BootMonitors extends LazyLogging {
       userServiceConstructor))
   }
 
-  private def startSubmissionMonitorSupervisor(system: ActorSystem, submissionMonitorConfig: Config, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {
+  private def startSubmissionMonitorSupervisor(system: ActorSystem, submissionMonitorConfig: Config, slickDataSource: SlickDataSource, samDAO: SamDAO, gcsDAO: GoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {
     system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
       slickDataSource,
+      samDAO,
+      gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
       util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
       submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),

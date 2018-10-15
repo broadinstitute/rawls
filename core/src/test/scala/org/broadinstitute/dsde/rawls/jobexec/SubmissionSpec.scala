@@ -179,6 +179,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         execServiceCluster,
         slickDataSource,
+        samDAO,
+        gcsDAO,
         gcsDAO.getBucketServiceAccountCredential,
         250 milliseconds,
         workbenchMetricBaseName = workbenchMetricBaseName

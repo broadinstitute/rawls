@@ -43,11 +43,13 @@ object SubmissionSupervisor {
 
   def props(executionServiceCluster: ExecutionServiceCluster,
             datasource: SlickDataSource,
+            samDAO: SamDAO,
+            googleServicesDAO: GoogleServicesDAO,
             bucketCredential: Credential,
             submissionPollInterval: FiniteDuration = 1 minutes,
             trackDetailedSubmissionMetrics: Boolean = true,
             workbenchMetricBaseName: String): Props = {
-    Props(new SubmissionSupervisor(executionServiceCluster, datasource, bucketCredential, submissionPollInterval, trackDetailedSubmissionMetrics, workbenchMetricBaseName))
+    Props(new SubmissionSupervisor(executionServiceCluster, datasource, samDAO, googleServicesDAO, bucketCredential, submissionPollInterval, trackDetailedSubmissionMetrics, workbenchMetricBaseName))
   }
 }
 
@@ -61,6 +63,8 @@ object SubmissionSupervisor {
  */
 class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            datasource: SlickDataSource,
+                           samDAO: SamDAO,
+                           googleServicesDAO: GoogleServicesDAO,
                            bucketCredential: Credential,
                            submissionPollInterval: FiniteDuration,
                            trackDetailedSubmissionMetrics: Boolean,
@@ -148,7 +152,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential): ActorRef = {
-    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, trackDetailedSubmissionMetrics, workbenchMetricBaseName).withDispatcher("submission-monitor-dispatcher"), submissionId.toString)
+    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, samDAO, googleServicesDAO, executionServiceCluster, credential, submissionPollInterval, trackDetailedSubmissionMetrics, workbenchMetricBaseName).withDispatcher("submission-monitor-dispatcher"), submissionId.toString)
   }
 
   private def scheduleNextCheckCurrentWorkflowStatus(actor: ActorRef): Cancellable = {

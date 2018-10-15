@@ -211,9 +211,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         for {
           petSAJson <- samDAO.getPetServiceAccountKeyForUser(workspaceRec.namespace, submitter.userEmail)
           petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-          xs <- traverseWorkflowOutputs(externalWorkflowIds, petUserInfo)
+          workflowOutputs <- traverseWorkflowOutputs(externalWorkflowIds, petUserInfo)
         } yield {
-          xs
+          workflowOutputs
         }
 
       } map (ExecutionServiceStatusResponse)

@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
+import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
@@ -34,9 +35,18 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
 
   val testDbName = "SubmissionMonitorSpec"
+  val mockServer = RemoteServicesMockServer()
+  val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
+  val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, mockGoogleServicesDAO.getPreparedMockGoogleCredential())
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    mockServer.startServer()
+  }
 
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
+    mockServer.stopServer
     super.afterAll()
   }
 
@@ -714,6 +724,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       wsName,
       UUID.fromString(submission.submissionId),
       dataSource,
+      mockSamDAO,
+      mockGoogleServicesDAO,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       1 second,
