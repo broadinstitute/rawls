@@ -178,12 +178,25 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
     def abortActiveWorkflows(submissionId: UUID): Future[Seq[(Option[String], Try[ExecutionServiceStatus])]] = {
       datasource.inTransaction { dataAccess =>
-        // look up abortable WorkflowRecs for this submission
-        dataAccess.workflowQuery.findWorkflowsForAbort(submissionId).result
-      }.flatMap { workflowRecs =>
-        Future.traverse(workflowRecs) { workflowRec =>
-          Future.successful(workflowRec.externalId).zip(executionServiceCluster.abort(workflowRec, UserInfo.buildFromTokens(credential)))
+        for {
+          // look up abortable WorkflowRecs for this submission
+          wfRecs <- dataAccess.workflowQuery.findWorkflowsForAbort(submissionId).result
+          submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.head)
+          submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
+          workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result.map(_.head)
+        } yield {
+          (wfRecs, submitter, workspaceRec)
         }
+      } flatMap { case (workflowRecs, submitter, workspaceRec) =>
+          for {
+            petSAJson <- samDAO.getPetServiceAccountKeyForUser(workspaceRec.namespace, submitter.userEmail)
+            petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
+            abortResults <- Future.traverse(workflowRecs) { workflowRec =>
+              Future.successful(workflowRec.externalId).zip(executionServiceCluster.abort(workflowRec, petUserInfo))
+            }
+          } yield {
+            abortResults
+          }
       }
     }
 
