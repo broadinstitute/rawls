@@ -89,7 +89,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       Get(testData.workspace.path) ~>
         services.sealedInstrumentedRoutes ~>
         check {
-          assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+          assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
         }
     } { capturedMetrics =>
       val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
@@ -324,7 +324,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
       }
   }
 
@@ -393,7 +393,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
       }
   }
 
@@ -466,7 +466,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       Get(testData.workspace.path) ~>
         services.sealedInstrumentedRoutes ~>
         check {
-          assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+          assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
         }
     } { capturedMetrics =>
       val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
@@ -673,7 +673,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
       }
   }
 

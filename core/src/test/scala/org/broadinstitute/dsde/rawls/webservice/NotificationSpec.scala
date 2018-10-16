@@ -11,7 +11,9 @@ import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import scala.concurrent.duration._
 import spray.json.DefaultJsonProtocol._
 import WorkspaceACLJsonSupport._
-import org.broadinstitute.dsde.rawls.mock.MockSamDAO
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
+import org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
@@ -23,36 +25,8 @@ import scala.concurrent.{ExecutionContext, Future}
  */
 class NotificationSpec extends ApiServiceSpec {
 
-  class NotificationSpecMockSamDAO(dataSource: SlickDataSource) extends MockSamDAO(slickDataSource) {
-    val userEmails = new TrieMap[String, String]()
-    val invitedUsers = new TrieMap[String, String]()
-    val policies = new TrieMap[(SamResourceTypeName, String), Set[SamPolicyWithNameAndEmail]]()
-
-
-    def addUser(user: RawlsUser) = userEmails.put(user.userEmail.value, user.userSubjectId.value)
-
-    override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]] = {
-      val result = userEmails.get(userEmail).map { id => UserIdInfo(id, userEmail, Option(id)) }
-      Future.successful(result match {
-        case Some(_) => Right(result)
-        case None => Left(())
-      })
-    }
-
-    override def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit] = {
-      Future.successful(invitedUsers.put(userEmail, userEmail))
-    }
-
-    override def listPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]] = {
-      policies.get((resourceTypeName, resourceId)) match {
-        case Some(policies) => Future.successful(policies)
-        case None => super.listPoliciesForResource(resourceTypeName, resourceId, userInfo)
-      }
-    }
-  }
-
   case class TestApiService(dataSource: SlickDataSource, user: RawlsUser, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser {
-    override val samDAO: NotificationSpecMockSamDAO = new NotificationSpecMockSamDAO(dataSource)
+    override val samDAO: CustomizableMockSamDAO = new CustomizableMockSamDAO(dataSource)
   }
 
   def withApiServices[T](dataSource: SlickDataSource, user: RawlsUser = testData.userOwner)(testCode: TestApiService => T): T = {
@@ -94,8 +68,8 @@ class NotificationSpec extends ApiServiceSpec {
   }
 
   it should "be sent for add to workspace" in withTestDataApiServices { services =>
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    services.samDAO.addUser(user)
+    val user = model.UserInfo(RawlsUserEmail("obama@whitehouse.gov"), OAuth2BearerToken(""), 0, RawlsUserSubjectId("obamaiscool"))
+    services.samDAO.registerUser(user)
 
     //add ACL
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>
@@ -108,9 +82,9 @@ class NotificationSpec extends ApiServiceSpec {
   }
 
   it should "be sent for remove from workspace" in withTestDataApiServices { services =>
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    services.samDAO.addUser(user)
-    services.samDAO.policies.put((SamResourceTypeNames.workspace, testData.workspace.workspaceId), Set(SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.writer, SamPolicy(Set(WorkbenchEmail(user.userEmail.value)), Set.empty, Set.empty), WorkbenchEmail(""))))
+    val user = model.UserInfo(RawlsUserEmail("obama@whitehouse.gov"), OAuth2BearerToken(""), 0, RawlsUserSubjectId("obamaiscool"))
+    services.samDAO.registerUser(user)
+    services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.writer, SamPolicy(Set(WorkbenchEmail(user.userEmail.value)), Set.empty, Set.empty), userInfo)
 
     //remove ACL
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.NoAccess, None)))) ~>

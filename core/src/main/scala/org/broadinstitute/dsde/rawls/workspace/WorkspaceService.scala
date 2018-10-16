@@ -36,6 +36,7 @@ import spray.json._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
+import cats.implicits._
 
 /**
  * Created by dvoet on 4/27/15.
@@ -438,12 +439,32 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  //TODO: actually fill in response
   def updateCatalog(workspaceName: WorkspaceName, input: Seq[WorkspaceCatalog]): Future[PerRequestMessage] = {
     for {
       workspaceId <- loadWorkspaceId(workspaceName)
-      _ <- Future.traverse(input) { user => samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, user.email, userInfo) }
-    } yield RequestComplete(StatusCodes.OK, input.map(change => WorkspaceCatalogUpdateResponseList(Seq.empty, Seq.empty)))
+      results <- Future.traverse(input) {
+        case WorkspaceCatalog(email, true) =>
+          toFutureTry(samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, email, userInfo)).
+            map(_.map(_ => Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, true))).recover {
+              case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) => Left(email)
+            })
+
+        case WorkspaceCatalog(email, false) =>
+          toFutureTry(samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, email, userInfo)).
+            map(_.map(_ => Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, false))).recover {
+              case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) => Left(email)
+            })
+      }
+    } yield {
+      val failures = results.collect {
+        case Failure(regrets) => ErrorReport(regrets)
+      }
+      if (failures.nonEmpty) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport("Error setting catalog permissions", failures))
+      } else {
+        RequestComplete(StatusCodes.OK, WorkspaceCatalogUpdateResponseList(results.collect { case Success(Right(wc)) => wc }, results.collect { case Success(Left(email)) => email }))
+      }
+    }
   }
 
   private def getWorkspacePolicies(workspaceName: WorkspaceName): Future[Set[SamPolicyWithNameAndEmail]] = {
@@ -513,8 +534,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     def determineComputePolicy(proposedAccessLevel: WorkspaceAccessLevel, canCurrently: Boolean, canProposed: Option[Boolean]): Option[SamResourcePolicyName] = {
+      // canProposed==None means canCompute yes
       if(proposedAccessLevel < WorkspaceAccessLevels.Write) None
-      else if(proposedAccessLevel >= WorkspaceAccessLevels.Owner) Option(SamWorkspacePolicyNames.canCompute)
       else (canCurrently, canProposed) match {
         case (true, None) => Option(SamWorkspacePolicyNames.canCompute)
         case (false, None) if proposedAccessLevel == WorkspaceAccessLevels.Write => Option(SamWorkspacePolicyNames.canCompute)

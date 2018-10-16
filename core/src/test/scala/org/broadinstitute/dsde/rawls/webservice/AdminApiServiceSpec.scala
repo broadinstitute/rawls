@@ -79,7 +79,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value, userInfo.accessToken.value))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, responseAs[String]) {
           status
         }
       }
@@ -99,7 +99,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(projectName, bucket, userInfo.userEmail.value, userInfo.accessToken.value))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, responseAs[String]) {
           status
         }
       }
@@ -230,19 +230,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "delete a workspace" in withTestDataApiServices { services =>
-    Delete(s"/admin/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Accepted) {
-          status
-        }
-      }
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(testData.workspace.toWorkspaceName))
-    }
-  }
-
   it should "return 200 when querying firecloud statistics with valid dates" in withTestDataApiServices { services =>
     Get("/admin/statistics?startDate=2010-10-10&endDate=2011-10-10") ~>
       sealRoute(services.adminRoutes) ~>
@@ -316,10 +303,10 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           .filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
           .mapValues(_.size)
 
-        val testUserWorkflows = (testSubjectId -> testUserStatusCounts.map { case (k, v) => k.toString -> v })
+        val testUserWorkflows = (testUserEmail -> testUserStatusCounts.map { case (k, v) => k.toString -> v })
 
         // userOwner workflow counts should be equal to all workflows in the system except for testUser's workflows.
-        val userOwnerWorkflows = (constantData.userOwner.userSubjectId.value ->
+        val userOwnerWorkflows = (constantData.userOwner.userEmail.value ->
           groupedWorkflowRecs.map { case (k, v) =>
             k -> (v - testUserStatusCounts.getOrElse(WorkflowStatuses.withName(k), 0))
           }.filter(_._2 > 0))
