@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.jobexec
 import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
+import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.{HttpSamDAO, MockExecutionServiceDAO, MockGoogleServicesDAO, MockShardedExecutionServiceCluster}
@@ -20,6 +21,7 @@ import scala.concurrent.duration._
 class SubmissionSupervisorSpec extends TestKit(ActorSystem("SubmissionSupervisorSpec")) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with RawlsTestUtils with MockitoTestUtils with RawlsStatsDTestUtils {
 
   import driver.api._
+  implicit val materializer = ActorMaterializer()
 
   val testDbName = "SubmissionSupervisorSpec"
   val submissionSupervisorActorName = "test-subsupervisorspec-submission-supervisor"
