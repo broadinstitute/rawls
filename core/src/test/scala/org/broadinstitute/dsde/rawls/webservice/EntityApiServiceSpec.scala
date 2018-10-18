@@ -72,7 +72,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       Get(testData.workspace.path) ~>
         services.sealedInstrumentedRoutes ~>
         check {
-          assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+          assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
       }
     } {capturedMetrics =>
       val AttributeEntityReference(eType, _) = testData.sample2.toReference
@@ -96,7 +96,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
       }
   }
 
@@ -144,12 +144,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             Get(workspaceSrcRequest.path) ~>
               sealRoute(services.workspaceRoutes) ~>
               check {
-                assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+                assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
               }
             Get(testData.wsName.path) ~>
               sealRoute(services.workspaceRoutes) ~>
               check {
-                assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+                assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
               }
           }
       }
@@ -171,7 +171,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
       }
   }
 
@@ -190,7 +190,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)      }
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)      }
   }
 
   it should "return 201 on create entity" in withTestDataApiServices { services =>

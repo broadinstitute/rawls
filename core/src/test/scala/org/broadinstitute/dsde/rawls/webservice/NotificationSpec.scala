@@ -97,10 +97,10 @@ class NotificationSpec extends ApiServiceSpec {
   }
 
   it should "sendChangeNotification api should exist" in withTestDataApiServicesAndUser(testData.userOwner) { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification", httpJsonEmpty) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/sendChangeNotification") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
       }

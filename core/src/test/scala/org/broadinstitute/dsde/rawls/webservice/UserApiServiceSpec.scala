@@ -92,14 +92,11 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
 
           import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-          assertResult(
-            List(RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.User, CreationStatuses.Ready),
-              RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready))) {
-            responseAs[List[RawlsBillingProjectMembership]]
-          }
-
-          assertResult(responseAs[List[RawlsBillingProjectMembership]].head)(RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.User, CreationStatuses.Ready))
-          assertResult(responseAs[List[RawlsBillingProjectMembership]].last)(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready))
+          responseAs[List[RawlsBillingProjectMembership]] should contain theSameElementsInOrderAs List(
+              RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.Owner, CreationStatuses.Ready),
+              RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready),
+              RawlsBillingProjectMembership(testData.testProject2.projectName, ProjectRoles.Owner, CreationStatuses.Ready),
+              RawlsBillingProjectMembership(testData.testProject3.projectName, ProjectRoles.Owner, CreationStatuses.Ready))
         }
     }
 
@@ -389,16 +386,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 403 when trying to add a user to a billing project that the caller does not own (but has access to)" in withTestDataApiServices { services =>
-    Put(s"/billing/not_an_owner/user/${testData.userWriter.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
-          status
-        }
-      }
-  }
-
   it should "return 200 when removing a user from a billing project that the caller owns" in withTestDataApiServices { services =>
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
     val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
@@ -427,16 +414,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
-          status
-        }
-      }
-  }
-
-  it should "return 403 when a non-owner tries to alter project permissions" in withTestDataApiServices { services =>
-    Put(s"/billing/no_access/user/${testData.userWriter.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
           status
         }
       }

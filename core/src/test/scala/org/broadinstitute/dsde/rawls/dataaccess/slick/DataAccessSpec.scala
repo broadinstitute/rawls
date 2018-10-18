@@ -15,6 +15,7 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     val safeTableNames: Seq[String] = rawTableNames flatMap {
       case "GROUP" => None
       case "USER" => None
+      case "MANAGED_GROUP" => None
       case "DATABASECHANGELOG" => None        // managed by Liquibase
       case "DATABASECHANGELOGLOCK" => None    // managed by Liquibase
       case other => Option(other)

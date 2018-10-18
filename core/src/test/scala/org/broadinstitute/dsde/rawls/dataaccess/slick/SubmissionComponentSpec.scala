@@ -348,9 +348,9 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     // Validate testUser counts
     val result: Map[String, Map[String, Int]] = runAndWait(workflowQuery.countWorkflowsByQueueStatusByUser)
 //    result should equal(Set())
-    result should contain key (testUserId)
+    result should contain key (testUserEmail)
     testUserStatusCounts.foreach { case (st, count) =>
-      result(testUserId)(st.toString) should be (count)
+      result(testUserEmail)(st.toString) should be (count)
     }
 
     // Validate all workspace counts by status
@@ -373,10 +373,10 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     it should s"count $status workflows by submitter" in withDefaultTestDatabase {
       val workflowRecs = runAndWait(workflowQuery.result)
       runAndWait(workflowQuery.batchUpdateStatus(workflowRecs, status))
-      assertResult(Seq((testData.userOwner.userSubjectId.value, workflowRecs.size))) {
+      assertResult(Seq((testData.userOwner.userEmail.value, workflowRecs.size))) {
         runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(0, WorkflowStatuses.runningStatuses))
       }
-      assertResult(Seq((testData.userOwner.userSubjectId.value, workflowRecs.size))) {
+      assertResult(Seq((testData.userOwner.userEmail.value, workflowRecs.size))) {
         runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(workflowRecs.size-1, WorkflowStatuses.runningStatuses))
       }
       assertResult(Seq.empty) {

@@ -15,14 +15,26 @@ import org.scalatest.path
 import akka.http.scaladsl.model.{HttpMethods, StatusCodes, Uri}
 import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.mockito.ArgumentMatchers
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers._
+import org.scalatest.mockito.MockitoSugar
 
-class BillingApiServiceSpec extends ApiServiceSpec {
+class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
+    override val samDAO: SamDAO = mock[SamDAO]
+    when(samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
+    when(samDAO.addUserToPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), any[String], any[SamResourcePolicyName], any[String], any[UserInfo])).thenReturn(Future.successful(()))
+    when(samDAO.removeUserFromPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), any[String], any[SamResourcePolicyName], any[String], any[UserInfo])).thenReturn(Future.successful(()))
+  }
 
   def withApiServices[T](dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test"))(testCode: TestApiService =>  T): T = {
     val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
@@ -49,18 +61,6 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   "BillingApiService" should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
 
-    val createRequest = CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)
-
-    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
-
-    Post(s"/billing", httpJson(createRequest)) ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-
     Put(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
@@ -80,6 +80,8 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   it should "return 403 when adding a user to a non-owned billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("no_access")
+
+    when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
 
     withStatsD {
       Put(s"/billing/${project.projectName.value}/user/${testData.userReader.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
@@ -114,6 +116,8 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when adding a user to a nonexistent project" in withTestDataApiServices { services =>
+    when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq("missing_project"), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
+
     Put(s"/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
@@ -127,25 +131,6 @@ class BillingApiServiceSpec extends ApiServiceSpec {
     val project = billingProjectFromName("new_project")
 
     withStatsD {
-      val createRequest = CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)
-
-      import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
-
-      Post(s"/billing", httpJson(createRequest)) ~>
-        sealRoute(services.billingRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
-          }
-        }
-
-      Put(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-        }
-
       Delete(s"/billing/${project.projectName.value}/user/${testData.userWriter.userEmail.value}") ~> services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.OK) {
@@ -153,14 +138,14 @@ class BillingApiServiceSpec extends ApiServiceSpec {
           }
         }
     } { capturedMetrics =>
-      val expected = expectedHttpRequestMetrics("put", s"billing.redacted.redacted.redacted", StatusCodes.OK.intValue, 1) ++
-        expectedHttpRequestMetrics("delete", s"billing.redacted.redacted.redacted", StatusCodes.OK.intValue, 1)
+      val expected = expectedHttpRequestMetrics("delete", s"billing.redacted.redacted.redacted", StatusCodes.OK.intValue, 1)
       assertSubsetOf(expected, capturedMetrics)
     }
   }
 
   it should "return 403 when removing a user from a non-owned billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("no_access")
+    when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
 
     Delete(s"/billing/${project.projectName.value}/owner/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -173,6 +158,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   it should "return 400 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("test_good")
+    when(services.samDAO.removeUserFromPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourcePolicyName], ArgumentMatchers.eq("nobody"), any[UserInfo])).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ""))))
 
     Delete(s"/billing/${project.projectName.value}/user/nobody") ~>
       sealRoute(services.billingRoutes) ~>
@@ -184,6 +170,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when removing a user from a nonexistent billing project" in withTestDataApiServices { services =>
+    when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq("missing_project"), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
     Delete(s"/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
@@ -195,6 +182,10 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when creating a project with accessible billing account" in withTestDataApiServices { services =>
     val projectName = RawlsBillingProjectName("test_good")
+
+    when(services.samDAO.createResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), any[UserInfo])).thenReturn(Future.successful(()))
+    when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.workspaceCreator), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator))), any[UserInfo])).thenReturn(Future.successful(()))
+    when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.canComputeUser), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser))), any[UserInfo])).thenReturn(Future.successful(()))
 
     Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
       sealRoute(services.billingRoutes) ~>
@@ -259,6 +250,12 @@ class BillingApiServiceSpec extends ApiServiceSpec {
   it should "return 200 when listing billing project members as owner" in withTestDataApiServices { services =>
     val project = billingProjectFromName("test_good")
 
+    when(services.samDAO.getResourcePolicies(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[UserInfo])).thenReturn(Future.successful(
+      Set(
+        SamPolicyWithName(SamBillingProjectPolicyNames.owner, SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set.empty, Set.empty)),
+        SamPolicyWithName(SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set.empty))
+      )))
+
     Get(s"/billing/${project.projectName.value}/members") ~>
       sealRoute(services.billingRoutes) ~>
       check {
@@ -273,6 +270,8 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   it should "return 403 when listing billing project members as non-owner" in withTestDataApiServices { services =>
     val project = billingProjectFromName("no_access")
+
+    when(services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(project.projectName.value), any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(false))
 
     Get(s"/billing/${project.projectName.value}/members") ~>
       sealRoute(services.billingRoutes) ~>

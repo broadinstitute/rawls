@@ -50,7 +50,7 @@ class PetSASpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(newWorkspace)) ~> addHeader("OIDC_access_token", petSA.accessToken.value) ~> addHeader("OIDC_CLAIM_expires_in", petSA.accessTokenExpiresIn.toString) ~> addHeader("OIDC_CLAIM_email", petSA.userEmail.value) ~> addHeader("OIDC_CLAIM_user_id", petSA.userSubjectId.value) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, responseAs[String]) {
           status
 
         }
@@ -75,10 +75,10 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set(testData.userProjectOwner.userEmail.value,testWorkspaces.userSAProjectOwner.userEmail.value), Some(false), Set.empty)
+          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set.empty)
         ){
-          val response = responseAs[WorkspaceListResponse]
-          WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners, Some(false), Set.empty)
+          val response = responseAs[WorkspaceResponse]
+          WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
         }
       }
   }
@@ -95,10 +95,10 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceListResponse(WorkspaceAccessLevels.ProjectOwner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set(testData.userProjectOwner.userEmail.value,testWorkspaces.userSAProjectOwner.userEmail.value), Some(false), Set.empty)
+          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set.empty)
         ){
-          val response = responseAs[WorkspaceListResponse]
-          WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners, Some(false), Set.empty)
+          val response = responseAs[WorkspaceResponse]
+          WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
         }
       }
   }
