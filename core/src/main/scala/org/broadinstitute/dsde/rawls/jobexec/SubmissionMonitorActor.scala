@@ -10,7 +10,7 @@ import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression, ThisEntityTarget, WorkspaceTarget}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
@@ -176,21 +176,37 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       }
     }
 
+    def getWorkspaceAndSubmitter(dataAccess: DataAccess): ReadWriteAction[(RawlsUser, WorkspaceRecord)] = {
+      for {
+        submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.head)
+        submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
+        workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result.map(_.head)
+      } yield {
+        (submitter, workspaceRec)
+      }
+    }
+
+    def getPetSAUserInfo(workspaceNamespace: String, submitterEmail: RawlsUserEmail): Future[UserInfo] = {
+      for {
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(workspaceNamespace, submitterEmail)
+      petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
+      } yield {
+        petUserInfo
+      }
+    }
+
     def abortActiveWorkflows(submissionId: UUID): Future[Seq[(Option[String], Try[ExecutionServiceStatus])]] = {
       datasource.inTransaction { dataAccess =>
         for {
           // look up abortable WorkflowRecs for this submission
           wfRecs <- dataAccess.workflowQuery.findWorkflowsForAbort(submissionId).result
-          submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.head)
-          submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
-          workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result.map(_.head)
+          (submitter, workspaceRec) <- getWorkspaceAndSubmitter(dataAccess)
         } yield {
           (wfRecs, submitter, workspaceRec)
         }
       } flatMap { case (workflowRecs, submitter, workspaceRec) =>
           for {
-            petSAJson <- samDAO.getPetServiceAccountKeyForUser(workspaceRec.namespace, submitter.userEmail)
-            petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
+            petUserInfo <- getPetSAUserInfo(workspaceRec.namespace, submitter.userEmail)
             abortResults <- Future.traverse(workflowRecs) { workflowRec =>
               Future.successful(workflowRec.externalId).zip(executionServiceCluster.abort(workflowRec, petUserInfo))
             }
@@ -200,7 +216,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       }
     }
 
-    def traverseWorkflowOutputs(externalWorkflowIds: Seq[WorkflowRecord], petUser: UserInfo) = {
+    def gatherWorkflowOutputs(externalWorkflowIds: Seq[WorkflowRecord], petUser: UserInfo) = {
       Future.traverse(externalWorkflowIds) { workflowRec =>
         // for each workflow query the exec service for status and if has Succeeded query again for outputs
         toFutureTry(execServiceStatus(workflowRec, petUser) flatMap {
@@ -214,17 +230,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       datasource.inTransaction { dataAccess =>
         for {
           wfRecs <- dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(submissionId, WorkflowStatuses.runningStatuses: _*)
-          submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.head)
-          submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
-          workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result.map(_.head)
+          (submitter, workspaceRec) <- getWorkspaceAndSubmitter(dataAccess)
         } yield {
           (wfRecs, submitter, workspaceRec)
         }
       } flatMap { case (externalWorkflowIds, submitter, workspaceRec) =>
         for {
-          petSAJson <- samDAO.getPetServiceAccountKeyForUser(workspaceRec.namespace, submitter.userEmail)
-          petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-          workflowOutputs <- traverseWorkflowOutputs(externalWorkflowIds, petUserInfo)
+          petUserInfo <- getPetSAUserInfo(workspaceRec.namespace, submitter.userEmail)
+          workflowOutputs <- gatherWorkflowOutputs(externalWorkflowIds, petUserInfo)
         } yield {
           workflowOutputs
         }
