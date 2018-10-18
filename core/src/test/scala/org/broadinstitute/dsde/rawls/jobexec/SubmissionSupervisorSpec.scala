@@ -3,12 +3,14 @@ package org.broadinstitute.dsde.rawls.jobexec
 import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
+import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.dataaccess.{MockExecutionServiceDAO, MockGoogleServicesDAO, MockShardedExecutionServiceCluster}
+import org.broadinstitute.dsde.rawls.dataaccess.{HttpSamDAO, MockExecutionServiceDAO, MockGoogleServicesDAO, MockShardedExecutionServiceCluster}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{SaveCurrentWorkflowStatusCounts, SubmissionStarted, RefreshGlobalJobExecGauges}
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{RefreshGlobalJobExecGauges, SaveCurrentWorkflowStatusCounts, SubmissionStarted}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
+import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
@@ -19,22 +21,34 @@ import scala.concurrent.duration._
 class SubmissionSupervisorSpec extends TestKit(ActorSystem("SubmissionSupervisorSpec")) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with RawlsTestUtils with MockitoTestUtils with RawlsStatsDTestUtils {
 
   import driver.api._
+  implicit val materializer = ActorMaterializer()
 
   val testDbName = "SubmissionSupervisorSpec"
   val submissionSupervisorActorName = "test-subsupervisorspec-submission-supervisor"
 
+  val mockServer = RemoteServicesMockServer()
+  val gcsDAO = new MockGoogleServicesDAO("test")
+  val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getPreparedMockGoogleCredential())
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    mockServer.startServer()
+  }
+
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
+    mockServer.stopServer
     super.afterAll()
   }
 
   def withSupervisor[T](trackDetailedMetrics: Boolean = true)(op: ActorRef => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO()
-    val gcsDAO = new MockGoogleServicesDAO("test")
     val execCluster = MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, slickDataSource)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       execCluster,
       slickDataSource,
+      mockSamDAO,
+      gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
       20 minutes,
       trackDetailedSubmissionMetrics = trackDetailedMetrics,

@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.jobexec
 import java.util.UUID
 
 import akka.actor._
+import akka.stream.ActorMaterializer
 import akka.testkit.{TestActorRef, TestKit}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
@@ -13,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
+import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
@@ -32,18 +34,28 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   import driver.api._
 
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
+  implicit val materializer = ActorMaterializer()
 
   val testDbName = "SubmissionMonitorSpec"
+  val mockServer = RemoteServicesMockServer()
+  val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
+  val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, mockGoogleServicesDAO.getPreparedMockGoogleCredential())
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    mockServer.startServer()
+  }
 
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
+    mockServer.stopServer
     super.afterAll()
   }
 
   private def await[T](f: Future[T]): T = Await.result(f, 5 minutes)
 
   "SubmissionMonitor" should "queryExecutionServiceForStatus success" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
 
@@ -55,7 +67,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "queryExecutionServiceForStatus submitted" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString))
 
     val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
 
@@ -68,7 +80,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   (WorkflowStatuses.runningStatuses.toSet ++ WorkflowStatuses.terminalStatuses -- Set(WorkflowStatuses.Succeeded, WorkflowStatuses.Submitted)).foreach { status =>
     it should s"queryExecutionServiceForStatus $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-      val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(status.toString))
+      val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(status.toString))
 
       val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
 
@@ -139,7 +151,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   it should "queryExecutionServiceForStatus exception" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val exception = new RuntimeException
-    val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(throw exception))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(throw exception))
 
     val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
 
@@ -152,7 +164,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   WorkflowStatuses.queuedStatuses.foreach { status =>
     it should s"checkOverallStatus queued status - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-      val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+      val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
       runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(status.toString))
 
@@ -169,7 +181,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   WorkflowStatuses.runningStatuses.foreach { status =>
     it should s"checkOverallStatus running status - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-      val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+      val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
       runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(status.toString))
 
@@ -188,7 +200,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   WorkflowStatuses.terminalStatuses.foreach { status =>
     it should s"checkOverallStatus terminal status - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
       withStatsD {
-        val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+        val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
         runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(status.toString))
 
@@ -218,7 +230,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz", "output3" -> "workspace.garble")
 
-    val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Left(Some(
       WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")))),
@@ -234,7 +246,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("output" -> "this.library:bar", "output2" -> "this.library:baz", "output3" -> "workspace.library:garble")
 
-    val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     val expected = Seq(Left(Some(
         WorkflowEntityUpdate(entity.toReference, Map(
@@ -258,7 +270,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz")
 
-    val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Left(Some(
       WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")))),
@@ -274,7 +286,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map.empty
 
-    val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Left(Some(WorkflowEntityUpdate(entity.toReference, Map())), None))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
@@ -285,7 +297,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, None, 0, None), outputs))
     val outputExpressions: Map[String, String] = Map("output" -> "", "output2" -> "", "output3" -> "")
 
-    val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Left(None, None))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, Map(), outputExpressions)
@@ -300,7 +312,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("missing" -> "this.bar")
 
-    val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Right((workflowRecord, Seq(AttributeString(s"output named missing does not exist")))))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
@@ -309,7 +321,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   it should "save workflow error messages" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     withStatsD {
-      val monitor = createSubmissionMonitor(dataSource, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+      val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
       val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
 
@@ -330,7 +342,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "handle outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val monitor = createSubmissionMonitor(dataSource, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
     val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)))
 
     runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))), this))
@@ -355,7 +367,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       runAndWait(submissionQuery.create(context, subUpdateEntityLibraryOutputs))
     }
 
-    val monitor = createSubmissionMonitor(dataSource, subUpdateEntityLibraryOutputs, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, subUpdateEntityLibraryOutputs, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
     val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(subUpdateEntityLibraryOutputs.submissionId)))
 
     runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1_lib" -> Left(AttributeString("result")))))), this))
@@ -378,7 +390,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       runAndWait(submissionQuery.create(context, subUpdateEntityLibraryInputs))
     }
 
-    val monitor2 = createSubmissionMonitor(dataSource, subUpdateEntityLibraryInputs, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor2 = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, subUpdateEntityLibraryInputs, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
     val workflowRecs2 = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(subUpdateEntityLibraryInputs.submissionId)))
 
     runAndWait(monitor2.handleOutputs(workflowRecs2.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o2_lib" -> Left(AttributeString("result2")))))), this))
@@ -393,7 +405,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "handleStatusResponses with no workflows" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val monitor = createSubmissionMonitor(dataSource, testData.submissionNoWorkflows, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionNoWorkflows, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString))
 
     assertResult(StatusCheckComplete(true)) {
       await(monitor.handleStatusResponses(ExecutionServiceStatusResponse(Seq.empty)))
@@ -405,7 +417,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)) flatMap { workflowRecs =>
         workflowQuery.batchUpdateStatus(workflowRecs, status)
       })
-      val monitor = createSubmissionMonitor(dataSource, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(status.toString))
+      val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(status.toString))
 
       assertResult(StatusCheckComplete(false)) {
         await(monitor.handleStatusResponses(ExecutionServiceStatusResponse(Seq.empty)))
@@ -415,7 +427,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   WorkflowStatuses.runningStatuses.foreach { status =>
     it should s"handleStatusResponses from exec svc - running - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-      val monitor = createSubmissionMonitor(dataSource, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(status.toString))
+      val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(status.toString))
       val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)))
 
       assertResult(StatusCheckComplete(false)) {
@@ -426,7 +438,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   WorkflowStatuses.terminalStatuses.foreach { status =>
     it should s"handleStatusResponses from exec svc - terminal - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-      val monitor = createSubmissionMonitor(dataSource, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(status.toString))
+      val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(status.toString))
       val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)))
 
       assertResult(StatusCheckComplete(true)) {
@@ -437,7 +449,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   it should s"handleStatusResponses from exec svc - success with outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val status = WorkflowStatuses.Succeeded
-    val monitor = createSubmissionMonitor(dataSource, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(status.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(status.toString))
     val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)))
 
     assertResult(StatusCheckComplete(true)) {
@@ -476,7 +488,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       runAndWait(submissionQuery.create(context, subUnboundExpr))
     }
 
-    val monitor = createSubmissionMonitor(dataSource, subUnboundExpr, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, subUnboundExpr, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
     val workflowRec = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(subUnboundExpr.submissionId))).head
 
     runAndWait(monitor.handleOutputs(Seq((workflowRec, ExecutionServiceOutputs(workflowRec.externalId.get, execOutputs))), this))
@@ -529,7 +541,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         runAndWait(submissionQuery.create(context, subBadExprs))
       }
 
-      val monitor = createSubmissionMonitor(dataSource, subBadExprs, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+      val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, subBadExprs, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
       val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(subBadExprs.submissionId)))
 
       runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("bad1" -> Left(AttributeString("result")))))), this))
@@ -574,7 +586,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
 
     val workflowRecBefore = getWorkflowRec
-    val monitor = createSubmissionMonitor(dataSource, testData.submissionMissingOutputs, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionMissingOutputs, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     import spray.json._
     val outputsJsonBad = s"""{
@@ -714,6 +726,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       wsName,
       UUID.fromString(submission.submissionId),
       dataSource,
+      mockSamDAO,
+      mockGoogleServicesDAO,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       1 second,
@@ -722,11 +736,13 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     ))
   }
 
-  def createSubmissionMonitor(dataSource: SlickDataSource, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO): SubmissionMonitor = {
+  def createSubmissionMonitor(dataSource: SlickDataSource, samDAO: SamDAO, googleServicesDAO: GoogleServicesDAO, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO): SubmissionMonitor = {
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),
       dataSource,
+      samDAO,
+      googleServicesDAO,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       1 minutes,
@@ -782,8 +798,11 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
 class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val submissionId: UUID,
                             val datasource: SlickDataSource,
+                            val samDAO: SamDAO,
+                            val googleServicesDAO: GoogleServicesDAO,
                             val executionServiceCluster: ExecutionServiceCluster,
                             val credential: Credential,
                             val submissionPollInterval: Duration,
                             val trackDetailedSubmissionMetrics: Boolean,
-                            override val workbenchMetricBaseName: String) extends SubmissionMonitor
+                            override val workbenchMetricBaseName: String) extends SubmissionMonitor {
+}

@@ -276,6 +276,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         //The person who submitted the submission, and their token
         submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
         petSAJson <- DBIO.from(samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, submitter.userEmail))
+        petUserInfo <- DBIO.from(googleServicesDAO.getUserInfoUsingJson(petSAJson))
         userCredentials <- DBIO.from(googleServicesDAO.getUserCredentials(submitter)).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for $submitter")))
 
         //The wdl
@@ -294,16 +295,16 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         }
 
         //yield the things we're going to submit to Cromwell
-        (wdl, wfRecs, wfInputsBatch, wfOpts, collectDosUris(workflowBatch))
+        (wdl, wfRecs, wfInputsBatch, wfOpts, collectDosUris(workflowBatch), petUserInfo)
       }
     }
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
-      (wdl, workflowRecs, wfInputsBatch, wfOpts, dosUris) <- workflowBatchFuture
+      (wdl, workflowRecs, wfInputsBatch, wfOpts, dosUris, petUserInfo) <- workflowBatchFuture
       dosServiceAccounts <- resolveDosUriServiceAccounts(dosUris)
       _ <- if (dosServiceAccounts.isEmpty) Future.successful(false) else googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(wfOpts.google_project), Map(requesterPaysRole -> dosServiceAccounts.map("user:"+_).toList))
-      workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), UserInfo.buildFromTokens(credential))
+      workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), petUserInfo)
     } yield {
       // call to submitWorkflows returns a tuple:
       val executionServiceKey = workflowSubmitResult._1

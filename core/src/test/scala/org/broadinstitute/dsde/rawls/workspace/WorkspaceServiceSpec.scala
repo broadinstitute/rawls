@@ -90,6 +90,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       slickDataSource,
+      samDAO,
+      gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
       workbenchMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"))

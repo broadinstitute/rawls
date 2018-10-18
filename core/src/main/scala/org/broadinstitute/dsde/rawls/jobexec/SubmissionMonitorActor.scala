@@ -5,11 +5,12 @@ import java.util.UUID
 import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
+import com.google.auth.Credentials
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression, ThisEntityTarget, WorkspaceTarget}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
@@ -32,12 +33,14 @@ object SubmissionMonitorActor {
   def props(workspaceName: WorkspaceName,
             submissionId: UUID,
             datasource: SlickDataSource,
+            samDAO: SamDAO,
+            googleServicesDAO: GoogleServicesDAO,
             executionServiceCluster: ExecutionServiceCluster,
             credential: Credential,
             submissionPollInterval: FiniteDuration,
             trackDetailedSubmissionMetrics: Boolean,
             workbenchMetricBaseName: String): Props = {
-    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval, trackDetailedSubmissionMetrics, workbenchMetricBaseName))
+    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, samDAO, googleServicesDAO, executionServiceCluster, credential, submissionPollInterval, trackDetailedSubmissionMetrics, workbenchMetricBaseName))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -71,6 +74,8 @@ object SubmissionMonitorActor {
 class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val submissionId: UUID,
                              val datasource: SlickDataSource,
+                             val samDAO: SamDAO,
+                             val googleServicesDAO: GoogleServicesDAO,
                              val executionServiceCluster: ExecutionServiceCluster,
                              val credential: Credential,
                              val submissionPollInterval: FiniteDuration,
@@ -130,6 +135,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val workspaceName: WorkspaceName
   val submissionId: UUID
   val datasource: SlickDataSource
+  val samDAO: SamDAO
+  val googleServicesDAO: GoogleServicesDAO
   val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
   val submissionPollInterval: Duration
@@ -169,28 +176,72 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       }
     }
 
+    def getWorkspaceAndSubmitter(dataAccess: DataAccess): ReadWriteAction[(RawlsUser, WorkspaceRecord)] = {
+      for {
+        submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.head)
+        submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
+        workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result.map(_.head)
+      } yield {
+        (submitter, workspaceRec)
+      }
+    }
+
+    def getPetSAUserInfo(workspaceNamespace: String, submitterEmail: RawlsUserEmail): Future[UserInfo] = {
+      for {
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(workspaceNamespace, submitterEmail)
+      petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
+      } yield {
+        petUserInfo
+      }
+    }
+
     def abortActiveWorkflows(submissionId: UUID): Future[Seq[(Option[String], Try[ExecutionServiceStatus])]] = {
       datasource.inTransaction { dataAccess =>
-        // look up abortable WorkflowRecs for this submission
-        dataAccess.workflowQuery.findWorkflowsForAbort(submissionId).result
-      }.flatMap { workflowRecs =>
-        Future.traverse(workflowRecs) { workflowRec =>
-          Future.successful(workflowRec.externalId).zip(executionServiceCluster.abort(workflowRec, UserInfo.buildFromTokens(credential)))
+        for {
+          // look up abortable WorkflowRecs for this submission
+          wfRecs <- dataAccess.workflowQuery.findWorkflowsForAbort(submissionId).result
+          (submitter, workspaceRec) <- getWorkspaceAndSubmitter(dataAccess)
+        } yield {
+          (wfRecs, submitter, workspaceRec)
         }
+      } flatMap { case (workflowRecs, submitter, workspaceRec) =>
+          for {
+            petUserInfo <- getPetSAUserInfo(workspaceRec.namespace, submitter.userEmail)
+            abortResults <- Future.traverse(workflowRecs) { workflowRec =>
+              Future.successful(workflowRec.externalId).zip(executionServiceCluster.abort(workflowRec, petUserInfo))
+            }
+          } yield {
+            abortResults
+          }
+      }
+    }
+
+    def gatherWorkflowOutputs(externalWorkflowIds: Seq[WorkflowRecord], petUser: UserInfo) = {
+      Future.traverse(externalWorkflowIds) { workflowRec =>
+        // for each workflow query the exec service for status and if has Succeeded query again for outputs
+        toFutureTry(execServiceStatus(workflowRec, petUser) flatMap {
+          case Some(updatedWorkflowRec) => execServiceOutputs(updatedWorkflowRec, petUser)
+          case None => Future.successful(None)
+        })
       }
     }
 
     def queryForWorkflowStatuses() = {
       datasource.inTransaction { dataAccess =>
-        dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(submissionId, WorkflowStatuses.runningStatuses: _*)
-      } flatMap { externalWorkflowIds =>
-        Future.traverse(externalWorkflowIds) { workflowRec =>
-          // for each workflow query the exec service for status and if has Succeeded query again for outputs
-          toFutureTry(execServiceStatus(workflowRec) flatMap {
-            case Some(updatedWorkflowRec) => execServiceOutputs(updatedWorkflowRec)
-            case None => Future.successful(None)
-          })
+        for {
+          wfRecs <- dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(submissionId, WorkflowStatuses.runningStatuses: _*)
+          (submitter, workspaceRec) <- getWorkspaceAndSubmitter(dataAccess)
+        } yield {
+          (wfRecs, submitter, workspaceRec)
         }
+      } flatMap { case (externalWorkflowIds, submitter, workspaceRec) =>
+        for {
+          petUserInfo <- getPetSAUserInfo(workspaceRec.namespace, submitter.userEmail)
+          workflowOutputs <- gatherWorkflowOutputs(externalWorkflowIds, petUserInfo)
+        } yield {
+          workflowOutputs
+        }
+
       } map (ExecutionServiceStatusResponse)
     }
 
@@ -213,11 +264,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
-  private def execServiceStatus(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[WorkflowRecord]] = {
+  private def execServiceStatus(workflowRec: WorkflowRecord, petUser: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[WorkflowRecord]] = {
     workflowRec.externalId match {
       case Some(externalId) =>
-        val token = UserInfo.buildFromTokens(credential)
-        executionServiceCluster.status(workflowRec, token).map(newStatus => {
+        executionServiceCluster.status(workflowRec, petUser).map(newStatus => {
           if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
           else None
         })
@@ -225,10 +275,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
-  private def execServiceOutputs(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] = {
+  private def execServiceOutputs(workflowRec: WorkflowRecord, petUser: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] = {
     WorkflowStatuses.withName(workflowRec.status) match {
       case WorkflowStatuses.Succeeded =>
-        executionServiceCluster.outputs(workflowRec, UserInfo.buildFromTokens(credential)).map(outputs => Option((workflowRec, Option(outputs))))
+        executionServiceCluster.outputs(workflowRec, petUser).map(outputs => Option((workflowRec, Option(outputs))))
 
       case _ => Future.successful(Option((workflowRec, None)))
     }

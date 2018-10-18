@@ -107,11 +107,15 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val swaggerConfig: SwaggerConfig = SwaggerConfig("foo", "bar")
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
+    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
+
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       slickDataSource,
+      samDAO,
+      gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
       5 seconds,
       trackDetailedSubmissionMetrics = true,
@@ -152,8 +156,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
       MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
       workbenchMetricBaseName = workbenchMetricBaseName)
-
-    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
 
     val healthMonitor = system.actorOf(HealthMonitor.props(
       dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO, executionServiceCluster.readMembers.map(c => c.key->c.dao).toMap,

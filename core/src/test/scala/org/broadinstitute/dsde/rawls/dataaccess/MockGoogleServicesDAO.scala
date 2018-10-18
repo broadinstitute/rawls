@@ -140,6 +140,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   }
 
   override def getAccessTokenUsingJson(saKey: String): Future[String] = Future.successful("token")
+  override def getUserInfoUsingJson(saKey: String): Future[UserInfo] = Future.successful(UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000")))
 
   override def getGoogleProject(billingProjectName: RawlsBillingProjectName): Future[Project] = Future.successful(new Project())
 
