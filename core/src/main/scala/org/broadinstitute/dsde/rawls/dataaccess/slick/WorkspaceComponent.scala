@@ -22,6 +22,7 @@ case class WorkspaceRecord(
   name: String,
   id: UUID,
   bucketName: String,
+  workflowCollection: Option[String],
   createdDate: Timestamp,
   lastModified: Timestamp,
   createdBy: String,
@@ -68,6 +69,7 @@ trait WorkspaceComponent {
     def namespace = column[String]("namespace", O.Length(254))
     def name = column[String]("name", O.Length(254))
     def bucketName = column[String]("bucket_name", O.Length(128))
+    def workflowCollection = column[Option[String]]("workflow_collection", O.Length(255))
     def createdDate = column[Timestamp]("created_date", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def lastModified = column[Timestamp]("last_modified", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def createdBy = column[String]("created_by", O.Length(254))
@@ -76,7 +78,7 @@ trait WorkspaceComponent {
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
-    def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   class WorkspaceAccessTable(tag: Tag) extends Table[WorkspaceAccessRecord](tag, "WORKSPACE_ACCESS") {
@@ -197,21 +199,36 @@ trait WorkspaceComponent {
       loadWorkspaces(getWorkspacesWithAttribute(attrName, attrValue))
     }
 
-    def save(workspace: Workspace): ReadWriteAction[Workspace] = {
+    private def validateWorkspace(workspace: Workspace) = {
       validateUserDefinedString(workspace.namespace)
       validateWorkspaceName(workspace.name)
       workspace.attributes.keys.foreach { attrName =>
         validateUserDefinedString(attrName.name)
         validateAttributeName(attrName, Attributable.workspaceEntityType)
       }
+    }
+
+    def saveNewWorkspace(workspace: Workspace, workflowCollectionName: String): ReadWriteAction[Workspace] = {
+      validateWorkspace(workspace)
 
       uniqueResult[WorkspaceRecord](findByIdQuery(UUID.fromString(workspace.workspaceId))) flatMap {
         case None =>
-          (workspaceQuery += marshalNewWorkspace(workspace)) andThen
+          (workspaceQuery += marshalNewWorkspace(workspace, workflowCollectionName)) andThen
             insertAuthDomainRecords(workspace) andThen
             insertOrUpdateAccessRecords(workspace) andThen
             rewriteAttributes(workspace) andThen
             updateLastModified(UUID.fromString(workspace.workspaceId))
+        case Some(_) =>
+          throw new RawlsException("called workspaceQuery.saveNewWorkspace() with workspace that already exists, call save() instead")
+      } map ( _ => workspace )
+    }
+
+    def save(workspace: Workspace): ReadWriteAction[Workspace] = {
+      validateWorkspace(workspace)
+
+      uniqueResult[WorkspaceRecord](findByIdQuery(UUID.fromString(workspace.workspaceId))) flatMap {
+        case None =>
+          throw new RawlsException("called workspaceQuery.save() with new workspace, call saveNewWorkspace() instead")
         case Some(workspaceRecord) =>
           insertOrUpdateAccessRecords(workspace) andThen
             rewriteAttributes(workspace) andThen
@@ -882,8 +899,8 @@ trait WorkspaceComponent {
       PendingWorkspaceAccessRecord(workspaceId, invite.email, originUser, new Timestamp(DateTime.now.getMillis), invite.accessLevel.toString)
     }
 
-    private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)
+    private def marshalNewWorkspace(workspace: Workspace, workflowCollectionName: String) = {
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, Some(workflowCollectionName), new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, authDomain: Seq[String], attributes: AttributeMap, accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], authDomainACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {

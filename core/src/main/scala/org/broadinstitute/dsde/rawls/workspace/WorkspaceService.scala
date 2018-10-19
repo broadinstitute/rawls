@@ -2017,6 +2017,23 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     withAttributeNamespaceCheck(attrNames)(op)
   }
 
+  val workflowCollectionOwnerPolicyName = "workflow-collection-owner"
+  val workflowCollectionWriterPolicyName = "workflow-collection-writer"
+  val workflowCollectionReaderPolicyName = "workflow-collection-reader"
+
+  private def createWorkflowCollectionForWorkspace(workspaceId: String, googleWorkspaceInfo: GoogleWorkspaceInfo) = {
+     for {
+       _ <- samDAO.createResource(SamResourceTypeNames.workflowCollection, workspaceId, userInfo)
+       _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, workflowCollectionOwnerPolicyName,
+              SamPolicy(Seq(googleWorkspaceInfo.accessGroupsByLevel(ProjectOwner).groupEmail.value, googleWorkspaceInfo.accessGroupsByLevel(Owner).groupEmail.value), Seq.empty, Seq(SamWorkflowCollectionRoles.owner)), userInfo)
+       _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, workflowCollectionWriterPolicyName,
+         SamPolicy(Seq(googleWorkspaceInfo.accessGroupsByLevel(Write).groupEmail.value), Seq.empty, Seq(SamWorkflowCollectionRoles.writer)), userInfo)
+       _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, workflowCollectionReaderPolicyName,
+         SamPolicy(Seq(googleWorkspaceInfo.accessGroupsByLevel(Read).groupEmail.value), Seq.empty, Seq(SamWorkflowCollectionRoles.reader)), userInfo)
+     } yield {
+     }
+  }
+
   private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
@@ -2048,7 +2065,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           googleWorkspaceInfo.intersectionGroupsByLevel.map(_.values.map(dataAccess.rawlsGroupQuery.save)).getOrElse(Seq.empty)
 
       DBIO.seq(groupInserts.toSeq: _*) andThen
-        dataAccess.workspaceQuery.save(workspace)
+        dataAccess.workspaceQuery.saveNewWorkspace(workspace, workspaceId)
     }
 
 
@@ -2071,8 +2088,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             projectOwnerGroup = projectOwnerGroupOE.collect { case Right(g) => g } getOrElse(throw new RawlsException(s"could not find project owner group for email $projectOwnerGroupEmail"))
             googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, projectOwnerGroup, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.authorizationDomain.getOrElse(Set.empty), authDomainProjectOwnerIntersection))
 
+            _ <- DBIO.from(createWorkflowCollectionForWorkspace(workspaceId, googleWorkspaceInfo))
             savedWorkspace <- saveNewWorkspace(workspaceId, googleWorkspaceInfo, workspaceRequest, dataAccess)
+
             response <- op(SlickWorkspaceContext(savedWorkspace))
+
           } yield response
       }
     }

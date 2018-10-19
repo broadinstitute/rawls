@@ -73,6 +73,7 @@ object SamResourceTypeNames {
 
   val billingProject = SamResourceTypeName("billing-project")
   val managedGroup = SamResourceTypeName("managed-group")
+  val workflowCollection = SamResourceTypeName("workflow-collection")
 }
 
 trait SamResourceRoles
@@ -82,6 +83,12 @@ object SamProjectRoles extends SamResourceRoles {
   val batchComputeUser = "batch-compute-user"
   val notebookUser = "notebook-user"
   val owner = "owner"
+}
+
+object SamWorkflowCollectionRoles extends SamResourceRoles {
+  val owner = "owner"
+  val writer = "writer"
+  val reader = "reader"
 }
 
 case class SamPolicy(memberEmails: Seq[String], actions: Seq[String], roles: Seq[String])
