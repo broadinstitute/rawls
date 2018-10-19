@@ -2,7 +2,7 @@ import sbt._
 
 object Dependencies {
   val akkaV = "2.5.16"
-  val akkaHttpV = "10.1.5"
+  val akkaHttpV = "10.1.3"
   val slickV = "3.2.3"
 
   val googleV = "1.22.0"
@@ -73,7 +73,8 @@ object Dependencies {
     exclude("io.spray", "spray-json_2.12")
     exclude("io.spray", "akka-parsing_2.12")
     exclude("io.spray", "akka-stream_2.12")
-    exclude("com.typesafe.akka", "akka-actor_2.12"))
+    exclude("com.typesafe.akka", "akka-actor_2.12")
+    exclude("com.typesafe.akka", "akka-http_2.12"))
 
   val workbenchModelV  = "0.10-6800f3a"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
