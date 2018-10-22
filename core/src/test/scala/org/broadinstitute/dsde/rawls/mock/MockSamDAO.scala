@@ -93,6 +93,8 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   override def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String] = Future.successful("""{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com"}""")
 
   override def getStatus(): Future[SubsystemStatus] = Future.successful(SubsystemStatus(true, None))
+
+  override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]] = ???
 }
 
 class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext) extends MockSamDAO(dataSource) {
@@ -146,5 +148,6 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     callsToRemoveFromPolicy.add((resourceTypeName, resourceId, policyName, memberEmail))
     Future.successful(())
   }
+
 }
 

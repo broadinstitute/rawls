@@ -33,6 +33,8 @@ trait SamDAO {
   def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus]
   def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String): Future[Seq[String]]
 
+  def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]]
+
   @deprecated
   def requestAccessToManagedGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit]
 

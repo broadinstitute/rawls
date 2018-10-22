@@ -23,8 +23,12 @@ import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.model.headers._
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 /**
  * Created by dvoet on 4/24/15.
@@ -58,19 +62,36 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  val userWriterNoCompute = RawlsUserEmail("writer-access-no-compute")
+  val userWriterNoComputeOnProject = RawlsUserEmail("writer-access-no-compute-on-project")
+
   def withApiServicesSecure[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
       override val samDAO: MockSamDAO = new MockSamDAO(dataSource) {
         override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
-          Future.successful(userInfo.userEmail match {
+          val result = userInfo.userEmail match {
             case testData.userOwner.userEmail => true
             case testData.userProjectOwner.userEmail => true
-            case testData.userWriter.userEmail => Set(SamWorkspaceActions.read, SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(action)
+            case testData.userWriter.userEmail => Set(SamWorkspaceActions.read, SamWorkspaceActions.write, SamWorkspaceActions.compute, SamBillingProjectActions.launchBatchCompute).contains(action)
+            case `userWriterNoCompute` => Set(SamWorkspaceActions.read, SamWorkspaceActions.write).contains(action)
+            case `userWriterNoComputeOnProject` => Set(SamWorkspaceActions.read, SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(action)
             case testData.userReader.userEmail => Set(SamWorkspaceActions.read).contains(action)
             case _ => false
-          })
+          }
+          Future.successful(result)
         }
       }
+    }
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
+    }
+  }
+
+  def withApiServicesMockitoSam[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
+    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
+      override val samDAO: SamDAO = mock[SamDAO]
     }
     try {
       testCode(apiService)
@@ -88,6 +109,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   def withTestDataApiServicesAndUser[T](user: String)(testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServicesSecure(dataSource, user) { services =>
+        testCode(services)
+      }
+    }
+  }
+
+  def withTestDataApiServicesMockitoSam[T](testCode: TestApiService => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withApiServicesMockitoSam(dataSource) { services =>
         testCode(services)
       }
     }
@@ -426,8 +455,33 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "delete workspace sam resource when deleting a workspace" in withTestDataApiServices { services =>
-    fail("implement me")
+  it should "delete workspace sam resource when deleting a workspace" in withTestDataApiServicesMockitoSam { services =>
+    when(services.samDAO.userHasAction(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      ArgumentMatchers.eq(SamWorkspaceActions.own),
+      any[UserInfo]
+    )).thenReturn(Future.successful(true))
+
+    when(services.samDAO.deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      any[UserInfo]
+    )).thenReturn(Future.successful(()))
+
+    Delete(testData.workspace.path) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted) {
+          status
+        }
+      }
+
+    verify(services.samDAO).deleteResource(
+      ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+      ArgumentMatchers.eq(testData.workspace.workspaceId),
+      any[UserInfo]
+    )
   }
 
   it should "list workspaces" in withTestWorkspacesApiServices { services =>
@@ -966,36 +1020,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
-
-  it should "allow a project-owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
-    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK ) { status }
-      }
-
-    Get(s"${testData.workspace.path}/acl") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK ) { status }
-      }
-  }
-
-  it should "allow an owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK ) { status }
-      }
-
-    Get(s"${testData.workspace.path}/acl") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK ) { status }
-      }
-  }
-
   it should "not allow ACL updates with a member specified twice" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
     Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -1022,24 +1046,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) { status }
       }
-    Get(s"${testData.workspace.path}/acl") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, true))
-      }
 
     // canCompute explicitly set to false
     Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, None, Option(false))))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-      }
-    Get(s"${testData.workspace.path}/acl") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false))
       }
 
     // canCompute explicitly set to true
@@ -1048,67 +1060,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) { status }
       }
-    Get(s"${testData.workspace.path}/acl") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, true))
-      }
 
     // canCompute explicitly set to true for owner has no effect
     Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Owner, None, Option(false))))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-      }
-    Get(s"${testData.workspace.path}/acl") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true))
-      }
-  }
-
-  it should "granting and revoking share permissions should update accordingly" in withTestDataApiServicesAndUser("owner-access") { services =>
-    import WorkspaceACLJsonSupport._
-
-    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-      }
-
-    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true, false))
-      }
-
-    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(false))))) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-      }
-
-    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))
-      }
-
-    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-      }
-
-    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true, false))
       }
   }
 
@@ -1222,23 +1179,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 403 creating workspace in billing project that does not exist" in withTestDataApiServices { services =>
-    val newWorkspace = WorkspaceRequest(
-      namespace = "missing_project",
-      name = "newWorkspace",
-      Map.empty
-    )
+  it should "return 403 creating workspace in billing project with no access" in withTestDataApiServicesMockitoSam { services =>
+    when(services.samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
+    when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, "no_access", SamBillingProjectActions.createWorkspace, userInfo)).thenReturn(Future.successful(false))
 
-    Post(s"/workspaces", httpJson(newWorkspace)) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
-          status
-        }
-      }
-  }
-
-  it should "return 403 creating workspace in billing project with no access" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
       namespace = "no_access",
       name = "newWorkspace",
@@ -1254,7 +1198,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when a user can read a workspace bucket" in withEmptyWorkspaceApiServices(testData.userReader.userEmail.value) { services =>
+  it should "return 200 when a user can read a workspace bucket" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
     Get(s"${testData.workspace.path}/checkBucketReadAccess") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1262,7 +1206,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 404 when a user can't read the bucket because they dont have workspace access" in withEmptyWorkspaceApiServices("no-access") { services =>
+  it should "return 404 when a user can't read the bucket because they dont have workspace access" in withTestDataApiServicesAndUser("no-access") { services =>
     Get(s"${testData.workspace.path}/checkBucketReadAccess") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1363,28 +1307,19 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "prevent user without compute permission from creating submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    testCreateSubmission(dataSource, Option(false), StatusCodes.Forbidden)
+    testCreateSubmission(dataSource, userWriterNoCompute, StatusCodes.Forbidden)
   }
 
   it should "allow user with explicit compute permission to create submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    testCreateSubmission(dataSource, Option(true), StatusCodes.Created)
+    testCreateSubmission(dataSource, testData.userWriter.userEmail, StatusCodes.Created)
   }
 
-  it should "allow user with default compute permission to create submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    testCreateSubmission(dataSource, None, StatusCodes.Created)
+  it should "403 creating submission without billing project compute permission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    testCreateSubmission(dataSource, userWriterNoComputeOnProject, StatusCodes.Forbidden)
   }
 
-  private def testCreateSubmission(dataSource: SlickDataSource, canCompute: Option[Boolean], exectedStatus: StatusCode) = {
-    withApiServices(dataSource, testData.userOwner.userEmail.value) { services =>
-      Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, None, canCompute)))) ~>
-        sealRoute(services.workspaceRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-        }
-    }
-    withApiServices(dataSource, testData.userReader.userEmail.value) { services =>
+  private def testCreateSubmission(dataSource: SlickDataSource, userEmail: RawlsUserEmail, exectedStatus: StatusCode) = {
+    withApiServicesSecure(dataSource, userEmail.value) { services =>
       val wsName = testData.wsName
       val agoraMethodConf = MethodConfiguration("no_input", "dsde", Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
       val dockstoreMethodConf =
@@ -1392,38 +1327,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
       List(agoraMethodConf, dockstoreMethodConf).foreach(createSubmission(wsName, _, testData.sample1, None, services, exectedStatus))
     }
-  }
-
-  it should "403 creating submission without billing project compute permission" in withTestDataApiServices { services =>
-    // launch_batch_compute is false for testData.testProject3 in RemoteServicesMockServer
-    val newWorkspace = WorkspaceRequest(
-      namespace = testData.testProject3.projectName.value,
-      name = "newWorkspace",
-      Map.empty
-    )
-
-    Post(s"/workspaces", httpJson(newWorkspace)) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-
-    val z1 = Entity("z1", "Sample", Map.empty)
-
-    Post(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}/entities", httpJson(z1)) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-
-    val mcName = MethodConfigurationName("no_input", "dsde", newWorkspace.toWorkspaceName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
-
-    createSubmission(newWorkspace.toWorkspaceName, methodConf, z1, None, services, StatusCodes.Forbidden)
   }
 
   private def createSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
@@ -1437,7 +1340,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
             sealRoute(services.methodConfigRoutes) ~>
             check {
-              assertResult(StatusCodes.Created) {
+              assertResult(StatusCodes.Created, responseAs[String]) {
                 status
               }
             }

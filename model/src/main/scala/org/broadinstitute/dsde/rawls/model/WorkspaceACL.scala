@@ -27,6 +27,7 @@ object WorkspaceAccessLevels {
     def compare(that: WorkspaceAccessLevel) = { all.indexOf(this).compare(all.indexOf(that)) }
 
     override def toString = WorkspaceAccessLevels.toString(this)
+    def toPolicyName = WorkspaceAccessLevels.toPolicyName(this)
     override def withName(name: String) = WorkspaceAccessLevels.withName(name)
   }
 
@@ -50,6 +51,16 @@ object WorkspaceAccessLevels {
       case Read => "READER"
       case NoAccess => "NO ACCESS"
       case _ => throw new RawlsException(s"invalid WorkspaceAccessLevel [${v}]")
+    }
+  }
+
+  def toPolicyName(v: WorkspaceAccessLevel): Option[String] = {
+    v match {
+      case ProjectOwner => Option("project-owner")
+      case Owner => Option("owner")
+      case Write => Option("writer")
+      case Read => Option("reader")
+      case _ => None
     }
   }
 

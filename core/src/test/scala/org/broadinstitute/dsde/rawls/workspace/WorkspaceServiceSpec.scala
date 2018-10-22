@@ -421,7 +421,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val aclAdd = Set(WorkspaceACLUpdate(user1.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(user2.userEmail.value, WorkspaceAccessLevels.Read, Option(true)))
     val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromAdd = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(user1.userEmail.value, WorkspaceAccessLevels.Owner), WorkspaceACLUpdate(user2.userEmail.value, WorkspaceAccessLevels.Read, Option(true))), Set.empty, Set.empty)
+    val responseFromAdd = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(user1.userEmail.value, WorkspaceAccessLevels.Owner, Some(true), Some(true)), WorkspaceACLUpdate(user2.userEmail.value, WorkspaceAccessLevels.Read, Some(true), Some(false))), Set.empty, Set.empty)
 
     assertResult((StatusCodes.OK, responseFromAdd), aclAddResponse.response.toString()) {
       aclAddResponse.response
@@ -442,7 +442,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val aclUpdates = Set(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, None))
     val aclUpdateResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromUpdate = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write)), Set.empty, Set.empty)
+    val responseFromUpdate = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, Some(false), Some(true))), Set.empty, Set.empty)
 
     assertResult((StatusCodes.OK, responseFromUpdate), "Update ACL shouldn't error") {
       aclUpdateResponse.response
@@ -465,7 +465,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val aclRemove = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.NoAccess, None))
     val aclRemoveResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclRemove, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, List[WorkspaceACLUpdateResponseList])]]
-    val responseFromRemove = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.NoAccess)), Set.empty, Set.empty)
+    val responseFromRemove = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.NoAccess, Some(false), Some(false))), Set.empty, Set.empty)
 
     assertResult((StatusCodes.OK, responseFromRemove), "Remove ACL shouldn't error") {
       aclRemoveResponse.response
@@ -495,7 +495,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val aclUpdates2 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
     val vComplete2 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates2, true), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromUpdate2 = WorkspaceACLUpdateResponseList(Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), Set.empty)
+    val responseFromUpdate2 = WorkspaceACLUpdateResponseList(Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, Some(true), Some(true))), Set.empty)
 
     assertResult((StatusCodes.OK, responseFromUpdate2), "Add ACL shouldn't error") {
       vComplete2.response
@@ -869,14 +869,18 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   }
 
-  for ((accessLevel, callCount) <- Seq((Write, 1), (Read, 0))) {
-    it should s"share billing compute $callCount times when workspace $accessLevel access granted" in withTestDataServices { services =>
+  for ((policyName, shouldShare) <- Seq((SamWorkspacePolicyNames.writer, false), (SamWorkspacePolicyNames.canCompute, true), (SamWorkspacePolicyNames.reader, false))) {
+    it should s"${if (!shouldShare) "not " else ""}share billing compute when workspace $policyName access granted" in withTestDataServicesCustomSam { services =>
       val email = s"${UUID.randomUUID}@bar.com"
-      val results = Set(WorkspaceACLUpdate(email, accessLevel))
+      val results = Set((policyName, email))
       Await.result(services.workspaceService.maybeShareProjectComputePolicy(results, testData.workspace.toWorkspaceName), Duration.Inf)
 
-      import org.mockserver.model.HttpRequest.request
-      mockServer.mockServer.verify(request().withMethod("PUT").withPath(s"/api/resource/${SamResourceTypeNames.billingProject.value}/${testData.workspace.namespace}/policies/${SamBillingProjectPolicyNames.canComputeUser}/memberEmails/$email"), VerificationTimes.exactly(callCount))
+      val expectedPolicyEntry = (SamResourceTypeNames.billingProject, testData.workspace.namespace, SamBillingProjectPolicyNames.canComputeUser, email)
+      if(shouldShare) {
+        services.samDAO.callsToAddToPolicy should contain theSameElementsAs(Set(expectedPolicyEntry))
+      } else {
+        services.samDAO.callsToAddToPolicy should contain theSameElementsAs(Set.empty)
+      }
     }
   }
 }

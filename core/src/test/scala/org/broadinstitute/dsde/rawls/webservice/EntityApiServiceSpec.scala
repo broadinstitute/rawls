@@ -15,8 +15,10 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 
-import scala.concurrent.ExecutionContext
+import scala.collection.concurrent.TrieMap
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 /**
@@ -25,6 +27,22 @@ import scala.util.Random
 class EntityApiServiceSpec extends ApiServiceSpec {
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiServiceForAuthDomains(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
+    override val samDAO: MockSamDAOForAuthDomains = new MockSamDAOForAuthDomains(dataSource)
+  }
+
+  class MockSamDAOForAuthDomains(slickDataSource: SlickDataSource) extends MockSamDAO(slickDataSource) {
+    val authDomains = new TrieMap[(SamResourceTypeName, String), Set[String]]()
+
+    override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = {
+      authDomains.put((resourceTypeName, resourceId), authDomain)
+      super.createResourceFull(resourceTypeName, resourceId, policies, authDomain, userInfo)
+    }
+
+    override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String): Future[Seq[String]] = {
+      Future.successful(authDomains.getOrElse((resourceTypeName, resourceId), Set.empty).toSeq)
+    }
+  }
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
@@ -35,9 +53,24 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  def withApiServicesForAuthDomains[T](dataSource: SlickDataSource)(testCode: TestApiServiceForAuthDomains => T): T = {
+    val apiService = new TestApiServiceForAuthDomains(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
+    }
+  }
+
   def withTestDataApiServices[T](testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
+    }
+  }
+
+  def withEmptyDatabaseApiServicesForAuthDomains[T](testCode: TestApiServiceForAuthDomains => T): T = {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      withApiServicesForAuthDomains(dataSource)(testCode)
     }
   }
 
@@ -1616,27 +1649,34 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 422 when copying entities from a Realm-protected workspace into one not in that Realm" in withTestDataApiServices { services =>
-    val srcWorkspace = testData.workspaceWithRealm
-    val srcWorkspaceName = srcWorkspace.toWorkspaceName
+  it should "return 422 when copying entities from a Realm-protected workspace into one not in that Realm" in withEmptyDatabaseApiServicesForAuthDomains { services =>
+    runAndWait(rawlsBillingProjectQuery.create(testData.billingProject))
+    val authDomain = Set(testData.dbGapAuthorizedUsersGroup)
 
     // add an entity to a workspace with a Realm
-
-    Post(s"${srcWorkspace.path}/entities", httpJson(z1)) ~>
-      sealRoute(services.entityRoutes) ~>
+    val x = WorkspaceRequest(namespace = testData.workspaceWithRealm.namespace, testData.workspaceWithRealm.name, Map.empty, Option(authDomain))
+    Post("/workspaces", x) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, responseAs[String]) {
           status
-        }
-        assertResult(z1) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(srcWorkspace), z1.entityType, z1.name)).get
         }
       }
 
+//    Post(s"${testData.workspaceWithRealm.path}/entities", httpJson(z1)) ~>
+//      sealRoute(services.entityRoutes) ~>
+//      check {
+//        assertResult(StatusCodes.Created) {
+//          status
+//        }
+//        assertResult(Some(z1)) {
+//          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspaceWithRealm), z1.entityType, z1.name))
+//        }
+//      }
+//
     // attempt to copy an entity to a workspace with the wrong Realm
-
-    val wrongRealmCloneRequest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "copy_add_realm", Map.empty, Option(Set(testData.realm2)))
-    Post(s"${testData.workspace.path}/clone", httpJson(wrongRealmCloneRequest)) ~>
+    val wrongRealmCloneRequest = WorkspaceRequest(namespace = testData.workspaceWithRealm.namespace, name = "copy_add_realm", Map.empty, Option(Set(testData.realm2)))
+    Post(s"/workspaces", httpJson(wrongRealmCloneRequest)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -1644,9 +1684,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val destWorkspaceWrongRealmName = wrongRealmCloneRequest.toWorkspaceName
-
-    val wrongRealmCopyDef = EntityCopyDefinition(srcWorkspaceName, destWorkspaceWrongRealmName, "Sample", Seq("z1"))
+    val wrongRealmCopyDef = EntityCopyDefinition(testData.workspaceWithRealm.toWorkspaceName, wrongRealmCloneRequest.toWorkspaceName, "Sample", Seq("z1"))
     Post("/workspaces/entities/copy", httpJson(wrongRealmCopyDef)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
@@ -1656,10 +1694,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
 
     // attempt to copy an entity to a workspace with no Realm
+    val x2 = WorkspaceRequest(namespace = testData.workspace.namespace, testData.workspace.name, Map.empty, Option(Set.empty))
+    Post("/workspaces", x2) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+      }
 
-    val destWorkspaceNoRealmName = testData.workspace.toWorkspaceName
-
-    val noRealmCopyDef = EntityCopyDefinition(srcWorkspaceName, destWorkspaceNoRealmName, "Sample", Seq("z1"))
+    val noRealmCopyDef = EntityCopyDefinition(testData.workspaceWithRealm.toWorkspaceName, testData.workspace.toWorkspaceName, "Sample", Seq("z1"))
     Post("/workspaces/entities/copy", httpJson(noRealmCopyDef)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
@@ -1669,8 +1713,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 204 when copying entities from an auth-domain protected workspace into one with a compatible auth-domain" in withTestDataApiServices { services =>
-    val srcWorkspace = testData.workspaceWithRealm
+  it should "return 204 when copying entities from an auth-domain protected workspace into one with a compatible auth-domain" in withEmptyDatabaseApiServicesForAuthDomains { services =>
+    runAndWait(rawlsBillingProjectQuery.create(testData.billingProject))
     val srcWorkspaceName = WorkspaceName(testData.workspaceWithRealm.namespace, "source_ws")
 
     val authDomain = Set(testData.dbGapAuthorizedUsersGroup)
@@ -1679,7 +1723,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post("/workspaces", x) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, responseAs[String]) {
           status
         }
       }
@@ -1691,10 +1735,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-// TODO figure out how to test that clones workspaces have the right AD
-//        assertResult(authDomain) {
-//          responseAs[Workspace].authorizationDomain
-//        }
+        assertResult(Some(authDomain.map(_.membersGroupName.value))) {
+          services.samDAO.authDomains.get((SamResourceTypeNames.workspace, responseAs[Workspace].workspaceId))
+        }
       }
 
     Post(s"/workspaces/${srcWorkspaceName.namespace}/${srcWorkspaceName.name}/entities", httpJson(z1)) ~>
@@ -1717,27 +1760,30 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 422 when copying entities from an auth domain protected workspace with only a partial match of AD groups" in withTestDataApiServices { services =>
-    val srcWorkspace = testData.workspaceWithMultiGroupAD
-    val destWorkspace = testData.workspaceWithRealm
-    val srcWorkspaceName = srcWorkspace.toWorkspaceName
+  it should "return 422 when copying entities from an auth domain protected workspace with only a partial match of AD groups" in withEmptyDatabaseApiServicesForAuthDomains { services =>
+    runAndWait(rawlsBillingProjectQuery.create(testData.billingProject))
+    val singleAuthDomain = Set(testData.dbGapAuthorizedUsersGroup)
+    val doubleAuthDomain = Set(testData.dbGapAuthorizedUsersGroup, testData.realm)
 
-    // add an entity to a workspace with a Realm
-
-    Post(s"${srcWorkspace.path}/entities", httpJson(z1)) ~>
-      sealRoute(services.entityRoutes) ~>
+    val x = WorkspaceRequest(testData.workspaceWithRealm.namespace, testData.workspaceWithRealm.name, Map.empty, Option(singleAuthDomain))
+    Post("/workspaces", x) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, responseAs[String]) {
           status
-        }
-        assertResult(z1) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(srcWorkspace), z1.entityType, z1.name)).get
         }
       }
 
-    val destWorkspaceWrongRealmName = destWorkspace.toWorkspaceName
+    val y = WorkspaceRequest(testData.workspaceWithMultiGroupAD.namespace, testData.workspaceWithMultiGroupAD.name, Map.empty, Option(doubleAuthDomain))
+    Post("/workspaces", y) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+      }
 
-    val wrongRealmCopyDef = EntityCopyDefinition(srcWorkspaceName, destWorkspaceWrongRealmName, "Sample", Seq("z1"))
+    val wrongRealmCopyDef = EntityCopyDefinition(testData.workspaceWithMultiGroupAD.toWorkspaceName, testData.workspaceWithRealm.toWorkspaceName, "Sample", Seq("z1"))
     Post("/workspaces/entities/copy", httpJson(wrongRealmCopyDef)) ~>
       sealRoute(services.entityRoutes) ~>
       check {

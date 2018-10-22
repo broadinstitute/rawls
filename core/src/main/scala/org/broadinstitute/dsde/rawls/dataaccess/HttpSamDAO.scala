@@ -253,4 +253,6 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String): Future[Seq[String]] = ???
+
+  override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]] = ???
 }
