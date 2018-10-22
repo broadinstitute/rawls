@@ -553,7 +553,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
           // figure out which of the incoming aclUpdates are actually changes by removing all the existingAcls
           val aclChanges = normalize(aclUpdates) -- existingAcls
-          validateAclChanges(aclChanges)
+          validateAclChanges(aclChanges, existingAcls)
 
           // find users to remove from policies: existing policy members that are not in policies implied by aclChanges
           // note that access level No Access corresponds to 0 desired policies so all existing policies will be removed
@@ -606,8 +606,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate]) = {
-    if (aclChanges.exists(_.accessLevel == WorkspaceAccessLevels.ProjectOwner)) {
+  private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate], existingAcls: Set[WorkspaceACLUpdate]) = {
+    val emailsBeingChanged = aclChanges.map(_.email.toLowerCase)
+    if (aclChanges.exists(_.accessLevel == WorkspaceAccessLevels.ProjectOwner) || existingAcls.exists(existingAcl => existingAcl.accessLevel == ProjectOwner && emailsBeingChanged.contains(existingAcl.email.toLowerCase))) {
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "project owner permissions cannot be changed"))
     }
     if (aclChanges.exists(_.email.equalsIgnoreCase(userInfo.userEmail.value))) {

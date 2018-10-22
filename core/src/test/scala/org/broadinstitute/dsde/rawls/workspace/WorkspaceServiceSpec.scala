@@ -34,6 +34,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration.{Duration, FiniteDuration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Try
 
 
 class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll {
@@ -401,6 +402,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
         SamPolicy(Set.empty, Set.empty, Set.empty), userInfo)
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCompute,
         SamPolicy(Set(WorkbenchEmail(testData.userWriter.userEmail.value)), Set.empty, Set.empty), userInfo)
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.projectOwner,
+        SamPolicy(Set.empty, Set.empty, Set.empty), userInfo)
     } yield ()
 
     Await.result(populateAcl, Duration.Inf)
@@ -883,4 +886,157 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       }
     }
   }
+
+  val aclTestUser = UserInfo(RawlsUserEmail("acl-test-user"), OAuth2BearerToken(""), 0, RawlsUserSubjectId("acl-test-user-subject-id"))
+
+  def allWorkspaceAclUpdatePermutations(emailString: String): Seq[WorkspaceACLUpdate] = for {
+    accessLevel <- WorkspaceAccessLevels.all
+    canShare <- Set(Some(true), Some(false), None)
+    canCompute <- Set(Some(true), Some(false), None)
+  } yield WorkspaceACLUpdate(emailString, accessLevel, canShare, canCompute)
+
+  def expectedPolicies(aclUpdate: WorkspaceACLUpdate): Either[StatusCode, Set[(SamResourceTypeName, SamResourcePolicyName)]] = {
+    aclUpdate match {
+      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.ProjectOwner, _, _) => Left(StatusCodes.BadRequest)
+      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Owner, _, _) => Right(Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.owner))
+
+      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, canShare, canCompute) =>
+        val canSharePolicy = canShare match {
+          case None | Some(false) => Set.empty
+          case Some(true) => Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.shareWriter)
+        }
+        val canComputePolicy = canCompute match {
+          case None | Some(true) => Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.canCompute, SamResourceTypeNames.billingProject -> SamBillingProjectPolicyNames.canComputeUser)
+          case Some(false) => Set.empty
+        }
+        Right(Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.writer) ++ canSharePolicy ++ canComputePolicy)
+
+      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, canShare, canCompute) =>
+        if (canCompute.contains(true)) {
+          Left(StatusCodes.BadRequest)
+        } else {
+          val canSharePolicy = canShare match {
+            case None | Some(false) => Set.empty
+            case Some(true) => Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.shareReader)
+          }
+          Right(Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.reader) ++ canSharePolicy)
+        }
+
+      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.NoAccess, _, _) => Right(Set.empty)
+    }
+  }
+
+  for (aclUpdate <- allWorkspaceAclUpdatePermutations(aclTestUser.userEmail.value)) {
+    it should s"add correct policies for $aclUpdate" in withTestDataServicesCustomSam { services =>
+      Await.result(services.samDAO.registerUser(aclTestUser), Duration.Inf)
+      populateWorkspacePolicies(services)
+
+      val result = Try {
+        Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
+      }
+
+      (expectedPolicies(aclUpdate), result) match {
+        case (Left(statusCode), util.Failure(exception: RawlsExceptionWithErrorReport)) => assertResult(Some(statusCode), result.toString) {
+          exception.errorReport.statusCode
+        }
+
+        case (Right(policies), util.Success(_)) =>
+          val expectedAdds = policies.map {
+            case (SamResourceTypeNames.workspace, policyName) => (SamResourceTypeNames.workspace, testData.workspace.workspaceId, policyName, aclTestUser.userEmail.value)
+            case (SamResourceTypeNames.billingProject, policyName) => (SamResourceTypeNames.billingProject, testData.workspace.namespace, policyName, aclTestUser.userEmail.value)
+            case _ => throw new Exception("make the compiler happy")
+          }
+
+          withClue(result.toString) {
+            services.samDAO.callsToAddToPolicy should contain theSameElementsAs expectedAdds
+            services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Set.empty
+          }
+
+        case (_, r) => fail(r.toString)
+      }
+    }
+  }
+
+  it should s"add correct policies for group" in withTestDataServicesCustomSam { services =>
+    // setting the email to None is what a group looks like
+    services.samDAO.userEmails.put(aclTestUser.userEmail.value, None)
+    populateWorkspacePolicies(services)
+
+    val aclUpdate = WorkspaceACLUpdate(aclTestUser.userEmail.value, WorkspaceAccessLevels.Write)
+
+    val result = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
+
+    withClue(result.toString) {
+      services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set(
+        (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.writer, aclTestUser.userEmail.value),
+        (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCompute, aclTestUser.userEmail.value),
+        (SamResourceTypeNames.billingProject, testData.workspace.namespace, SamBillingProjectPolicyNames.canComputeUser, aclTestUser.userEmail.value)
+      )
+      services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Set.empty
+    }
+  }
+
+
+  def addEmailToPolicy(services: TestApiServiceWithCustomSamDAO, policyName: SamResourcePolicyName, email: String) = {
+    val policy = services.samDAO.policies((SamResourceTypeNames.workspace, testData.workspace.workspaceId))(policyName)
+    val updateMembers = policy.policy.memberEmails + WorkbenchEmail(email)
+    val updatedPolicy = policy.copy(policy = policy.policy.copy(memberEmails = updateMembers))
+    services.samDAO.policies((SamResourceTypeNames.workspace, testData.workspace.workspaceId)).put(policyName, updatedPolicy)
+  }
+
+  val testPolicyNames = Set(SamWorkspacePolicyNames.canCompute, SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader, SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.projectOwner, SamWorkspacePolicyNames.shareReader, SamWorkspacePolicyNames.shareWriter)
+  for(testPolicyName1 <- testPolicyNames; testPolicyName2 <- testPolicyNames if testPolicyName1 != testPolicyName2 && !(testPolicyName1 == SamWorkspacePolicyNames.shareReader && testPolicyName2 == SamWorkspacePolicyNames.shareWriter) && !(testPolicyName1 == SamWorkspacePolicyNames.shareWriter && testPolicyName2 == SamWorkspacePolicyNames.shareReader)) {
+    it should s"remove $testPolicyName1 and $testPolicyName2" in withTestDataServicesCustomSam { services =>
+      Await.result(services.samDAO.registerUser(aclTestUser), Duration.Inf)
+      populateWorkspacePolicies(services)
+
+      addEmailToPolicy(services, testPolicyName1, aclTestUser.userEmail.value)
+      addEmailToPolicy(services, testPolicyName2, aclTestUser.userEmail.value)
+
+      val result = Try {
+        Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate(aclTestUser.userEmail.value, WorkspaceAccessLevels.NoAccess)), inviteUsersNotFound = false), Duration.Inf)
+      }
+
+      if (testPolicyName1 == SamWorkspacePolicyNames.projectOwner || testPolicyName2 == SamWorkspacePolicyNames.projectOwner) {
+        val error = intercept[RawlsExceptionWithErrorReport] {
+          result.get
+        }
+        assertResult(Some(StatusCodes.BadRequest), result.toString) {
+          error.errorReport.statusCode
+        }
+      } else {
+        assert(result.isSuccess, result.toString)
+        services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Set(
+          (SamResourceTypeNames.workspace, testData.workspace.workspaceId, testPolicyName1, aclTestUser.userEmail.value),
+          (SamResourceTypeNames.workspace, testData.workspace.workspaceId, testPolicyName2, aclTestUser.userEmail.value)
+        )
+        services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set.empty
+      }
+
+    }
+  }
+
+  for(testPolicyName <- Set(SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader, SamWorkspacePolicyNames.owner); aclUpdate <- Set(WorkspaceAccessLevels.Read ,WorkspaceAccessLevels.Write, WorkspaceAccessLevels.Owner).map(l => WorkspaceACLUpdate(aclTestUser.userEmail.value, l, canCompute = Some(false)))) {
+    it should s"change $testPolicyName to $aclUpdate" in withTestDataServicesCustomSam { services =>
+      Await.result(services.samDAO.registerUser(aclTestUser), Duration.Inf)
+      populateWorkspacePolicies(services)
+
+      addEmailToPolicy(services, testPolicyName, aclTestUser.userEmail.value)
+
+      val result = Try {
+        Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
+      }
+
+      assert(result.isSuccess, result.toString)
+
+      if (aclUpdate.accessLevel.toPolicyName.contains(testPolicyName.value)) {
+        services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Set.empty
+        services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set.empty
+      } else {
+        services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Set((SamResourceTypeNames.workspace, testData.workspace.workspaceId, testPolicyName, aclTestUser.userEmail.value))
+        services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set((SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamResourcePolicyName(aclUpdate.accessLevel.toPolicyName.get), aclTestUser.userEmail.value))
+      }
+    }
+  }
+
 }

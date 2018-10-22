@@ -98,7 +98,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 }
 
 class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext) extends MockSamDAO(dataSource) {
-  val userEmails = new TrieMap[String, String]()
+  val userEmails = new TrieMap[String, Option[String]]()
   val invitedUsers = new TrieMap[String, String]()
   val policies = new TrieMap[(SamResourceTypeName, String), TrieMap[SamResourcePolicyName, SamPolicyWithNameAndEmail]]()
 
@@ -106,14 +106,14 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
   val callsToRemoveFromPolicy = new ConcurrentLinkedDeque[(SamResourceTypeName, String, SamResourcePolicyName, String)]()
 
   override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = {
-    userEmails.put(userInfo.userEmail.value, userInfo.userSubjectId.value)
+    userEmails.put(userInfo.userEmail.value, Option(userInfo.userSubjectId.value))
     Future.successful(Option(UserStatus(RawlsUser(userInfo.userSubjectId, userInfo.userEmail), Map.empty)))
   }
 
   override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]] = {
-    val result = userEmails.get(userEmail).map { id => UserIdInfo(id, userEmail, Option(id)) }
+    val result = userEmails.get(userEmail).map(_.map(id => UserIdInfo(id, userEmail, Option(id))))
     Future.successful(result match {
-      case Some(_) => Right(result)
+      case Some(userOrGroup) => Right(userOrGroup)
       case None => Left(())
     })
   }

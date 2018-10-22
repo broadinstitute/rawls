@@ -125,7 +125,6 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     val url = samServiceURL + s"/api/users/v1/$userEmail"
     retry(when401or500) { () =>
       (pipeline[Option[UserIdInfo]](userInfo) apply RequestBuilding.Get(url)).map(Right(_)) recover {
-        //todo: in case of 204 return Right(None)
         case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => Left(())
       }
     }
