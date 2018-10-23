@@ -146,12 +146,12 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           register cleanUp Rawls.workspaces.delete(projectName, workspaceName)(studentAToken)
 
           //it's enough that the resource exists
-          val collName = Rawls.workspaces.getWorkflowCollectionName(projectName, workspaceName)
+          val collName = Rawls.workspaces.getWorkflowCollectionName(projectName, workspaceName)(studentAToken)
 
           //deleting the workspace should subsequently make the resource vanish (returning a 404, which gets turned into a RestException)
           Rawls.workspaces.delete(projectName, workspaceName)(studentAToken)
           assertThrows[RestException] {
-            Sam.user.listResourcePolicies("workflow-collection", collName)
+            Sam.user.listResourcePolicies("workflow-collection", collName)(studentAToken)
           }
         }
       }
