@@ -39,7 +39,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       super.createResourceFull(resourceTypeName, resourceId, policies, authDomain, userInfo)
     }
 
-    override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String): Future[Seq[String]] = {
+    override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[String]] = {
       Future.successful(authDomains.getOrElse((resourceTypeName, resourceId), Set.empty).toSeq)
     }
   }

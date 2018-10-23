@@ -291,7 +291,6 @@ trait WorkspaceComponent {
       uniqueResult(loadWorkspaces(lookup))
     }
 
-    //todo: this used to load the auth domain info but now that needs to come from sam...
     private def loadWorkspaces(lookup: WorkspaceQueryType): ReadAction[Seq[Workspace]] = {
       for {
         workspaceRecs <- lookup.result
