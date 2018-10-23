@@ -132,6 +132,26 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       }
     }
 
+    "should create a workflow collection resource in Sam for a workspace" in {
+      withCleanBillingProject(owner) { projectName =>
+        withCleanUp {
+          //Create workspaces for Students
+          Orchestration.billing.addUserToBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
+          register cleanUp Orchestration.billing.removeUserFromBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
+
+          val uuid = UUID.randomUUID().toString
+
+          val workspaceName = "rawls_test_workflow_collection_workspace" + uuid
+          Rawls.workspaces.create(projectName, workspaceName)(studentAToken)
+          register cleanUp Rawls.workspaces.delete(projectName, workspaceName)(studentAToken)
+
+          //it's enough that the resource exists
+          val collName = Rawls.workspaces.getWorkflowCollectionName(projectName, workspaceName)
+          Sam.user.listResourcePolicies("workflow-collection", collName)
+        }
+      }
+    }
+
     "should retrieve sub-workflow metadata and outputs from Cromwell" in {
       implicit val token: AuthToken = studentAToken
 
