@@ -260,6 +260,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // Abort running workflows
       aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) }
 
+      //remove the workflow collection resource
+      _ <- { workspaceContext.workspace.workflowCollectionName.map { collName => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, collName, userInfo) }.getOrElse(Future.successful()) }
+
       // Remove Google Groups
       _ <- Future.traverse(groupsToRemove) {
         case Some(group) => gcsDAO.deleteGoogleGroup(group)

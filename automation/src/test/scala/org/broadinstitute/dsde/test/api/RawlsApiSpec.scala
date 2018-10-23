@@ -7,7 +7,7 @@ import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, Sam}
+import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, Sam}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
@@ -132,7 +132,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       }
     }
 
-    "should create a workflow collection resource in Sam for a workspace" in {
+    "should create and destroy a workflow collection resource in Sam for a workspace" in {
       withCleanBillingProject(owner) { projectName =>
         withCleanUp {
           //Create workspaces for Students
@@ -147,7 +147,12 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
           //it's enough that the resource exists
           val collName = Rawls.workspaces.getWorkflowCollectionName(projectName, workspaceName)
-          Sam.user.listResourcePolicies("workflow-collection", collName)
+
+          //deleting the workspace should subsequently make the resource vanish (returning a 404, which gets turned into a RestException)
+          Rawls.workspaces.delete(projectName, workspaceName)(studentAToken)
+          assertThrows[RestException] {
+            Sam.user.listResourcePolicies("workflow-collection", collName)
+          }
         }
       }
     }
