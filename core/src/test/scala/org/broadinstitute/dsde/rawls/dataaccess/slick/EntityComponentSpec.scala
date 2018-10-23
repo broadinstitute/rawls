@@ -28,7 +28,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   "EntityComponent" should "crud entities" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
-    val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, Set.empty, workspaceId.toString, "bucketname", currentTime(), currentTime(), "me", Map.empty, Map.empty, Map.empty, false)
+    val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, Set.empty, workspaceId.toString, "bucketname", Some(workspaceId.toString), currentTime(), currentTime(), "me", Map.empty, Map.empty, Map.empty, false)
     runAndWait(workspaceQuery.save(workspace))
     val workspaceContext = SlickWorkspaceContext(workspace)
 
@@ -320,7 +320,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   class BugTestData extends TestData {
     val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
-    val workspace = new Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID.toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
+    val workspace = new Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID.toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
     val sample1 = new Entity("sample1", "Sample",
       Map(AttributeName.withDefaultNS("aliquot") -> AttributeEntityReference("Aliquot", "aliquot1")))
@@ -424,6 +424,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       Set.empty,
       workspaceId = UUID.randomUUID.toString,
       bucketName = "aBucket",
+      workflowCollectionName = Some("workflow-collection"),
       createdDate = currentTime(),
       lastModified = currentTime(),
       createdBy = "Joe Biden",
@@ -438,6 +439,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       authorizationDomain = Set.empty,
       workspaceId = UUID.randomUUID.toString,
       bucketName = "anotherBucket",
+      workflowCollectionName = Some("workflow-collection"),
       createdDate = currentTime(),
       lastModified = currentTime(),
       createdBy = "Joe Biden",
@@ -614,6 +616,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     Set.empty,
     workspaceId = UUID.randomUUID.toString,
     bucketName = "aBucket",
+    workflowCollectionName =  Some("workflow-collection"),
     createdDate = currentTime(),
     lastModified = currentTime(),
     createdBy = "Joe Biden",
@@ -628,6 +631,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     Set.empty,
     workspaceId = UUID.randomUUID.toString,
     bucketName = "aBucket",
+    workflowCollectionName = Some("workflow-collection"),
     createdDate = currentTime(),
     lastModified = currentTime(),
     createdBy = "Joe Biden",
@@ -795,7 +799,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "save a new entity with the same name as a deleted entity" in withDefaultTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
-    val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, Set.empty, workspaceId.toString, "bucketname", currentTime(), currentTime(), "me", Map.empty, Map.empty, Map.empty, false)
+    val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, Set.empty, workspaceId.toString, "bucketname", Some(workspaceId.toString), currentTime(), currentTime(), "me", Map.empty, Map.empty, Map.empty, false)
     runAndWait(workspaceQuery.save(workspace))
     val workspaceContext = SlickWorkspaceContext(workspace)
 

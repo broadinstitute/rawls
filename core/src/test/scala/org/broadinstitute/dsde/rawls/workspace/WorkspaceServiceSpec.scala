@@ -50,6 +50,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     Set.empty,
     "aWorkspaceId",
     "aBucket",
+    Some("workflow-collection"),
     currentTime(),
     currentTime(),
     "test",

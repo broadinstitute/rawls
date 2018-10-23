@@ -199,36 +199,21 @@ trait WorkspaceComponent {
       loadWorkspaces(getWorkspacesWithAttribute(attrName, attrValue))
     }
 
-    private def validateWorkspace(workspace: Workspace) = {
+    def save(workspace: Workspace): ReadWriteAction[Workspace] = {
       validateUserDefinedString(workspace.namespace)
       validateWorkspaceName(workspace.name)
       workspace.attributes.keys.foreach { attrName =>
         validateUserDefinedString(attrName.name)
         validateAttributeName(attrName, Attributable.workspaceEntityType)
       }
-    }
-
-    def saveNewWorkspace(workspace: Workspace, workflowCollectionName: String): ReadWriteAction[Workspace] = {
-      validateWorkspace(workspace)
 
       uniqueResult[WorkspaceRecord](findByIdQuery(UUID.fromString(workspace.workspaceId))) flatMap {
         case None =>
-          (workspaceQuery += marshalNewWorkspace(workspace, workflowCollectionName)) andThen
+          (workspaceQuery += marshalNewWorkspace(workspace)) andThen
             insertAuthDomainRecords(workspace) andThen
             insertOrUpdateAccessRecords(workspace) andThen
             rewriteAttributes(workspace) andThen
             updateLastModified(UUID.fromString(workspace.workspaceId))
-        case Some(_) =>
-          throw new RawlsException("called workspaceQuery.saveNewWorkspace() with workspace that already exists, call save() instead")
-      } map ( _ => workspace )
-    }
-
-    def save(workspace: Workspace): ReadWriteAction[Workspace] = {
-      validateWorkspace(workspace)
-
-      uniqueResult[WorkspaceRecord](findByIdQuery(UUID.fromString(workspace.workspaceId))) flatMap {
-        case None =>
-          throw new RawlsException("called workspaceQuery.save() with new workspace, call saveNewWorkspace() instead")
         case Some(workspaceRecord) =>
           insertOrUpdateAccessRecords(workspace) andThen
             rewriteAttributes(workspace) andThen
@@ -899,13 +884,13 @@ trait WorkspaceComponent {
       PendingWorkspaceAccessRecord(workspaceId, invite.email, originUser, new Timestamp(DateTime.now.getMillis), invite.accessLevel.toString)
     }
 
-    private def marshalNewWorkspace(workspace: Workspace, workflowCollectionName: String) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, Some(workflowCollectionName), new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)
+    private def marshalNewWorkspace(workspace: Workspace) = {
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, authDomain: Seq[String], attributes: AttributeMap, accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], authDomainACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
       val authDomainRefs = authDomain.map(name => ManagedGroupRef(RawlsGroupName(name)))
-      Workspace(workspaceRec.namespace, workspaceRec.name, authDomainRefs.toSet, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, accessGroups, authDomainACLs, workspaceRec.isLocked)
+      Workspace(workspaceRec.namespace, workspaceRec.name, authDomainRefs.toSet, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, accessGroups, authDomainACLs, workspaceRec.isLocked)
     }
 
     private def unmarshalRawlsGroupRefs(workspaceAccessRecords: Seq[WorkspaceAccessRecord]) = {

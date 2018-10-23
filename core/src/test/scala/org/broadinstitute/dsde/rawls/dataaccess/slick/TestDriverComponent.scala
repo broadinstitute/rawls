@@ -163,7 +163,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val accessGroupsByLevel = newAccessGroupsByLevel + (ProjectOwner -> projectOwnerPolicyGroup)
 
-    (Workspace(project.projectName.value, name, authDomain, workspaceId, bucketName, createdDate, createdDate, createdBy, attributes,
+    (Workspace(project.projectName.value, name, authDomain, workspaceId, bucketName, Some(workspaceId), createdDate, createdDate, createdBy, attributes,
       accessGroupsByLevel.map { case (level, group) => level -> RawlsGroup.toRef(group) },
       intersectionGroupsByLevel.getOrElse(accessGroupsByLevel).map { case (level, group) => level -> RawlsGroup.toRef(group) }, isLocked),
 
@@ -179,7 +179,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket",  Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
 
@@ -205,7 +205,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set(userReader))
 
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup), isLocked = true)
 
@@ -285,13 +285,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       AttributeName.withDefaultNS("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
-    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", Set.empty, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", wsAttrs, Map.empty, Map.empty)
+    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", Set.empty, UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, Map.empty, Map.empty)
 
     val (workspace, workspaceGroups) = makeWorkspace(billingProject, billingProjectGroups(ProjectRoles.Owner).head, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", Set.empty, UUID.randomUUID().toString, "aBucket3", currentTime(), currentTime(), "testUser",
+    val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", Set.empty, UUID.randomUUID().toString, "aBucket3", Some("workflow-collection"), currentTime(), currentTime(), "testUser",
       wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)), Map.empty, Map.empty)
-    val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", Set.empty, UUID.randomUUID().toString, "aBucket4", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
+    val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", Set.empty, UUID.randomUUID().toString, "aBucket4", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
     val realm = ManagedGroupRef(RawlsGroupName("Test-Realm"))
     val realmWsName = wsName.name + "withRealm"
@@ -781,10 +781,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
     val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map.empty, Map.empty)
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
-    val workspace2 = Workspace(wsName2.namespace, wsName2.name, Set.empty, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", Map.empty,
+    val workspace2 = Workspace(wsName2.namespace, wsName2.name, Set.empty, UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup2, WorkspaceAccessLevels.Write -> writerGroup2, WorkspaceAccessLevels.Read -> readerGroup2),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup2, WorkspaceAccessLevels.Write -> writerGroup2, WorkspaceAccessLevels.Read -> readerGroup2))
 
@@ -827,7 +827,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       AttributeName.withDefaultNS("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
 

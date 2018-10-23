@@ -37,6 +37,7 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       Set.empty,
       workspaceId.toString,
       "bucketname",
+      Some("workflow-collection"),
       currentTime(),
       currentTime(),
       "me",

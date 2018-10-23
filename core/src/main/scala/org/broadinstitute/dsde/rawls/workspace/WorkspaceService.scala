@@ -2051,6 +2051,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         authorizationDomain = workspaceRequest.authorizationDomain.getOrElse(Set.empty),
         workspaceId = workspaceId,
         bucketName = googleWorkspaceInfo.bucketName,
+        workflowCollectionName = Some(workspaceId),
         createdDate = currentDate,
         lastModified = currentDate,
         createdBy = userInfo.userEmail.value,
@@ -2065,7 +2066,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           googleWorkspaceInfo.intersectionGroupsByLevel.map(_.values.map(dataAccess.rawlsGroupQuery.save)).getOrElse(Seq.empty)
 
       DBIO.seq(groupInserts.toSeq: _*) andThen
-        dataAccess.workspaceQuery.saveNewWorkspace(workspace, workspaceId)
+        dataAccess.workspaceQuery.save(workspace)
     }
 
 

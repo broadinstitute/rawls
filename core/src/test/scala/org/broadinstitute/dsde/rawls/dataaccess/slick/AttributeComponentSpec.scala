@@ -17,7 +17,7 @@ import scala.concurrent.duration.Duration
 class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with AttributeComponent with RawlsTestUtils {
   import driver.api._
 
-  val workspace = Workspace("broad-dsde-test", "test-workspace", Set.empty, UUID.randomUUID().toString, "fake-bucket", DateTime.now, DateTime.now, "biden", Map.empty, Map.empty, Map.empty, false)
+  val workspace = Workspace("broad-dsde-test", "test-workspace", Set.empty, UUID.randomUUID().toString, "fake-bucket", Some("workflow-collection"), DateTime.now, DateTime.now, "biden", Map.empty, Map.empty, Map.empty, false)
   val workspaceId = UUID.fromString(workspace.workspaceId)
 
   // we don't know the IDs because it autoincrements
@@ -341,6 +341,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       Set.empty,
       workspaceId.toString,
       "bucketname",
+      Some("workflow-collection"),
       currentTime(),
       currentTime(),
       "me",
@@ -382,6 +383,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       Set.empty,
       workspaceId.toString,
       "bucketname",
+      Some("workflow-collection"),
       currentTime(),
       currentTime(),
       "me",
@@ -481,7 +483,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
 
     val workspace2ID = UUID.randomUUID()
-    val workspace2 = Workspace("broad-dsde-test", "test-tag-workspace", Set.empty, workspace2ID.toString, "fake-bucket", DateTime.now, DateTime.now, "testuser", Map.empty, Map.empty, Map.empty, false)
+    val workspace2 = Workspace("broad-dsde-test", "test-tag-workspace", Set.empty, workspace2ID.toString, "fake-bucket", Some("workflow-collection"), DateTime.now, DateTime.now, "testuser", Map.empty, Map.empty, Map.empty, false)
     runAndWait(workspaceQuery.save(workspace2))
     runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("cancer")))
     runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("buffalo")))

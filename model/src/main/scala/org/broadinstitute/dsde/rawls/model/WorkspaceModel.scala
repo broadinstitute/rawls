@@ -96,6 +96,7 @@ case class Workspace(
                       authorizationDomain: Set[ManagedGroupRef],
                       workspaceId: String,
                       bucketName: String,
+                      workflowCollectionName: Option[String],
                       createdDate: DateTime,
                       lastModified: DateTime,
                       createdBy: String,
@@ -536,7 +537,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
 
-  implicit val WorkspaceFormat = jsonFormat12(Workspace)
+  implicit val WorkspaceFormat = jsonFormat13(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
