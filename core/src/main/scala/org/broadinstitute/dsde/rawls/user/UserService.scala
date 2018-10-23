@@ -26,6 +26,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.WorkbenchGroupNameFormat
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -634,7 +635,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         } yield (savedGroup, intersectionGroups)
       }, TransactionIsolation.ReadCommitted)
 
-      messages = (intersectionGroups.toSeq :+ RawlsGroup.toRef(savedGroup)).map(_.toJson.compactPrint)
+      messages = (intersectionGroups.toSeq :+ RawlsGroup.toRef(savedGroup)).map(x => WorkbenchGroupName(x.groupName.value).toJson.compactPrint)
 
       _ <- gpsDAO.publishMessages(gpsGroupSyncTopic, messages)
     } yield savedGroup
@@ -650,7 +651,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         } yield intersectionGroups
       }, TransactionIsolation.ReadCommitted)
 
-      messages = intersectionGroups.toSeq.map(_.toJson.compactPrint)
+      messages = intersectionGroups.toSeq.map(x => WorkbenchGroupName(x.groupName.value).toJson.compactPrint)
 
       _ <- gpsDAO.publishMessages(gpsGroupSyncTopic, messages)
     } yield intersectionGroups
@@ -672,7 +673,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         } yield (updatedGroup, intersectionGroups)
       }, TransactionIsolation.ReadCommitted)
 
-      messages = intersectionGroups.toSeq.map(_.toJson.compactPrint)
+      messages = intersectionGroups.toSeq.map(x => WorkbenchGroupName(x.groupName.value).toJson.compactPrint)
 
       _ <- gpsDAO.publishMessages(gpsGroupSyncTopic, messages)
     } yield savedGroup
