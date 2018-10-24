@@ -20,8 +20,9 @@ import akka.pattern._
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+import org.broadinstitute.dsde.workbench.model.{WorkbenchGroupName, WorkbenchIdentityJsonSupport}
 
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
  * Created by dvoet on 12/6/16.
@@ -99,10 +100,9 @@ class GoogleGroupSyncMonitorActor(val pollInterval: FiniteDuration, pollInterval
       // send a message to the user service, it will send back a SyncReport message
       // note the message ack id used as the actor name
       // note that the UserInfo passed in probably is not used
-      import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsGroupRefFormat
       val userServiceRef = userServiceConstructor(UserInfo.buildFromTokens(pubSubDao.getPubSubServiceAccountCredential))
       logger.debug(s"received sync message: ${message.contents}")
-      toFutureTry(userServiceRef.InternalSynchronizeGroupMembers(message.contents.parseJson.convertTo[RawlsGroupRef])).map(report => (report, message.ackId)) pipeTo self
+      toFutureTry(userServiceRef.InternalSynchronizeGroupMembers(parseMessage(message))).map(report => (report, message.ackId)) pipeTo self
 
     case None =>
       // there was no message to wait and try again
@@ -133,6 +133,17 @@ class GoogleGroupSyncMonitorActor(val pollInterval: FiniteDuration, pollInterval
 
     case ReceiveTimeout =>
       throw new RawlsException("GoogleGroupSyncMonitorActor has received no messages for too long")
+  }
+
+  private def parseMessage(message: PubSubMessage) = {
+    (Try {
+      import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsGroupRefFormat
+      message.contents.parseJson.convertTo[RawlsGroupRef]
+    } recover {
+      case _: DeserializationException =>
+        import WorkbenchIdentityJsonSupport.WorkbenchGroupNameFormat
+        RawlsGroupRef(RawlsGroupName(message.contents.parseJson.convertTo[WorkbenchGroupName].value))
+    }).get
   }
 
   private def acknowledgeMessage(messageAckId: String): Future[Unit] = {

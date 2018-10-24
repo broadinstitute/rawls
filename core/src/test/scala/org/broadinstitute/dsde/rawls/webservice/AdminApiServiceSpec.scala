@@ -5,9 +5,8 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{RawlsGroupMemberListFormat, SyncReportFormat, RawlsBillingProjectTransferFormat, UserInfoFormat}
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserListFormat, UserStatusFormat}
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsGroupRefFormat
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{RawlsBillingProjectTransferFormat, SyncReportFormat}
+import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.WorkbenchGroupNameFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceFormat, WorkspaceListResponseFormat, WorkspaceStatusFormat}
 import org.broadinstitute.dsde.rawls.model._
@@ -18,6 +17,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import org.broadinstitute.dsde.workbench.model.WorkbenchGroupName
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
@@ -243,7 +243,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
 
     val group = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
-    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 1))
+    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, WorkbenchGroupName(group.groupName.value).toJson.compactPrint, 1))
 
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -261,7 +261,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.NotFound) { status }
       }
-    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 2))
+    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, WorkbenchGroupName(group.groupName.value).toJson.compactPrint, 2))
 
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
