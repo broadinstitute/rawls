@@ -163,6 +163,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val accessGroupsByLevel = newAccessGroupsByLevel + (ProjectOwner -> projectOwnerPolicyGroup)
 
+    for {
+      (level, group) <- accessGroupsByLevel
+    } yield {
+      samDataSaver.savePolicyGroup(group, SamResourceTypeNames.workflowCollection.toString, workspaceId)
+    }
+
     (Workspace(project.projectName.value, name, authDomain, workspaceId, bucketName, Some(workspaceId), createdDate, createdDate, createdBy, attributes,
       accessGroupsByLevel.map { case (level, group) => level -> RawlsGroup.toRef(group) },
       intersectionGroupsByLevel.getOrElse(accessGroupsByLevel).map { case (level, group) => level -> RawlsGroup.toRef(group) }, isLocked),

@@ -745,6 +745,15 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     mockServer.when(
       request()
+        .withMethod("DELETE")
+        .withPath("/api/resource/.*/.*")
+    ).respond(
+      response()
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
         .withMethod("PUT")
         .withPath("/api/resource/.*/.*/policies/.*")
     ).respond(
