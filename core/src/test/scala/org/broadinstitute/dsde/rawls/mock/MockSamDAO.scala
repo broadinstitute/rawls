@@ -10,9 +10,9 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
 
 class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext) extends SamDAO {
-  override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = ???
+  override def registerUser(userInfo: UserInfo): Future[Option[RawlsUser]] = ???
 
-  override def getUserStatus(userInfo: UserInfo): Future[Option[UserStatus]] = Future.successful(Option(UserStatus(RawlsUser(userInfo), Map.empty)))
+  override def getUserStatus(userInfo: UserInfo): Future[Option[RawlsUser]] = Future.successful(Option(RawlsUser(userInfo)))
 
   override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]] = Future.successful(Right(Option(UserIdInfo(userInfo.userSubjectId.value, userEmail, Option(userInfo.userSubjectId.value)))))
 
@@ -78,8 +78,6 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
       case _ => Set.empty
     } )
 
-  override def listUserPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = ???
-
   override def listUserRolesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[String]] = ???
 
   override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus] = Future.successful(SamPolicySyncStatus("", WorkbenchEmail("foo@bar.com")))
@@ -107,9 +105,9 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
   val callsToAddToPolicy = new ConcurrentLinkedDeque[(SamResourceTypeName, String, SamResourcePolicyName, String)]()
   val callsToRemoveFromPolicy = new ConcurrentLinkedDeque[(SamResourceTypeName, String, SamResourcePolicyName, String)]()
 
-  override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = {
+  override def registerUser(userInfo: UserInfo): Future[Option[RawlsUser]] = {
     userEmails.put(userInfo.userEmail.value, Option(userInfo.userSubjectId.value))
-    Future.successful(Option(UserStatus(RawlsUser(userInfo.userSubjectId, userInfo.userEmail), Map.empty)))
+    Future.successful(Option(RawlsUser(userInfo.userSubjectId, userInfo.userEmail)))
   }
 
   override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]] = {

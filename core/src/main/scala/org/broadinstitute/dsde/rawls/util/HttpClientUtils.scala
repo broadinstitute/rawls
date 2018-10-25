@@ -44,6 +44,27 @@ trait HttpClientUtils extends LazyLogging {
       }
     }
   }
+
+  def executeRequestUnmarshalResponseAcceptNoContent[T](http: HttpExt, httpRequest: HttpRequest)(implicit unmarshaller: Unmarshaller[ResponseEntity, T]): Future[Option[T]] = {
+    executeRequest(http, httpRequest) recover { case t: Throwable =>
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"http call failed: ${httpRequest.uri}: ${t.getMessage}", t))
+    } flatMap { response =>
+      if (response.status.isSuccess) {
+        if (response.status == StatusCodes.NoContent) {
+          // don't know if discarding the entity is required if there is no content but it probably doesn't hurt
+          response.entity.discardBytes()
+          Future.successful(None)
+        } else {
+          Unmarshal(response.entity).to[T].map(Option(_))
+        }
+      } else {
+        Unmarshal(response.entity).to[String] map { entityAsString =>
+          logger.debug(s"http error status ${response.status} calling uri ${httpRequest.uri}, response: ${entityAsString}")
+          throw new RawlsExceptionWithErrorReport(ErrorReport(response.status, s"http error calling uri ${httpRequest.uri}"))
+        }
+      }
+    }
+  }
 }
 
 case class HttpClientUtilsStandard()(implicit val materializer: Materializer, val executionContext: ExecutionContext) extends HttpClientUtils

@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.SamModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUserEmail, SamPolicy, SamPolicySyncStatus, SamPolicyWithName, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceIdWithPolicyName, SamResourcePolicyName, SamResourceTypeName, SamResourceWithPolicies, SyncReportItem, UserIdInfo, UserInfo, UserStatus, WorkspaceJsonSupport}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard, Retry}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.WorkbenchEmailFormat
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
@@ -69,8 +69,6 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
-  def listUserPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): scala.concurrent.Future[Set[SamPolicyWithName]] = ???
-
   override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus] = {
     val url = samServiceURL + s"/api/google/v1/resource/${resourceTypeName.value}/$resourceId/$policyName/sync"
 
@@ -103,19 +101,19 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
-  override def registerUser(userInfo: UserInfo): Future[Option[UserStatus]] = {
-    val url = samServiceURL + "/register/user"
+  override def registerUser(userInfo: UserInfo): Future[Option[RawlsUser]] = {
+    val url = samServiceURL + "/register/user/v2/self"
     retry(when401or500) { () =>
-      pipeline[Option[UserStatus]](userInfo) apply RequestBuilding.Post(url) recover {
+      pipeline[Option[RawlsUser]](userInfo) apply RequestBuilding.Post(url) recover {
         case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.Conflict) => None
       }
     }
   }
 
-  override def getUserStatus(userInfo: UserInfo): Future[Option[UserStatus]] = {
-    val url = samServiceURL + "/register/user"
+  override def getUserStatus(userInfo: UserInfo): Future[Option[RawlsUser]] = {
+    val url = samServiceURL + "/register/user/v2/info"
     retry(when401or500) { () =>
-      pipeline[Option[UserStatus]](userInfo) apply RequestBuilding.Get(url) recover {
+      pipeline[Option[RawlsUser]](userInfo) apply RequestBuilding.Get(url) recover {
         case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
       }
     }
@@ -123,29 +121,30 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
   override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]] = {
     val url = samServiceURL + s"/api/users/v1/$userEmail"
+    val httpRequest = RequestBuilding.Get(url).addHeader(authHeader(userInfo))
     retry(when401or500) { () =>
-      (pipeline[Option[UserIdInfo]](userInfo) apply RequestBuilding.Get(url)).map(Right(_)) recover {
+      httpClientUtils.executeRequestUnmarshalResponseAcceptNoContent[UserIdInfo](http, httpRequest).map(Right(_)) recover {
         case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => Left(())
       }
     }
   }
 
   override def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail] = {
-    val url = samServiceURL + s"/api/google/user/proxyGroup/$targetUserEmail"
+    val url = samServiceURL + s"/api/google/v1/user/proxyGroup/$targetUserEmail"
     retry(when401or500) { () =>
       pipeline[WorkbenchEmail](userInfo) apply RequestBuilding.Get(url)
     }
   }
 
   override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId"
     val httpRequest = HttpRequest(POST, Uri(url))
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId"
     val httpRequest = RequestBuilding.Delete(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
@@ -158,20 +157,20 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       override def read(json: JsValue): Boolean = DefaultJsonProtocol.BooleanJsonFormat.read(json)
     }
 
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/action/${action.value}"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/action/${action.value}"
 
     retry(when401or500) { () => pipeline[Boolean](userInfo) apply RequestBuilding.Get(url) }
   }
 
   override def getPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicy] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}"
     val httpRequest = RequestBuilding.Get(url)
 
     retry(when401or500) { () => pipeline[SamPolicy](userInfo) apply httpRequest }
   }
 
   override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, policy: SamPolicy, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}"
 
     Marshal(policy).to[RequestEntity].flatMap { policyEntity =>
       val httpRequest = HttpRequest(PUT, Uri(url), entity = policyEntity)
@@ -180,7 +179,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   override def overwritePolicyMembership(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberList: Set[WorkbenchEmail], userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails"
 
     Marshal(memberList).to[RequestEntity].flatMap { membershipEntity =>
       val httpRequest = HttpRequest(PUT, Uri(url), entity = membershipEntity)
@@ -189,43 +188,43 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails/$memberEmail"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails/$memberEmail"
     val httpRequest = RequestBuilding.Put(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails/$memberEmail"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails/$memberEmail"
     val httpRequest = RequestBuilding.Delete(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/v1/invite/user/$userEmail"
+    val url = samServiceURL + s"/api/users/v1/invite/$userEmail"
     val httpRequest = RequestBuilding.Post(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
   }
 
   override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] = {
-    val url = samServiceURL + s"/api/google/resource/${resourceTypeName.value}/$resourceId/${policyName.value.toLowerCase}/sync"
+    val url = samServiceURL + s"/api/google/v1/resource/${resourceTypeName.value}/$resourceId/${policyName.value.toLowerCase}/sync"
     retry(when401or500) { () => asRawlsSAPipeline[Map[WorkbenchEmail, Seq[SyncReportItem]]] apply HttpRequest(POST, Uri(url)) }
   }
 
   override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}"
     retry(when401or500) { () => pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply RequestBuilding.Get(url) }
   }
 
   override def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = {
-    val url = samServiceURL + s"/api/resource/${resourceTypeName.value}/$resourceId/policies"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/policies"
     retry(when401or500) { () => pipeline[Set[SamPolicyWithName]](userInfo) apply RequestBuilding.Get(url) }
   }
 
   override def getPetServiceAccountKeyForUser(googleProject: String, userEmail: RawlsUserEmail): Future[String] = {
-    val url = samServiceURL + s"/api/google/petServiceAccount/$googleProject/${userEmail.value}"
+    val url = samServiceURL + s"/api/google/v1/petServiceAccount/$googleProject/${userEmail.value}"
     retry(when401or500) { () => asRawlsSAPipeline[String] apply RequestBuilding.Get(url) }
   }
 
@@ -237,7 +236,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   //managed group apis
 
   override def requestAccessToManagedGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/group/${groupName.value}/requestAccess"
+    val url = samServiceURL + s"/api/groups/v1/${groupName.value}/requestAccess"
     val httpRequest = RequestBuilding.Post(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
@@ -251,9 +250,19 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     serviceAccountCreds.getAccessToken
   }
 
-  override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[String]] = ???
+  override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[String]] = {
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/authDomain"
+    retry(when401or500) { () => pipeline[Seq[String]](userInfo) apply RequestBuilding.Get(url) }
+  }
 
-  override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]] = ???
+  override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]] = {
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/allMembers"
+    retry(when401or500) { () => pipeline[Set[UserIdInfo]](userInfo) apply RequestBuilding.Get(url) }
+  }
 
-  override def getAccessInstructions(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Option[String]] = ???
+  override def getAccessInstructions(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Option[String]] = {
+    val url = samServiceURL + s"/api/groups/v1/${groupName.value}/accessInstructions"
+    val httpRequest = RequestBuilding.Get(url).addHeader(authHeader(userInfo))
+    retry(when401or500) { () => httpClientUtils.executeRequestUnmarshalResponseAcceptNoContent[String](http, httpRequest) }
+  }
 }

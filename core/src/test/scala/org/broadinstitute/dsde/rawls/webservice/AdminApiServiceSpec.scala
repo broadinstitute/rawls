@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{RawlsBillingProjectTransferFormat, RawlsGroupMemberListFormat, SyncReportFormat, UserInfoFormat}
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserListFormat, UserStatusFormat}
+import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserListFormat}
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceFormat, WorkspaceListResponseFormat, WorkspaceStatusFormat}
