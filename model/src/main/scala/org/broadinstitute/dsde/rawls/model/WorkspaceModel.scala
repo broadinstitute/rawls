@@ -397,19 +397,47 @@ case class MethodRepoConfigurationExport(
                                          )
 
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
-                                 workspace: Workspace,
+                                 workspace: WorkspaceDetails,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
-                                 owners: Set[String],
-                                 public: Boolean,
-                                 authorizationDomain: Set[ManagedGroupRef])
+                                 public: Boolean)
 
 case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
                              canShare: Boolean,
                              canCompute: Boolean,
                              catalog: Boolean,
-                             workspace: Workspace,
+                             workspace: WorkspaceDetails,
                              workspaceSubmissionStats: WorkspaceSubmissionStats,
                              owners: Set[String])
+
+case class WorkspaceDetails(namespace: String,
+                            name: String,
+                            workspaceId: String,
+                            bucketName: String,
+                            createdDate: DateTime,
+                            lastModified: DateTime,
+                            createdBy: String,
+                            attributes: AttributeMap,
+                            isLocked: Boolean = false,
+                            authorizationDomain: Set[ManagedGroupRef]) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, createdDate, lastModified, createdBy, attributes, isLocked)
+}
+
+object WorkspaceDetails {
+  def apply(workspace: Workspace, authorizationDomain: Set[ManagedGroupRef]): WorkspaceDetails = {
+    WorkspaceDetails(
+      workspace.namespace,
+      workspace.name,
+      workspace.workspaceId,
+      workspace.bucketName,
+      workspace.createdDate,
+      workspace.lastModified,
+      workspace.createdBy,
+      workspace.attributes,
+      workspace.isLocked,
+      authorizationDomain
+    )
+  }
+}
 
 case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
 
@@ -532,10 +560,6 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
 
-  implicit val WorkspaceFormat = jsonFormat9(Workspace)
-
-//  implicit val WorkspaceLiteFormat = jsonFormat10(WorkspaceLite)
-
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
   implicit val EntityTypeMetadataFormat = jsonFormat3(EntityTypeMetadata)
@@ -610,7 +634,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 
-  implicit val WorkspaceListResponseFormat = jsonFormat6(WorkspaceListResponse)
+  implicit val WorkspaceDetailsFormat = jsonFormat10(WorkspaceDetails.apply)
+
+  implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
   implicit val WorkspaceResponseFormat = jsonFormat7(WorkspaceResponse)
 

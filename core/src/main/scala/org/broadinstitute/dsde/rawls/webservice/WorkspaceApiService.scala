@@ -33,7 +33,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
         entity(as[WorkspaceRequest]) { workspace =>
           addLocationHeader(workspace.path) {
             complete {
-              workspaceServiceConstructor(userInfo).CreateWorkspace(workspace).map(StatusCodes.Created -> _)
+              workspaceServiceConstructor(userInfo).CreateWorkspace(workspace).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
             }
           }
         }
@@ -67,7 +67,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           entity(as[WorkspaceRequest]) { destWorkspace =>
             addLocationHeader(destWorkspace.toWorkspaceName.path) {
               complete {
-                workspaceServiceConstructor(userInfo).CloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace).map(StatusCodes.Created -> _)
+                workspaceServiceConstructor(userInfo).CloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace).map(w => StatusCodes.Created -> WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty)))
               }
             }
           }

@@ -253,7 +253,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty))
         }
         assertResult(newWorkspace) {
-          val ws = responseAs[Workspace]
+          val ws = responseAs[WorkspaceDetails]
           WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty))
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
@@ -353,7 +353,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Set.empty)
+          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Set.empty)
         ){
           val response = responseAs[WorkspaceResponse]
           WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
@@ -494,8 +494,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         val dateTime = currentTime()
         assertResult(Set(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Set.empty, false, Set.empty),
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set.empty, false, Set.empty)
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(None, None, 0), false)
         )) {
           responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
         }
@@ -797,7 +797,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(testData.workspace.attributes) {
-          responseAs[Workspace].attributes
+          responseAs[WorkspaceDetails].attributes
         }
       }
 
@@ -814,7 +814,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(testData.workspace.attributes ++ newAtts) {
-            responseAs[Workspace].attributes
+            responseAs[WorkspaceDetails].attributes
           }
         }
     } { capturedMetrics =>
@@ -872,7 +872,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
       }
   }
 
@@ -959,7 +959,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        mutableWorkspace = responseAs[WorkspaceResponse].workspace
+        mutableWorkspace = responseAs[WorkspaceResponse].workspace.toWorkspace
       }
 
     Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
@@ -972,7 +972,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        val updatedWorkspace: Workspace = responseAs[WorkspaceResponse].workspace
+        val updatedWorkspace: Workspace = responseAs[WorkspaceResponse].workspace.toWorkspace
         assertWorkspaceModifiedDate(status, updatedWorkspace)
         assert {
           updatedWorkspace.lastModified.isAfter(mutableWorkspace.lastModified)
@@ -1094,7 +1094,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
       }
 
     Put(s"${testData.workspace.path}/unlock") ~>
@@ -1106,7 +1106,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace)
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
       }
 
   }

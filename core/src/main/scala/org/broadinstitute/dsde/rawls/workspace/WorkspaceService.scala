@@ -138,13 +138,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               canCompute <- DBIO.from(getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel))
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
               owners <- DBIO.from(getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)))
+              authDomain <- DBIO.from(loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo))
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, canCatalog, workspaceContext.workspace, stats, owners))
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, canCatalog, WorkspaceDetails(workspaceContext.workspace, authDomain.toSet), stats, owners))
             }
           }
         }
       }
     }
+
+  private def loadResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[ManagedGroupRef]] = {
+    samDAO.getResourceAuthDomain(resourceTypeName, resourceId, userInfo).map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
+  }
 
   def getUserComputePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] = {
     if(userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
@@ -244,28 +249,33 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def updateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
     withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
-      tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
-        getWorkspaceContext(workspaceName) flatMap { ctx =>
+      for {
+        isCurator <- tryIsCurator(userInfo.userEmail)
+        workspace <- getWorkspaceContext(workspaceName) flatMap { ctx =>
           withLibraryPermissions(ctx, operations, userInfo, isCurator) {
             dataSource.inTransaction { dataAccess =>
               updateWorkspace(operations, dataAccess)(ctx)
             }
           }
-        } map { ws =>
-          RequestComplete(StatusCodes.OK, ws)
         }
+        authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)
+      } yield {
+        RequestComplete(StatusCodes.OK, WorkspaceDetails(workspace, authDomain))
       }
     }
   }
 
   def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
     withAttributeNamespaceCheck(operations.map(_.name)) {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, dataAccess) {
-          updateWorkspace(operations, dataAccess)
+      for {
+        workspace <- dataSource.inTransaction { dataAccess =>
+          withWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, dataAccess) {
+            updateWorkspace(operations, dataAccess)
+          }
         }
-      } map { ws =>
-        RequestComplete(StatusCodes.OK, ws)
+        authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)
+      } yield {
+        RequestComplete(StatusCodes.OK, WorkspaceDetails(workspace, authDomain))
       }
     }
   }
@@ -295,12 +305,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       workspacePolicies <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
       result <- dataSource.inTransaction({ dataAccess =>
         val query = for {
-          ownerEmails <- DBIO.sequence(workspacePolicies.toSeq.map(p => DBIO.from(getWorkspaceOwners(p.resourceId).map(owners => p.resourceId -> owners)))) //TODO: this could be a lot of calls to sam...
           submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(workspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
           workspaces <- dataAccess.workspaceQuery.listByIds(workspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
-        } yield (ownerEmails.toMap, submissionSummaryStats, workspaces)
+        } yield (submissionSummaryStats, workspaces)
 
-        val results = query.map { case (ownerEmails, submissionSummaryStats, workspaces) =>
+        val results = query.map { case (submissionSummaryStats, workspaces) =>
           val policiesByWorkspaceId = workspacePolicies.groupBy(_.resourceId).map { case (workspaceId, policies) =>
             workspaceId -> policies.reduce { (p1, p2) =>
               SamResourceIdWithPolicyName(
@@ -316,7 +325,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val wsId = UUID.fromString(workspace.workspaceId)
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
             val accessLevel = if (workspacePolicy.missingAuthDomains.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withName(workspacePolicy.accessPolicyName.value)
-            WorkspaceListResponse(accessLevel, workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId.toString, Set.empty).map(_.value), workspacePolicy.public, workspacePolicy.authDomains.map(groupName => ManagedGroupRef(RawlsGroupName(groupName))))
+            val workspaceDetails = WorkspaceDetails(workspace, workspacePolicy.authDomains.map(groupName => ManagedGroupRef(RawlsGroupName(groupName))))
+            WorkspaceListResponse(accessLevel, workspaceDetails, submissionSummaryStats(wsId), workspacePolicy.public)
           }
         }
 
@@ -1591,15 +1601,23 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def listAllWorkspaces() = {
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listAll.map(RequestComplete(StatusCodes.OK, _))
+        dataAccess.workspaceQuery.listAll.map(workspaces => RequestComplete(StatusCodes.OK, workspaces.map(w => WorkspaceDetails(w, Set.empty))))
       }
     }
   }
 
   def listWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.listWithAttribute(attributeName, attributeValue).map(RequestComplete(StatusCodes.OK, _))
+    for {
+      workspaces <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.listWithAttribute(attributeName, attributeValue)
+      }
+      results <- Future.traverse(workspaces) { workspace =>
+        loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo).map(WorkspaceDetails(workspace, _))
+      }
+    } yield {
+      RequestComplete(StatusCodes.OK, results)
     }
+
   }
 
   def getBucketUsage(workspaceName: WorkspaceName): Future[PerRequestMessage] = {

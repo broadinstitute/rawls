@@ -158,7 +158,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
               assertResult(StatusCodes.OK) {
                 status
               }
-              Some(responseAs[Workspace])
+              Some(responseAs[WorkspaceDetails].toWorkspace)
             case x =>
               assertResult(expectedStatusCode) {
                 status

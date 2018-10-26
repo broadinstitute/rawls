@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{RawlsBillingProj
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserListFormat}
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceFormat, WorkspaceListResponseFormat, WorkspaceStatusFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceListResponseFormat, WorkspaceStatusFormat, WorkspaceDetailsFormat}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -199,7 +199,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) { status }
         // TODO: why is this result returned out of order?
-        sortAndAssertWorkspaceResult(testData.allWorkspaces) { responseAs[Seq[Workspace]] }
+        sortAndAssertWorkspaceResult(testData.allWorkspaces) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
       }
   }
 
@@ -208,7 +208,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[Workspace]] }
+        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
       }
   }
 
@@ -217,7 +217,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[Workspace]] }
+        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
       }
   }
 
@@ -226,7 +226,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(testData.workspacePublished)) { responseAs[Seq[Workspace]] }
+        assertWorkspaceResult(Seq(testData.workspacePublished)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
       }
   }
 
