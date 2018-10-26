@@ -400,7 +400,7 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspace: Workspace,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
                                  owners: Set[String],
-                                 public: Option[Boolean],
+                                 public: Boolean,
                                  authorizationDomain: Set[ManagedGroupRef])
 
 case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,

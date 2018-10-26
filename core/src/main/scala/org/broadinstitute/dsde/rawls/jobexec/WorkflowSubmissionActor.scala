@@ -265,7 +265,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         petSAJson <- DBIO.from(samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, RawlsUserEmail(submissionRec.submitterEmail)))
 
         userIdInfo <- DBIO.from(samDAO.getUserIdInfo(submissionRec.submitterEmail,  UserInfo.buildFromTokens(credential))).map {
-          case Right(Some(userIdInfo)) => userIdInfo.googleSubjectId.getOrElse(throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}"))
+          case SamDAO.User(userIdInfo) => userIdInfo.googleSubjectId.getOrElse(throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}"))
           case _ => throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}")
         }
 

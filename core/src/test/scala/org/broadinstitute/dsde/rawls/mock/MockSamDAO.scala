@@ -14,7 +14,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getUserStatus(userInfo: UserInfo): Future[Option[RawlsUser]] = Future.successful(Option(RawlsUser(userInfo)))
 
-  override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]] = Future.successful(Right(Option(UserIdInfo(userInfo.userSubjectId.value, userEmail, Option(userInfo.userSubjectId.value)))))
+  override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult] = Future.successful(SamDAO.User(UserIdInfo(userInfo.userSubjectId.value, userEmail, Option(userInfo.userSubjectId.value))))
 
   override def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail] = ???
 
@@ -45,12 +45,12 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
       case SamResourceTypeNames.workspace =>
         dataSource.inTransaction { dataaccess =>
           dataaccess.workspaceQuery.listAll()
-        }.map(_.map(workspace => SamResourceIdWithPolicyName(workspace.workspaceId, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, None)).toSet)
+        }.map(_.map(workspace => SamResourceIdWithPolicyName(workspace.workspaceId, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)).toSet)
 
       case SamResourceTypeNames.billingProject =>
         dataSource.inTransaction { dataaccess =>
           dataaccess.rawlsBillingProjectQuery.listAll()
-        }.map(_.map(project => SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.owner, Set.empty, Set.empty, None)).toSet)
+        }.map(_.map(project => SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.owner, Set.empty, Set.empty, false)).toSet)
 
       case _ => Future.successful(Set.empty)
     }
@@ -110,11 +110,12 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     Future.successful(Option(RawlsUser(userInfo.userSubjectId, userInfo.userEmail)))
   }
 
-  override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]] = {
+  override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult] = {
     val result = userEmails.get(userEmail).map(_.map(id => UserIdInfo(id, userEmail, Option(id))))
     Future.successful(result match {
-      case Some(userOrGroup) => Right(userOrGroup)
-      case None => Left(())
+      case Some(Some(userOrGroup)) => SamDAO.User(userOrGroup)
+      case Some(None) => SamDAO.NotUser
+      case None => SamDAO.NotFound
     })
   }
 

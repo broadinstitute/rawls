@@ -494,8 +494,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         val dateTime = currentTime()
         assertResult(Set(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Set.empty, None, Set.empty),
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set.empty, None, Set.empty)
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Set.empty, false, Set.empty),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Set.empty, false, Set.empty)
         )) {
           responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
         }

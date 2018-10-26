@@ -41,14 +41,14 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
 
   it should "handle no content getting user id info" in {
     val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
-    assertResult(Right(None)) {
+    assertResult(SamDAO.NotUser) {
       Await.result(dao.getUserIdInfo("group@example.com", UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))), Duration.Inf)
     }
   }
 
   it should "handle 404 getting user id info" in {
     val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
-    assertResult(Left(())) {
+    assertResult(SamDAO.NotFound) {
       Await.result(dao.getUserIdInfo("dne@example.com", UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))), Duration.Inf)
     }
   }

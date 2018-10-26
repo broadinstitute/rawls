@@ -12,7 +12,7 @@ trait SamDAO {
   val errorReportSource = ErrorReportSource("sam")
   def registerUser(userInfo: UserInfo): Future[Option[RawlsUser]]
   def getUserStatus(userInfo: UserInfo): Future[Option[RawlsUser]]
-  def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]]
+  def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult]
   def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail]
   def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
   def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit]
@@ -45,4 +45,11 @@ trait SamDAO {
   def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String]
 
   def getStatus(): Future[SubsystemStatus]
+}
+
+object SamDAO {
+  sealed trait GetUserIdInfoResult extends Product with Serializable
+  case object NotFound extends GetUserIdInfoResult
+  case object NotUser extends GetUserIdInfoResult
+  final case class User(userIdInfo: UserIdInfo) extends GetUserIdInfoResult
 }

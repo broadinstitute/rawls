@@ -58,7 +58,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
   def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)
   def UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateLibraryAttributes(workspaceName, operations)
-  def ListWorkspaces(lite: Boolean) = listWorkspaces(lite: Boolean)
+  def ListWorkspaces() = listWorkspaces()
   def ListAllWorkspaces = listAllWorkspaces()
   def GetTags(query: Option[String]) = getTags(query)
   def AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) = asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) }
@@ -290,7 +290,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def listWorkspaces(lite: Boolean): Future[PerRequestMessage] = {
+  def listWorkspaces(): Future[PerRequestMessage] = {
     for {
       workspacePolicies <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
       result <- dataSource.inTransaction({ dataAccess =>
@@ -308,7 +308,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 model.SamResourcePolicyName(max(WorkspaceAccessLevels.withPolicyName(p1.accessPolicyName.value).getOrElse(NoAccess), WorkspaceAccessLevels.withPolicyName(p2.accessPolicyName.value).getOrElse(NoAccess)).toString),
                 p1.authDomains ++ p2.authDomains,
                 p1.missingAuthDomains ++ p2.missingAuthDomains,
-                for(p1pub <- p1.public; p2pub <- p2.public) yield p1pub || p2pub
+                p1.public || p2.public
               )
             }
           }
@@ -378,9 +378,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def isUserPending(userEmail: String): Future[Boolean] = {
     samDAO.getUserIdInfo(userEmail, userInfo).map {
-      case Right(Some(x)) => x.googleSubjectId.isEmpty
-      case Right(None) => false
-      case _ => true
+      case SamDAO.User(x) => x.googleSubjectId.isEmpty
+      case SamDAO.NotUser => false
+      case SamDAO.NotFound => true
     }
   }
 
@@ -475,13 +475,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield policies
   }
 
-  def validateUsersExist(userEmails: Set[String]): Future[Set[Option[String]]] = {
+  def collectMissingUsers(userEmails: Set[String]): Future[Set[String]] = {
     Future.traverse(userEmails) { email =>
       samDAO.getUserIdInfo(email, userInfo).map {
-        case Left(()) => Option(email)
+        case SamDAO.NotFound => Option(email)
         case _ => None
       }
-    }
+    }.map(_.flatten)
   }
 
   /**
@@ -541,8 +541,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         update.copy(canShare = Option(ownerLevel || update.canShare.getOrElse(false)), canCompute = Option(normalizedCanCompute)) }
     }
 
-    validateUsersExist(aclUpdates.map(_.email)).flatMap { missingUsers =>
-      val userToInvite = missingUsers.flatten
+    collectMissingUsers(aclUpdates.map(_.email)).flatMap { userToInvite =>
       if (userToInvite.isEmpty || inviteUsersNotFound) {
         getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
 
@@ -633,13 +632,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }.map(_ => ())
   }
 
-  private def sendACLUpdateNotifications(workspaceName: WorkspaceName, usersModified: Set[WorkspaceACLUpdate]) {
+  private def sendACLUpdateNotifications(workspaceName: WorkspaceName, usersModified: Set[WorkspaceACLUpdate]): Unit = {
     Future.traverse(usersModified) { accessUpdate =>
       for {
         userIdInfo <- samDAO.getUserIdInfo(accessUpdate.email, userInfo)
       } yield {
         userIdInfo match {
-          case Right(Some(idInfo)) => idInfo.googleSubjectId match {
+          case SamDAO.User(idInfo) => idInfo.googleSubjectId match {
             case Some(googleSubjectId) =>
               if(accessUpdate.accessLevel == WorkspaceAccessLevels.NoAccess)
                 notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(RawlsUserSubjectId(googleSubjectId), NoAccess.toString, workspaceName, userInfo.userSubjectId))

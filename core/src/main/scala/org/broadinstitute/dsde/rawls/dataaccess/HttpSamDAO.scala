@@ -119,12 +119,15 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
-  override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[Either[Unit, Option[UserIdInfo]]] = {
+  override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult] = {
     val url = samServiceURL + s"/api/users/v1/$userEmail"
     val httpRequest = RequestBuilding.Get(url).addHeader(authHeader(userInfo))
     retry(when401or500) { () =>
-      httpClientUtils.executeRequestUnmarshalResponseAcceptNoContent[UserIdInfo](http, httpRequest).map(Right(_)) recover {
-        case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => Left(())
+      httpClientUtils.executeRequestUnmarshalResponseAcceptNoContent[UserIdInfo](http, httpRequest).map {
+        case None => SamDAO.NotUser
+        case Some(idInfo) => SamDAO.User(idInfo)
+      } recover {
+        case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => SamDAO.NotFound
       }
     }
   }

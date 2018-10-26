@@ -90,7 +90,7 @@ case class SamPolicy(memberEmails: Set[WorkbenchEmail], actions: Set[SamResource
 case class SamPolicyWithName(policyName: SamResourcePolicyName, policy: SamPolicy)
 case class SamPolicyWithNameAndEmail(policyName: SamResourcePolicyName, policy: SamPolicy, email: WorkbenchEmail)
 case class SamResourceWithPolicies(resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String])
-case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: SamResourcePolicyName, authDomains: Set[String], missingAuthDomains: Set[String], public: Option[Boolean])
+case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: SamResourcePolicyName, authDomains: Set[String], missingAuthDomains: Set[String], public: Boolean)
 case class SamPolicySyncStatus(lastSyncDate: String, email: WorkbenchEmail)
 
 object SamModelJsonSupport extends JsonSupport {

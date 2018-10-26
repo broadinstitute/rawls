@@ -39,10 +39,8 @@ trait WorkspaceApiService extends UserInfoDirectives {
         }
       } ~
         get {
-          parameter('lite.?) { lite =>
-            complete {
-              workspaceServiceConstructor(userInfo).ListWorkspaces(lite.getOrElse("false").toBoolean)
-            }
+          complete {
+            workspaceServiceConstructor(userInfo).ListWorkspaces()
           }
         }
     } ~
