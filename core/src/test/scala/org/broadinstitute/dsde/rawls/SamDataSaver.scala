@@ -62,6 +62,7 @@ class SamDataSaver(implicit executionContext: ExecutionContext) extends JndiSupp
         Thread.sleep(50)
         savePolicyGroup(policyGroup, resourceType, resourceId, trial + 1)
       }
+    case _: NameAlreadyBoundException => Future.successful(policyGroup)
   }
 
   protected def resourceTypeDn(resourceTypeName: String) = s"${Attr.resourceType}=${resourceTypeName},$resourcesOu"
