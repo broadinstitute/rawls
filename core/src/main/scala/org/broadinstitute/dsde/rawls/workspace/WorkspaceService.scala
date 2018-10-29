@@ -1719,6 +1719,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     withAttributeNamespaceCheck(attrNames)(op)
   }
 
+  private def createWorkflowCollectionForWorkspace(workspaceId: String) = {
+    for {
+      workspacePolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo)
+      policyMap = workspacePolicies.map(pol => pol.policyName -> pol.email).toMap
+      _ <- samDAO.createResource(SamResourceTypeNames.workflowCollection, workspaceId, userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, SamWorkflowCollectionPolicyNames.workflowCollectionOwnerPolicyName,
+        SamPolicy(Set(policyMap(SamWorkspacePolicyNames.projectOwner), policyMap(SamWorkspacePolicyNames.owner)), Set.empty, Set(SamWorkflowCollectionRoles.owner)), userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, SamWorkflowCollectionPolicyNames.workflowCollectionWriterPolicyName,
+        SamPolicy(Set(policyMap(SamWorkspacePolicyNames.writer)), Set.empty, Set(SamWorkflowCollectionRoles.writer)), userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, SamWorkflowCollectionPolicyNames.workflowCollectionReaderPolicyName,
+        SamPolicy(Set(policyMap(SamWorkspacePolicyNames.reader)), Set.empty, Set(SamWorkflowCollectionRoles.reader)), userInfo)
+    } yield {
+    }
+  }
+
   private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
@@ -1735,7 +1750,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         namespace = workspaceRequest.namespace,
         name = workspaceRequest.name,
         workspaceId = workspaceId,
+<<<<<<< fc525e8c1f1538e24794791f31629fb89cc639ee
         bucketName = bucketName,
+=======
+        bucketName = s"fc-$workspaceId",
+        workflowCollectionName = Some(workspaceId),
+>>>>>>> redo on top of ph4 branch
         createdDate = currentDate,
         lastModified = currentDate,
         createdBy = userInfo.userEmail.value,
@@ -1759,6 +1779,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo)).map(_ => defaultPolicies)
           }
+          _ <- DBIO.from(createWorkflowCollectionForWorkspace(workspaceId))
           _ <- DBIO.from(Future.traverse(policies.toSeq) { case (policyName, _) =>
             if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
               // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
