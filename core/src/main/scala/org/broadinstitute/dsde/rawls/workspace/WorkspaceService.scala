@@ -1694,6 +1694,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     withAttributeNamespaceCheck(attrNames)(op)
   }
 
+  private def createWorkflowCollectionForWorkspace(workspaceId: String) = {
+    for {
+      workspacePolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo)
+      policyMap = workspacePolicies.map(pol => pol.policyName -> pol.email).toMap
+      _ <- samDAO.createResource(SamResourceTypeNames.workflowCollection, workspaceId, userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, SamWorkflowCollectionPolicyNames.workflowCollectionOwnerPolicyName,
+        SamPolicy(Set(policyMap(SamWorkspacePolicyNames.projectOwner), policyMap(SamWorkspacePolicyNames.owner)), Set.empty, Set(SamWorkflowCollectionRoles.owner)), userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, SamWorkflowCollectionPolicyNames.workflowCollectionWriterPolicyName,
+        SamPolicy(Set(policyMap(SamWorkspacePolicyNames.writer)), Set.empty, Set(SamWorkflowCollectionRoles.writer)), userInfo)
+      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, SamWorkflowCollectionPolicyNames.workflowCollectionReaderPolicyName,
+        SamPolicy(Set(policyMap(SamWorkspacePolicyNames.reader)), Set.empty, Set(SamWorkflowCollectionRoles.reader)), userInfo)
+    } yield {
+    }
+  }
+
   private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
@@ -1705,6 +1720,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         name = workspaceRequest.name,
         workspaceId = workspaceId,
         bucketName = s"fc-$workspaceId",
+        workflowCollectionName = Some(workspaceId),
         createdDate = currentDate,
         lastModified = currentDate,
         createdBy = userInfo.userEmail.value,
@@ -1728,6 +1744,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo)).map(_ => defaultPolicies)
           }
+          _ <- DBIO.from(createWorkflowCollectionForWorkspace(workspaceId))
           _ <- DBIO.from(Future.traverse(policies.toSeq) { case (policyName, _) =>
             if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
               // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
@@ -1752,16 +1769,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             for {
               project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
               projectOwnerGroupEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, project.get.projectName.value, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))
-              policyEmails <- DBIO.from(getAccessLevelPolicies(workspaceId).map(_.map(policy =>
-                if(policy.policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
-                  // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
-                  // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
-                  // the limit of 2000
-                  WorkspaceAccessLevels.ProjectOwner -> projectOwnerGroupEmail
-                } else {
-                  WorkspaceAccessLevels.withName(policy.policyName.value) -> policy.email
-                }).toMap))
-              _ <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, policyEmails))
+              policyEmails <- DBIO.from(getAccessLevelPolicies(workspaceId).map(_.map(policy => WorkspaceAccessLevels.withName(policy.policyName.value) -> policy.email).toMap))
+              googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, policyEmails + (WorkspaceAccessLevels.ProjectOwner -> projectOwnerGroupEmail)))
               response <- op(SlickWorkspaceContext(savedWorkspace))
             } yield response
           }
