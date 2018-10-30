@@ -1728,7 +1728,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo)).map(_ => defaultPolicies)
           }
-          _ <- DBIO.from(Future.traverse(policies.toSeq) { case (policyName, _) => samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName) })
+          _ <- DBIO.from(Future.traverse(policies.toSeq) { case (policyName, _) =>
+            if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
+              // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
+              // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
+              // the limit of 2000
+              Future.successful()
+            } else {
+              samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName)
+            }
+          })
         } yield workspace
       }
     }
@@ -1743,8 +1752,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             for {
               project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
               projectOwnerGroupEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, project.get.projectName.value, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))
-              policyEmails <- DBIO.from(getAccessLevelPolicies(workspaceId).map(_.map(policy => WorkspaceAccessLevels.withName(policy.policyName.value) -> policy.email).toMap))
-              googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, policyEmails + (WorkspaceAccessLevels.ProjectOwner -> projectOwnerGroupEmail)))
+              policyEmails <- DBIO.from(getAccessLevelPolicies(workspaceId).map(_.map(policy =>
+                if(policy.policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
+                  // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
+                  // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
+                  // the limit of 2000
+                  WorkspaceAccessLevels.ProjectOwner -> projectOwnerGroupEmail
+                } else {
+                  WorkspaceAccessLevels.withName(policy.policyName.value) -> policy.email
+                }).toMap))
+              _ <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, policyEmails))
               response <- op(SlickWorkspaceContext(savedWorkspace))
             } yield response
           }
@@ -1756,7 +1773,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def getAccessLevelPolicies(workspaceId: String): Future[Set[SamPolicyWithNameAndEmail]] = {
     samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { allPolicies =>
       allPolicies.filter { policy =>
-        WorkspaceAccessLevels.all.map(_.toString).contains(policy.policyName.value.toUpperCase) //TODO: get rid of toUpperCase...
+        WorkspaceAccessLevels.all.flatMap(_.toPolicyName).contains(policy.policyName.value)
       }
     }
   }
