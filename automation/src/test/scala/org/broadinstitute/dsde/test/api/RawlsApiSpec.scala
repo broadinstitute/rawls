@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.test.api
 
-import language.postfixOps
 import java.util.UUID
 
 import akka.actor.ActorSystem
@@ -11,13 +10,12 @@ import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyResponseEntry, AccessPolicyMembership}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
+import org.broadinstitute.dsde.workbench.dao.Google.googleIamDAO
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.fixture._
-import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, ServiceAccount}
+import org.broadinstitute.dsde.workbench.model.google.{GoogleProject, ServiceAccount}
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
@@ -30,7 +28,7 @@ import scala.concurrent.duration._
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
+class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures
   with CleanUp with RandomUtil with Retry
   with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures {
 
@@ -134,6 +132,31 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       }
     }
 
+    "should create and destroy a workflow collection resource in Sam for a workspace" in {
+      withCleanBillingProject(owner) { projectName =>
+        withCleanUp {
+          //Create workspaces for Students
+          Orchestration.billing.addUserToBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
+          register cleanUp Orchestration.billing.removeUserFromBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
+
+          val uuid = UUID.randomUUID().toString
+
+          val workspaceName = "rawls_test_workflow_collection_workspace" + uuid
+          Rawls.workspaces.create(projectName, workspaceName)(studentAToken)
+          register cleanUp Rawls.workspaces.delete(projectName, workspaceName)(studentAToken)
+
+          //it's enough that the resource exists
+          val collName = Rawls.workspaces.getWorkflowCollectionName(projectName, workspaceName)(studentAToken)
+
+          //deleting the workspace should subsequently make the resource vanish (returning a 404, which gets turned into a RestException)
+          Rawls.workspaces.delete(projectName, workspaceName)(studentAToken)
+          assertThrows[RestException] {
+            Sam.user.listResourcePolicies("workflow-collection", collName)(studentAToken)
+          }
+        }
+      }
+    }
+
     "should retrieve sub-workflow metadata and outputs from Cromwell" in {
       implicit val token: AuthToken = studentAToken
 
@@ -170,6 +193,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
 
             withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
+              status shouldBe "Submitted"
               workflows should not be (empty)
               workflows.head
             }
@@ -201,17 +225,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
           eventually {
             Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
-          }
-
-          // verify that Rawls can retrieve the workflows' outputs from Cromwell without error
-          // https://github.com/DataBiosphere/firecloud-app/issues/157
-
-          val outputsTimeout = Timeout(scaled(Span(10, Seconds)))
-          eventually(outputsTimeout) {
-            Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstWorkflowId)
-            // nope https://github.com/DataBiosphere/firecloud-app/issues/160
-            //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubWorkflowId)
-            //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
           }
 
           // clean up: Abort and wait for Aborted
@@ -268,6 +281,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
 
             withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
+              status shouldBe "Submitted"
               workflows should not be (empty)
               workflows.head
             }
@@ -298,9 +312,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
           // can we also quickly retrieve metadata for a few of the subworkflows?
 
-          Random.shuffle(subworkflowIds.take(10)).foreach {
-            cromwellMetadata(_)
-          }
+          Random.shuffle(subworkflowIds.take(10)).foreach { cromwellMetadata(_) }
 
           // clean up: Abort and wait for one minute or Aborted, whichever comes first
           // Timeout is OK here: just make a best effort
@@ -319,39 +331,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
         }
       }
 
-    }
-
-    "should label low security bucket" in {
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = studentAToken
-
-      withCleanBillingProject(studentA) { projectName =>
-        withWorkspace(projectName, "rawls-bucket-test") { workspaceName =>
-          val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
-          val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
-
-          bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "low")
-        }
-      }
-    }
-
-    "should label high security bucket" in {
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = studentAToken
-
-      withGroup("ad") { realmGroup =>
-        withGroup("ad2") { realmGroup2 =>
-          withCleanBillingProject(studentA) { projectName =>
-            withWorkspace(projectName, "rawls-bucket-test", Set(realmGroup, realmGroup2)) { workspaceName =>
-              val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
-              val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
-
-              bucketName should startWith("fc-secure-")
-              bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "high", "ad-" + realmGroup.toLowerCase -> "", "ad-" + realmGroup2.toLowerCase -> "")
-            }
-          }
-        }
-      }
     }
 
     // bucket and object access levels for sam policies as described in comments in insertBucket function in HttpGoogleServicesDAO
