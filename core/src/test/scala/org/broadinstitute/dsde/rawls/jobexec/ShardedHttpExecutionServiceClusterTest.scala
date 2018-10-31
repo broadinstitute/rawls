@@ -57,7 +57,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     val wsName = WorkspaceName("ExecClusterTestDataNamespace", "ExecClusterTestDataName")
     val user = RawlsUser(userInfo)
     val ownerGroup = makeRawlsGroup("ExecClusterTestDataOwnerGroup", Set(user))
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "ExecClusterTestDataBucket", currentTime(), currentTime(), "testUser", Map.empty)
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "ExecClusterTestDataBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
     val sample1 = Entity("sample1", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
 
