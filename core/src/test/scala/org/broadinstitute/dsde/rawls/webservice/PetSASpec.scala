@@ -120,7 +120,7 @@ class PetSASpec extends ApiServiceSpec {
     val workspaceName = WorkspaceName(billingProject.projectName.value, "testworkspace")
 
     val workspace1Id = UUID.randomUUID().toString
-    val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
+    val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", Some("workflow-collection"), testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
 
     override def save() = {
       DBIO.seq(

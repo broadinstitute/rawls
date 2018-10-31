@@ -68,7 +68,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
     val unpublishedWriterGroup = makeRawlsGroup(s"${wsUnpublishedName.name}-${wsUnpublishedName.name}-WRITER", users.filter(_.level == WorkspaceAccessLevels.Write).map(_.rawlsUser:RawlsUserRef).toSet)
     val unpublishedReaderGroup = makeRawlsGroup(s"${wsUnpublishedName.name}-${wsUnpublishedName.name}-READER", users.filter(_.level == WorkspaceAccessLevels.Read).map(_.rawlsUser:RawlsUserRef).toSet)
 
-    val unpublishedWorkspace = Workspace(wsUnpublishedName.namespace, wsUnpublishedName.name, wsUnpublishedId.toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
+    val unpublishedWorkspace = Workspace(wsUnpublishedName.namespace, wsUnpublishedName.name, wsUnpublishedId.toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
     def enableCurators(gcsDAO: GoogleServicesDAO ) = {
       users.filter(_.curator).map(u=> gcsDAO.addLibraryCurator(u.rawlsUser.userEmail.value))
