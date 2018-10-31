@@ -130,6 +130,31 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       }
     }
 
+    "should create and destroy a workflow collection resource in Sam for a workspace" in {
+      withCleanBillingProject(owner) { projectName =>
+        withCleanUp {
+          //Create workspaces for Students
+          Orchestration.billing.addUserToBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
+          register cleanUp Orchestration.billing.removeUserFromBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
+
+          val uuid = UUID.randomUUID().toString
+
+          val workspaceName = "rawls_test_workflow_collection_workspace" + uuid
+          Rawls.workspaces.create(projectName, workspaceName)(studentAToken)
+          register cleanUp Rawls.workspaces.delete(projectName, workspaceName)(studentAToken)
+
+          //it's enough that the resource exists
+          val collName = Rawls.workspaces.getWorkflowCollectionName(projectName, workspaceName)(studentAToken)
+
+          //deleting the workspace should subsequently make the resource vanish (returning a 404, which gets turned into a RestException)
+          Rawls.workspaces.delete(projectName, workspaceName)(studentAToken)
+          assertThrows[RestException] {
+            Sam.user.listResourcePolicies("workflow-collection", collName)(studentAToken)
+          }
+        }
+      }
+    }
+
     "should retrieve sub-workflow metadata from Cromwell" in {
       implicit val token: AuthToken = studentAToken
 
