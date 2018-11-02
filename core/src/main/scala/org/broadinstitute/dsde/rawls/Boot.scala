@@ -203,7 +203,7 @@ object Boot extends App with LazyLogging {
         samDAO,
         executionServiceServers.map(c => c.key->c.dao).toMap,
         groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
-        topicsToCheck = Seq(gcsConfig.getString("notifications.topicName"), gcsConfig.getString("groupMonitor.topicName")),
+        topicsToCheck = Seq(gcsConfig.getString("notifications.topicName")),
         bucketsToCheck = Seq(gcsDAO.tokenBucketName)
       ).withDispatcher("health-monitor-dispatcher"),
       "health-monitor"
