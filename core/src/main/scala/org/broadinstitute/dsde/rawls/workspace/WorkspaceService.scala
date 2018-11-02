@@ -315,8 +315,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               SamResourceIdWithPolicyName(
                 p1.resourceId,
                 model.SamResourcePolicyName(max(WorkspaceAccessLevels.withPolicyName(p1.accessPolicyName.value).getOrElse(NoAccess), WorkspaceAccessLevels.withPolicyName(p2.accessPolicyName.value).getOrElse(NoAccess)).toString),
-                p1.authDomains ++ p2.authDomains,
-                p1.missingAuthDomains ++ p2.missingAuthDomains,
+                p1.authDomainGroups ++ p2.authDomainGroups,
+                p1.missingAuthDomainGroups ++ p2.missingAuthDomainGroups,
                 p1.public || p2.public
               )
             }
@@ -324,8 +324,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           workspaces.map { workspace =>
             val wsId = UUID.fromString(workspace.workspaceId)
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
-            val accessLevel = if (workspacePolicy.missingAuthDomains.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withName(workspacePolicy.accessPolicyName.value)
-            val workspaceDetails = WorkspaceDetails(workspace, workspacePolicy.authDomains.map(groupName => ManagedGroupRef(RawlsGroupName(groupName))))
+            val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withName(workspacePolicy.accessPolicyName.value)
+            val workspaceDetails = WorkspaceDetails(workspace, workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value))))
             WorkspaceListResponse(accessLevel, workspaceDetails, submissionSummaryStats(wsId), workspacePolicy.public)
           }
         }
