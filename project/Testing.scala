@@ -2,37 +2,34 @@ import sbt.Keys._
 import sbt._
 
 object Testing {
-  val validMySqlHost = taskKey[Unit]("Determine if mysql.host is provided.")
+  lazy val validMySqlHost = taskKey[Unit]("Determine if mysql.host is provided.")
 
-  val validMySqlHostSetting = validMySqlHost := {
+  lazy val validMySqlHostSetting = validMySqlHost := Def.taskDyn {
     val hostName = sys.props.getOrElse("mysql.host", "")
     if (hostName.length == 0) {
-      val log = streams.value.log
-      log.error("Database host name not set. Please see run instructions in README.md for providing a valid database hostname")
-      sys.exit()
+      streams.map(x => x.log.error("Database host name not set. Please see run instructions in README.md for providing a valid database hostname")).value
     }
-  }
+    sys.exit()
+  }.value
 
-  val validDirectoryUrl = taskKey[Unit]("Determine if directory.url is provided.")
-  val validDirectoryPassword = taskKey[Unit]("Determine if directory.password is provided.")
+  lazy val validDirectoryUrl = taskKey[Unit]("Determine if directory.url is provided.")
+  lazy val validDirectoryPassword = taskKey[Unit]("Determine if directory.password is provided.")
 
-  val validDirectoryUrlSetting = validDirectoryUrl := {
+  lazy val validDirectoryUrlSetting = validDirectoryUrl := Def.taskDyn {
     val setting = sys.props.getOrElse("directory.url", "")
     if (setting.length == 0) {
-      val log = streams.value.log
-      log.error("directory.url not set")
-      sys.exit()
+      streams.map(x => x.log.error("directory.url not set")).value
     }
-  }
+    sys.exit()
+  }.value
 
-  val validDirectoryPasswordSetting = validDirectoryPassword := {
+  lazy val validDirectoryPasswordSetting = validDirectoryPassword := Def.taskDyn {
     val setting = sys.props.getOrElse("directory.password", "")
     if (setting.length == 0) {
-      val log = streams.value.log
-      log.error("directory.password not set")
-      sys.exit()
+      streams.map(x => x.log.error("directory.password not set")).value
     }
-  }
+    sys.exit()
+  }.value
 
   def isIntegrationTest(name: String) = name contains "integrationtest"
 
@@ -71,10 +68,10 @@ object Testing {
     validDirectoryUrlSetting,
     validDirectoryPasswordSetting,
 
-    (test in Test) <<= (test in Test) dependsOn(validDirectoryUrl, validDirectoryPassword),
-    (testOnly in Test) <<= (testOnly in Test) dependsOn(validDirectoryUrl, validDirectoryPassword),
-    (test in Test) <<= (test in Test) dependsOn validMySqlHost,
-    (testOnly in Test) <<= (testOnly in Test) dependsOn validMySqlHost,
+    (test in Test) := ((test in Test) dependsOn(validDirectoryUrl, validDirectoryPassword)).value,
+    (testOnly in Test) := ((testOnly in Test) dependsOn(validDirectoryUrl, validDirectoryPassword)).inputTaskValue.evaluated,
+    (test in Test) := ((test in Test) dependsOn validMySqlHost).value,
+    (testOnly in Test) := ((testOnly in Test) dependsOn validMySqlHost).inputTaskValue.evaluated,
 
     parallelExecution in Test := false
 
