@@ -187,7 +187,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "throw exception inserting ref to nonexistent entity" in withEmptyTestDatabase {
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, 0))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", Some("workflow-collection"), defaultTimeStamp, defaultTimeStamp, "me", false, 0))
     val testAttribute = AttributeEntityReference("type", "name")
     intercept[RawlsException] {
       runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
@@ -240,14 +240,14 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.libraryNamespace, "string", Some("lib-value"), None, None, None, None, None, None, false, None)), None),
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "num", None, Some(1), None, None, None, None, None, false, None)), None),
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "bool", None, None, Some(true), None, None, None, None, false, None)), None),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "ref", None, None, None, None, Some(1), None, None, false, None)), Some(EntityRecord(0, "name", "type", workspaceId, 0, None, deleted = false, None))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "ref", None, None, None, None, Some(1), None, None, false, None)), Some(EntityRecord(0, "name", "type", workspaceId, 0, deleted = false, None))),
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "null", None, None, None, None, None, None, None, false, None)), None),
       ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(1), None, None, None, Some(2), Some(3), false, None)), None),
       ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(2), None, None, None, Some(1), Some(3), false, None)), None),
       ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(3), None, None, None, Some(0), Some(3), false, None)), None),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "refList", None, None, None, None, Some(1), Some(2), Some(3), false, None)), Some(EntityRecord(0, "name1", "type", workspaceId, 0, None, deleted = false, None))),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "refList", None, None, None, None, Some(2), Some(1), Some(3), false, None)), Some(EntityRecord(0, "name2", "type", workspaceId, 0, None, deleted = false, None))),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "refList", None, None, None, None, Some(3), Some(0), Some(3), false, None)), Some(EntityRecord(0, "name3", "type", workspaceId, 0, None, deleted = false, None))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "refList", None, None, None, None, Some(1), Some(2), Some(3), false, None)), Some(EntityRecord(0, "name1", "type", workspaceId, 0, deleted = false, None))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "refList", None, None, None, None, Some(2), Some(1), Some(3), false, None)), Some(EntityRecord(0, "name2", "type", workspaceId, 0, deleted = false, None))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "refList", None, None, None, None, Some(3), Some(0), Some(3), false, None)), Some(EntityRecord(0, "name3", "type", workspaceId, 0, deleted = false, None))),
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "emptyList", None, Some(1), None, None, None, Some(-1), Some(0), false, None)), None)
     )
 
@@ -340,6 +340,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       "test_name",
       workspaceId.toString,
       "bucketname",
+      Some("workflow-collection"),
       currentTime(),
       currentTime(),
       "me",
@@ -378,6 +379,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       "test_name",
       workspaceId.toString,
       "bucketname",
+      Some("workflow-collection"),
       currentTime(),
       currentTime(),
       "me",
@@ -475,7 +477,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
 
     val workspace2ID = UUID.randomUUID()
-    val workspace2 = Workspace("broad-dsde-test", "test-tag-workspace", workspace2ID.toString, "fake-bucket", DateTime.now, DateTime.now, "testuser", Map.empty, false)
+    val workspace2 = Workspace("broad-dsde-test", "test-tag-workspace", workspace2ID.toString, "fake-bucket", Some("workflow-collection"), DateTime.now, DateTime.now, "testuser", Map.empty, false)
     runAndWait(workspaceQuery.save(workspace2))
     runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("cancer")))
     runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("buffalo")))
