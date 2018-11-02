@@ -26,7 +26,7 @@ import scala.concurrent.duration._
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures
+class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
   with CleanUp with RandomUtil with Retry
   with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures {
 
@@ -191,7 +191,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
 
             withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
-              status shouldBe "Submitted"
               workflows should not be (empty)
               workflows.head
             }
@@ -223,6 +222,17 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
           eventually {
             Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
+          }
+
+          // verify that Rawls can retrieve the workflows' outputs from Cromwell without error
+          // https://github.com/DataBiosphere/firecloud-app/issues/157
+
+          val outputsTimeout = Timeout(scaled(Span(10, Seconds)))
+          eventually(outputsTimeout) {
+            Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstWorkflowId)
+            // nope https://github.com/DataBiosphere/firecloud-app/issues/160
+            //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubWorkflowId)
+            //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
           }
 
           // clean up: Abort and wait for Aborted
@@ -279,7 +289,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
 
             withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
-              status shouldBe "Submitted"
               workflows should not be (empty)
               workflows.head
             }
@@ -310,7 +319,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
           // can we also quickly retrieve metadata for a few of the subworkflows?
 
-          Random.shuffle(subworkflowIds.take(10)).foreach { cromwellMetadata(_) }
+          Random.shuffle(subworkflowIds.take(10)).foreach {
+            cromwellMetadata(_)
+          }
 
           // clean up: Abort and wait for one minute or Aborted, whichever comes first
           // Timeout is OK here: just make a best effort
@@ -329,6 +340,39 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
         }
       }
 
+    }
+
+    "should label low security bucket" in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+      implicit val token: AuthToken = studentAToken
+
+      withCleanBillingProject(studentA) { projectName =>
+        withWorkspace(projectName, "rawls-bucket-test") { workspaceName =>
+          val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
+          val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
+
+          bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "low")
+        }
+      }
+    }
+
+    "should label high security bucket" in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+      implicit val token: AuthToken = studentAToken
+
+      withGroup("ad") { realmGroup =>
+        withGroup("ad2") { realmGroup2 =>
+          withCleanBillingProject(studentA) { projectName =>
+            withWorkspace(projectName, "rawls-bucket-test", Set(realmGroup, realmGroup2)) { workspaceName =>
+              val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
+              val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
+
+              bucketName should startWith("fc-secure-")
+              bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "high", "ad-" + realmGroup.toLowerCase -> "", "ad-" + realmGroup2.toLowerCase -> "")
+            }
+          }
+        }
+      }
     }
   }
 }
