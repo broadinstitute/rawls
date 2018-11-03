@@ -254,7 +254,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[String]] = {
-    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/authDomain"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/authDomain"
     retry(when401or500) { () => pipeline[Seq[String]](userInfo) apply RequestBuilding.Get(url) }
   }
 
