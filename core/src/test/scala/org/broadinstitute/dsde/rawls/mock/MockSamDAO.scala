@@ -56,8 +56,6 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
     }
   }
 
-  override def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = Future.successful(Set(SamPolicyWithName(SamWorkspacePolicyNames.owner, SamPolicy(Set.empty, Set.empty, Set.empty))))
-
   override def listPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]] = Future.successful(
     resourceTypeName match {
       case SamResourceTypeNames.workspace =>
@@ -78,7 +76,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
       case _ => Set.empty
     } )
 
-  override def listUserRolesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[String]] = ???
+  override def listUserRolesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamResourceRole]] = Future.successful(Set(SamWorkspaceRoles.owner))
 
   override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus] = Future.successful(SamPolicySyncStatus("", WorkbenchEmail("foo@bar.com")))
 

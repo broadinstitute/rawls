@@ -23,9 +23,11 @@ object SamResourceTypeNames {
 case class SamResourceRole(value: String) extends ValueObject
 
 object SamWorkspaceRoles {
+  val projectOwner = SamResourceRole("project-owner")
   val owner = SamResourceRole("owner")
   val writer = SamResourceRole("writer")
   val reader = SamResourceRole("reader")
+
   val shareWriter = SamResourceRole("share-writer")
   val shareReader = SamResourceRole("share-reader")
   val canCompute = SamResourceRole("can-compute")
@@ -87,7 +89,6 @@ object SamBillingProjectPolicyNames {
 }
 
 case class SamPolicy(memberEmails: Set[WorkbenchEmail], actions: Set[SamResourceAction], roles: Set[SamResourceRole])
-case class SamPolicyWithName(policyName: SamResourcePolicyName, policy: SamPolicy)
 case class SamPolicyWithNameAndEmail(policyName: SamResourcePolicyName, policy: SamPolicy, email: WorkbenchEmail)
 case class SamResourceWithPolicies(resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String])
 case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: SamResourcePolicyName, authDomainGroups: Set[WorkbenchGroupName], missingAuthDomainGroups: Set[WorkbenchGroupName], public: Boolean)
@@ -99,7 +100,6 @@ object SamModelJsonSupport extends JsonSupport {
   implicit val SamResourceRoleFormat = ValueObjectFormat(SamResourceRole)
 
   implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
-  implicit val SamPolicyWithNameFormat = jsonFormat2(SamPolicyWithName)
   implicit val SamPolicyWithNameAndEmailFormat = jsonFormat3(SamPolicyWithNameAndEmail)
   implicit val SamResourceWithPoliciesFormat = jsonFormat3(SamResourceWithPolicies)
   implicit val SamResourceIdWithPolicyNameFormat = jsonFormat5(SamResourceIdWithPolicyName)
