@@ -316,6 +316,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def listWorkspaces(): Future[PerRequestMessage] = {
     for {
       workspacePolicies <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
+      // filter out the policies that are not related to access levels, if a user has only those ignore the workspace
+      accessLevelWorkspacePolicies = workspacePolicies.filter(p => WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty)
       result <- dataSource.inTransaction({ dataAccess =>
         val query = for {
           submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(workspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
@@ -323,11 +325,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         } yield (submissionSummaryStats, workspaces)
 
         val results = query.map { case (submissionSummaryStats, workspaces) =>
-          val policiesByWorkspaceId = workspacePolicies.groupBy(_.resourceId).map { case (workspaceId, policies) =>
+          val policiesByWorkspaceId = accessLevelWorkspacePolicies.groupBy(_.resourceId).map { case (workspaceId, policies) =>
             workspaceId -> policies.reduce { (p1, p2) =>
+              val accessPolicyName = (WorkspaceAccessLevels.withPolicyName(p1.accessPolicyName.value), WorkspaceAccessLevels.withPolicyName(p2.accessPolicyName.value)) match {
+                case (Some(p1Level), Some(p2Level)) if p1Level > p2Level => p1.accessPolicyName
+                case (Some(_), Some(_)) => p2.accessPolicyName
+                case _ => throw new RawlsException(s"unexpected state, both $p1 and $p2 should be related to access levels at this point")
+              }
               SamResourceIdWithPolicyName(
                 p1.resourceId,
-                model.SamResourcePolicyName(max(WorkspaceAccessLevels.withPolicyName(p1.accessPolicyName.value).getOrElse(NoAccess), WorkspaceAccessLevels.withPolicyName(p2.accessPolicyName.value).getOrElse(NoAccess)).toString),
+                accessPolicyName,
                 p1.authDomainGroups ++ p2.authDomainGroups,
                 p1.missingAuthDomainGroups ++ p2.missingAuthDomainGroups,
                 p1.public || p2.public
@@ -337,7 +344,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           workspaces.map { workspace =>
             val wsId = UUID.fromString(workspace.workspaceId)
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
-            val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withName(workspacePolicy.accessPolicyName.value)
+            val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
             val workspaceDetails = WorkspaceDetails(workspace, workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value))))
             WorkspaceListResponse(accessLevel, workspaceDetails, submissionSummaryStats(wsId), workspacePolicy.public)
           }
