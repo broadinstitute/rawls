@@ -177,7 +177,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       submissionCostService,
-      trackDetailedSubmissionMetrics = true
+      trackDetailedSubmissionMetrics = true,
+      workspaceBucketNamePrefix = "fc-"
     )_
 
     def cleanupSupervisor = {
