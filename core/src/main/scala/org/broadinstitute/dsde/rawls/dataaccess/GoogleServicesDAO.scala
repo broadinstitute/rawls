@@ -24,7 +24,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingEmail: String
 
   // returns bucket and group information
-  def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], authDomain: Set[ManagedGroupRef]): Future[GoogleWorkspaceInfo]
+  def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String]): Future[GoogleWorkspaceInfo]
 
   def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project]
 
@@ -201,6 +201,11 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getAccessTokenUsingJson(saKey: String) : Future[String]
   def getUserInfoUsingJson(saKey: String): Future[UserInfo]
+
+  def labelSafeString(s: String, prefix: String = "fc-"): String = {
+    // https://cloud.google.com/compute/docs/labeling-resources#restrictions
+    prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(63)
+  }
 }
 
 case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
