@@ -77,11 +77,11 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
-  override def listUserRolesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[String]] = {
+  override def listUserRolesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamResourceRole]] = {
     val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/roles"
 
     retry(when401or500) { () =>
-      pipeline[Set[String]](userInfo) apply RequestBuilding.Get(url)
+      pipeline[Set[SamResourceRole]](userInfo) apply RequestBuilding.Get(url)
     }
   }
 
@@ -219,11 +219,6 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
     val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}"
     retry(when401or500) { () => pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply RequestBuilding.Get(url) }
-  }
-
-  override def getResourcePolicies(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithName]] = {
-    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/policies"
-    retry(when401or500) { () => pipeline[Set[SamPolicyWithName]](userInfo) apply RequestBuilding.Get(url) }
   }
 
   override def getPetServiceAccountKeyForUser(googleProject: String, userEmail: RawlsUserEmail): Future[String] = {

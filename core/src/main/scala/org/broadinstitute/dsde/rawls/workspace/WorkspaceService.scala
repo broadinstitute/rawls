@@ -165,9 +165,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.catalog, userInfo)
   }
 
+  /**
+    * Sums up all the user's roles in a workspace to a single access level.
+    *
+    * USE FOR DISPLAY/USABILITY PURPOSES ONLY, NOT FOR REAL ACCESS DECISIONS
+    * for real access decisions check actions in sam
+    *
+    * @param workspaceId
+    * @return
+    */
   def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] = {
-    samDAO.getResourcePolicies(SamResourceTypeNames.workspace, workspaceId, userInfo).map { policies =>
-      policies.flatMap(p => WorkspaceAccessLevels.withPolicyName(p.policyName.value)).fold(WorkspaceAccessLevels.NoAccess)(max)
+    samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { roles =>
+      roles.flatMap(role => WorkspaceAccessLevels.withRoleName(role.value)).fold(WorkspaceAccessLevels.NoAccess)(max)
     }
   }
 
@@ -648,12 +657,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         userIdInfo <- samDAO.getUserIdInfo(accessUpdate.email, userInfo)
       } yield {
         userIdInfo match {
-          case SamDAO.User(idInfo) => idInfo.googleSubjectId match {
-            case Some(googleSubjectId) =>
-              if(accessUpdate.accessLevel == WorkspaceAccessLevels.NoAccess)
-                notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(RawlsUserSubjectId(googleSubjectId), NoAccess.toString, workspaceName, userInfo.userSubjectId))
-              else notificationDAO.fireAndForgetNotification(Notifications.WorkspaceAddedNotification(RawlsUserSubjectId(googleSubjectId), accessUpdate.accessLevel.toString, workspaceName, userInfo.userSubjectId))
-          }
+          case SamDAO.User(UserIdInfo(_, _, Some(googleSubjectId))) =>
+            if(accessUpdate.accessLevel == WorkspaceAccessLevels.NoAccess)
+              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(RawlsUserSubjectId(googleSubjectId), NoAccess.toString, workspaceName, userInfo.userSubjectId))
+            else
+              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceAddedNotification(RawlsUserSubjectId(googleSubjectId), accessUpdate.accessLevel.toString, workspaceName, userInfo.userSubjectId))
+          case _ =>
         }
       }
     }
@@ -1720,7 +1729,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         for {
           projectOwnerEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo))
           policies <- {
-            val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(projectOwnerEmail.email), Set.empty, Set(SamWorkspaceRoles.owner))
+            val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(projectOwnerEmail.email), Set.empty, Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.projectOwner))
             val ownerPolicy = SamWorkspacePolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set(SamWorkspaceRoles.owner))
             val writerPolicy = SamWorkspacePolicyNames.writer -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.writer))
             val readerPolicy = SamWorkspacePolicyNames.reader -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.reader))
