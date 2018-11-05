@@ -62,7 +62,7 @@ trait SubmissionApiService extends UserInfoDirectives {
         get {
           parameters("includeKey".as[String].*, "excludeKey".as[String].*, "expandSubWorkflows".as[Boolean] ? false) { (includes, excludes, expandSubWorkflows) =>
             complete { workspaceServiceConstructor(userInfo).GetWorkflowMetadata(WorkspaceName(workspaceNamespace, workspaceName),
-              submissionId, workflowId, MetadataParams(includes.toSeq, excludes.toSeq, expandSubWorkflows)) }
+              submissionId, workflowId, MetadataParams(includes.toSet, excludes.toSet, expandSubWorkflows)) }
           }
         }
       } ~

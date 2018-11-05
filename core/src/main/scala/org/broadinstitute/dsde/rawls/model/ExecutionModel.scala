@@ -237,8 +237,8 @@ case class ExecutionEvent(
 )
 
 case class MetadataParams(
-  includeKeys: Seq[String] = Seq.empty[String],
-  excludeKeys: Seq[String] = Seq.empty[String],
+  includeKeys: Set[String] = Set.empty[String],
+  excludeKeys: Set[String] = Set.empty[String],
   expandSubWorkflows: Boolean = false
 )
 

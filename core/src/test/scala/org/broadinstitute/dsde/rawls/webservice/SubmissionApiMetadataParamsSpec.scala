@@ -96,7 +96,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       check {
         val actualParams = responseAs[MetadataParams]
         // get the defaults
-        val expectedParams = MetadataParams(includeKeys=Seq("foo"))
+        val expectedParams = MetadataParams(includeKeys=Set("foo"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -110,7 +110,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       check {
         val actualParams = responseAs[MetadataParams]
         // get the defaults
-        val expectedParams = MetadataParams(includeKeys=Seq("foo", "bar"))
+        val expectedParams = MetadataParams(includeKeys=Set("foo", "bar"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -124,7 +124,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       check {
         val actualParams = responseAs[MetadataParams]
         // get the defaults
-        val expectedParams = MetadataParams(excludeKeys=Seq("baz"))
+        val expectedParams = MetadataParams(excludeKeys=Set("baz"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -138,7 +138,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       check {
         val actualParams = responseAs[MetadataParams]
         // get the defaults
-        val expectedParams = MetadataParams(excludeKeys=Seq("baz", "qux"))
+        val expectedParams = MetadataParams(excludeKeys=Set("baz", "qux"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -152,7 +152,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       check {
         val actualParams = responseAs[MetadataParams]
         // get the defaults
-        val expectedParams = MetadataParams(includeKeys=Seq("foo", "bar"), excludeKeys=Seq("baz", "qux"), expandSubWorkflows=true)
+        val expectedParams = MetadataParams(includeKeys=Set("foo", "bar"), excludeKeys=Set("baz", "qux"), expandSubWorkflows=true)
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -195,7 +195,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
   }
 
   it should "generate single includeKey=* url to Cromwell given appropriate metadata params" in {
-    val params = MetadataParams(includeKeys = Seq("foo"))
+    val params = MetadataParams(includeKeys = Set("foo"))
     val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
@@ -205,7 +205,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
   }
 
   it should "generate multiple includeKey=* url to Cromwell given appropriate metadata params" in {
-    val params = MetadataParams(includeKeys = Seq("foo","bar"))
+    val params = MetadataParams(includeKeys = Set("foo","bar"))
     val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
@@ -215,7 +215,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
   }
 
   it should "generate single excludeKey=* url to Cromwell given appropriate metadata params" in {
-    val params = MetadataParams(excludeKeys = Seq("baz"))
+    val params = MetadataParams(excludeKeys = Set("baz"))
     val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
@@ -225,7 +225,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
   }
 
   it should "generate multiple excludeKey=* url to Cromwell given appropriate metadata params" in {
-    val params = MetadataParams(excludeKeys = Seq("baz","qux"))
+    val params = MetadataParams(excludeKeys = Set("baz","qux"))
     val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
@@ -235,7 +235,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
   }
 
   it should "generate all query params to Cromwell when they are all specified in metadata params" in {
-    val params = MetadataParams(expandSubWorkflows = true, includeKeys = Seq("foo","bar"), excludeKeys = Seq("baz","qux"))
+    val params = MetadataParams(expandSubWorkflows = true, includeKeys = Set("foo","bar"), excludeKeys = Set("baz","qux"))
     val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()

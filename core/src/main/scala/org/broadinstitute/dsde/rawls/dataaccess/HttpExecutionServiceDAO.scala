@@ -60,10 +60,10 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
   // break out uri generation into a separate method so it's easily unit-testable
   def getExecutionServiceMetadataUri(id: String, metadataParams: MetadataParams): Uri = {
     val params = metadataParams.includeKeys.map(("includeKey", _)) ++
-      metadataParams.excludeKeys.map(("excludeKey", _)) :+
-      ("expandSubWorkflows", metadataParams.expandSubWorkflows.toString)
+      metadataParams.excludeKeys.map(("excludeKey", _)) +
+      (("expandSubWorkflows", metadataParams.expandSubWorkflows.toString))
 
-    Uri(executionServiceURL + s"/api/workflows/v1/${id}/metadata").withQuery(Query(params:_*))
+    Uri(executionServiceURL + s"/api/workflows/v1/${id}/metadata").withQuery(Query(params.toList:_*))
   }
 
   override def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo): Future[JsObject] = {
