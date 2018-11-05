@@ -46,7 +46,7 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
 
   override def status(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceStatus(id, "Submitted"))
 
-  override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
+  override def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo) = Future.successful(null)
 
   override def getLabels(id: String, userInfo: UserInfo): Future[ExecutionServiceLabelResponse] = Future.successful(ExecutionServiceLabelResponse(id, labels))
 

@@ -776,7 +776,7 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
     abortedMap += id -> WorkflowStatuses.Aborting.toString
     Future.successful(Success(ExecutionServiceStatus(id, WorkflowStatuses.Aborting.toString)))
   }
-  override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
+  override def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo) = Future.successful(null)
 
   override def getLabels(id: String, userInfo: UserInfo): Future[ExecutionServiceLabelResponse] = Future.successful(ExecutionServiceLabelResponse(id, labels))
 

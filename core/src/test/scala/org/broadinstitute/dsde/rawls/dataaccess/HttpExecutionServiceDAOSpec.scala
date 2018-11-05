@@ -7,7 +7,7 @@ import akka.testkit.TestKit
 import cats.implicits._
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, Subsystems, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{MetadataParams, RawlsUserEmail, RawlsUserSubjectId, Subsystems, UserInfo}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.time.{Seconds, Span}
@@ -69,7 +69,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
 
   it should "query for metadata" in {
     withStatsD {
-      val result = test.callLevelMetadata("8afafe21-2b70-4180-a565-748cb573e10c", userInfo).futureValue
+      val result = test.callLevelMetadata("8afafe21-2b70-4180-a565-748cb573e10c", MetadataParams(), userInfo).futureValue
       result shouldBe a [JsObject]
     } { capturedMetrics =>
       capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "api.workflows.v1.redacted.metadata", 201, 1, Option(Subsystems.Cromwell)))
