@@ -61,7 +61,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
     withGroup("ad", List(projectUser.email, projectOwner.email)) { realmGroup =>
       withGroup("ad2", List(projectUser.email, projectOwner.email)) { realmGroup2 =>
         val realmGroup2Full = Orchestration.groups.getGroup(realmGroup2)(groupOwnerToken)
-        withGroup("ad3", List(realmGroup2Full.membersGroup.groupEmail)) { realmGroup3 =>
+        withGroup("ad3", List(realmGroup2Full.groupEmail)) { realmGroup3 =>
           withWorkspace(project.projectName, "AuthDomains", Set(realmGroup, realmGroup3), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             for (user <- Set(projectOwner, projectUser)) {
               val userToken = user.makeAuthToken()
@@ -102,7 +102,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
     withGroup("ad", List(projectUser.email, projectOwner.email)) { realmGroup =>
       withGroup("ng", List(projectUser.email)) { nestedGroup =>
         val nestedGroupFull = Orchestration.groups.getGroup(nestedGroup)(groupOwnerToken)
-        withGroup("ag", List(nestedGroupFull.membersGroup.groupEmail)) { accessGroup =>
+        withGroup("ag", List(nestedGroupFull.groupEmail)) { accessGroup =>
           val accessGroupFull = Orchestration.groups.getGroup(accessGroup)(groupOwnerToken)
           val workspaceOwnerToken = projectOwner.makeAuthToken()
 
@@ -111,7 +111,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
           // from the policy so the group remains in use and cannot be deleted so cleanup will fail. Using a new project which
           // gets released removes the offending policy and allows the group to be cleaned up.
           withCleanBillingProject(projectOwner) { localProject =>
-            withWorkspace(localProject, "AuthDomains", Set(realmGroup), List(AclEntry(accessGroupFull.membersGroup.groupEmail, WorkspaceAccessLevel.Writer))) { workspace =>
+            withWorkspace(localProject, "AuthDomains", Set(realmGroup), List(AclEntry(accessGroupFull.groupEmail, WorkspaceAccessLevel.Writer))) { workspace =>
               val user = projectUser
               val userToken = user.makeAuthToken()
 
@@ -129,7 +129,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
               Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
 
               // remove accessGroup from acl and user should lose access
-              Orchestration.workspaces.updateAcl(localProject, workspace, accessGroupFull.membersGroup.groupEmail, WorkspaceAccessLevel.NoAccess, None, None)(workspaceOwnerToken)
+              Orchestration.workspaces.updateAcl(localProject, workspace, accessGroupFull.groupEmail, WorkspaceAccessLevel.NoAccess, None, None)(workspaceOwnerToken)
               intercept[RestException] {
                 Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
               }
@@ -153,7 +153,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
           val authDomain = Set(realmGroup, realmGroup2, realmGroup3)
           withWorkspace(project.projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             val clone = "AuthDomainsClone_" + makeRandomId()
-            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, authDomain, "", Map.empty)(projectUser.makeAuthToken())
+            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, authDomain)(projectUser.makeAuthToken())
             withCleanUp {
               register cleanUp Orchestration.workspaces.delete(project.projectName, clone)(projectUser.makeAuthToken())
               Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
@@ -181,7 +181,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
           val authDomain = Set(realmGroup, realmGroup2)
           withWorkspace(project.projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             val clone = "AuthDomainsClone_" + makeRandomId()
-            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, authDomain + realmGroup3, "", Map.empty)(projectUser.makeAuthToken())
+            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, authDomain + realmGroup3)(projectUser.makeAuthToken())
             withCleanUp {
               register cleanUp Orchestration.workspaces.delete(project.projectName, clone)(projectUser.makeAuthToken())
               Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
@@ -200,7 +200,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
         withWorkspace(project.projectName, "AuthDomains", Set(realmGroup), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
           intercept[RestException] {
             val clone = "AuthDomainsClone_" + makeRandomId()
-            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, Set(realmGroup2), "", Map.empty)(authToken)
+            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, Set(realmGroup2))(authToken)
           }
         }(authToken)
       }(authToken)
