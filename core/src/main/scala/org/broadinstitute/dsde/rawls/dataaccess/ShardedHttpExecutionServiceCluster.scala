@@ -138,10 +138,10 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
     }
   }
 
-  def callLevelMetadata(submissionId: String, workflowId: String, execId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject] = {
+  def callLevelMetadata(submissionId: String, workflowId: String, metadataParams: MetadataParams, execId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject] = {
     for {
       executionServiceId <- findExecService(submissionId, workflowId, userInfo, execId)
-      metadata <- getMember(executionServiceId).dao.callLevelMetadata(workflowId, userInfo)
+      metadata <- getMember(executionServiceId).dao.callLevelMetadata(workflowId, metadataParams, userInfo)
     } yield {
       labelSubWorkflowsWithSubmissionId(submissionId, executionServiceId, metadata, userInfo)
       metadata

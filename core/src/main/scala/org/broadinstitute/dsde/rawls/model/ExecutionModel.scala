@@ -236,6 +236,12 @@ case class ExecutionEvent(
   endTime: DateTime
 )
 
+case class MetadataParams(
+  includeKeys: Seq[String] = Seq.empty[String],
+  excludeKeys: Seq[String] = Seq.empty[String],
+  expandSubWorkflows: Boolean = false
+)
+
 case class CallMetadata(
   inputs: JsObject,
   executionStatus: String,

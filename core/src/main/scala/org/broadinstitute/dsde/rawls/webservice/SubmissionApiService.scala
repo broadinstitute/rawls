@@ -60,7 +60,10 @@ trait SubmissionApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment) { (workspaceNamespace, workspaceName, submissionId, workflowId) =>
         get {
-          complete { workspaceServiceConstructor(userInfo).GetWorkflowMetadata(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId) }
+          parameters("includeKey".as[String].*, "excludeKey".as[String].*, "expandSubWorkflows".as[Boolean] ? false) { (includes, excludes, expandSubWorkflows) =>
+            complete { workspaceServiceConstructor(userInfo).GetWorkflowMetadata(WorkspaceName(workspaceNamespace, workspaceName),
+              submissionId, workflowId, MetadataParams(includes.toSeq, excludes.toSeq, expandSubWorkflows)) }
+          }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment / "outputs") { (workspaceNamespace, workspaceName, submissionId, workflowId) =>

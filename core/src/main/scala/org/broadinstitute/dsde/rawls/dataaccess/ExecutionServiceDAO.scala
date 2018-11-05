@@ -13,7 +13,7 @@ trait ExecutionServiceDAO extends ErrorReportable {
   val errorReportSource = ErrorReportSource("cromwell")
   def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]]
   def status(id: String, userInfo: UserInfo): Future[ExecutionServiceStatus]
-  def callLevelMetadata(id: String, userInfo: UserInfo): Future[JsObject]
+  def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo): Future[JsObject]
   def outputs(id: String, userInfo: UserInfo): Future[ExecutionServiceOutputs]
   def logs(id: String, userInfo: UserInfo): Future[ExecutionServiceLogs]
   def abort(id: String, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]]
