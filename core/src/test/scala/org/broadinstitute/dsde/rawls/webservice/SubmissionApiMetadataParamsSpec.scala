@@ -28,7 +28,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
 
   def withApiServices[T](dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test"))(testCode: TestApiService =>  T): T = {
-    val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO, MockShardedExecutionServiceCluster.fromDAO(new ParamValidatingExecutionServiceDAO("unused", "unused"), dataSource))
+    val apiService = TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO, MockShardedExecutionServiceCluster.fromDAO(new ParamValidatingExecutionServiceDAO("unused", "unused"), dataSource))
 
     try {
       testCode(apiService)
@@ -43,8 +43,8 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
     }
   }
 
-  val submissionId = testData.submission1.submissionId
-  val workflowId = testData.submission1.workflows.head.workflowId.get // assume it exists; if it doesn't, will throw exception so the test fails
+  val submissionId: String = testData.submission1.submissionId
+  val workflowId: String = testData.submission1.workflows.head.workflowId.get // assume it exists; if it doesn't, will throw exception so the test fails
 
   val basePath = s"${testData.workspace.path}/submissions/$submissionId/workflows/$workflowId"
 
@@ -53,7 +53,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        // get the defaults
+        // use MetadataParams' defaults
         val expectedParams = MetadataParams()
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
@@ -67,7 +67,6 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        // get the defaults
         val expectedParams = MetadataParams(expandSubWorkflows=true)
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
@@ -81,7 +80,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        // get the defaults
+        // expandSubWorkflows=false duplicates the default but is included here in case the defaults change later
         val expectedParams = MetadataParams(expandSubWorkflows=false)
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
@@ -95,7 +94,6 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        // get the defaults
         val expectedParams = MetadataParams(includeKeys=Set("foo"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
@@ -109,7 +107,6 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        // get the defaults
         val expectedParams = MetadataParams(includeKeys=Set("foo", "bar"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
@@ -123,7 +120,6 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        // get the defaults
         val expectedParams = MetadataParams(excludeKeys=Set("baz"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
@@ -137,7 +133,6 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        // get the defaults
         val expectedParams = MetadataParams(excludeKeys=Set("baz", "qux"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
@@ -151,7 +146,6 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        // get the defaults
         val expectedParams = MetadataParams(includeKeys=Set("foo", "bar"), excludeKeys=Set("baz", "qux"), expandSubWorkflows=true)
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
@@ -160,9 +154,9 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       }
   }
 
-  val testExecSvcDummyBase = "http://localhost:12345/unit-test"
-  val testExecSvcDAO = new HttpExecutionServiceDAO(testExecSvcDummyBase, "unused")
-  val testExecSvcDummyWorkflowId = java.util.UUID.randomUUID().toString
+  val testExecSvcDummyBase: String = "http://localhost:12345/unit-test"
+  val testExecSvcDAO: HttpExecutionServiceDAO = new HttpExecutionServiceDAO(testExecSvcDummyBase, "unused")
+  val testExecSvcDummyWorkflowId: String = java.util.UUID.randomUUID().toString
 
   "HttpExecutionServiceDAO.getExecutionServiceMetadataUri" should "generate default url to Cromwell given default metadata params" in {
     val params = MetadataParams()
@@ -185,6 +179,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
   }
 
   it should "generate expandSubWorkflows=false url to Cromwell given appropriate metadata params" in {
+    // expandSubWorkflows=false duplicates the default but is included here in case the defaults change later
     val params = MetadataParams(expandSubWorkflows = false)
     val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
