@@ -1,6 +1,6 @@
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.7")
 
-addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.0")
+addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.1")
 
 addSbtPlugin("org.scoverage" % "sbt-coveralls" % "1.2.5")
 
