@@ -7,8 +7,8 @@ object Dependencies {
   val akkaV = "2.5.7"
   val akkaHttpV = "10.0.10"
 
-  val serviceTestV = "0.15-6344f5d"
-  val workbenchGoogleV = "0.16-eb6af64"
+  val serviceTestV = "0.15-34ffb43-SNAP"
+  val workbenchGoogleV = "0.17-34ffb43-SNAP"
   val workbenchModelV  = "0.10-52d614b"
   val workbenchMetricsV  = "0.3-7ad0aa8"
 
