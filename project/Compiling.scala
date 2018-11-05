@@ -14,6 +14,6 @@ object Compiling {
   }
 
   val rawlsCompileSettings = List(
-    resourceGenerators in Compile <+= writeVersionConf
+    resourceGenerators in Compile += writeVersionConf
   )
 }
