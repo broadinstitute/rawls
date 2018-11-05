@@ -57,13 +57,17 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
     retry(when500) { () => pipeline[ExecutionServiceStatus](userInfo) apply Get(url) }
   }
 
-  override def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo): Future[JsObject] = {
+  // break out uri generation into a separate method so it's easily unit-testable
+  def getExecutionServiceMetadataUri(id: String, metadataParams: MetadataParams): Uri = {
     val params = metadataParams.includeKeys.map(("includeKey", _)) ++
       metadataParams.excludeKeys.map(("excludeKey", _)) :+
       ("expandSubWorkflows", metadataParams.expandSubWorkflows.toString)
 
-    val uri = Uri(executionServiceURL + s"/api/workflows/v1/${id}/metadata").withQuery(Query(params:_*))
-    retry(when500) { () => pipeline[JsObject](userInfo) apply Get(uri) }
+    Uri(executionServiceURL + s"/api/workflows/v1/${id}/metadata").withQuery(Query(params:_*))
+  }
+
+  override def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo): Future[JsObject] = {
+    retry(when500) { () => pipeline[JsObject](userInfo) apply Get(getExecutionServiceMetadataUri(id, metadataParams)) }
   }
 
   override def outputs(id: String, userInfo: UserInfo): Future[ExecutionServiceOutputs] = {

@@ -367,6 +367,8 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionListResponseFormat = jsonFormat12(SubmissionListResponse.apply)
 
+  implicit val MetadataParamsFormat = jsonFormat3(MetadataParams)
+
   implicit val CallMetadataFormat = jsonFormat14(CallMetadata)
 
   implicit val ActiveSubmissionFormat = jsonFormat3(ActiveSubmission)
