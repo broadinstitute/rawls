@@ -236,7 +236,7 @@ case class ExecutionEvent(
   endTime: DateTime
 )
 
-case class MetadataParams(
+final case class MetadataParams(
   includeKeys: Set[String] = Set.empty[String],
   excludeKeys: Set[String] = Set.empty[String],
   expandSubWorkflows: Boolean = false
