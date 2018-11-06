@@ -5,6 +5,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.marshalling.Marshal
+import akka.http.scaladsl.model.Uri.Query
 import akka.http.scaladsl.model.{Multipart, RequestEntity, Uri}
 import akka.http.scaladsl.server.PathMatchers.Segment
 import akka.http.scaladsl.server.directives.PathDirectives._
@@ -56,9 +57,17 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
     retry(when500) { () => pipeline[ExecutionServiceStatus](userInfo) apply Get(url) }
   }
 
-  override def callLevelMetadata(id: String, userInfo: UserInfo): Future[JsObject] = {
-    val url = executionServiceURL + s"/api/workflows/v1/${id}/metadata"
-    retry(when500) { () => pipeline[JsObject](userInfo) apply Get(url) }
+  // break out uri generation into a separate method so it's easily unit-testable
+  def getExecutionServiceMetadataUri(id: String, metadataParams: MetadataParams): Uri = {
+    val params = metadataParams.includeKeys.map(("includeKey", _)) ++
+      metadataParams.excludeKeys.map(("excludeKey", _)) +
+      (("expandSubWorkflows", metadataParams.expandSubWorkflows.toString))
+
+    Uri(executionServiceURL + s"/api/workflows/v1/${id}/metadata").withQuery(Query(params.toList:_*))
+  }
+
+  override def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo): Future[JsObject] = {
+    retry(when500) { () => pipeline[JsObject](userInfo) apply Get(getExecutionServiceMetadataUri(id, metadataParams)) }
   }
 
   override def outputs(id: String, userInfo: UserInfo): Future[ExecutionServiceOutputs] = {

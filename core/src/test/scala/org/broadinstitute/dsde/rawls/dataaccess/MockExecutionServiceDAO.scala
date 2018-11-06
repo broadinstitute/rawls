@@ -5,6 +5,7 @@ import org.broadinstitute.dsde.rawls.model.Subsystems.Cromwell
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import akka.http.scaladsl.model.StatusCodes
+import spray.json.JsObject
 
 import scala.concurrent.Future
 import scala.util.Success
@@ -46,7 +47,7 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
 
   override def status(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceStatus(id, "Submitted"))
 
-  override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
+  override def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo): Future[JsObject] = Future.successful(null)
 
   override def getLabels(id: String, userInfo: UserInfo): Future[ExecutionServiceLabelResponse] = Future.successful(ExecutionServiceLabelResponse(id, labels))
 

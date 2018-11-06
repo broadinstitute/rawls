@@ -748,7 +748,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val rqComplete = workspaceService.workflowMetadata(
       subTestData.wsName,
       subTestData.submissionTestAbortGoodWorkflow.submissionId,
-      subTestData.existingWorkflowId.get)
+      subTestData.existingWorkflowId.get,
+      MetadataParams())
     val (status, data) = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, JsObject)]].response
 
     assertResult(StatusCodes.OK) {

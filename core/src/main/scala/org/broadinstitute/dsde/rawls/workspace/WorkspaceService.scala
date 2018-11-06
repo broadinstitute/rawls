@@ -110,7 +110,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = getSubmissionStatus(workspaceName, submissionId)
   def AbortSubmission(workspaceName: WorkspaceName, submissionId: String) = abortSubmission(workspaceName, submissionId)
   def GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = workflowOutputs(workspaceName, submissionId, workflowId)
-  def GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = workflowMetadata(workspaceName, submissionId, workflowId)
+  def GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String, metadataParams: MetadataParams) = workflowMetadata(workspaceName, submissionId, workflowId, metadataParams)
   def GetWorkflowCost(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = workflowCost(workspaceName, submissionId, workflowId)
   def WorkflowQueueStatus = workflowQueueStatus()
 
@@ -1621,7 +1621,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield RequestComplete(StatusCodes.OK, WorkflowCost(workflowId, costs.get(workflowId)))
   }
 
-  def workflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String): Future[PerRequestMessage] = {
+  def workflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String, metadataParams: MetadataParams): Future[PerRequestMessage] = {
 
     // two possibilities here:
     //
@@ -1646,7 +1646,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     // query the execution service(s) for the metadata
     execIdFutOpt flatMap {
-      executionServiceCluster.callLevelMetadata(submissionId, workflowId, _, userInfo)
+      executionServiceCluster.callLevelMetadata(submissionId, workflowId, metadataParams, _, userInfo)
     } map(RequestComplete(StatusCodes.OK, _))
   }
 

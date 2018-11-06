@@ -236,6 +236,12 @@ case class ExecutionEvent(
   endTime: DateTime
 )
 
+final case class MetadataParams(
+  includeKeys: Set[String] = Set.empty[String],
+  excludeKeys: Set[String] = Set.empty[String],
+  expandSubWorkflows: Boolean = false
+)
+
 case class CallMetadata(
   inputs: JsObject,
   executionStatus: String,
@@ -360,6 +366,8 @@ class ExecutionJsonSupport extends JsonSupport {
   implicit val SubmissionStatusResponseFormat = jsonFormat11(SubmissionStatusResponse.apply)
 
   implicit val SubmissionListResponseFormat = jsonFormat12(SubmissionListResponse.apply)
+
+  implicit val MetadataParamsFormat = jsonFormat3(MetadataParams)
 
   implicit val CallMetadataFormat = jsonFormat14(CallMetadata)
 
