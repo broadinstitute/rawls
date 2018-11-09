@@ -278,7 +278,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         //The person who submitted the submission
         submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
 
-        //The wdl
+        //the method configuration, in order to get the wdl
         methodConfig <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId).map(_.get)
       } yield {
         (wfRecs, workflowBatch, billingProject, submitter, methodConfig)
