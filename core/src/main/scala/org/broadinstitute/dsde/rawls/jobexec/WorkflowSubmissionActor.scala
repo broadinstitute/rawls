@@ -265,6 +265,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceRec.toWorkspaceName, submissionRec.id))(status))
       else None
 
+    //split out the db transaction from the calls to external services
     val dbThingsFuture = dataSource.inTransaction { dataAccess =>
       for {
         //Load a bunch of things we'll need to reconstruct information:
