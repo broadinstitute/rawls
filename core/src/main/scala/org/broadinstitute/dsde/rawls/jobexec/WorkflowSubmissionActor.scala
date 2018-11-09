@@ -192,10 +192,12 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     )
   }
 
-  def getWdl(methodConfig: MethodConfiguration, userCredentials: Credential)(implicit executionContext: ExecutionContext): ReadWriteAction[String] = {
-    withMethod(methodConfig.methodRepoMethod, UserInfo.buildFromTokens(userCredentials)) { method =>
-      withWdl(method) { wdl =>
-        DBIO.successful(wdl)
+  def getWdl(methodConfig: MethodConfiguration, userCredentials: Credential)(implicit executionContext: ExecutionContext): Future[String] = {
+    dataSource.inTransaction { dataAccess => //this is a transaction that makes no database calls, but the sprawling stack of withFoos was too hard to unpick :(
+      withMethod(methodConfig.methodRepoMethod, UserInfo.buildFromTokens(userCredentials)) { method =>
+        withWdl(method) { wdl =>
+          DBIO.successful(wdl)
+        }
       }
     }
   }
@@ -263,7 +265,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceRec.toWorkspaceName, submissionRec.id))(status))
       else None
 
-    val workflowBatchFuture = dataSource.inTransaction { dataAccess =>
+    val dbThingsFuture = dataSource.inTransaction { dataAccess =>
       for {
         //Load a bunch of things we'll need to reconstruct information:
         //The list of workflows in this submission
@@ -273,17 +275,24 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         //The workspace's billing project
         billingProject <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRec.namespace)).map(_.get)
 
-        //The person who submitted the submission, and their token
+        //The person who submitted the submission
         submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
-        petSAJson <- DBIO.from(samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, submitter.userEmail))
-        petUserInfo <- DBIO.from(googleServicesDAO.getUserInfoUsingJson(petSAJson))
-        userCredentials <- DBIO.from(googleServicesDAO.getUserCredentials(submitter)).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for $submitter")))
 
         //The wdl
         methodConfig <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId).map(_.get)
+      } yield {
+        (wfRecs, workflowBatch, billingProject, submitter, methodConfig)
+      }
+    }
 
+    val workflowBatchFuture = dbThingsFuture flatMap { case (wfRecs, workflowBatch, billingProject, submitter, methodConfig) =>
+      for {
+        petSAJson <- samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, submitter.userEmail)
+        petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
+        userCredentials <- googleServicesDAO.getUserCredentials(submitter).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for $submitter")))
         wdl <- getWdl(methodConfig, userCredentials)
       } yield {
+
         val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, submitter, petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
 
         val wfInputsBatch = workflowBatch map { wf =>
@@ -298,6 +307,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         (wdl, wfRecs, wfInputsBatch, wfOpts, collectDosUris(workflowBatch), petUserInfo)
       }
     }
+
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
