@@ -53,6 +53,7 @@ object SamWorkspaceActions {
   val write = SamResourceAction("write")
   val read = SamResourceAction("read")
   val compute = SamResourceAction("compute")
+  val delete = SamResourceAction("delete")
   def sharePolicy(policy: String) = SamResourceAction(s"share_policy::$policy")
 }
 

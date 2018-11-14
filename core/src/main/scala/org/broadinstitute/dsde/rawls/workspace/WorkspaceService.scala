@@ -205,7 +205,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =  {
-     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own) flatMap { ctx =>
+     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { ctx =>
        deleteWorkspace(workspaceName, ctx)
     }
   }
@@ -327,14 +327,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         val results = query.map { case (submissionSummaryStats, workspaces) =>
           val policiesByWorkspaceId = accessLevelWorkspacePolicies.groupBy(_.resourceId).map { case (workspaceId, policies) =>
             workspaceId -> policies.reduce { (p1, p2) =>
-              val accessPolicyName = (WorkspaceAccessLevels.withPolicyName(p1.accessPolicyName.value), WorkspaceAccessLevels.withPolicyName(p2.accessPolicyName.value)) match {
+              val betterAccessPolicyName = (WorkspaceAccessLevels.withPolicyName(p1.accessPolicyName.value), WorkspaceAccessLevels.withPolicyName(p2.accessPolicyName.value)) match {
                 case (Some(p1Level), Some(p2Level)) if p1Level > p2Level => p1.accessPolicyName
                 case (Some(_), Some(_)) => p2.accessPolicyName
                 case _ => throw new RawlsException(s"unexpected state, both $p1 and $p2 should be related to access levels at this point")
               }
               SamResourceIdWithPolicyName(
                 p1.resourceId,
-                accessPolicyName,
+                betterAccessPolicyName,
                 p1.authDomainGroups ++ p2.authDomainGroups,
                 p1.missingAuthDomainGroups ++ p2.missingAuthDomainGroups,
                 p1.public || p2.public
