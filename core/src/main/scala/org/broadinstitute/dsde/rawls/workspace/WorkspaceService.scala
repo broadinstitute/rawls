@@ -1723,13 +1723,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     for {
       workspacePolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo)
       policyMap = workspacePolicies.map(pol => pol.policyName -> pol.email).toMap
-      _ <- samDAO.createResource(SamResourceTypeNames.workflowCollection, workspaceId, userInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, SamWorkflowCollectionPolicyNames.workflowCollectionOwnerPolicyName,
-        SamPolicy(Set(policyMap(SamWorkspacePolicyNames.projectOwner), policyMap(SamWorkspacePolicyNames.owner)), Set.empty, Set(SamWorkflowCollectionRoles.owner)), userInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, SamWorkflowCollectionPolicyNames.workflowCollectionWriterPolicyName,
-        SamPolicy(Set(policyMap(SamWorkspacePolicyNames.writer)), Set.empty, Set(SamWorkflowCollectionRoles.writer)), userInfo)
-      _ <- samDAO.overwritePolicy(SamResourceTypeNames.workflowCollection, workspaceId, SamWorkflowCollectionPolicyNames.workflowCollectionReaderPolicyName,
-        SamPolicy(Set(policyMap(SamWorkspacePolicyNames.reader)), Set.empty, Set(SamWorkflowCollectionRoles.reader)), userInfo)
+      _ <- samDAO.createResourceFull(
+              SamResourceTypeNames.workflowCollection,
+              workspaceId,
+              Map(
+                SamWorkflowCollectionPolicyNames.workflowCollectionOwnerPolicyName ->
+                  SamPolicy(Set(policyMap(SamWorkspacePolicyNames.projectOwner), policyMap(SamWorkspacePolicyNames.owner)), Set.empty, Set(SamWorkflowCollectionRoles.owner)),
+                SamWorkflowCollectionPolicyNames.workflowCollectionWriterPolicyName ->
+                  SamPolicy(Set(policyMap(SamWorkspacePolicyNames.writer)), Set.empty, Set(SamWorkflowCollectionRoles.writer)),
+                SamWorkflowCollectionPolicyNames.workflowCollectionReaderPolicyName ->
+                  SamPolicy(Set(policyMap(SamWorkspacePolicyNames.reader)), Set.empty, Set(SamWorkflowCollectionRoles.reader))
+              ),
+              Set.empty,
+              userInfo
+            )
     } yield {
     }
   }
