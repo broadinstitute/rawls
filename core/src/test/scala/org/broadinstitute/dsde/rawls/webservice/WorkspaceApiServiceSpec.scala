@@ -459,7 +459,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     when(services.samDAO.userHasAction(
       ArgumentMatchers.eq(SamResourceTypeNames.workspace),
       ArgumentMatchers.eq(testData.workspace.workspaceId),
-      ArgumentMatchers.eq(SamWorkspaceActions.own),
+      ArgumentMatchers.eq(SamWorkspaceActions.delete),
       any[UserInfo]
     )).thenReturn(Future.successful(true))
 
@@ -472,7 +472,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Accepted) {
+        assertResult(StatusCodes.Accepted, responseAs[String]) {
           status
         }
       }
