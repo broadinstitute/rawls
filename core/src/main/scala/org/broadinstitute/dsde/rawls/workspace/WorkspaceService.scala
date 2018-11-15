@@ -249,6 +249,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       // Delete resource in sam outside of DB transaction
       _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, userInfo)
+      _ <- workspaceContext.workspace.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
 
       // Abort running workflows
       aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) }
