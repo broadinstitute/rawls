@@ -266,6 +266,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       else None
 
     //split out the db transaction from the calls to external services
+    //DON'T make http calls in here!
     val dbThingsFuture = dataSource.inTransaction { dataAccess =>
       for {
         //Load a bunch of things we'll need to reconstruct information:
@@ -286,27 +287,28 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       }
     }
 
-    val workflowBatchFuture = dbThingsFuture flatMap { case (wfRecs, workflowBatch, billingProject, submitter, methodConfig) =>
-      for {
-        petSAJson <- samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, submitter.userEmail)
-        petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-        userCredentials <- googleServicesDAO.getUserCredentials(submitter).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for $submitter")))
-        wdl <- getWdl(methodConfig, userCredentials)
-      } yield {
+    val workflowBatchFuture = for {
+      //yank things from the db. note this future has already started running and we're just waiting on it here
+      (wfRecs, workflowBatch, billingProject, submitter, methodConfig) <- dbThingsFuture
 
-        val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, submitter, petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, submitter.userEmail)
+      petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
+      userCredentials <- googleServicesDAO.getUserCredentials(submitter).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for $submitter")))
+      wdl <- getWdl(methodConfig, userCredentials)
+    } yield {
 
-        val wfInputsBatch = workflowBatch map { wf =>
-          val methodProps = wf.inputResolutions map {
-            case svv: SubmissionValidationValue if svv.value.isDefined =>
-              svv.inputName -> svv.value.get
-          }
-          MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+      val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, submitter, petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
+
+      val wfInputsBatch = workflowBatch map { wf =>
+        val methodProps = wf.inputResolutions map {
+          case svv: SubmissionValidationValue if svv.value.isDefined =>
+            svv.inputName -> svv.value.get
         }
-
-        //yield the things we're going to submit to Cromwell
-        (wdl, wfRecs, wfInputsBatch, wfOpts, collectDosUris(workflowBatch), petUserInfo)
+        MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
       }
+
+      //yield the things we're going to submit to Cromwell
+      (wdl, wfRecs, wfInputsBatch, wfOpts, collectDosUris(workflowBatch), petUserInfo)
     }
 
 
