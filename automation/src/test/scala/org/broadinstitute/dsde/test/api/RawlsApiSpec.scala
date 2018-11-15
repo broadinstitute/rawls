@@ -8,7 +8,7 @@ import akka.testkit.TestKit
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.service._
-import org.broadinstitute.dsde.workbench.service.SamModel.AccessPolicyResponseEntry
+import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyResponseEntry, AccessPolicyMembership}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
@@ -355,52 +355,95 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     }
 
     "should have correct policies in Sam and ACLs in Google when workspace is created" in {
+      import DefaultJsonProtocol._
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
       val workspacePolicyNames = Set("can-compute", "project-owner", "writer", "reader", "share-writer", "can-catalog", "owner", "share-reader")
-      val policyToAccessLevel = Map("project-owner" -> "WRITER", "owner" -> "WRITER", "writer" -> "WRITER", "reader" -> "READER")
-
-      implicit val WorkspaceListFormat = jsonFormat4(WorkspaceList.apply)
-      implicit val WorkspaceFormat = jsonFormat10(Workspace.apply)
-      implicit val WorkspaceSubmissionStats = ValueObjectFormat(WorkspaceSubmissionStats.apply)
-
-      case class WorkspaceList(accessLevel: String, workspace: Workspace, workspaceSubmissionStats: WorkspaceSubmissionStats, public: Boolean)
-      case class Workspace(workspaceId: String, name: String, isLocked: Boolean, lastModified: String, attributes: String, createdBy: String, bucketName: String, nameSpace: String, authorizationDomain: Set[String], createdDate: String)
-      case class WorkspaceSubmissionStats(runningSubmissionsCount: Int) extends ValueObject
+      // bucket and object access levels for sam policies as described in comments in insertBucket function in HttpGoogleServicesDAO
+      val policyToBucketAccessLevel = Map("project-owner" -> "WRITER", "owner" -> "WRITER", "writer" -> "WRITER", "reader" -> "READER")
+      val policyToObjectAccessLevel = Map("project-owner" -> "READER", "owner" -> "READER", "writer" -> "READER", "reader" -> "READER")
+      val serviceAccountEmailDomain = "developer.gserviceaccount.com"
 
       withCleanBillingProject(owner) { projectName =>
-        val aclEntry1 = AclEntry(owner.email, WorkspaceAccessLevel.Owner)
         withWorkspace(projectName, s"unconstrained-workspace") { workspaceName =>
           val workspaces = Rawls.workspaces.list()
-          println(s"workspaces $workspaces")
-          import DefaultJsonProtocol._
-          println(s"ids ${workspaces.parseJson.convertTo[Set[WorkspaceList]].workspace.workspaceId}")
-//          println(s"ids ${workspaces.parseJson.asInstanceOf[JsArray].elements.map { jvalue => jvalue.asJsObject.getFields("workspace").map(_.asJsObject.getFields("workspaceId")) }}")
-          val workspaceId = workspaces.substring(workspaces.indexOf("\"workspaceId\":\"") + 15, workspaces.indexOf("\",\"name\"") )
+          val workspaceId = workspaces.parseJson.asInstanceOf[JsArray].elements.flatMap { workspaceListEntry =>
+            workspaceListEntry.asJsObject.getFields("workspace").flatMap { workspace =>
+              workspace.asJsObject.getFields("workspaceId")
+            }
+          }.head.convertTo[String]
 
+          // check sam policies
           val unconstrainedSamPolicies = Sam.user.listResourcePolicies("workspace", workspaceId)
-          println(unconstrainedSamPolicies)
-          val whatitshouldhave = unconstrainedSamPolicies.map(policy => (policyToAccessLevel.getOrElse(policy.policyName, "Not Found"), policy.email, policy.policyName)).filter { case (role, email, name) => !role.equals("Not Found") }
-          println(whatitshouldhave)
-          val unconstrainedSamPolicyNames = unconstrainedSamPolicies.map(accessPolicy => accessPolicy.policyName)
+          val unconstrainedSamPolicyNames = unconstrainedSamPolicies.map(_.policyName)
           eventually(unconstrainedSamPolicyNames should contain theSameElementsAs workspacePolicyNames)
 
-          val unconstrainedBucketAcl = googleStorageDAO.getBucketAccessControl(GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))).futureValue.getItems
-          println(unconstrainedBucketAcl)
+          // check bucket acls
+          val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
+          val unconstrainedBucketAcl = googleStorageDAO.getBucketAccessControls(bucketName).futureValue.getItems.asScala.toList
+          // service account should have owner access
+          assert(unconstrainedBucketAcl.exists(acl => acl.getRole().equals("OWNER") && acl.getEmail().endsWith(serviceAccountEmailDomain)))
+          val actualBucketRolesAndPolicies = unconstrainedBucketAcl.collect {
+            case acl if (acl.getRole() != null && !acl.getRole().equals("OWNER")) => (acl.getRole(), acl.getEmail())
+          }
+          val expectedBucketRolesAndPolicies = unconstrainedSamPolicies.collect {
+            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("WRITER", emails.head)
+            case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
+          }
+          eventually(actualBucketRolesAndPolicies should contain theSameElementsAs expectedBucketRolesAndPolicies)
 
-          val whatithas = unconstrainedBucketAcl.asScala.toList.map(acl => (acl.getRole(), acl.getEmail())).filter { case (role, email) => email != null}
-          eventually(whatithas should contain allElementsOf whatitshouldhave)
+          // check object acls
+          val unconstrainedObjectAcl = googleStorageDAO.getDefaultObjectAccessControls(bucketName).futureValue.getItems.asScala.toList
+          // service account should have owner access
+          assert(unconstrainedObjectAcl.exists(acl => acl.getRole().equals("OWNER") && acl.getEmail().endsWith(serviceAccountEmailDomain)))
+          val actualObjectRolesAndPolicies = unconstrainedObjectAcl.collect {
+            case acl if (acl.getRole() != null && !acl.getRole().equals("OWNER")) => (acl.getRole(), acl.getEmail())
+          }
+          val expectedObjectRolesAndPolicies = unconstrainedSamPolicies.collect {
+            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("READER", emails.head)
+            case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
+          }
+          eventually(actualObjectRolesAndPolicies should contain theSameElementsAs expectedObjectRolesAndPolicies)
         }
 
-        withGroup("authDomain", List(/* authDomainMembers */)) { authDomain =>
-          withWorkspace(projectName, s"constrained-workspace", Set(authDomain), List(/* Acl entries */)) { workspaceName =>
-            println(s"workspace 2: $workspaceName")
-            val constrainedSamPolicies = Sam.user.listResourcePolicies("billing-project", workspaceName)
-            eventually(constrainedSamPolicies should contain theSameElementsAs workspacePolicyNames)
+        withGroup("authDomain", List(owner.email)) { authDomain =>
+          withWorkspace(projectName, s"constrained-workspace", Set(authDomain)) { workspaceName =>
+            val workspaces = Rawls.workspaces.list()
+            val workspaceId = workspaces.parseJson.asInstanceOf[JsArray].elements.flatMap { workspaceListEntry =>
+              workspaceListEntry.asJsObject.getFields("workspace").flatMap { workspace =>
+                workspace.asJsObject.getFields("workspaceId")
+              }
+            }.head.convertTo[String]
 
-            val constrainedBucket = googleStorageDAO.getBucket(GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))).futureValue
+            // check sam policies
+            val constrainedSamPolicies = Sam.user.listResourcePolicies("workspace", workspaceId)
+            val constrainedSamPolicyNames = constrainedSamPolicies.map(_.policyName)
+            eventually(constrainedSamPolicyNames should contain theSameElementsAs workspacePolicyNames)
 
-            constrainedBucket.getAcl.asScala should contain theSameElementsAs Set(/* Acl on this bucket */)
+            // check bucket acls
+            val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
+            val constrainedBucketAcl = googleStorageDAO.getBucketAccessControls(bucketName).futureValue.getItems.asScala.toList
+            // service account should have owner access
+            assert(constrainedBucketAcl.exists(acl => acl.getRole().equals("OWNER") && acl.getEmail().endsWith(serviceAccountEmailDomain)))
+            val actualBucketRolesAndPolicies = constrainedBucketAcl.collect {
+              case acl if (acl.getRole() != null && !acl.getRole().equals("OWNER")) => (acl.getRole(), acl.getEmail())
+            }
+            val expectedBucketRolesAndPolicies = constrainedSamPolicies.collect {
+              case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
+            }
+            eventually(actualBucketRolesAndPolicies should contain theSameElementsAs expectedBucketRolesAndPolicies)
+
+            // check object acls
+            val constrainedObjectAcl = googleStorageDAO.getDefaultObjectAccessControls(bucketName).futureValue.getItems.asScala.toList
+            // service account should have owner access
+            assert(constrainedObjectAcl.exists(acl => acl.getRole().equals("OWNER") && acl.getEmail().endsWith(serviceAccountEmailDomain)))
+            val actualObjectRolesAndPolicies = constrainedObjectAcl.collect {
+              case acl if (acl.getRole() != null && !acl.getRole().equals("OWNER")) => (acl.getRole(), acl.getEmail())
+            }
+            val expectedObjectRolesAndPolicies = constrainedSamPolicies.collect {
+              case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
+            }
+            eventually(actualObjectRolesAndPolicies should contain theSameElementsAs expectedObjectRolesAndPolicies)
           }
         }
       }
