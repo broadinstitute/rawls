@@ -354,8 +354,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       }
     }
 
-    "should have correct policies in Sam and ACLs in Google when workspace is created" in {
-      import DefaultJsonProtocol._
+    import DefaultJsonProtocol._
+
+    "should have correct policies in Sam and ACLs in Google when an unconstrained workspace is created" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
       val workspacePolicyNames = Set("can-compute", "project-owner", "writer", "reader", "share-writer", "can-catalog", "owner", "share-reader")
@@ -367,16 +368,18 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       withCleanBillingProject(owner) { projectName =>
         withWorkspace(projectName, s"unconstrained-workspace") { workspaceName =>
           val workspaces = Rawls.workspaces.list()
+          println(workspaces)
           val workspaceId = workspaces.parseJson.asInstanceOf[JsArray].elements.flatMap { workspaceListEntry =>
-            workspaceListEntry.asJsObject.getFields("workspace").flatMap { workspace =>
-              workspace.asJsObject.getFields("workspaceId")
+            workspaceListEntry.asJsObject.getFields("workspace").collect {
+              case workspace if (workspace.asJsObject.getFields("name").exists(name => name.convertTo[String].equals(workspaceName)) &&
+                workspace.asJsObject.getFields("namespace").exists(namespace => namespace.convertTo[String].equals(projectName))) => workspace.asJsObject.getFields("workspaceId").head
             }
           }.head.convertTo[String]
 
           // check sam policies
           val unconstrainedSamPolicies = Sam.user.listResourcePolicies("workspace", workspaceId)
           val unconstrainedSamPolicyNames = unconstrainedSamPolicies.map(_.policyName)
-          eventually(unconstrainedSamPolicyNames should contain theSameElementsAs workspacePolicyNames)
+          unconstrainedSamPolicyNames should contain theSameElementsAs workspacePolicyNames
 
           // check bucket acls
           val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
@@ -390,7 +393,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("WRITER", emails.head)
             case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
           }
-          eventually(actualBucketRolesAndPolicies should contain theSameElementsAs expectedBucketRolesAndPolicies)
+          actualBucketRolesAndPolicies should contain theSameElementsAs expectedBucketRolesAndPolicies
 
           // check object acls
           val unconstrainedObjectAcl = googleStorageDAO.getDefaultObjectAccessControls(bucketName).futureValue.getItems.asScala.toList
@@ -403,22 +406,35 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("READER", emails.head)
             case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
           }
-          eventually(actualObjectRolesAndPolicies should contain theSameElementsAs expectedObjectRolesAndPolicies)
+          actualObjectRolesAndPolicies should contain theSameElementsAs expectedObjectRolesAndPolicies
         }
+      }
+    }
 
+    "should have correct policies in Sam and ACLs in Google when a constrained workspace is created" in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+      implicit val token: AuthToken = ownerAuthToken
+      val workspacePolicyNames = Set("can-compute", "project-owner", "writer", "reader", "share-writer", "can-catalog", "owner", "share-reader")
+      // bucket and object access levels for sam policies as described in comments in insertBucket function in HttpGoogleServicesDAO
+      val policyToBucketAccessLevel = Map("project-owner" -> "WRITER", "owner" -> "WRITER", "writer" -> "WRITER", "reader" -> "READER")
+      val policyToObjectAccessLevel = Map("project-owner" -> "READER", "owner" -> "READER", "writer" -> "READER", "reader" -> "READER")
+      val serviceAccountEmailDomain = "developer.gserviceaccount.com"
+
+      withCleanBillingProject(owner) { projectName =>
         withGroup("authDomain", List(owner.email)) { authDomain =>
           withWorkspace(projectName, s"constrained-workspace", Set(authDomain)) { workspaceName =>
             val workspaces = Rawls.workspaces.list()
             val workspaceId = workspaces.parseJson.asInstanceOf[JsArray].elements.flatMap { workspaceListEntry =>
-              workspaceListEntry.asJsObject.getFields("workspace").flatMap { workspace =>
-                workspace.asJsObject.getFields("workspaceId")
+              workspaceListEntry.asJsObject.getFields("workspace").collect {
+                case workspace if (workspace.asJsObject.getFields("name").exists(name => name.convertTo[String].equals(workspaceName)) &&
+                  workspace.asJsObject.getFields("namespace").exists(namespace => namespace.convertTo[String].equals(projectName))) => workspace.asJsObject.getFields("workspaceId").head
               }
             }.head.convertTo[String]
 
             // check sam policies
             val constrainedSamPolicies = Sam.user.listResourcePolicies("workspace", workspaceId)
             val constrainedSamPolicyNames = constrainedSamPolicies.map(_.policyName)
-            eventually(constrainedSamPolicyNames should contain theSameElementsAs workspacePolicyNames)
+            constrainedSamPolicyNames should contain theSameElementsAs workspacePolicyNames
 
             // check bucket acls
             val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
@@ -431,7 +447,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val expectedBucketRolesAndPolicies = constrainedSamPolicies.collect {
               case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
             }
-            eventually(actualBucketRolesAndPolicies should contain theSameElementsAs expectedBucketRolesAndPolicies)
+            actualBucketRolesAndPolicies should contain theSameElementsAs expectedBucketRolesAndPolicies
 
             // check object acls
             val constrainedObjectAcl = googleStorageDAO.getDefaultObjectAccessControls(bucketName).futureValue.getItems.asScala.toList
@@ -443,7 +459,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val expectedObjectRolesAndPolicies = constrainedSamPolicies.collect {
               case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
             }
-            eventually(actualObjectRolesAndPolicies should contain theSameElementsAs expectedObjectRolesAndPolicies)
+            actualObjectRolesAndPolicies should contain theSameElementsAs expectedObjectRolesAndPolicies
           }
         }
       }
