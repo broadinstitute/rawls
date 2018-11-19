@@ -354,8 +354,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       }
     }
 
-    import DefaultJsonProtocol._
-
     "should have correct policies in Sam and ACLs in Google when an unconstrained workspace is created" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
@@ -367,15 +365,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
       withCleanBillingProject(owner) { projectName =>
         withWorkspace(projectName, s"unconstrained-workspace") { workspaceName =>
-          val workspaces = Rawls.workspaces.list()
-          println(workspaces)
-          val workspaceId = workspaces.parseJson.asInstanceOf[JsArray].elements.flatMap { workspaceListEntry =>
-            workspaceListEntry.asJsObject.getFields("workspace").collect {
-              case workspace if (workspace.asJsObject.getFields("name").exists(name => name.convertTo[String].equals(workspaceName)) &&
-                workspace.asJsObject.getFields("namespace").exists(namespace => namespace.convertTo[String].equals(projectName))) => workspace.asJsObject.getFields("workspaceId").head
-            }
-          }.head.convertTo[String]
-
+          val workspaceId = getWorkspaceId(projectName, workspaceName)
           // check sam policies
           val unconstrainedSamPolicies = Sam.user.listResourcePolicies("workspace", workspaceId)
           val unconstrainedSamPolicyNames = unconstrainedSamPolicies.map(_.policyName)
@@ -423,13 +413,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       withCleanBillingProject(owner) { projectName =>
         withGroup("authDomain", List(owner.email)) { authDomain =>
           withWorkspace(projectName, s"constrained-workspace", Set(authDomain)) { workspaceName =>
-            val workspaces = Rawls.workspaces.list()
-            val workspaceId = workspaces.parseJson.asInstanceOf[JsArray].elements.flatMap { workspaceListEntry =>
-              workspaceListEntry.asJsObject.getFields("workspace").collect {
-                case workspace if (workspace.asJsObject.getFields("name").exists(name => name.convertTo[String].equals(workspaceName)) &&
-                  workspace.asJsObject.getFields("namespace").exists(namespace => namespace.convertTo[String].equals(projectName))) => workspace.asJsObject.getFields("workspaceId").head
-              }
-            }.head.convertTo[String]
+            val workspaceId = getWorkspaceId(projectName, workspaceName)
 
             // check sam policies
             val constrainedSamPolicies = Sam.user.listResourcePolicies("workspace", workspaceId)
@@ -464,5 +448,13 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
         }
       }
     }
+  }
+
+  private def getWorkspaceId(projectName: String, workspaceName: String)(implicit token: AuthToken): String = {
+    import DefaultJsonProtocol._
+
+    Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName).parseJson.asJsObject.getFields("workspace").flatMap { workspace =>
+      workspace.asJsObject.getFields("workspaceId")
+    }.head.convertTo[String]
   }
 }
