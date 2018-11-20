@@ -437,7 +437,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
   private val serviceAccountEmailDomain = "developer.gserviceaccount.com"
 
-  // Retrieves roles with policy emails for bucket acls
+  // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
   private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, String)] = {
     val bucketAcls = googleStorageDAO.getBucketAccessControls(bucketName).futureValue.getItems.asScala.toList
     // service account should have owner access
@@ -447,7 +447,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     }
   }
 
-  // Retrieves roles with policy emails for object acls
+  // Retrieves roles with policy emails for object acls and checks that service account is set up correctly
   private def getObjectRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, String)] = {
     val objectAcls = googleStorageDAO.getDefaultObjectAccessControls(bucketName).futureValue.getItems.asScala.toList
     // service account should have owner access
