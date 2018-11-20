@@ -294,7 +294,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         wdl <- getWdl(methodConfig, userCredentials)
       } yield {
         val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, RawlsUser(RawlsUserSubjectId(userIdInfo), RawlsUserEmail(submissionRec.submitterEmail)), petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
-        val submissionAndWorkspaceLabels = Map("submission id" -> submissionRec.id.toString,  "workspace id" -> workspaceRec.id.toString)
+        val submissionAndWorkspaceLabels = Map("submission-id" -> submissionRec.id.toString,  "workspace-id" -> workspaceRec.id.toString)
         val wfLabels = workspaceRec.workflowCollection match {
           case None => submissionAndWorkspaceLabels
           case Some(workflowCollection) => if (useWorkflowCollectionField) submissionAndWorkspaceLabels else submissionAndWorkspaceLabels + ("caas-collection-name" -> workflowCollection)

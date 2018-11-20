@@ -258,7 +258,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       val mockExecService = mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO]
-      mockExecService.labels shouldEqual Map("submission id" -> submissionRec.id.toString, "workspace id" -> workspaceRec.id.toString, "caas-collection-name"  -> workspaceRec.workflowCollection.getOrElse(""))
+      mockExecService.labels shouldEqual Map("submission-id" -> submissionRec.id.toString, "workspace-id" -> workspaceRec.id.toString, "caas-collection-name"  -> workspaceRec.workflowCollection.getOrElse(""))
       mockExecService.collection shouldEqual None
 
     }
@@ -275,8 +275,9 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       val mockExecService = mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO]
+      mockExecService.labels shouldEqual Map("submission-id" -> submissionRec.id.toString, "workspace-id" -> workspaceRec.id.toString)
       mockExecService.collection shouldEqual Some(workspaceRec.workflowCollection.getOrElse(""))
-      mockExecService.labels shouldEqual Map("submission id" -> submissionRec.id.toString, "workspace id" -> workspaceRec.id.toString)
+
     }
   }
 
