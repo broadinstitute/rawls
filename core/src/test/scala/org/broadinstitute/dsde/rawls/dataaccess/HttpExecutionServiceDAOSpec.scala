@@ -44,7 +44,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
 
   "HttpExecutionServiceDAO" should "submit workflows" in {
     withStatsD {
-      val submitResult = test.submitWorkflows("wdl", Seq("input1", "input2"), None, userInfo).futureValue
+      val submitResult = test.submitWorkflows("wdl", Seq("input1", "input2"), None, None, None, userInfo).futureValue
 
       // results are hard-coded in RemoteServicesMockServer
       submitResult.size shouldBe 3
