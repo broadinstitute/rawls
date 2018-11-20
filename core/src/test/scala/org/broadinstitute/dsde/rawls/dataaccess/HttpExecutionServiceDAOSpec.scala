@@ -58,24 +58,6 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
     }
   }
 
-
-  "HttpExecutionServiceDAO" should "submit workflows with labels" in {
-    withStatsD {
-      val submitResult = test.submitWorkflows("wdl", Seq("input1", "input2"), None, Option(Map("label1" -> "value1", "label2" -> "value2")), None, userInfo).futureValue
-
-      // results are hard-coded in RemoteServicesMockServer
-      submitResult.size shouldBe 3
-      val (lefts, rights) = submitResult.toList.separate
-      lefts.size shouldBe 3
-      rights shouldBe 'empty
-      lefts.filter(_.status == "Submitted").size shouldBe 2
-      lefts.filter(_.status == "Failed").size shouldBe 1
-    } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("post", "api.workflows.v1.batch", 201, 1, Option(Subsystems.Cromwell)))
-    }
-  }
-
-
   it should "query for status" in {
     withStatsD {
       val result = test.status("foo", userInfo).futureValue

@@ -93,7 +93,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       trackDetailedSubmissionMetrics = true,
       "test",
       "requesterPays",
-      true
+      false
     ))
 
     try {
