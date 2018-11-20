@@ -86,15 +86,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
                                                pollInterval: FiniteDuration = 1 second) extends TestWorkflowSubmission(dataSource, batchSize, processInterval, pollInterval) {
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), dataSource)
   }
-//
-//  class TestWorkflowSubmissionWithCollectionField(
-//                                                   dataSource: SlickDataSource,
-//                                                   batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
-//                                                   processInterval: FiniteDuration = 25 milliseconds,
-//                                                   pollInterval: FiniteDuration = 1 second,
-//                                                   useWorkflowCollectionField: Boolean = true) extends TestWorkflowSubmission(dataSource, batchSize, processInterval, pollInterval) {
-//    override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), dataSource)
-//  }
+
+  class TestWorkflowSubmissionWithLabels(dataSource: SlickDataSource,
+                                         useWorkflowCollectionField: Boolean) extends TestWorkflowSubmission(dataSource, 3, 25 milliseconds, 1 second, useWorkflowCollectionField = useWorkflowCollectionField)
+
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -249,6 +244,39 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }
+    }
+  }
+
+  it should "submit a workflow that sets the workflow collection as a label" in withDefaultTestDatabase {
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmissionWithLabels(slickDataSource, false) {
+      override val executionServiceCluster = mockExecCluster
+    }
+
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.submission1, testData.workspace)
+      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+
+      val mockExecService = mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO]
+      mockExecService.labels shouldEqual Map("submission id" -> submissionRec.id.toString, "workspace id" -> workspaceRec.id.toString, "caas-collection-name"  -> workspaceRec.workflowCollection.getOrElse(""))
+      mockExecService.collection shouldEqual None
+
+    }
+  }
+
+  it should "submit a workflow that sets the workflow collection as a field in the request" in withDefaultTestDatabase {
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmissionWithLabels(slickDataSource, true) {
+      override val executionServiceCluster = mockExecCluster
+    }
+
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.submission1, testData.workspace)
+      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+
+      val mockExecService = mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO]
+      mockExecService.collection shouldEqual Some(workspaceRec.workflowCollection.getOrElse(""))
+      mockExecService.labels shouldEqual Map("submission id" -> submissionRec.id.toString, "workspace id" -> workspaceRec.id.toString)
     }
   }
 
