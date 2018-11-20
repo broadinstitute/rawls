@@ -14,14 +14,15 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
   var submitInput: Seq[String] = null
   var submitOptions: Option[String] = None
   var labels: Map[String, String] = Map.empty   // could make this more sophisticated: map of workflow to map[s,s]
-  val collection: String = null
+  var collection: Option[String] = None
 
   override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo)= {
     this.submitInput = inputs
     this.submitWdl = wdl
     this.submitOptions = options
     this.labels = labels.getOrElse(Map.empty)
-    this.collection = workflowCollection.getOrElse(null)
+    this.collection = workflowCollection
+
 
     val inputPattern = """\{"three_step.cgrep.pattern":"(sample[0-9])"\}""".r
 

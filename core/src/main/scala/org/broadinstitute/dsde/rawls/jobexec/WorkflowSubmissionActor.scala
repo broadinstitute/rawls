@@ -40,8 +40,9 @@ object WorkflowSubmissionActor {
             runtimeOptions: Option[JsValue],
             trackDetailedSubmissionMetrics: Boolean,
             workbenchMetricBaseName: String,
-            requesterPaysRole: String): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole))
+            requesterPaysRole: String,
+            useWorkflowCollectionField: Boolean): Props = {
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -52,10 +53,6 @@ object WorkflowSubmissionActor {
   case object LookForWorkflows extends WorkflowSubmissionMessage
   case class SubmitWorkflowBatch(workflowBatch: WorkflowBatch) extends WorkflowSubmissionMessage
 
-  // Is this only
-  val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
-  val executionServiceConfig = conf.getConfig("executionservice")
-  val useWorkflowCollectionField = executionServiceConfig.getBoolean("useWorkflowCollectionField")
 }
 
 class WorkflowSubmissionActor(val dataSource: SlickDataSource,
@@ -73,7 +70,8 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val runtimeOptions: Option[JsValue],
                               val trackDetailedSubmissionMetrics: Boolean,
                               override val workbenchMetricBaseName: String,
-                              val requesterPaysRole: String) extends Actor with WorkflowSubmission with LazyLogging {
+                              val requesterPaysRole: String,
+                              val useWorkflowCollectionField: Boolean) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
 
@@ -119,6 +117,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val runtimeOptions: Option[JsValue]
   val trackDetailedSubmissionMetrics: Boolean
   val requesterPaysRole: String
+  val useWorkflowCollectionField: Boolean
 
   import dataSource.dataAccess.driver.api._
 
@@ -267,12 +266,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     implicit val wfStatusCounter = (status: WorkflowStatus) =>
       if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceRec.toWorkspaceName, submissionRec.id))(status))
       else None
-
-//    def buildWorkflowLabels(workflowCollection: String, submissionId: UUID, workspaceId: UUID) = {
-//      Map("caas-collection-name" -> workflowCollection,
-//        "submission id" -> submissionId.toString,
-//        "workspace id" -> workspaceId.toString)
-//    }
 
     val workflowBatchFuture = dataSource.inTransaction { dataAccess =>
       for {

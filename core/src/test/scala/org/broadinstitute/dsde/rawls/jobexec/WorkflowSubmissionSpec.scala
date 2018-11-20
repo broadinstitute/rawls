@@ -56,7 +56,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val runtimeOptions: Option[JsValue] = None,
     val trackDetailedSubmissionMetrics: Boolean = true,
     override val workbenchMetricBaseName: String = "test",
-    val requesterPaysRole: String = requesterPaysRole) extends WorkflowSubmission {
+    val requesterPaysRole: String = requesterPaysRole,
+    val useWorkflowCollectionField: Boolean = false) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
@@ -85,6 +86,15 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
                                                pollInterval: FiniteDuration = 1 second) extends TestWorkflowSubmission(dataSource, batchSize, processInterval, pollInterval) {
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), dataSource)
   }
+//
+//  class TestWorkflowSubmissionWithCollectionField(
+//                                                   dataSource: SlickDataSource,
+//                                                   batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
+//                                                   processInterval: FiniteDuration = 25 milliseconds,
+//                                                   pollInterval: FiniteDuration = 1 second,
+//                                                   useWorkflowCollectionField: Boolean = true) extends TestWorkflowSubmission(dataSource, batchSize, processInterval, pollInterval) {
+//    override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), dataSource)
+//  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -355,7 +365,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
-        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole)
+        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, true)
       )
 
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).exists(_ == WorkflowStatuses.Submitted.toString), 10 seconds)
@@ -390,7 +400,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
-        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole)
+        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, true)
       )
 
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)
