@@ -41,8 +41,9 @@ object WorkflowSubmissionActor {
             trackDetailedSubmissionMetrics: Boolean,
             workbenchMetricBaseName: String,
             requesterPaysRole: String,
-            useWorkflowCollectionField: Boolean): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField))
+            useWorkflowCollectionField: Boolean,
+            useWorkflowCollectionLabel: Boolean): Props = {
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -71,7 +72,8 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val trackDetailedSubmissionMetrics: Boolean,
                               override val workbenchMetricBaseName: String,
                               val requesterPaysRole: String,
-                              val useWorkflowCollectionField: Boolean) extends Actor with WorkflowSubmission with LazyLogging {
+                              val useWorkflowCollectionField: Boolean,
+                              val useWorkflowCollectionLabel: Boolean) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
 
@@ -118,6 +120,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val trackDetailedSubmissionMetrics: Boolean
   val requesterPaysRole: String
   val useWorkflowCollectionField: Boolean
+  val useWorkflowCollectionLabel: Boolean
 
   import dataSource.dataAccess.driver.api._
 
@@ -296,8 +299,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, RawlsUser(RawlsUserSubjectId(userIdInfo), RawlsUserEmail(submissionRec.submitterEmail)), petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
         val submissionAndWorkspaceLabels = Map("submission-id" -> submissionRec.id.toString,  "workspace-id" -> workspaceRec.id.toString)
         val wfLabels = workspaceRec.workflowCollection match {
-          case None => submissionAndWorkspaceLabels
-          case Some(workflowCollection) => if (useWorkflowCollectionField) submissionAndWorkspaceLabels else submissionAndWorkspaceLabels + ("caas-collection-name" -> workflowCollection)
+          case Some(workflowCollection) if useWorkflowCollectionLabel => submissionAndWorkspaceLabels + ("caas-collection-name" -> workflowCollection)
+          case _ => submissionAndWorkspaceLabels
         }
         val wfCollection = if (useWorkflowCollectionField) workspaceRec.workflowCollection else None
 
