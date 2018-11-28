@@ -1758,12 +1758,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         namespace = workspaceRequest.namespace,
         name = workspaceRequest.name,
         workspaceId = workspaceId,
-<<<<<<< fc525e8c1f1538e24794791f31629fb89cc639ee
         bucketName = bucketName,
-=======
-        bucketName = s"fc-$workspaceId",
         workflowCollectionName = Some(workspaceId),
->>>>>>> redo on top of ph4 branch
         createdDate = currentDate,
         lastModified = currentDate,
         createdBy = userInfo.userEmail.value,
