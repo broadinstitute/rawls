@@ -140,7 +140,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
       withCleanBillingProject(studentA) { projectName =>
         withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
-          withCleanup {
+          withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
               projectName, workspaceName,
               topLevelMethod,
