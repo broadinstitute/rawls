@@ -140,87 +140,79 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
       withCleanBillingProject(studentA) { projectName =>
         withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
-          Orchestration.methodConfigurations.createMethodConfigInWorkspace(
-            projectName, workspaceName,
-            topLevelMethod,
-            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
-            topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
+          withCleanUp {
+            Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+              projectName, workspaceName,
+              topLevelMethod,
+              topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
+              topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
 
-          Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
+            Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
 
-          // it currently takes ~ 5 min for google bucket read permissions to propagate.
-          // We can't launch a workflow until this happens.
-          // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
+            // it currently takes ~ 5 min for google bucket read permissions to propagate.
+            // We can't launch a workflow until this happens.
+            // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
 
-          Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+            Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
 
-          val submissionId = Rawls.submissions.launchWorkflow(
-            projectName, workspaceName,
-            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
-            "participant", SingleParticipant.entityId, "this", useCallCache = false)
+            val submissionId = Rawls.submissions.launchWorkflow(
+              projectName, workspaceName,
+              topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
+              "participant", SingleParticipant.entityId, "this", useCallCache = false)
+            // clean up: Abort submission
+            register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
-          // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
+            // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
 
-          val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
-          implicit val patienceConfig: PatienceConfig = submissionPatience
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+            implicit val patienceConfig: PatienceConfig = submissionPatience
 
-          val firstWorkflowId = eventually {
-            val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+            val firstWorkflowId = eventually {
+              val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
 
-            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
-              workflows should not be (empty)
-              workflows.head
+              withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
+                workflows should not be (empty)
+                workflows.head
+              }
             }
-          }
 
-          // retrieve the workflow's metadata.  May need to wait for a subworkflow to appear.  Take the first one we see.
+            // retrieve the workflow's metadata.  May need to wait for a subworkflow to appear.  Take the first one we see.
 
-          val firstSubWorkflowId = eventually {
-            val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstWorkflowId)
-            val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
-            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
-              subIds should not be (empty)
-              subIds.head
+            val firstSubWorkflowId = eventually {
+              val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstWorkflowId)
+              val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
+              withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
+                subIds should not be (empty)
+                subIds.head
+              }
             }
-          }
 
-          // can we also retrieve the subworkflow's metadata?  Get a sub-sub-workflow ID while we're doing this.
+            // can we also retrieve the subworkflow's metadata?  Get a sub-sub-workflow ID while we're doing this.
 
-          val firstSubSubWorkflowId = eventually {
-            val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubWorkflowId)
-            val subSubIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
-            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstSubWorkflowId: ") {
-              subSubIds should not be (empty)
-              subSubIds.head
+            val firstSubSubWorkflowId = eventually {
+              val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubWorkflowId)
+              val subSubIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
+              withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstSubWorkflowId: ") {
+                subSubIds should not be (empty)
+                subSubIds.head
+              }
             }
-          }
 
-          // verify that Rawls can retrieve the sub-sub-workflow's metadata without throwing an exception.
+            // verify that Rawls can retrieve the sub-sub-workflow's metadata without throwing an exception.
 
-          eventually {
-            Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
-          }
+            eventually {
+              Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
+            }
 
-          // verify that Rawls can retrieve the workflows' outputs from Cromwell without error
-          // https://github.com/DataBiosphere/firecloud-app/issues/157
+            // verify that Rawls can retrieve the workflows' outputs from Cromwell without error
+            // https://github.com/DataBiosphere/firecloud-app/issues/157
 
-          val outputsTimeout = Timeout(scaled(Span(10, Seconds)))
-          eventually(outputsTimeout) {
-            Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstWorkflowId)
-            // nope https://github.com/DataBiosphere/firecloud-app/issues/160
-            //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubWorkflowId)
-            //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
-          }
-
-          // clean up: Abort and wait for Aborted
-
-          Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
-
-          eventually {
-            val (status, _) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
-
-            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
-              status shouldBe "Aborted"
+            val outputsTimeout = Timeout(scaled(Span(10, Seconds)))
+            eventually(outputsTimeout) {
+              Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstWorkflowId)
+              // nope https://github.com/DataBiosphere/firecloud-app/issues/160
+              //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubWorkflowId)
+              //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
             }
           }
         }
