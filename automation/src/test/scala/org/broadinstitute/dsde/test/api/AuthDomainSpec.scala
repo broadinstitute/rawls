@@ -153,7 +153,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
           val authDomain = Set(realmGroup, realmGroup2, realmGroup3)
           withWorkspace(project.projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             val clone = "AuthDomainsClone_" + makeRandomId()
-            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, authDomain, "", Map.empty)(projectUser.makeAuthToken())
+            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, authDomain)(projectUser.makeAuthToken())
             withCleanUp {
               register cleanUp Orchestration.workspaces.delete(project.projectName, clone)(projectUser.makeAuthToken())
               Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
@@ -181,7 +181,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
           val authDomain = Set(realmGroup, realmGroup2)
           withWorkspace(project.projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             val clone = "AuthDomainsClone_" + makeRandomId()
-            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, authDomain + realmGroup3, "", Map.empty)(projectUser.makeAuthToken())
+            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, authDomain + realmGroup3)(projectUser.makeAuthToken())
             withCleanUp {
               register cleanUp Orchestration.workspaces.delete(project.projectName, clone)(projectUser.makeAuthToken())
               Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
@@ -200,7 +200,7 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
         withWorkspace(project.projectName, "AuthDomains", Set(realmGroup), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
           intercept[RestException] {
             val clone = "AuthDomainsClone_" + makeRandomId()
-            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, Set(realmGroup2), "", Map.empty)(authToken)
+            Orchestration.workspaces.clone(project.projectName, workspace, project.projectName, clone, Set(realmGroup2))(authToken)
           }
         }(authToken)
       }(authToken)
