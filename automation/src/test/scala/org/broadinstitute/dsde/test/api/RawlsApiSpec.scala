@@ -80,6 +80,17 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     }
   }
 
+  // if these prove useful anywhere else, they should move into workbench-libs
+  def getSubmissionResponse(billingProject: String, workspaceName: String, submissionId: String)(implicit token: AuthToken): String = {
+    Rawls.parseResponse(Rawls.getRequest(s"${Rawls.url}api/workspaces/$billingProject/$workspaceName/submissions/$submissionId"))
+  }
+  def getWorkflowResponse(billingProject: String, workspaceName: String, submissionId: String, workflowId: String)(implicit token: AuthToken): String = {
+    Rawls.parseResponse(Rawls.getRequest(s"${Rawls.url}api/workspaces/$billingProject/$workspaceName/submissions/$submissionId/workflows/$workflowId"))
+  }
+  def getQueueStatus()(implicit token: AuthToken): String = {
+    Rawls.parseResponse(Rawls.getRequest(s"${Rawls.url}api/submissions/queueStatus"))
+  }
+
   "Rawls" - {
     "should give pets the same access as their owners" in {
       withCleanBillingProject(owner) { projectName =>
@@ -133,12 +144,12 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     }
 
     "should retrieve sub-workflow metadata and outputs from Cromwell" in {
-      implicit val token: AuthToken = studentAToken
+      implicit val token: AuthToken = studentBToken
 
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
       val topLevelMethod: Method = methodTree(levels = 3, scatterCount = 3)
 
-      withCleanBillingProject(studentA) { projectName =>
+      withCleanBillingProject(studentB) { projectName =>
         withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
@@ -164,13 +175,13 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
             // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
 
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
             val firstWorkflowId = eventually {
               val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
-
-              withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
+              withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
+                status should (be("Submitted") or be("Done")) // very unlikely it's already done, but let's handle that case.
                 workflows should not be (empty)
                 workflows.head
               }
@@ -181,7 +192,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val firstSubWorkflowId = eventually {
               val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstWorkflowId)
               val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
-              withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
+              withClue(getWorkflowResponse(projectName, workspaceName, submissionId, firstWorkflowId)) {
                 subIds should not be (empty)
                 subIds.head
               }
@@ -192,7 +203,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val firstSubSubWorkflowId = eventually {
               val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubWorkflowId)
               val subSubIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
-              withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstSubWorkflowId: ") {
+              withClue(getWorkflowResponse(projectName, workspaceName, submissionId, firstSubWorkflowId)) {
                 subSubIds should not be (empty)
                 subSubIds.head
               }
