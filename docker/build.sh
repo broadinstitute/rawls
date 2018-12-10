@@ -98,7 +98,7 @@ function make_jar()
     GIT_MODEL_HASH=$(git log -n 1 --pretty=format:%h model)
 
     # make jar.  cache sbt dependencies. capture output and stop db before returning.
-    JAR_CMD=`docker run --rm --link mysql:mysql -e SKIP_TESTS=$SKIP_TESTS -e GIT_MODEL_HASH=$GIT_MODEL_HASH -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working`
+    JAR_CMD=`docker run --rm --link mysql:mysql -e SKIP_TESTS=$SKIP_TESTS -e GIT_MODEL_HASH=$GIT_MODEL_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working`
     EXIT_CODE=$?
 
     # stop mysql
