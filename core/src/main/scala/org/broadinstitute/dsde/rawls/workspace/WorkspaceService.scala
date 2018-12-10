@@ -320,8 +320,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       accessLevelWorkspacePolicies = workspacePolicies.filter(p => WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty)
       result <- dataSource.inTransaction({ dataAccess =>
         val query = for {
-          submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(workspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
-          workspaces <- dataAccess.workspaceQuery.listByIds(workspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
+          submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
+          workspaces <- dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
         } yield (submissionSummaryStats, workspaces)
 
         val results = query.map { case (submissionSummaryStats, workspaces) =>
