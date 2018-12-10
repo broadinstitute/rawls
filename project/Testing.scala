@@ -47,8 +47,8 @@ object Testing {
 
     validMySqlHostSetting,
 
-    (test in Test) := ((test in Test) dependsOn validMySqlHost).value,
-    (testOnly in Test) := ((testOnly in Test) dependsOn validMySqlHost).inputTaskValue.evaluated,
+//    (test in Test) := ((test in Test) dependsOn validMySqlHost).value,
+//    (testOnly in Test) := ((testOnly in Test) dependsOn validMySqlHost).inputTaskValue.evaluated,
 
     parallelExecution in Test := false
 

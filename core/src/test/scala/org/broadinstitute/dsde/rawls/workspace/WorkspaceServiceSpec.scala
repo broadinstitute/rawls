@@ -1043,4 +1043,16 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  it should "ignore workspaces in list without access level policies" in withTestDataServicesCustomSam { services =>
+    services.samDAO.policies.clear()
+    services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.shareReader, SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set.empty), userInfo)
+    services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspaceNoAttrs.workspaceId, SamWorkspacePolicyNames.owner, SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set.empty), userInfo)
+    val result = Await.result(services.workspaceService.listWorkspaces(), Duration.Inf)
+    result match {
+      case RequestComplete((StatusCodes.OK, responses: Seq[WorkspaceListResponse])) =>
+        responses.map(_.workspace.workspaceId) should not contain testData.workspace.workspaceId
+        responses.map(_.workspace.workspaceId) should contain only testData.workspaceNoAttrs.workspaceId
+      case other => fail("unexpected response: " + other)
+    }
+  }
 }

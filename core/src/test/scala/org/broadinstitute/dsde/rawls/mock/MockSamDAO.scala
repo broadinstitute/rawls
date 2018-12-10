@@ -148,5 +148,18 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     Future.successful(())
   }
 
+  override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
+    val policiesForType = for {
+      ((typeName, resourceId), resourcePolicies) <- policies if typeName == resourceTypeName
+      (policyName, policy) <- resourcePolicies if policy.policy.memberEmails.contains(WorkbenchEmail(userInfo.userEmail.value))
+    } yield {
+      SamResourceIdWithPolicyName(resourceId, policyName, Set.empty, Set.empty, false)
+    }
+    if (policiesForType.isEmpty) {
+      super.getPoliciesForType(resourceTypeName, userInfo)
+    } else {
+      Future.successful(policiesForType.toSet)
+    }
+  }
 }
 
