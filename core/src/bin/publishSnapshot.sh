@@ -2,4 +2,4 @@
 
 set -e
 
-sbt publish -Dproject.isSnapshot=true
+SBT_OPTS=-Dproject.isSnapshot=true sbt +publish

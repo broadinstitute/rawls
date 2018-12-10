@@ -12,17 +12,17 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
+import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{Read, Write}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, GoogleGroupSyncMonitorSupervisor}
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.openam.{MockUserInfoDirectives, MockUserInfoDirectivesWithUser}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils, model}
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
@@ -30,9 +30,11 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration.{Duration, FiniteDuration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Try
 
 
 class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll {
@@ -47,14 +49,11 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   val workspace = Workspace(
     testData.wsName.namespace,
     testData.wsName.name,
-    Set.empty,
     "aWorkspaceId",
     "aBucket",
     currentTime(),
     currentTime(),
     "test",
-    Map.empty,
-    Map.empty,
     Map.empty
   )
 
@@ -70,7 +69,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     super.afterAll()
   }
 
-  case class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
+  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
     private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
     lazy val userService: UserService = userServiceConstructor(userInfo1)
@@ -80,7 +79,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-    val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
+    val samDAO = new MockSamDAO(dataSource)
     val gpsDAO = new MockGooglePubSubDAO
 
     val notificationTopic = "test-notification-topic"
@@ -96,13 +95,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       workbenchMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"))
 
-    val directoryDAO = new MockUserDirectoryDAO
-
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      gpsDAO,
-      "test-topic-name",
       notificationDAO,
       samDAO,
       Seq("bigquery.jobUser"),
@@ -114,7 +109,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       gcsDAO
     )_
 
-    val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
     val bigQueryDAO = new MockGoogleBigQueryDAO
     val submissionCostService = new MockSubmissionCostService("test", "test", bigQueryDAO)
     val execServiceBatchSize = 3
@@ -137,13 +131,17 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       submissionCostService,
-      trackDetailedSubmissionMetrics = true
+      trackDetailedSubmissionMetrics = true,
+      workspaceBucketNamePrefix = "fc-"
     )_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
-      googleGroupSyncMonitorSupervisor ! PoisonPill
     }
+  }
+
+  class TestApiServiceWithCustomSamDAO(dataSource: SlickDataSource, override val user: RawlsUser)(override implicit val executionContext: ExecutionContext) extends TestApiService(dataSource, user) {
+    override val samDAO: CustomizableMockSamDAO = new CustomizableMockSamDAO(dataSource)
   }
 
   def withTestDataServices[T](testCode: TestApiService => T): T = {
@@ -152,10 +150,25 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  def withTestDataServicesCustomSam[T](testCode: TestApiServiceWithCustomSamDAO => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withServicesCustomSam(dataSource, testData.userOwner)(testCode)
+    }
+  }
+
   private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
     val apiService = new TestApiService(dataSource, user)
     try {
-      testData.createWorkspaceGoogleGroups(apiService.gcsDAO)
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
+    }
+  }
+
+  private def withServicesCustomSam[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiServiceWithCustomSamDAO) => T) = {
+    val apiService = new TestApiServiceWithCustomSamDAO(dataSource, user)
+
+    try {
       testCode(apiService)
     } finally {
       apiService.cleanupSupervisor
@@ -350,19 +363,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  it should "retrieve ACLs" in withTestDataServices { services =>
-    //Really annoying setup. I'm trying to avoid using the patch function to test get, so I have to poke
-    //ACLs into the workspace manually.
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-
-    runAndWait(rawlsUserQuery.createUser(user))
-    runAndWait(rawlsGroupQuery.save(group))
-
-    val ownerGroupRef = testData.workspace.accessLevels(WorkspaceAccessLevels.Owner)
-    val theOwnerGroup = runAndWait(rawlsGroupQuery.load(ownerGroupRef)).get
-    val replacementOwnerGroup = theOwnerGroup.copy(users = theOwnerGroup.users + user, subGroups = theOwnerGroup.subGroups + group)
-    runAndWait(rawlsGroupQuery.save(replacementOwnerGroup))
+  it should "retrieve ACLs" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
 
     val vComplete = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
@@ -373,312 +375,203 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     assertResult(WorkspaceACL(Map(
-      testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      "obama@whitehouse.gov" -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
-      "group@whitehouse.gov" -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
-      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
+      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
+      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, true),
       testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)))) {
       vData
     }
   }
 
-  it should "patch ACLs and return updated acls" in withTestDataServices { services =>
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    runAndWait(rawlsUserQuery.createUser(user))
-    runAndWait(rawlsGroupQuery.save(group))
+  private def toUserInfo(user: RawlsUser) = UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId)
+  private def populateWorkspacePolicies(services: TestApiService) = {
+    val populateAcl = for {
+      _ <- services.samDAO.registerUser(toUserInfo(testData.userOwner))
+      _ <- services.samDAO.registerUser(toUserInfo(testData.userWriter))
+      _ <- services.samDAO.registerUser(toUserInfo(testData.userReader))
 
-    services.gcsDAO.createGoogleGroup(group)
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.owner,
+        SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set(SamWorkspaceActions.own, SamWorkspaceActions.write, SamWorkspaceActions.read), Set(SamWorkspaceRoles.owner)), userInfo)
+
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.writer,
+        SamPolicy(Set(WorkbenchEmail(testData.userWriter.userEmail.value)), Set(SamWorkspaceActions.write, SamWorkspaceActions.read), Set(SamWorkspaceRoles.writer)), userInfo)
+
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.reader,
+        SamPolicy(Set(WorkbenchEmail(testData.userReader.userEmail.value)), Set(SamWorkspaceActions.read), Set(SamWorkspaceRoles.reader)), userInfo)
+
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCatalog,
+        SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set(SamWorkspaceActions.catalog), Set.empty), userInfo)
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.shareReader,
+        SamPolicy(Set.empty, Set.empty, Set.empty), userInfo)
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.shareWriter,
+        SamPolicy(Set.empty, Set.empty, Set.empty), userInfo)
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCompute,
+        SamPolicy(Set(WorkbenchEmail(testData.userWriter.userEmail.value)), Set.empty, Set.empty), userInfo)
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.projectOwner,
+        SamPolicy(Set.empty, Set.empty, Set.empty), userInfo)
+    } yield ()
+
+    Await.result(populateAcl, Duration.Inf)
+  }
+
+  it should "add ACLs" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
+
+    val user1 = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+    val user2 = RawlsUser(RawlsUserSubjectId("obamaiscool2"), RawlsUserEmail("obama2@whitehouse.gov"))
+
+    Await.result(for {
+      _ <- services.samDAO.registerUser(toUserInfo(user1))
+      _ <- services.samDAO.registerUser(toUserInfo(user2))
+    } yield (), Duration.Inf)
 
     //add ACL
-    val aclAdd = Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Read, None))
+    val aclAdd = Set(WorkspaceACLUpdate(user1.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(user2.userEmail.value, WorkspaceAccessLevels.Read, Option(true)))
     val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromAdd = WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse(user.userSubjectId.value, user.userEmail.value, WorkspaceAccessLevels.Owner), WorkspaceACLUpdateResponse(group.groupName.value, group.groupEmail.value, WorkspaceAccessLevels.Read)), Seq.empty, Seq.empty, Seq.empty)
+    val responseFromAdd = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(user1.userEmail.value, WorkspaceAccessLevels.Owner, Some(true), Some(true)), WorkspaceACLUpdate(user2.userEmail.value, WorkspaceAccessLevels.Read, Some(true), Some(false))), Set.empty, Set.empty)
 
-    assertResult((StatusCodes.OK, responseFromAdd), "Add ACL shouldn't error") {
+    assertResult((StatusCodes.OK, responseFromAdd), aclAddResponse.response.toString()) {
       aclAddResponse.response
     }
 
-    //check result
-    val (_, addedACLs) = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-    .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]].response
+    services.samDAO.callsToAddToPolicy should contain theSameElementsAs Seq(
+      (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.owner, user1.userEmail.value),
+      (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.shareReader, user2.userEmail.value),
+      (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.reader, user2.userEmail.value)
+    )
+    services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Seq.empty
+  }
 
-    assertResult(WorkspaceACL(Map(
-      testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
-      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
-      testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false),
-      group.groupEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))), "Add ACL should actually do so") {
-      addedACLs
-    }
+  it should "update ACLs" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
 
     //update ACL
-    val aclUpdates = Seq(WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Write, None))
+    val aclUpdates = Set(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, None))
     val aclUpdateResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromUpdate = WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse(group.groupName.value, group.groupEmail.value, WorkspaceAccessLevels.Write)), Seq.empty, Seq.empty, Seq.empty)
+    val responseFromUpdate = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write, Some(false), Some(true))), Set.empty, Set.empty)
 
     assertResult((StatusCodes.OK, responseFromUpdate), "Update ACL shouldn't error") {
       aclUpdateResponse.response
     }
 
-    //check result
-    val (_, updatedACLs) = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]].response
+    services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Seq(
+      (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.reader, testData.userReader.userEmail.value)
+    )
+    services.samDAO.callsToAddToPolicy should contain theSameElementsAs Seq(
+      (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.writer, testData.userReader.userEmail.value),
+      (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCompute, testData.userReader.userEmail.value),
+      (SamResourceTypeNames.billingProject, testData.workspace.namespace, SamBillingProjectPolicyNames.canComputeUser, testData.userReader.userEmail.value)
+    )
+  }
 
-    assertResult(WorkspaceACL(Map(
-      testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
-      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
-      testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false),
-      group.groupEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, true))), "Update ACL should actually do so") {
-      updatedACLs
-    }
+  it should "remove ACLs" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
 
     //remove ACL
-    val aclRemove = Seq(WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.NoAccess, None))
+    val aclRemove = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.NoAccess, None))
     val aclRemoveResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclRemove, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, List[WorkspaceACLUpdateResponseList])]]
-    val responseFromRemove = WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse(group.groupName.value, group.groupEmail.value, WorkspaceAccessLevels.NoAccess)), Seq.empty, Seq.empty, Seq.empty)
+    val responseFromRemove = WorkspaceACLUpdateResponseList(Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.NoAccess, Some(false), Some(false))), Set.empty, Set.empty)
 
     assertResult((StatusCodes.OK, responseFromRemove), "Remove ACL shouldn't error") {
       aclRemoveResponse.response
     }
 
-    //check result
-    val (_, removedACLs) = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]].response
-
-    assertResult(WorkspaceACL(Map(
-      testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false, true, true),
-      user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
-      testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
-      testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false))), "Remove ACL should actually do so") {
-      removedACLs
-    }
+    services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Seq(
+      (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCompute, testData.userWriter.userEmail.value),
+      (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.writer, testData.userWriter.userEmail.value)
+    )
+    services.samDAO.callsToAddToPolicy should contain theSameElementsAs Seq.empty
   }
 
-  it should "allow can share user to share when there are multiple project owners" in withDefaultTestDatabase { datasource: SlickDataSource =>
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    runAndWait(rawlsUserQuery.createUser(user))
+  it should "return non-existent users during patch ACLs" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
 
-    withServices(datasource, testData.userOwner) { services =>
-      //add the owner as an owner on the billing project
-      Await.result(services.userService.addUserToBillingProject(RawlsBillingProjectName(testData.workspace.namespace), ProjectAccessUpdate(testData.userOwner.userEmail.value, ProjectRoles.Owner)), Duration.Inf)
-
-      val aCLUpdates = Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true)), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)))
-      val aCLUpdatesResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aCLUpdates, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-
-      assertResult(StatusCodes.OK) {
-        aCLUpdatesResponse.response._1
-      }
-    }
-    withServices(datasource, testData.userReader) { services =>
-      val addRead = Seq(
-        WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
-        WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, Option(true), Option(true)),
-        WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, Option(false), Option(true)),
-        WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true), Option(false)),
-        WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Read))
-
-      val addReadResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, addRead, false), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-      assertResult(StatusCodes.OK) {
-        addReadResponse.response._1
-      }
-      assertResult(Seq(WorkspaceACLUpdateResponse(user.userSubjectId.value, user.userEmail.value, WorkspaceAccessLevels.Read))) {
-        addReadResponse.response._2.usersUpdated
-      }
-    }
-  }
-
-  it should "return non-existent users during patch ACLs" in withTestDataServices { services =>
-    val aclUpdates = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
+    val aclUpdates = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
     val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromUpdate = WorkspaceACLUpdateResponseList(Seq.empty, Seq.empty, Seq.empty, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)))
+    val responseFromUpdate = WorkspaceACLUpdateResponseList(Set.empty, Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)))
 
     assertResult((StatusCodes.OK, responseFromUpdate), "Add ACL shouldn't error") {
       vComplete.response
     }
+  }
 
-    val aclUpdates2 = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
+  it should "invite a user to a workspace" in withTestDataServicesCustomSam { services =>
+    val aclUpdates2 = Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None))
     val vComplete2 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates2, true), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromUpdate2 = WorkspaceACLUpdateResponseList(Seq.empty, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), Seq.empty, Seq.empty)
+    val responseFromUpdate2 = WorkspaceACLUpdateResponseList(Set.empty, Set(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, Some(true), Some(true))), Set.empty)
 
     assertResult((StatusCodes.OK, responseFromUpdate2), "Add ACL shouldn't error") {
       vComplete2.response
     }
 
-    val aclUpdates3 = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None))
-    val vComplete3 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates3, true), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromUpdate3 = WorkspaceACLUpdateResponseList(Seq.empty, Seq.empty, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None)), Seq.empty)
-
-    assertResult((StatusCodes.OK, responseFromUpdate3), "Add ACL shouldn't error") {
-      vComplete3.response
-    }
-
-    assertResult(true, "Changing an invitees access level should return them in the invitesUpdated group") {
-      vComplete3.response._2.invitesUpdated.size == 1
-    }
-
-    assertResult(true, "Changing an invitees access level shouldn't return them in the usersNotFound group") {
-      vComplete3.response._2.usersNotFound.size == 0
-    }
+    services.samDAO.invitedUsers.keySet should contain theSameElementsAs Set("obama@whitehouse.gov")
   }
 
-  it should "invite a user to a workspace" in withTestDataServices { services =>
-    val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+  it should "retrieve catalog permission" in withTestDataServicesCustomSam { services =>
+    val populateAcl = for {
+      _ <- services.samDAO.registerUser(toUserInfo(testData.userOwner))
 
-    assertResult(StatusCodes.OK, "Invite user shouldn't error") {
-      vComplete.response._1
-    }
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCatalog,
+        SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set(SamWorkspaceActions.catalog), Set.empty), userInfo)
+    } yield ()
 
-    assert(vComplete.response._2.invitesSent.contains(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)))
+    Await.result(populateAcl, Duration.Inf)
 
-    val vComplete3 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-
-    assert(vComplete3.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false))))
-
-  }
-
-  it should "be case insensitive when adding user/group to workspace" in withTestDataServices { services =>
-    val vComplete0 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-
-    val vComplete1 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-
-    assert(vComplete1.response._2.acl.toSeq.contains("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false)))
-
-    val vComplete2 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Seq(WorkspaceACLUpdate("ObAmA@WhiteHouse.Gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-
-    assertResult(true, "Entering already added user/group with different capitalization should not include them in the invitesUpdated group") {
-      vComplete2.response._2.invitesUpdated.size == 0
-    }
-
-    assertResult(true, "Entering already added user/group with different capitalization should not include them in the usersNotFound group") {
-      vComplete2.response._2.usersNotFound.size == 0
-    }
-
-  }
-
-  it should "update an existing workspace invitation to change access levels" in withTestDataServices { services =>
-    val vComplete0 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-
-    val vComplete1 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-
-    assert(vComplete1.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false))))
-
-    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read, None)), true), Duration.Inf)
-
-    val vComplete2 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-
-    assert(vComplete2.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Read, true, false, false))))
-
-  }
-
-  it should "remove a user invite from a workspace" in withTestDataServices { services =>
-    val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)), true), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-
-    assertResult(StatusCodes.OK, "Invite user shouldn't error") {
-      vComplete.response._1
-    }
-
-    val vComplete2 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-
-    assert(vComplete2.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false))))
-
-    val vComplete3 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.NoAccess, None)), true), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-
-    assertResult(StatusCodes.OK, "Remove invite shouldn't error") {
-      vComplete3.response._1
-    }
-
-    val vComplete4 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
-
-    assert(!vComplete4.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false, false))))
-  }
-
-  it should "send notification messages to all users on workspace" in withTestDataServices { services =>
-    val vComplete = Await.result(services.workspaceService.sendChangeNotifications(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, String)]]
-
-    assertResult(StatusCodes.OK, "Notification shouldn't error") {
-      vComplete.response._1
-    }
-
-    assertResult("4", "Number of notifications sent should match number of users on workspace") {
-      vComplete.response._2
-    }
-
-  }
-
-
-  it should "retrieve catalog permission" in withTestDataServices { services =>
     val vComplete = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]]
+      .asInstanceOf[RequestComplete[(StatusCode, Set[WorkspaceCatalog])]]
     val (vStatus, vData) = vComplete.response
-    assertResult((StatusCodes.OK, Vector.empty)) {
+    assertResult((StatusCodes.OK, Set.empty)) {
       (vStatus, vData.filter(wc => wc.catalog))
     }
   }
 
-  it should "patch Catalog and return updated permissions" in withTestDataServices { services =>
-    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    runAndWait(rawlsUserQuery.createUser(user))
-    runAndWait(rawlsGroupQuery.save(group))
+  it should "add catalog permissions" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
 
-    services.gcsDAO.createGoogleGroup(group)
+    val user1 = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+
+    Await.result(for {
+      _ <- services.samDAO.registerUser(toUserInfo(user1))
+    } yield (), Duration.Inf)
 
     //add catalog perm
     val catalogUpdateResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
-      Seq(WorkspaceCatalog("obama@whitehouse.gov", true),WorkspaceCatalog("group@whitehouse.gov", true),WorkspaceCatalog("none@nowhere.gov", true))), Duration.Inf)
+      Seq(WorkspaceCatalog("obama@whitehouse.gov", true))), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
-    val expectedResponse = WorkspaceCatalogUpdateResponseList(Seq(
-      WorkspaceCatalogResponse(user.userSubjectId.value, true),
-      WorkspaceCatalogResponse(group.groupName.value,true)),Seq("none@nowhere.gov"))
+    val expectedResponse = WorkspaceCatalogUpdateResponseList(Seq(WorkspaceCatalogResponse("obama@whitehouse.gov", true)), Seq.empty)
 
     assertResult((StatusCodes.OK, expectedResponse)) {
       catalogUpdateResponse.response
     }
 
     //check result
-    val (_, catalogUpdates) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
+    services.samDAO.callsToAddToPolicy should contain theSameElementsAs Seq(
+      (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCatalog, user1.userEmail.value)
+    )
+  }
 
-    assertSameElements(Vector(WorkspaceCatalog("obama@whitehouse.gov",true),WorkspaceCatalog("group@whitehouse.gov",true)), catalogUpdates)
+  it should "remove catalog permissions" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
 
     //remove catalog perm
     val catalogRemoveResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
-      Seq(WorkspaceCatalog("obama@whitehouse.gov", false),WorkspaceCatalog("group@whitehouse.gov", false),WorkspaceCatalog("none@nowhere.gov", false))), Duration.Inf)
+      Seq(WorkspaceCatalog(testData.userOwner.userEmail.value, false))), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
 
-    assertResult((StatusCodes.OK, Seq("none@nowhere.gov"))) {
-      (catalogRemoveResponse.response._1, catalogRemoveResponse.response._2.emailsNotFound)
+    val expectedResponse = WorkspaceCatalogUpdateResponseList(Seq(WorkspaceCatalogResponse(testData.userOwner.userEmail.value, false)), Seq.empty)
+
+    assertResult((StatusCodes.OK, expectedResponse)) {
+      catalogRemoveResponse.response
     }
-    assertSameElements(Seq(WorkspaceCatalogResponse("obamaiscool", false),WorkspaceCatalogResponse("test", false)), catalogRemoveResponse.response._2.usersUpdated)
 
     //check result
-    val (_, catalogRemovals) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
-
-    assertResult(Vector.empty){
-      catalogRemovals
-    }
+    services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Seq(
+      (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCatalog, testData.userOwner.userEmail.value)
+    )
   }
 
   it should "lock a workspace with terminated submissions" in withTestDataServices { services =>
@@ -733,8 +626,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "delete a workspace with succeeded submission" in withTestDataServices { services =>
-    println(runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission))).toSet)
-
     //check that the workspace to be deleted exists
     assertWorkspaceResult(Option(testData.workspaceSuccessfulSubmission)) {
       runAndWait(workspaceQuery.findByName(testData.wsName4))
@@ -744,11 +635,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assertResult(Vector(MethodConfigurationShort("testConfig2",Some("Sample"),AgoraMethod("myNamespace","method-a",1),"dsde"),
       MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
-    }
-
-    //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false, false))) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission))).toSet
     }
 
     //Check if submissions on workspace exist
@@ -774,11 +660,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
     }
 
-    //Check if access levels have been deleted
-    assertResult(Vector()) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
-    }
-
     //Check if submissions on workspace have been deleted
     assertResult(Vector()) {
       runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
@@ -799,11 +680,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
-    }
-
-    //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false, false))) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceFailedSubmission))).toSet
     }
 
     //Check if submissions on workspace exist
@@ -829,11 +705,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
     }
 
-    //Check if access levels have been deleted
-    assertResult(Vector()) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
-    }
-
     //Check if submissions on workspace have been deleted
     assertResult(Vector()) {
       runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
@@ -855,11 +726,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
-    }
-
-    //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false, false))) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSubmittedSubmission))).toSet
     }
 
     //Check if submissions on workspace exist
@@ -885,11 +751,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
     }
 
-    //Check if access levels have been deleted
-    assertResult(Vector()) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
-    }
-
     //Check if submissions on workspace have been deleted
     assertResult(Vector()) {
       runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
@@ -910,11 +771,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //Check method configs to be deleted exist
     assertResult(Vector(MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
-    }
-
-    //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false, false))) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceMixedSubmissions))).toSet
     }
 
     //Check if submissions on workspace exist
@@ -938,11 +794,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //check if method configs have been deleted
     assertResult(Vector()) {
       runAndWait(methodConfigurationQuery.listActive(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
-    }
-
-    //Check if access levels have been deleted
-    assertResult(Vector()) {
-      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
     }
 
     //Check if submissions on workspace have been deleted
@@ -1025,43 +876,171 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   }
 
-  for ((accessLevel, callCount) <- Seq((Write, 1), (Read, 0))) {
-    it should s"share billing compute $callCount times when workspace $accessLevel access granted" in withTestDataServices { services =>
-      import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-      import WorkspaceACLJsonSupport._
+  for ((policyName, shouldShare) <- Seq((SamWorkspacePolicyNames.writer, false), (SamWorkspacePolicyNames.canCompute, true), (SamWorkspacePolicyNames.reader, false))) {
+    it should s"${if (!shouldShare) "not " else ""}share billing compute when workspace $policyName access granted" in withTestDataServicesCustomSam { services =>
       val email = s"${UUID.randomUUID}@bar.com"
-      val results = RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse("foo", email, accessLevel)), Seq.empty, Seq.empty, Seq.empty))
-      assertResult(results) {
-        Await.result(services.workspaceService.maybeShareProjectComputePolicy(Future.successful(results), testData.workspace.toWorkspaceName), Duration.Inf)
+      val results = Set((policyName, email))
+      Await.result(services.workspaceService.maybeShareProjectComputePolicy(results, testData.workspace.toWorkspaceName), Duration.Inf)
+
+      val expectedPolicyEntry = (SamResourceTypeNames.billingProject, testData.workspace.namespace, SamBillingProjectPolicyNames.canComputeUser, email)
+      if(shouldShare) {
+        services.samDAO.callsToAddToPolicy should contain theSameElementsAs(Set(expectedPolicyEntry))
+      } else {
+        services.samDAO.callsToAddToPolicy should contain theSameElementsAs(Set.empty)
+      }
+    }
+  }
+
+  val aclTestUser = UserInfo(RawlsUserEmail("acl-test-user"), OAuth2BearerToken(""), 0, RawlsUserSubjectId("acl-test-user-subject-id"))
+
+  def allWorkspaceAclUpdatePermutations(emailString: String): Seq[WorkspaceACLUpdate] = for {
+    accessLevel <- WorkspaceAccessLevels.all
+    canShare <- Set(Some(true), Some(false), None)
+    canCompute <- Set(Some(true), Some(false), None)
+  } yield WorkspaceACLUpdate(emailString, accessLevel, canShare, canCompute)
+
+  def expectedPolicies(aclUpdate: WorkspaceACLUpdate): Either[StatusCode, Set[(SamResourceTypeName, SamResourcePolicyName)]] = {
+    aclUpdate match {
+      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.ProjectOwner, _, _) => Left(StatusCodes.BadRequest)
+      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Owner, _, _) => Right(Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.owner))
+
+      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, canShare, canCompute) =>
+        val canSharePolicy = canShare match {
+          case None | Some(false) => Set.empty
+          case Some(true) => Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.shareWriter)
+        }
+        val canComputePolicy = canCompute match {
+          case None | Some(true) => Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.canCompute, SamResourceTypeNames.billingProject -> SamBillingProjectPolicyNames.canComputeUser)
+          case Some(false) => Set.empty
+        }
+        Right(Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.writer) ++ canSharePolicy ++ canComputePolicy)
+
+      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, canShare, canCompute) =>
+        if (canCompute.contains(true)) {
+          Left(StatusCodes.BadRequest)
+        } else {
+          val canSharePolicy = canShare match {
+            case None | Some(false) => Set.empty
+            case Some(true) => Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.shareReader)
+          }
+          Right(Set(SamResourceTypeNames.workspace -> SamWorkspacePolicyNames.reader) ++ canSharePolicy)
+        }
+
+      case WorkspaceACLUpdate(_, WorkspaceAccessLevels.NoAccess, _, _) => Right(Set.empty)
+    }
+  }
+
+  for (aclUpdate <- allWorkspaceAclUpdatePermutations(aclTestUser.userEmail.value)) {
+    it should s"add correct policies for $aclUpdate" in withTestDataServicesCustomSam { services =>
+      Await.result(services.samDAO.registerUser(aclTestUser), Duration.Inf)
+      populateWorkspacePolicies(services)
+
+      val result = Try {
+        Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
       }
 
-      import org.mockserver.model.HttpRequest.request
-      mockServer.mockServer.verify(request().withMethod("PUT").withPath(s"/api/resource/${SamResourceTypeNames.billingProject.value}/${testData.workspace.namespace}/policies/${UserService.canComputeUserPolicyName}/memberEmails/$email"), VerificationTimes.exactly(callCount))
+      (expectedPolicies(aclUpdate), result) match {
+        case (Left(statusCode), util.Failure(exception: RawlsExceptionWithErrorReport)) => assertResult(Some(statusCode), result.toString) {
+          exception.errorReport.statusCode
+        }
+
+        case (Right(policies), util.Success(_)) =>
+          val expectedAdds = policies.map {
+            case (SamResourceTypeNames.workspace, policyName) => (SamResourceTypeNames.workspace, testData.workspace.workspaceId, policyName, aclTestUser.userEmail.value)
+            case (SamResourceTypeNames.billingProject, policyName) => (SamResourceTypeNames.billingProject, testData.workspace.namespace, policyName, aclTestUser.userEmail.value)
+            case _ => throw new Exception("make the compiler happy")
+          }
+
+          withClue(result.toString) {
+            services.samDAO.callsToAddToPolicy should contain theSameElementsAs expectedAdds
+            services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Set.empty
+          }
+
+        case (_, r) => fail(r.toString)
+      }
     }
   }
 
-  it should "not fail horribly when workspace access groups are missing" in withTestDataServices { services =>
-    val workspaceName = UUID.randomUUID().toString
-    Await.result(services.workspaceService.CreateWorkspace(WorkspaceRequest(testData.billingProject.projectName.value, workspaceName, Map.empty, None)), Duration.Inf)
+  it should s"add correct policies for group" in withTestDataServicesCustomSam { services =>
+    // setting the email to None is what a group looks like
+    services.samDAO.userEmails.put(aclTestUser.userEmail.value, None)
+    populateWorkspacePolicies(services)
 
-    val workspaces = Await.result(services.workspaceService.ListWorkspaces, Duration.Inf) match {
-      case RequestComplete((StatusCodes.OK, responses: Seq[Option[WorkspaceListResponse]])) => responses.flatten
-      case x => fail(s"unexpected response from ListWorkspaces: $x")
+    val aclUpdate = WorkspaceACLUpdate(aclTestUser.userEmail.value, WorkspaceAccessLevels.Write)
+
+    val result = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
+
+    withClue(result.toString) {
+      services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set(
+        (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.writer, aclTestUser.userEmail.value),
+        (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCompute, aclTestUser.userEmail.value),
+        (SamResourceTypeNames.billingProject, testData.workspace.namespace, SamBillingProjectPolicyNames.canComputeUser, aclTestUser.userEmail.value)
+      )
+      services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Set.empty
     }
-
-    val partiallyRemovedWorkspace = workspaces.find(_.workspace.name == workspaceName).get.workspace
-
-    assert(workspaces.find(_.workspace.toWorkspaceName == partiallyRemovedWorkspace.toWorkspaceName).get.owners.nonEmpty)
-
-    services.dataSource.inTransaction { dataaccess =>
-      DBIO.sequence(partiallyRemovedWorkspace.accessLevels.values.map(dataaccess.rawlsGroupQuery.delete))
-    }
-
-    val workspacesAgain = Await.result(services.workspaceService.ListWorkspaces, Duration.Inf) match {
-      case RequestComplete((StatusCodes.OK, responses: Seq[Option[WorkspaceListResponse]])) => responses.flatten
-      case x => fail(s"unexpected response from ListWorkspaces: $x")
-    }
-
-    assert(workspacesAgain.find(_.workspace.toWorkspaceName == partiallyRemovedWorkspace.toWorkspaceName).get.owners.isEmpty)
   }
+
+
+  def addEmailToPolicy(services: TestApiServiceWithCustomSamDAO, policyName: SamResourcePolicyName, email: String) = {
+    val policy = services.samDAO.policies((SamResourceTypeNames.workspace, testData.workspace.workspaceId))(policyName)
+    val updateMembers = policy.policy.memberEmails + WorkbenchEmail(email)
+    val updatedPolicy = policy.copy(policy = policy.policy.copy(memberEmails = updateMembers))
+    services.samDAO.policies((SamResourceTypeNames.workspace, testData.workspace.workspaceId)).put(policyName, updatedPolicy)
+  }
+
+  val testPolicyNames = Set(SamWorkspacePolicyNames.canCompute, SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader, SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.projectOwner, SamWorkspacePolicyNames.shareReader, SamWorkspacePolicyNames.shareWriter)
+  for(testPolicyName1 <- testPolicyNames; testPolicyName2 <- testPolicyNames if testPolicyName1 != testPolicyName2 && !(testPolicyName1 == SamWorkspacePolicyNames.shareReader && testPolicyName2 == SamWorkspacePolicyNames.shareWriter) && !(testPolicyName1 == SamWorkspacePolicyNames.shareWriter && testPolicyName2 == SamWorkspacePolicyNames.shareReader)) {
+    it should s"remove $testPolicyName1 and $testPolicyName2" in withTestDataServicesCustomSam { services =>
+      Await.result(services.samDAO.registerUser(aclTestUser), Duration.Inf)
+      populateWorkspacePolicies(services)
+
+      addEmailToPolicy(services, testPolicyName1, aclTestUser.userEmail.value)
+      addEmailToPolicy(services, testPolicyName2, aclTestUser.userEmail.value)
+
+      val result = Try {
+        Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(WorkspaceACLUpdate(aclTestUser.userEmail.value, WorkspaceAccessLevels.NoAccess)), inviteUsersNotFound = false), Duration.Inf)
+      }
+
+      if (testPolicyName1 == SamWorkspacePolicyNames.projectOwner || testPolicyName2 == SamWorkspacePolicyNames.projectOwner) {
+        val error = intercept[RawlsExceptionWithErrorReport] {
+          result.get
+        }
+        assertResult(Some(StatusCodes.BadRequest), result.toString) {
+          error.errorReport.statusCode
+        }
+      } else {
+        assert(result.isSuccess, result.toString)
+        services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Set(
+          (SamResourceTypeNames.workspace, testData.workspace.workspaceId, testPolicyName1, aclTestUser.userEmail.value),
+          (SamResourceTypeNames.workspace, testData.workspace.workspaceId, testPolicyName2, aclTestUser.userEmail.value)
+        )
+        services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set.empty
+      }
+
+    }
+  }
+
+  for(testPolicyName <- Set(SamWorkspacePolicyNames.writer, SamWorkspacePolicyNames.reader, SamWorkspacePolicyNames.owner); aclUpdate <- Set(WorkspaceAccessLevels.Read ,WorkspaceAccessLevels.Write, WorkspaceAccessLevels.Owner).map(l => WorkspaceACLUpdate(aclTestUser.userEmail.value, l, canCompute = Some(false)))) {
+    it should s"change $testPolicyName to $aclUpdate" in withTestDataServicesCustomSam { services =>
+      Await.result(services.samDAO.registerUser(aclTestUser), Duration.Inf)
+      populateWorkspacePolicies(services)
+
+      addEmailToPolicy(services, testPolicyName, aclTestUser.userEmail.value)
+
+      val result = Try {
+        Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
+      }
+
+      assert(result.isSuccess, result.toString)
+
+      if (aclUpdate.accessLevel.toPolicyName.contains(testPolicyName.value)) {
+        services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Set.empty
+        services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set.empty
+      } else {
+        services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Set((SamResourceTypeNames.workspace, testData.workspace.workspaceId, testPolicyName, aclTestUser.userEmail.value))
+        services.samDAO.callsToAddToPolicy should contain theSameElementsAs Set((SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamResourcePolicyName(aclUpdate.accessLevel.toPolicyName.get), aclTestUser.userEmail.value))
+      }
+    }
+  }
+
 }

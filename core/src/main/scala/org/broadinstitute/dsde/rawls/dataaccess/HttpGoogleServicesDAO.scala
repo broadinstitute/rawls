@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.io._
 import java.util.UUID
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
 import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
@@ -22,7 +22,7 @@ import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
-import com.google.api.services.compute.model.{ServiceAccount, UsageExportLocation}
+import com.google.api.services.compute.model.UsageExportLocation
 import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.genomics.model.Operation
 import com.google.api.services.genomics.{Genomics, GenomicsScopes}
@@ -35,27 +35,24 @@ import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
-import com.typesafe.scalalogging.LazyLogging
+import io.grpc.Status.Code
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.GoogleUtilities
-import io.grpc.Status.Code
-import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, GoogleInstrumentedService}
-import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService._
+import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard, Retry}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroup}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time
 import spray.json._
 
 import scala.collection.JavaConversions._
-import scala.concurrent.duration._
 import scala.concurrent.{Future, _}
 import scala.io.Source
-import scala.util.{Success, Try}
+import scala.util.Try
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -84,10 +81,6 @@ class HttpGoogleServicesDAO(
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
   val API_SERVICE_MANAGEMENT = "ServiceManagement"
   val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
-
-  val SECURITY_LABEL_KEY = "security"
-  val HIGH_SECURITY_LABEL = "high"
-  val LOW_SECURITY_LABEL = "low"
 
   // modify these if we need more granular access in the future
   val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
@@ -137,65 +130,12 @@ class HttpGoogleServicesDAO(
     executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
-  private def getBucketName(workspaceId: String, secure: Boolean) = s"${groupsPrefix}-${if(secure) "secure-" else ""}${workspaceId}"
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String]): Future[GoogleWorkspaceInfo] = {
 
-  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, projectOwnerGroup: RawlsGroup, workspaceId: String, workspaceName: WorkspaceName, authDomain: Set[ManagedGroupRef], authDomainProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
-
-    // we do not make a special access group for project owners because the only member would be a single group
-    // we will just use that group directly and avoid potential google problems with a group being in too many groups
-    val accessGroupRefsByLevel: Map[WorkspaceAccessLevel, RawlsGroupRef] = (groupAccessLevelsAscending.filterNot(_ == ProjectOwner)).map { accessLevel =>
-      (accessLevel, RawlsGroupRef(RawlsGroupName(workspaceAccessGroupName(workspaceId, accessLevel))))
-    }.toMap
-
-    val intersectionGroupRefsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroupRef]] = {
-      if(authDomain.isEmpty) None
-      else {
-        Option(groupAccessLevelsAscending.map { accessLevel =>
-          (accessLevel, RawlsGroupRef(RawlsGroupName(intersectionGroupName(workspaceId, accessLevel))))
-        }.toMap)
-      }
-    }
-
-    def rollbackGroups(groupInsertTries: Iterable[Try[RawlsGroup]]) = {
-      Future.traverse(groupInsertTries) {
-        case Success(group) => deleteGoogleGroup(group)
-        case _ => Future.successful(())
-      }
-    }
-
-    def insertGroups(groupRefsByAccess: Map[WorkspaceAccessLevel, RawlsGroupRef]): Future[Map[WorkspaceAccessLevel, Try[RawlsGroup]]] = {
-      Future.traverse(groupRefsByAccess) { case (access, groupRef) => toFutureTry(createGoogleGroup(groupRef)).map(access -> _) }.map(_.toMap)
-    }
-
-    def insertOwnerMember: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
-      val ownerGroup = groupsByAccess(WorkspaceAccessLevels.Owner)
-      addMemberToGoogleGroup(ownerGroup, Left(RawlsUser(userInfo))).map(_ => groupsByAccess + (WorkspaceAccessLevels.Owner -> ownerGroup.copy(users = ownerGroup.users + RawlsUser(userInfo))))
-    }
-
-    def insertAuthDomainProjectOwnerIntersection: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
-      val projectOwnerGroup = groupsByAccess(WorkspaceAccessLevels.ProjectOwner)
-      val inserts = Future.traverse(authDomainProjectOwnerIntersection.getOrElse(Set.empty)) { userRef =>
-        addEmailToGoogleGroup(projectOwnerGroup.groupEmail.value, toProxyFromUser(userRef.userSubjectId))
-      }
-
-      inserts.map { _ =>
-        groupsByAccess.map {
-          case (ProjectOwner, group) => ProjectOwner -> group.copy(users = authDomainProjectOwnerIntersection.getOrElse(Set.empty))
-          case otherwise => otherwise
-        }
-      }
-    }
-
-    def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[String] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
+    def insertBucket: Map[WorkspaceAccessLevel, WorkbenchEmail] => Future[String] = { policyGroupsByAccessLevel =>
       implicit val service = GoogleInstrumentedService.Storage
-      val bucketName = getBucketName(workspaceId, authDomain.nonEmpty)
       retryWhen500orGoogleError {
         () => {
-
-          // When Intersection Groups exist, these are the groups used to determine ACLs.  Otherwise, Access Groups are used directly.
-
-          val groupsByAccess = intersectionGroupsByLevel getOrElse accessGroupsByLevel
-
           // bucket ACLs should be:
           //   project owner - bucket writer
           //   workspace owner - bucket writer
@@ -204,7 +144,7 @@ class HttpGoogleServicesDAO(
           //   bucket service account - bucket owner
           val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(ProjectOwner -> "WRITER", Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
           val bucketAcls =
-            groupsByAccess.map { case (access, group) => newBucketAccessControl(makeGroupEntityString(group.groupEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
+            policyGroupsByAccessLevel.map { case (access, policyEmail) => newBucketAccessControl(makeGroupEntityString(policyEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
               newBucketAccessControl("user-" + clientEmail, "OWNER")
 
           // default object ACLs should be:
@@ -214,15 +154,10 @@ class HttpGoogleServicesDAO(
           //   workspace reader - object reader
           //   bucket service account - object owner
           val defaultObjectAcls =
-            groupsByAccess.map { case (access, group) => newObjectAccessControl(makeGroupEntityString(group.groupEmail.value), "READER") }.toSeq :+
+          policyGroupsByAccessLevel.map { case (_, policyEmail) => newObjectAccessControl(makeGroupEntityString(policyEmail.value), "READER") }.toSeq :+
               newObjectAccessControl("user-" + clientEmail, "OWNER")
 
           val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
-
-          val labels = authDomain.toList match {
-            case Nil => Map(SECURITY_LABEL_KEY -> LOW_SECURITY_LABEL)
-            case ads => Map(SECURITY_LABEL_KEY -> HIGH_SECURITY_LABEL) ++ ads.map(ad => labelSafeString(ad.membersGroupName.value, "ad-") -> "")
-          }
 
           val bucket = new Bucket().
             setName(bucketName).
@@ -257,47 +192,15 @@ class HttpGoogleServicesDAO(
 
     // setupWorkspace main logic
 
-    val accessGroupInserts = insertGroups(accessGroupRefsByLevel)
-
-    val intersectionGroupInserts = intersectionGroupRefsByLevel match {
-      case Some(g) => insertGroups(g) map { Option(_) }
-      case None => Future.successful(None)
-    }
-
     val bucketInsertion = for {
-      accessGroupTries <- accessGroupInserts
-      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember map { _ + (ProjectOwner -> projectOwnerGroup) }
-      intersectionGroupTries <- intersectionGroupInserts
-      intersectionGroups <- intersectionGroupTries match {
-        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertAuthDomainProjectOwnerIntersection map { Option(_) }
-        case None => Future.successful(None)
-      }
-      bucketName <- insertBucket(accessGroups, intersectionGroups)
+      bucketName <- insertBucket(policyGroupsByAccessLevel)
       _ <- insertInitialStorageLog(bucketName)
-    } yield GoogleWorkspaceInfo(bucketName, accessGroups, intersectionGroups)
+    } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
 
-    bucketInsertion recoverWith {
-      case regrets =>
-        val groupsToRollback = for {
-          accessGroupTries <- accessGroupInserts
-          intersectionGroupTries <- intersectionGroupInserts
-        } yield {
-          intersectionGroupTries match {
-            case Some(tries) => accessGroupTries.values ++ tries.values
-            case None => accessGroupTries.values
-          }
-        }
-        groupsToRollback flatMap rollbackGroups flatMap (_ => Future.failed(regrets))
-    }
+    bucketInsertion
   }
 
-  def workspaceAccessGroupName(workspaceId: String, accessLevel: WorkspaceAccessLevel) = s"${workspaceId}-${accessLevel.toString}"
-
-  def intersectionGroupName(workspaceId: String, accessLevel: WorkspaceAccessLevel) = {
-    s"I_$workspaceId-${accessLevel.toString}"
-  }
-
-  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[RawlsGroupEmail]): Future[String] = {
+  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
     val bucketName = getCromwellAuthBucketName(billingProject)
     retryWithRecoverWhen500orGoogleError(
@@ -322,7 +225,7 @@ class HttpGoogleServicesDAO(
 
   def grantReadAccess(billingProject: RawlsBillingProjectName,
                       bucketName: String,
-                      authBucketReaders: Set[RawlsGroupEmail]): Future[String] = {
+                      authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
 
     def insertNewAcls() = for {
@@ -428,31 +331,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val member = new Member().setEmail(user.userEmail.value).setRole(groupMemberRole)
-    val inserter = getGroupDirectory.members.insert(toProxyFromUser(user.userSubjectId), member)
-    retryWhen500orGoogleError(() => { executeGoogleRequest(inserter) })
-  }
-
-  override def removeUserFromProxyGroup(user: RawlsUser): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val deleter = getGroupDirectory.members.delete(toProxyFromUser(user.userSubjectId), user.userEmail.value)
-    retryWhen500orGoogleError(() => { executeGoogleRequest(deleter) })
-  }
-
-  override def isUserInProxyGroup(user: RawlsUser): Future[Boolean] = {
-    isEmailInGoogleGroup(user.userEmail.value, toProxyFromUser(user.userSubjectId))
-  }
-
-  override def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val getter = getGroupDirectory.members.get(groupName, email)
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
-      case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
-    } map { _.isDefined }
-  }
-
   override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] = {
     implicit val service = GoogleInstrumentedService.Groups
     val getter = getGroupDirectory.groups().get(groupName)
@@ -523,137 +401,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  private def listGroupMembersInternal(groupName: String): Future[Option[Seq[String]]] = {
-    val fetcher = getGroupDirectory.members.list(groupName).setMaxResults(maxPageSize)
-
-    listGroupMembersRecursive(fetcher) map { pagesOption =>
-      pagesOption.map { pages =>
-        pages.toSeq.flatMap { page =>
-          Option(page.getMembers) match {
-            case None => Seq.empty
-            case Some(members) => members.map(_.getEmail)
-          }
-        }
-      }
-    }
-  }
-
-  /**
-   * recursive because the call to list all members is paginated.
-   * @param fetcher
-   * @param accumulated the accumulated Members objects, 1 for each page, the head element is the last prior request
-   *                    for easy retrieval. The initial state is Some(Nil). This is what is eventually returned. This
-   *                    is None when the group does not exist.
-   * @return None if the group does not exist or a Members object for each page.
-   */
-  private def listGroupMembersRecursive(fetcher: Directory#Members#List, accumulated: Option[List[Members]] = Some(Nil)): Future[Option[List[Members]]] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    accumulated match {
-      // when accumulated has a Nil list then this must be the first request
-      case Some(Nil) => retryWithRecoverWhen500orGoogleError(() => {
-        blocking {
-          Option(executeGoogleRequest(fetcher))
-        }
-      }) {
-        case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
-      }.flatMap(firstPage => listGroupMembersRecursive(fetcher, firstPage.map(List(_))))
-
-      // the head is the Members object of the prior request which contains next page token
-      case Some(head :: xs) if head.getNextPageToken != null => retryWhen500orGoogleError(() => {
-        blocking {
-          executeGoogleRequest(fetcher.setPageToken(head.getNextPageToken))
-        }
-      }).flatMap(nextPage => listGroupMembersRecursive(fetcher, accumulated.map(pages => nextPage :: pages)))
-
-      // when accumulated is None (group does not exist) or next page token is null
-      case _ => Future.successful(accumulated)
-    }
-  }
-
-  val proxyPattern = s"${proxyNamePrefix}PROXY_(.+)@${appsDomain}".toLowerCase.r
-  val groupPattern = s"${proxyNamePrefix}GROUP_(.+)@${appsDomain}".toLowerCase.r
-
-  override def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]] = {
-    listGroupMembersInternal(group.groupEmail.value) map { membersOption =>
-      membersOption match {
-        case None => None
-        case Some(emails) => Option(emails map(_.toLowerCase) map {
-          case email@proxyPattern(subjectId) => email -> Option(Left(RawlsUserRef(RawlsUserSubjectId(subjectId))))
-          case email@groupPattern(groupName) => email -> Option(Right(RawlsGroupRef(RawlsGroupName(groupName))))
-          case email => email -> None
-        } toMap)
-      }
-    }
-  }
-
-  def createProxyGroup(user: RawlsUser): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val directory = getGroupDirectory
-    val groups = directory.groups
-    retryWhen500orGoogleError (() => {
-      val inserter = groups.insert(new Group().setEmail(toProxyFromUser(user.userSubjectId)).setName(user.userEmail.value))
-      executeGoogleRequest(inserter)
-    })
-  }
-
-  def deleteProxyGroup(user: RawlsUser): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val directory = getGroupDirectory
-    val groups = directory.groups
-    retryWhen500orGoogleError (() => {
-      val deleter = groups.delete(toProxyFromUser(user.userSubjectId))
-      executeGoogleRequest(deleter)
-    })
-  }
-
-  override def createGoogleGroup(groupRef: RawlsGroupRef): Future[RawlsGroup] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val newGroup = RawlsGroup(groupRef.groupName, RawlsGroupEmail(toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    val directory = getGroupDirectory
-    val groups = directory.groups
-
-    for {
-      // first verify it does not exist
-      // then try to create it, sometimes we get a 503 error creating the group but it actually gets created
-      // so we get a 409 on subsequent retries - because we have already check it does not exist assume that any
-      // 409 means we created it
-      // last verify it is there
-      preexistingGroup <- retryWithRecoverWhen500orGoogleError( () => {
-        Option(executeGoogleRequest(groups.get(newGroup.groupEmail.value)))
-      }) {
-        case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
-      }
-
-      _ <- if (preexistingGroup.isDefined) Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"google group ${newGroup.groupEmail.value} already exists"))) else Future.successful(())
-
-      _ <- retryWithRecoverWhen500orGoogleError (() => {
-        // group names have a 60 char limit
-        executeGoogleRequest(groups.insert(new Group().setEmail(newGroup.groupEmail.value).setName(newGroup.groupName.value.take(60))))
-        () // need this because in the recover case below we can't create a Group object to return
-      }) {
-        case e: HttpResponseException if e.getStatusCode == StatusCodes.Conflict.intValue =>
-      }
-
-      // GAWB-853 verify that the group exists by retrying to get group until success or too many tries
-      _ <- retryWhen500orGoogleError (() => {
-        executeGoogleRequest(groups.get(newGroup.groupEmail.value))
-      }) recover {
-        case t: Throwable =>
-        // log but ignore any error in the getter, downstream code will fail or not as appropriate
-        logger.debug(s"could not verify that google group ${newGroup.groupEmail.value} exists", t)
-      }
-
-    } yield newGroup
-  }
-
-  override def addMemberToGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
-    val memberEmail = memberToAdd match {
-      case Left(member) => toProxyFromUser(member)
-      case Right(member) => member.groupEmail.value
-    }
-    addEmailToGoogleGroup(group.groupEmail.value, memberEmail)
-  }
-
   override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Groups
     val inserter = getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
@@ -672,61 +419,12 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def removeMemberFromGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
-    val memberEmail = memberToAdd match {
-      case Left(member) => toProxyFromUser(member.userSubjectId)
-      case Right(member) => member.groupEmail.value
-    }
-    removeEmailFromGoogleGroup(group.groupEmail.value, memberEmail)
-  }
-
   override def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Groups
     val deleter = getGroupDirectory.members.delete(groupEmail, emailToRemove)
     retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(deleter) }) {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // it is ok of the email is already missing
     }
-  }
-
-  override def deleteGoogleGroup(group: RawlsGroup): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Groups
-    val directory = getGroupDirectory
-    val groups = directory.groups
-    val deleter = groups.delete(group.groupEmail.value)
-    retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(deleter) }) {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // if the group is already gone, don't fail
-    }
-  }
-
-  //add a file to the bucket as the specified user, then remove it
-  //returns an ErrorReport if something went wrong, otherwise returns None
-  override def diagnosticBucketWrite(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]] = {
-    implicit val service = GoogleInstrumentedService.Storage
-    val uuid = UUID.randomUUID.toString
-    val so = new StorageObject().setName(uuid)
-    val media = new InputStreamContent("text/plain",
-      new ByteArrayInputStream("This is a test file generated by FireCloud which should have been automatically deleted".getBytes))
-
-    val result = getUserCredentials(user) map { credentialOpt =>
-      credentialOpt match {
-        case None => Some(ErrorReport(new RawlsException("Unable to load credentials for user")))
-        case Some(credential) => {
-          val inserter = getStorage(credential).objects().insert(bucketName, so, media)
-          inserter.getMediaHttpUploader().setDirectUploadEnabled(true)
-          val getter = getStorage(credential).objects().get(bucketName, uuid)
-          val remover = getStorage(credential).objects().delete(bucketName, uuid)
-          try {
-            executeGoogleRequest(inserter)
-            executeGoogleRequest(getter)
-            executeGoogleRequest(remover)
-            None
-          } catch {
-            case t: HttpResponseException => Some(ErrorReport(new RawlsException(t.getMessage)))
-          }
-        }
-      }
-    }
-    result
   }
 
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]] = {
@@ -1090,7 +788,7 @@ class HttpGoogleServicesDAO(
     removePolicyBindings(projectName, Map(s"roles/$role" -> Seq(s"group:${groupEmail.value}")))
   }
 
-  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[RawlsGroupEmail]): Future[Try[Unit]] = {
+  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[WorkbenchEmail]): Future[Try[Unit]] = {
     implicit val service = GoogleInstrumentedService.Billing
     val projectName = project.projectName
     val credential = getBillingServiceAccountCredential
@@ -1120,11 +818,6 @@ class HttpGoogleServicesDAO(
     } yield {
       // nothing
     })
-  }
-
-  def labelSafeString(s: String, prefix: String = "fc-"): String = {
-    // https://cloud.google.com/compute/docs/labeling-resources#restrictions
-    prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(63)
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {
@@ -1174,11 +867,6 @@ class HttpGoogleServicesDAO(
     new Directory.Builder(httpTransport, jsonFactory, getGroupServiceAccountCredential).setApplicationName(appName).build()
   }
 
-  private def getBucketCredential(userInfo: UserInfo): Credential = {
-    if (useServiceAccountForBuckets) getBucketServiceAccountCredential
-    else getUserCredential(userInfo)
-  }
-
   private def getUserCredential(userInfo: UserInfo): Credential = {
     new GoogleCredential().setAccessToken(userInfo.accessToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
   }
@@ -1225,13 +913,6 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
-  def toProxyFromUser(rawlsUser: RawlsUser): String = toProxyFromUser(rawlsUser.userSubjectId)
-  def toProxyFromUser(userInfo: UserInfo): String = toProxyFromUser(userInfo.userSubjectId)
-  def toProxyFromUser(subjectId: RawlsUserSubjectId): String = s"${proxyNamePrefix}PROXY_${subjectId.value}@${appsDomain}"
-  def toUserFromProxy(proxy: String): String = {
-    implicit val service = GoogleInstrumentedService.Groups
-    executeGoogleRequest(getGroupDirectory.groups().get(proxy)).getName
-  }
   def toGoogleGroupName(groupName: RawlsGroupName) = s"${proxyNamePrefix}GROUP_${groupName.value}@${appsDomain}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"

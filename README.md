@@ -25,22 +25,20 @@ See the wiki for detailed documentation.
 * Jenkins: https://dsde-jenkins.broadinstitute.org/job/rawls-dev-build
 * Running locally in docker https://github.com/broadinstitute/firecloud-develop
 
-## Unit Testing with MySQL and OpenDJ in Docker
+## Unit Testing with MySQL in Docker
 Ensure that docker is up to date and initialized.
-Spin up mysql and opendj locally and validate that it is working:
+Spin up mysql locally and validate that it is working:
 ```
 ./docker/run-mysql.sh start
-./docker/run-opendj.sh start
 ```
 Run tests.
 ```
 export SBT_OPTS="-Xmx2G -Xms1G -Dmysql.host=localhost -Dmysql.port=3310 -Ddirectory.url=ldap://localhost:3389 -Ddirectory.password=testtesttest -Dcom.sun.jndi.ldap.connect.pool.maxsize=100"
 sbt clean compile test
 ```
-And when you're done, spin down mysql and opendj (it is also fine to leave them running for your next round of tests):
+And when you're done, spin down mysql (it is also fine to leave it running for your next round of tests):
 ```
 ./docker/run-mysql.sh stop
-./docker/run-opendj.sh stop
 ```
 
 ## Build Rawls docker image

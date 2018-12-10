@@ -9,9 +9,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverCompo
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitorSupervisor
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
@@ -23,6 +22,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json._
 
 import scala.concurrent.Await
@@ -74,7 +74,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val wsName = WorkspaceName("myNamespacexxx", "myWorkspace")
     val user = RawlsUser(userInfo)
     val ownerGroup = makeRawlsGroup("workspaceOwnerGroup", Set(user))
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map(WorkspaceAccessLevels.Owner -> ownerGroup), Map(WorkspaceAccessLevels.Owner -> ownerGroup))
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
 
     val sample1 = Entity("sample1", "Sample",
       Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
@@ -88,29 +88,29 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val alreadyTerminatedWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c8778")
     val badLogsAndMetadataWorkflowId = Option("29b2e816-ecaf-11e6-b006-92361f002671")
 
-    val submissionTestAbortMissingWorkflow = Submission(subMissingWorkflow,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+    val submissionTestAbortMissingWorkflow = Submission(subMissingWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
       Seq(Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestAbortMalformedWorkflow = Submission(subMalformedWorkflow,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+    val submissionTestAbortMalformedWorkflow = Submission(subMalformedWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
       Seq(Workflow(Option("malformed_workflow"),WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestAbortGoodWorkflow = Submission(subGoodWorkflow,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+    val submissionTestAbortGoodWorkflow = Submission(subGoodWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
       Seq(Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestAbortTerminalWorkflow = Submission(subTerminalWorkflow,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+    val submissionTestAbortTerminalWorkflow = Submission(subTerminalWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
       Seq(Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestAbortOneMissingWorkflow = Submission(subOneMissingWorkflow,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+    val submissionTestAbortOneMissingWorkflow = Submission(subOneMissingWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
       Seq(
         Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions),
         Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample2.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestAbortTwoGoodWorkflows = Submission(subTwoGoodWorkflows,testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+    val submissionTestAbortTwoGoodWorkflows = Submission(subTwoGoodWorkflows,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
       Seq(
         Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions),
         Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample2.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
-    val submissionTestCromwellBadWorkflows = Submission(subCromwellBadWorkflows, testDate, testData.userOwner, "std","someMethod",Some(sample1.toReference),
+    val submissionTestCromwellBadWorkflows = Submission(subCromwellBadWorkflows, testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
       Seq(
         Workflow(badLogsAndMetadataWorkflowId,WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
@@ -142,8 +142,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.createUser(user),
-        rawlsGroupQuery.save(ownerGroup),
         workspaceQuery.save(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
@@ -174,7 +172,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
 
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-      val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
+      val samDAO = new MockSamDAO(dataSource)
       val gpsDAO = new MockGooglePubSubDAO
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         execServiceCluster,
@@ -187,15 +185,12 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
 
       gcsDAO.storeToken(userInfo, subTestData.refreshToken)
-      val directoryDAO = new MockUserDirectoryDAO
 
       val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")
 
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
-        gpsDAO,
-        "test-topic-name",
         notificationDAO,
         samDAO,
         Seq("bigquery.jobUser"),
@@ -207,7 +202,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         gcsDAO
       )_
 
-      val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
       val execServiceBatchSize = 3
       val maxActiveWorkflowsTotal = 10
       val maxActiveWorkflowsPerUser = 2
@@ -228,7 +222,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName,
         mockSubmissionCostService,
-        trackDetailedSubmissionMetrics = true
+        trackDetailedSubmissionMetrics = true,
+        workspaceBucketNamePrefix = "fc-"
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {
@@ -237,7 +232,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       finally {
         // for failed tests we also need to poison pill
         submissionSupervisor ! PoisonPill
-        googleGroupSyncMonitorSupervisor ! PoisonPill
       }
     }
   }

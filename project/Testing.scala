@@ -12,25 +12,6 @@ object Testing {
     sys.exit()
   }.value
 
-  lazy val validDirectoryUrl = taskKey[Unit]("Determine if directory.url is provided.")
-  lazy val validDirectoryPassword = taskKey[Unit]("Determine if directory.password is provided.")
-
-  lazy val validDirectoryUrlSetting = validDirectoryUrl := Def.taskDyn {
-    val setting = sys.props.getOrElse("directory.url", "")
-    if (setting.length == 0) {
-      streams.map(x => x.log.error("directory.url not set")).value
-    }
-    sys.exit()
-  }.value
-
-  lazy val validDirectoryPasswordSetting = validDirectoryPassword := Def.taskDyn {
-    val setting = sys.props.getOrElse("directory.password", "")
-    if (setting.length == 0) {
-      streams.map(x => x.log.error("directory.password not set")).value
-    }
-    sys.exit()
-  }.value
-
   def isIntegrationTest(name: String) = name contains "integrationtest"
 
   lazy val IntegrationTest = config("it") extend Test
@@ -65,11 +46,7 @@ object Testing {
     testOptions in IntegrationTest := Seq(Tests.Filter(s => isIntegrationTest(s))),
 
     validMySqlHostSetting,
-    validDirectoryUrlSetting,
-    validDirectoryPasswordSetting,
 
-    (test in Test) := ((test in Test) dependsOn(validDirectoryUrl, validDirectoryPassword)).value,
-    (testOnly in Test) := ((testOnly in Test) dependsOn(validDirectoryUrl, validDirectoryPassword)).inputTaskValue.evaluated,
     (test in Test) := ((test in Test) dependsOn validMySqlHost).value,
     (testOnly in Test) := ((testOnly in Test) dependsOn validMySqlHost).inputTaskValue.evaluated,
 

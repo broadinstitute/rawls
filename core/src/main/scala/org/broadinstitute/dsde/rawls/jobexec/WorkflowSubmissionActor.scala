@@ -277,27 +277,30 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         //The workspace's billing project
         billingProject <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRec.namespace)).map(_.get)
 
-        //The person who submitted the submission
-        submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
-
         //the method configuration, in order to get the wdl
         methodConfig <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId).map(_.get)
       } yield {
-        (wfRecs, workflowBatch, billingProject, submitter, methodConfig)
+        (wfRecs, workflowBatch, billingProject, methodConfig)
       }
     }
 
     val workflowBatchFuture = for {
       //yank things from the db. note this future has already started running and we're just waiting on it here
-      (wfRecs, workflowBatch, billingProject, submitter, methodConfig) <- dbThingsFuture
+      (wfRecs, workflowBatch, billingProject, methodConfig) <- dbThingsFuture
 
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, submitter.userEmail)
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, RawlsUserEmail(submissionRec.submitterEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-      userCredentials <- googleServicesDAO.getUserCredentials(submitter).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for $submitter")))
+
+      userIdInfo <- samDAO.getUserIdInfo(submissionRec.submitterEmail,  UserInfo.buildFromTokens(credential)).map {
+        case SamDAO.User(userIdInfo) => userIdInfo.googleSubjectId.getOrElse(throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}"))
+        case _ => throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}")
+      }
+
+      userCredentials <- googleServicesDAO.getUserCredentials(RawlsUserRef(RawlsUserSubjectId(userIdInfo))).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}")))
       wdl <- getWdl(methodConfig, userCredentials)
     } yield {
 
-      val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, submitter, petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
+      val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, RawlsUser(RawlsUserSubjectId(userIdInfo), RawlsUserEmail(submissionRec.submitterEmail)), petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
 
       val wfInputsBatch = workflowBatch map { wf =>
         val methodProps = wf.inputResolutions map {

@@ -20,7 +20,6 @@ import com.typesafe.scalalogging.LazyLogging
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.jndi.DirectoryConfig
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, UserInfo}
@@ -53,14 +52,7 @@ object Boot extends App with LazyLogging {
     implicit val system = ActorSystem("rawls")
     implicit val materializer = ActorMaterializer()
 
-    val directoryConfig = DirectoryConfig(
-      conf.getString("directory.url"),
-      conf.getString("directory.user"),
-      conf.getString("directory.password"),
-      conf.getString("directory.baseDn")
-    )
-
-    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", conf), directoryConfig)
+    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", conf))
 
     val liquibaseConf = conf.getConfig("liquibase")
     val liquibaseChangeLog = liquibaseConf.getString("changelog")
@@ -175,8 +167,8 @@ object Boot extends App with LazyLogging {
 
     val notificationDAO = new PubSubNotificationDAO(pubSubDAO, gcsConfig.getString("notifications.topicName"))
     val marthaConfig = conf.getConfig("martha")
-    val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl_v2"))
-    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, pubSubDAO, gcsConfig.getStringOr("groupMonitor.samTopicName", gcsConfig.getString("groupMonitor.topicName")),  notificationDAO, samDAO, projectOwnerGrantableRoles, requesterPaysRole)
+    val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl"))
+    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO,  notificationDAO, samDAO, projectOwnerGrantableRoles, requesterPaysRole)
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
     val submissionCostService: SubmissionCostService =
@@ -211,7 +203,7 @@ object Boot extends App with LazyLogging {
         samDAO,
         executionServiceServers.map(c => c.key->c.dao).toMap,
         groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
-        topicsToCheck = Seq(gcsConfig.getString("notifications.topicName"), gcsConfig.getString("groupMonitor.topicName")),
+        topicsToCheck = Seq(gcsConfig.getString("notifications.topicName")),
         bucketsToCheck = Seq(gcsDAO.tokenBucketName)
       ).withDispatcher("health-monitor-dispatcher"),
       "health-monitor"
@@ -236,7 +228,8 @@ object Boot extends App with LazyLogging {
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName = metricsPrefix,
         submissionCostService,
-        conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics")),
+        conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),
+        gcsConfig.getString("groupsPrefix")),
       userServiceConstructor,
       genomicsServiceConstructor,
       statisticsServiceConstructor,

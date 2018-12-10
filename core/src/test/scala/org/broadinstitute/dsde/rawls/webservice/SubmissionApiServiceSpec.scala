@@ -21,6 +21,7 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.testkit.RouteTestTimeout
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -241,7 +242,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     Get(s"${testData.wsName.path}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceResponse].workspace.toWorkspace)
       }
 
   }
@@ -282,10 +283,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     lazy val failedSubmission = getSubmission(submissionResponseWithFailureMode.submissionId)
     lazy val submission = getSubmission(submissionResponseWithoutFailureMode.submissionId)
     val submissionListResponseWithFailureMode =
-      SubmissionListResponse(failedSubmission, testData.userOwner, None, Map("Queued" -> 1)).copy(cost = None)
+      SubmissionListResponse(failedSubmission, None, Map("Queued" -> 1)).copy(cost = None)
     val submissionListResponseWithoutFailureMode =
       SubmissionListResponse(
-        getSubmission(submissionResponseWithoutFailureMode.submissionId), testData.userOwner, None, Map("Queued" -> 1)).copy(cost = None)
+        getSubmission(submissionResponseWithoutFailureMode.submissionId), None, Map("Queued" -> 1)).copy(cost = None)
 
     // Sanity check the workflow failure modes in the expected SubmissionListResponse objects
     submissionListResponseWithFailureMode.workflowFailureMode should equal (Some(WorkflowFailureModes.ContinueWhilePossible))
@@ -400,7 +401,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
-        assertResult(SubmissionStatusResponse(testData.costedSubmission1, testData.userOwner)) {responseAs[SubmissionStatusResponse]}
+        assertResult(SubmissionStatusResponse(testData.costedSubmission1)) {responseAs[SubmissionStatusResponse]}
       }
   }
 
@@ -425,7 +426,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       // val runCost = if (wfCount == 0) None else Some(wfCount * 1.23f)  // mockSubmissionCostService.fixedCost
       val runCost = None
 
-      SubmissionListResponse(sub, testData.userOwner, None, statuses).copy(cost = runCost)
+      SubmissionListResponse(sub, None, statuses).copy(cost = runCost)
     }
 
 
@@ -484,7 +485,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Queued, DateTime.now, Some(ent.toReference), testData.inputResolutions)
       }
 
-      val sub = createTestSubmission(testData.workspace, testData.agoraMethodConfig, testData.indiv1, user, Seq.empty, Map.empty, Seq.empty, Map.empty).copy(workflows = workflows)
+      val sub = createTestSubmission(testData.workspace, testData.agoraMethodConfig, testData.indiv1, WorkbenchEmail(user.userEmail.value), Seq.empty, Map.empty, Seq.empty, Map.empty).copy(workflows = workflows)
       runAndWait(submissionQuery.create(context, sub))
     }
   }
@@ -570,9 +571,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val otherUser1 = RawlsUser(RawlsUserSubjectId("subj-id-1"), RawlsUserEmail("new.email1@example.net"))
     val otherUser2 = RawlsUser(RawlsUserSubjectId("subj-id-2"), RawlsUserEmail("new.email2@example.net"))
 
-    runAndWait(rawlsUserQuery.createUser(otherUser1))
-    runAndWait(rawlsUserQuery.createUser(otherUser2))
-
     addWorkflowsToQueue(otherUser1, 5)
     addWorkflowsToQueue(otherUser2, 10)
 
@@ -586,15 +584,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "count workflows ahead of the user when the user is in the queue" in withTestDataApiServices { services =>
-    val otherUser1 = RawlsUser(RawlsUserSubjectId("subj-id-1"), RawlsUserEmail("new.email1@example.net"))
-    val otherUser2 = RawlsUser(RawlsUserSubjectId("subj-id-2"), RawlsUserEmail("new.email2@example.net"))
+    val otherUser1 = UserInfo(RawlsUserEmail("new.email1@example.net"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("subj-id-1"))
+    val otherUser2 = UserInfo(RawlsUserEmail("new.email2@example.net"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("subj-id-2"))
 
-    runAndWait(rawlsUserQuery.createUser(otherUser1))
-    runAndWait(rawlsUserQuery.createUser(otherUser2))
-
-    addWorkflowsToQueue(otherUser1, 5)
+    addWorkflowsToQueue(RawlsUser(otherUser1), 5)
     addWorkflowsToQueue(RawlsUser(userInfo), 20)
-    addWorkflowsToQueue(otherUser2, 10)
+    addWorkflowsToQueue(RawlsUser(otherUser2), 10)
 
     val status = getQueueStatus(services.submissionRoutes)
     assertResult(Some(35)) {
@@ -614,7 +609,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, Some(testData.indiv1.toReference), Seq.empty)
     )
 
-    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some(testData.indiv1.toReference), workflows, SubmissionStatuses.Done, false)
+    val testSubmission = Submission(UUID.randomUUID.toString, testDate, WorkbenchEmail(testData.userOwner.userEmail.value), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some(testData.indiv1.toReference), workflows, SubmissionStatuses.Done, false)
 
     runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))
@@ -646,12 +641,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set())
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set())
-    val billingProjectGroups = generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner, userOwner), ProjectRoles.User -> Set.empty), Map.empty)
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
 
-    val workspace = Workspace(wsName.namespace, wsName.name, Set.empty, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
 
     val numSamples = 10000
 
@@ -662,13 +654,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       import driver.api._
 
       DBIO.seq(
-        rawlsUserQuery.createUser(userProjectOwner),
-        rawlsUserQuery.createUser(userOwner),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
-        DBIO.from(samDataSaver.savePolicyGroups(billingProjectGroups.values.flatten, SamResourceTypeNames.billingProject.value, billingProject.projectName.value)),
-        rawlsBillingProjectQuery.create(billingProject),
         workspaceQuery.save(workspace),
         entityQuery.save(SlickWorkspaceContext(workspace), lotsOfSamples :+ sampleSet)
       )

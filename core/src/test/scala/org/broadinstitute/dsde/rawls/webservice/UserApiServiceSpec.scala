@@ -19,6 +19,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.unmarshalling.Unmarshal
+import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -47,12 +48,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  def userFromId(subjectId: String) =
-    RawlsUser(RawlsUserSubjectId(subjectId), RawlsUserEmail("dummy@example.com"))
-
-  def loadUser(user: RawlsUser) = runAndWait(rawlsUserQuery.load(user))
-
-
   "UserApi" should "put token and get date" in withTestDataApiServices { services =>
     Put("/user/refreshToken", httpJson(UserRefreshToken("gobblegobble"))) ~>
       sealRoute(services.userRoutes) ~>
@@ -67,66 +62,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
     Get("/user/refreshTokenDate") ~>
       sealRoute(services.userRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
-  }
-
-  def assertUserMissing(services: TestApiService, user: RawlsUser): Unit = {
-    assert {
-      loadUser(user).isEmpty
-    }
-    assert {
-      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
-      group.isEmpty || ! group.get.users.contains(user)
-    }
-  }
-
-  def assertUserExists(services: TestApiService, user: RawlsUser): Unit = {
-    assert {
-      loadUser(user).nonEmpty
-    }
-    assert {
-      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
-      group.isDefined && group.get.users.contains(user)
-    }
-  }
-
-  it should "fully create a user and grant them pending access to a workspace" in withMinimalTestDatabase { dataSource: SlickDataSource =>
-    withApiServices(dataSource) { services =>
-      runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace.workspaceId), testData.userReader.userSubjectId.value, WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Read, None)))
-      runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace2.workspaceId), testData.userReader.userSubjectId.value, WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Write, None)))
-
-      val startingInvites = runAndWait(services.dataSource.dataAccess.workspaceQuery.findWorkspaceInvitesForUser(testData.userOwner.userEmail))
-
-      runAndWait(dataSource.dataAccess.rawlsUserQuery.createUser(testData.userOwner))
-
-      withStatsD {
-        Post("/user") ~> services.sealedInstrumentedRoutes ~>
-          check {
-            assertResult(StatusCodes.Created) {
-              status
-            }
-          }
-
-        import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
-
-        Get(s"/workspaces") ~> services.sealedInstrumentedRoutes ~>
-          check {
-            assertResult(Some(WorkspaceAccessLevels.Read)) {
-              responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == minimalTestData.workspace.toWorkspaceName).map(_.accessLevel)
-            }
-            assertResult(Some(WorkspaceAccessLevels.Write)) {
-              responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == minimalTestData.workspace2.toWorkspaceName).map(_.accessLevel)
-            }
-          }
-      } { capturedMetrics =>
-        val expected = expectedHttpRequestMetrics("post", "user", StatusCodes.Created.intValue, 1) ++
-          expectedHttpRequestMetrics("get", "workspaces", StatusCodes.OK.intValue, 1)
-        assertSubsetOf(expected, capturedMetrics)
-      }
-
-      val leftoverInvites = runAndWait(services.dataSource.dataAccess.workspaceQuery.findWorkspaceInvitesForUser(testData.userOwner.userEmail))
-      assert(leftoverInvites.size == 0)
-
-    }
   }
 
   it should "get a valid billing project status" in withTestDataApiServices { services =>
@@ -157,18 +92,13 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
 
           import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-          assertResult(
-            List(RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.User, CreationStatuses.Ready),
-              RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready))) {
-            responseAs[List[RawlsBillingProjectMembership]]
-          }
-
-          assertResult(responseAs[List[RawlsBillingProjectMembership]].head)(RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.User, CreationStatuses.Ready))
-          assertResult(responseAs[List[RawlsBillingProjectMembership]].last)(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready))
+          responseAs[List[RawlsBillingProjectMembership]] should contain theSameElementsInOrderAs List(
+              RawlsBillingProjectMembership(testData.testProject1.projectName, ProjectRoles.Owner, CreationStatuses.Ready),
+              RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready),
+              RawlsBillingProjectMembership(testData.testProject2.projectName, ProjectRoles.Owner, CreationStatuses.Ready),
+              RawlsBillingProjectMembership(testData.testProject3.projectName, ProjectRoles.Owner, CreationStatuses.Ready))
         }
     }
-
-  private val project1Groups = generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty)
 
   it should "create a billing project" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
@@ -177,8 +107,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       val billingUser = testData.userOwner
       val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
-
-      runAndWait(rawlsUserQuery.createUser(billingUser))
 
       val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
@@ -191,9 +119,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
         }
-
-      // need to manually create the owner group because the test sam dao does not actually talk to ldap
-      Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
 
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
@@ -215,7 +140,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         override val datasource: SlickDataSource = services.dataSource
         override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty, Seq("foo", "bar", "baz"))
         override val gcsDAO = new MockGoogleServicesDAO("foo")
-        override val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
+        override val samDAO = new MockSamDAO(dataSource)
         override val requesterPaysRole: String = "requesterPaysRole"
       }
 
@@ -282,8 +207,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
       val billingUser = testData.userOwner
       val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
-      runAndWait(rawlsUserQuery.createUser(billingUser))
-
       val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
       import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
@@ -295,9 +218,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
         }
-
-      // need to manually create the owner group because the test sam dao does not actually talk to ldap
-      Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
 
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
@@ -321,7 +241,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
           override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = failureMode(rawlsBillingProjectOperation)
         }
-        override val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
+        override val samDAO = new MockSamDAO(dataSource)
         override val requesterPaysRole: String = "requesterPaysRole"
       }
 
@@ -357,8 +277,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
       val billingUser = testData.userOwner
       val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
-      runAndWait(rawlsUserQuery.createUser(billingUser))
-
       val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
       import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
@@ -370,9 +288,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
         }
-
-      // need to manually create the owner group because the test sam dao does not actually talk to ldap
-      Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
 
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
@@ -402,7 +317,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
             }
           }
         }
-        override val samDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getBucketServiceAccountCredential)
+        override val samDAO = new MockSamDAO(dataSource)
         override val requesterPaysRole: String = "requesterPaysRole"
       }
 
@@ -463,23 +378,12 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
     Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
-          status
-        }
-      }
-  }
-
-  it should "return 403 when trying to add a user to a billing project that the caller does not own (but has access to)" in withTestDataApiServices { services =>
-    Put(s"/billing/not_an_owner/user/${testData.userWriter.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
           status
         }
       }
@@ -499,9 +403,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    // need to manually create the owner group because the test sam dao does not actually talk to ldap
-    Await.result(samDataSaver.savePolicyGroups(project1Groups.values.flatten, SamResourceTypeNames.billingProject.value, project1.projectName.value), Duration.Inf)
-
     Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
@@ -516,117 +417,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
-          status
-        }
-      }
-  }
-
-  it should "return 403 when a non-owner tries to alter project permissions" in withTestDataApiServices { services =>
-    Put(s"/billing/no_access/user/${testData.userWriter.userEmail.value}") ~>
-      sealRoute(services.billingRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) {
-          status
-        }
-      }
-  }
-
-  it should "get details of a group a user is a member of" in withTestDataApiServices { services =>
-    val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
-    val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group3))
-    val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group2))
-
-    runAndWait(rawlsGroupQuery.save(group3))
-    runAndWait(rawlsGroupQuery.save(group2))
-    runAndWait(rawlsGroupQuery.save(group1))
-
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-    withStatsD {
-      Get(s"/user/group/${group3.groupName.value}") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(group3.toRawlsGroupShort) {
-            responseAs[RawlsGroupShort]
-          }
-        }
-      Get(s"/user/group/${group2.groupName.value}") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(group2.toRawlsGroupShort) {
-            responseAs[RawlsGroupShort]
-          }
-        }
-      Get(s"/user/group/${group1.groupName.value}") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(group1.toRawlsGroupShort) {
-            responseAs[RawlsGroupShort]
-          }
-        }
-    } { capturedMetrics =>
-      val expected = Set(group1, group2, group3) flatMap { g => expectedHttpRequestMetrics("get", s"user.group.redacted", StatusCodes.OK.intValue, 3) }
-      assertSubsetOf(expected, capturedMetrics)
-    }
-  }
-
-  it should "not get details of a group a user is not a member of" in withTestDataApiServices { services =>
-    val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
-    val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group2))
-
-    runAndWait(rawlsGroupQuery.save(group3))
-    runAndWait(rawlsGroupQuery.save(group2))
-    runAndWait(rawlsGroupQuery.save(group1))
-
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-    Get(s"/user/group/${group3.groupName.value}") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        assertResult(group3.toRawlsGroupShort) { responseAs[RawlsGroupShort] }
-      }
-    Get(s"/user/group/${group2.groupName.value}") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound, Await.result(Unmarshal(responseEntity).to[String], Duration.Inf)) { status }
-      }
-    Get(s"/user/group/${group1.groupName.value}") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) { status }
-      }
-  }
-
-  it should "return groups for a user" in withTestDataApiServices { services =>
-    val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
-    val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group3))
-
-    runAndWait(rawlsGroupQuery.save(group3))
-    runAndWait(rawlsGroupQuery.save(group2))
-    runAndWait(rawlsGroupQuery.save(group1))
-
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-    Get("/user/groups") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = Seq(group3.groupName.value, group1.groupName.value)
-        assertResult(expected) { responseAs[Seq[String]].intersect(expected) }
-      }
-  }
-
-  it should "get not details of a group that does not exist" in withTestDataApiServices { services =>
-    Get("/user/group/blarg") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
           status
         }
       }
@@ -676,27 +466,5 @@ class UserApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
-  }
-
-  def withUsersTestDataApiServices[T](user: RawlsUser = usersTestData.userOwner)(testCode: TestApiService => T): T = {
-    withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
-      withApiServices(dataSource, user)(testCode)
-    }
-  }
-
-  val usersTestData = new TestData {
-    import driver.api._
-
-    val userOwner = RawlsUser(userInfo)
-    val userUser = RawlsUser(UserInfo(RawlsUserEmail("user"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212346")))
-    val userNoAccess = RawlsUser(UserInfo(RawlsUserEmail("no-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
-
-    override def save() = {
-      DBIO.seq(
-        rawlsUserQuery.createUser(userOwner),
-        rawlsUserQuery.createUser(userUser),
-        rawlsUserQuery.createUser(userNoAccess)
-      )
-    }
   }
 }
