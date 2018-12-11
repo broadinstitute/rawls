@@ -427,19 +427,27 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       withCleanBillingProject(studentA) { projectName =>
         withWorkspace(projectName, "test-copy-files", Set.empty) { workspaceName =>
           val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
-          Await.result(googleStorageDAO.storeObject(GcsBucketName(bucketName), GcsObjectName("/dontcopythis/foo.txt"), "foo", "text/plain"), Duration.Inf)
-          Await.result(googleStorageDAO.storeObject(GcsBucketName(bucketName), GcsObjectName("/pleasecopythis/bar.txt"), "bar", "text/plain"), Duration.Inf)
+
+          val fileToCopy = GcsObjectName("/pleasecopythis/foo.txt")
+          val fileToLeave = GcsObjectName("/dontcopythis/bar.txt")
+
+          Await.result(googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToCopy, "foo", "text/plain"), Duration.Inf)
+          Await.result(googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToLeave, "bar", "text/plain"), Duration.Inf)
+
+          val initialFiles = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(bucketName), ""), Duration.Inf)
+
+          initialFiles.size shouldBe 2
+          initialFiles should contain(fileToCopy)
+          initialFiles should contain(fileToLeave)
 
           val destWorkspaceName = workspaceName + "_clone"
-
           Rawls.workspaces.clone(projectName, workspaceName, projectName, destWorkspaceName, Set.empty, Some("/pleasecopythis"))
           val cloneBucketName = Rawls.workspaces.getBucketName(projectName, destWorkspaceName)
 
-          val files = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), Duration.Inf)
+          val copiedFiles = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), Duration.Inf)
 
-          println(files)
-
-          files.size shouldBe 1
+          copiedFiles.size shouldBe 1
+          copiedFiles should contain(fileToCopy)
         }
       }
     }
