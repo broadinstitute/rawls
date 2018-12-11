@@ -55,25 +55,25 @@ import scala.io.Source
 import scala.util.Try
 
 class HttpGoogleServicesDAO(
-                             useServiceAccountForBuckets: Boolean,
-                             val clientSecrets: GoogleClientSecrets,
-                             clientEmail: String,
-                             subEmail: String,
-                             pemFile: String,
-                             appsDomain: String,
-                             groupsPrefix: String,
-                             appName: String,
-                             deletedBucketCheckSeconds: Int,
-                             serviceProject: String,
-                             tokenEncryptionKey: String,
-                             tokenClientSecretsJson: String,
-                             billingPemEmail: String,
-                             billingPemFile: String,
-                             val billingEmail: String,
-                             bucketLogsMaxAge: Int,
-                             maxPageSize: Int = 200,
-                             override val workbenchMetricBaseName: String,
-                             proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+  useServiceAccountForBuckets: Boolean,
+  val clientSecrets: GoogleClientSecrets,
+  clientEmail: String,
+  subEmail: String,
+  pemFile: String,
+  appsDomain: String,
+  groupsPrefix: String,
+  appName: String,
+  deletedBucketCheckSeconds: Int,
+  serviceProject: String,
+  tokenEncryptionKey: String,
+  tokenClientSecretsJson: String,
+  billingPemEmail: String,
+  billingPemFile: String,
+  val billingEmail: String,
+  bucketLogsMaxAge: Int,
+  maxPageSize: Int = 200,
+  override val workbenchMetricBaseName: String,
+  proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
 
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
@@ -145,7 +145,7 @@ class HttpGoogleServicesDAO(
           val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(ProjectOwner -> "WRITER", Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
           val bucketAcls =
             policyGroupsByAccessLevel.map { case (access, policyEmail) => newBucketAccessControl(makeGroupEntityString(policyEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
-              newBucketAccessControl("user-" + clientEmail, "OWNER")
+                newBucketAccessControl("user-" + clientEmail, "OWNER")
 
           // default object ACLs should be:
           //   project owner - object reader
@@ -180,8 +180,8 @@ class HttpGoogleServicesDAO(
           // manually insert an initial storage log
           val stream: InputStreamContent = new InputStreamContent("text/plain", new ByteArrayInputStream(
             s""""bucket","storage_byte_hours"
-               |"$bucketName","0"
-               |""".stripMargin.getBytes))
+                |"$bucketName","0"
+                |""".stripMargin.getBytes))
           // use an object name that will always be superseded by a real storage log
           val storageObject = new StorageObject().setName(s"${bucketName}_storage_00_initial_log")
           val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(getStorageLogsBucketName(project.projectName), storageObject, stream)
@@ -721,8 +721,8 @@ class HttpGoogleServicesDAO(
   }
 
   /**
-    * converts a possibly null java boolean to a scala boolean, null is treated as false
-    */
+   * converts a possibly null java boolean to a scala boolean, null is treated as false
+   */
   private def toScalaBool(b: java.lang.Boolean) = Option(b).contains(java.lang.Boolean.TRUE)
 
   private def toErrorMessage(message: String, code: Int): String = {
@@ -883,7 +883,7 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(resMgr.projects().delete(projectNameString))
       }) {
         case e: GoogleJsonResponseException if e.getDetails.getCode == 403 && "Cannot delete an inactive project.".equals(e.getDetails.getMessage) => new Empty()
-        // stop trying to delete an already deleted project
+          // stop trying to delete an already deleted project
       }
     } yield {
       // nothing
