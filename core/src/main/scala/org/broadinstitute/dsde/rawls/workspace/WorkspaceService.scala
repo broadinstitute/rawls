@@ -387,7 +387,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                       }
                       DBIO.seq(inserts: _*)
                     } andThen {
-                    DBIO.successful((destWorkspaceContext, sourceWorkspaceContext))
+                    DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
                   }
                 }
               }
