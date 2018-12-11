@@ -433,7 +433,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           Rawls.workspaces.clone(projectName, workspaceName, projectName, workspaceName + "_clone", Set.empty, Some("/pleasecopythis"))
           val cloneBucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
 
-          val files = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), Duration.inf)
+          val files = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), Duration.Inf)
 
           println(files)
 
