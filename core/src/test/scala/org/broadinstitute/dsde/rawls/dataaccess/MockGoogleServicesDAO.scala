@@ -9,7 +9,7 @@ import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.genomics.model.Operation
-import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
+import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -118,6 +118,10 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = Future.successful(Some(List.fill(5)(new BucketAccessControl)))
 
   override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String) = Future.successful(None)
+
+  override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = Future.successful(List.empty)
+
+  override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]] = Future.successful(None)
 
   val adminList = scala.collection.mutable.Set("owner-access")
   val curatorList = scala.collection.mutable.Set("owner-access")

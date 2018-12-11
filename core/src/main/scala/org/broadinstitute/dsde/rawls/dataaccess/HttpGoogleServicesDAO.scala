@@ -55,25 +55,25 @@ import scala.io.Source
 import scala.util.Try
 
 class HttpGoogleServicesDAO(
-  useServiceAccountForBuckets: Boolean,
-  val clientSecrets: GoogleClientSecrets,
-  clientEmail: String,
-  subEmail: String,
-  pemFile: String,
-  appsDomain: String,
-  groupsPrefix: String,
-  appName: String,
-  deletedBucketCheckSeconds: Int,
-  serviceProject: String,
-  tokenEncryptionKey: String,
-  tokenClientSecretsJson: String,
-  billingPemEmail: String,
-  billingPemFile: String,
-  val billingEmail: String,
-  bucketLogsMaxAge: Int,
-  maxPageSize: Int = 200,
-  override val workbenchMetricBaseName: String,
-  proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+                             useServiceAccountForBuckets: Boolean,
+                             val clientSecrets: GoogleClientSecrets,
+                             clientEmail: String,
+                             subEmail: String,
+                             pemFile: String,
+                             appsDomain: String,
+                             groupsPrefix: String,
+                             appName: String,
+                             deletedBucketCheckSeconds: Int,
+                             serviceProject: String,
+                             tokenEncryptionKey: String,
+                             tokenClientSecretsJson: String,
+                             billingPemEmail: String,
+                             billingPemFile: String,
+                             val billingEmail: String,
+                             bucketLogsMaxAge: Int,
+                             maxPageSize: Int = 200,
+                             override val workbenchMetricBaseName: String,
+                             proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
 
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
@@ -155,7 +155,7 @@ class HttpGoogleServicesDAO(
           //   bucket service account - object owner
           val defaultObjectAcls =
           policyGroupsByAccessLevel.map { case (_, policyEmail) => newObjectAccessControl(makeGroupEntityString(policyEmail.value), "READER") }.toSeq :+
-              newObjectAccessControl("user-" + clientEmail, "OWNER")
+            newObjectAccessControl("user-" + clientEmail, "OWNER")
 
           val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
 
@@ -180,8 +180,8 @@ class HttpGoogleServicesDAO(
           // manually insert an initial storage log
           val stream: InputStreamContent = new InputStreamContent("text/plain", new ByteArrayInputStream(
             s""""bucket","storage_byte_hours"
-                |"$bucketName","0"
-                |""".stripMargin.getBytes))
+               |"$bucketName","0"
+               |""".stripMargin.getBytes))
           // use an object name that will always be superseded by a real storage log
           val storageObject = new StorageObject().setName(s"${bucketName}_storage_00_initial_log")
           val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(getStorageLogsBucketName(project.projectName), storageObject, stream)
@@ -424,6 +424,55 @@ class HttpGoogleServicesDAO(
     val deleter = getGroupDirectory.members.delete(groupEmail, emailToRemove)
     retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(deleter) }) {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // it is ok of the email is already missing
+    }
+  }
+
+  override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]] = {
+    implicit val service = GoogleInstrumentedService.Storage
+
+    val copier = getStorage(getBucketServiceAccountCredential).objects.copy(sourceBucket, sourceObject, destinationBucket, destinationObject, new StorageObject())
+    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(copier)) }) {
+      case e: HttpResponseException => {
+        logger.warn(s"encountered error [${e.getStatusMessage}] with status code [${e.getStatusCode}] when copying [$sourceBucket/$sourceObject] to [$destinationBucket]")
+        None
+      }
+    }
+  }
+
+  override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {
+    implicit val service = GoogleInstrumentedService.Storage
+    val getter = getStorage(getBucketServiceAccountCredential).objects().list(bucketName).setPrefix(objectNamePrefix).setMaxResults(maxPageSize.toLong)
+
+    listObjectsRecursive(getter) map { pagesOption =>
+      pagesOption.map { pages =>
+        pages.flatMap { page =>
+          Option(page.getItems) match {
+            case None => List.empty
+            case Some(objects) => objects.toList
+          }
+        }
+      }.getOrElse(List.empty)
+    }
+  }
+
+  private def listObjectsRecursive(fetcher: Storage#Objects#List, accumulated: Option[List[Objects]] = Some(Nil)): Future[Option[List[Objects]]] = {
+    implicit val service = GoogleInstrumentedService.Storage
+
+    accumulated match {
+      // when accumulated has a Nil list then this must be the first request
+      case Some(Nil) => retryWithRecoverWhen500orGoogleError(() => {
+        Option(executeGoogleRequest(fetcher))
+      }) {
+        case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
+      }.flatMap(firstPage => listObjectsRecursive(fetcher, firstPage.map(List(_))))
+
+      // the head is the Objects object of the prior request which contains next page token
+      case Some(head :: _) if head.getNextPageToken != null => retryWhen500orGoogleError(() => {
+        executeGoogleRequest(fetcher.setPageToken(head.getNextPageToken))
+      }).flatMap(nextPage => listObjectsRecursive(fetcher, accumulated.map(pages => nextPage :: pages)))
+
+      // when accumulated is None (bucket does not exist) or next page token is null
+      case _ => Future.successful(accumulated)
     }
   }
 
@@ -672,8 +721,8 @@ class HttpGoogleServicesDAO(
   }
 
   /**
-   * converts a possibly null java boolean to a scala boolean, null is treated as false
-   */
+    * converts a possibly null java boolean to a scala boolean, null is treated as false
+    */
   private def toScalaBool(b: java.lang.Boolean) = Option(b).contains(java.lang.Boolean.TRUE)
 
   private def toErrorMessage(message: String, code: Int): String = {
@@ -834,7 +883,7 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(resMgr.projects().delete(projectNameString))
       }) {
         case e: GoogleJsonResponseException if e.getDetails.getCode == 403 && "Cannot delete an inactive project.".equals(e.getDetails.getMessage) => new Empty()
-          // stop trying to delete an already deleted project
+        // stop trying to delete an already deleted project
       }
     } yield {
       // nothing

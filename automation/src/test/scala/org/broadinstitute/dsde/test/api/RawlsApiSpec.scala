@@ -11,13 +11,14 @@ import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyResponseEntry, AccessPolicyMembership}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
+import org.broadinstitute.dsde.workbench.dao.Google
 import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, ServiceAccount}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GoogleProject, ServiceAccount}
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
@@ -415,6 +416,28 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             }
             actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
           }
+        }
+      }
+    }
+
+    "should clone a workspace and only copy files in the specified path" in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+      implicit val token: AuthToken = studentAToken
+
+      withCleanBillingProject(studentA) { projectName =>
+        withWorkspace(projectName, "test-copy-files", Set.empty) { workspaceName =>
+          val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
+          Await.result(googleStorageDAO.storeObject(GcsBucketName(bucketName), GcsObjectName("/dontcopythis/foo.txt"), "foo", "text/plain"), Duration.Inf)
+          Await.result(googleStorageDAO.storeObject(GcsBucketName(bucketName), GcsObjectName("/pleasecopythis/bar.txt"), "bar", "text/plain"), Duration.Inf)
+
+          Rawls.workspaces.clone(projectName, workspaceName, projectName, workspaceName + "_clone", Set.empty, Some("/pleasecopythis"))
+          val cloneBucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
+
+          val files = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), Duration.inf)
+
+          println(files)
+
+          files.size shouldBe 1
         }
       }
     }

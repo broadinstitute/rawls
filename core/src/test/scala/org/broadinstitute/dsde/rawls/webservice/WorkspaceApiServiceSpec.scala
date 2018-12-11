@@ -528,6 +528,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 400 Bad Request on clone if the copyFilesWithPrefix is the empty string" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", Map.empty, copyFilesWithPrefix = Some(""))
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
   it should "return 200 on update workspace attributes" in withTestDataApiServices { services =>
     Patch(testData.workspace.path, httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>

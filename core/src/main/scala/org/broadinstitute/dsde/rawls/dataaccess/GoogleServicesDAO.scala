@@ -5,7 +5,7 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.genomics.model.Operation
-import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
+import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
@@ -92,6 +92,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
 
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]
+
+  def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]]
+
+  def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]]
 
   def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
 
