@@ -145,7 +145,7 @@ class HttpGoogleServicesDAO(
           val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(ProjectOwner -> "WRITER", Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
           val bucketAcls =
             policyGroupsByAccessLevel.map { case (access, policyEmail) => newBucketAccessControl(makeGroupEntityString(policyEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
-                newBucketAccessControl("user-" + clientEmail, "OWNER")
+              newBucketAccessControl("user-" + clientEmail, "OWNER")
 
           // default object ACLs should be:
           //   project owner - object reader
@@ -155,7 +155,7 @@ class HttpGoogleServicesDAO(
           //   bucket service account - object owner
           val defaultObjectAcls =
           policyGroupsByAccessLevel.map { case (_, policyEmail) => newObjectAccessControl(makeGroupEntityString(policyEmail.value), "READER") }.toSeq :+
-            newObjectAccessControl("user-" + clientEmail, "OWNER")
+              newObjectAccessControl("user-" + clientEmail, "OWNER")
 
           val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
 
