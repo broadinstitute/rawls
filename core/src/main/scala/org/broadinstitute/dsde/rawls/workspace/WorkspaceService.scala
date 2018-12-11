@@ -27,12 +27,8 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import org.joda.time.DateTime
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-<<<<<<< HEAD
 import akka.http.scaladsl.model.{StatusCodes, Uri}
-=======
-import akka.http.scaladsl.model.{StatusCode, StatusCodes, Uri}
 import com.google.api.services.storage.model.StorageObject
->>>>>>> copy files with prefix during clone
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
 import spray.json.DefaultJsonProtocol._
