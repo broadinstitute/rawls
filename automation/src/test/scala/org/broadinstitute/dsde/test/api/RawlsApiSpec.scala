@@ -8,7 +8,7 @@ import akka.testkit.TestKit
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.service._
-import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyResponseEntry, AccessPolicyMembership}
+import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google
@@ -446,12 +446,15 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
           val copiedFiles = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), Duration.Inf).map(_.value)
 
+          val start = System.currentTimeMillis()
           eventually {
             Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), 1 minute).size shouldBe 1
           }
-//
-//          copiedFiles.size shouldBe 1
-//          copiedFiles should contain(fileToCopy.value)
+          val finish = System.currentTimeMillis()
+
+          Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), 1 minute).map(_.value) should be List(fileToCopy.value)
+
+          logger.info(s"Copied bucket files visible after ${finish-start} milliseconds")
         }
       }
     }
