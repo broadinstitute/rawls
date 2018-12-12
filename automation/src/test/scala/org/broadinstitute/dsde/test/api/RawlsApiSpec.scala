@@ -452,7 +452,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           }
           val finish = System.currentTimeMillis()
 
-          Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), 1 minute).map(_.value) should be List(fileToCopy.value)
+          Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), 1 minute).map(_.value) should contain only fileToCopy.value
 
           logger.info(s"Copied bucket files visible after ${finish-start} milliseconds")
         }
