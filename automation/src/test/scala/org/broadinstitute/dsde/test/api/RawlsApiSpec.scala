@@ -434,20 +434,20 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           Await.result(googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToCopy, "foo", "text/plain"), Duration.Inf)
           Await.result(googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToLeave, "bar", "text/plain"), Duration.Inf)
 
-          val initialFiles = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(bucketName), ""), Duration.Inf)
+          val initialFiles = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(bucketName), ""), Duration.Inf).map(_.value)
 
           initialFiles.size shouldBe 2
-          initialFiles should contain(fileToCopy)
-          initialFiles should contain(fileToLeave)
+          initialFiles should contain(fileToCopy.value)
+          initialFiles should contain(fileToLeave.value)
 
           val destWorkspaceName = workspaceName + "_clone"
           Rawls.workspaces.clone(projectName, workspaceName, projectName, destWorkspaceName, Set.empty, Some("/pleasecopythis"))
           val cloneBucketName = Rawls.workspaces.getBucketName(projectName, destWorkspaceName)
 
-          val copiedFiles = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), Duration.Inf)
+          val copiedFiles = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), Duration.Inf).map(_.value)
 
           copiedFiles.size shouldBe 1
-          copiedFiles should contain(fileToCopy)
+          copiedFiles should contain(fileToCopy.value)
         }
       }
     }
