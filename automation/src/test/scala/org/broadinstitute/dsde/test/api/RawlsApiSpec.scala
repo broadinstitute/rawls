@@ -431,10 +431,10 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           val fileToCopy = GcsObjectName("/pleasecopythis/foo.txt")
           val fileToLeave = GcsObjectName("/dontcopythis/bar.txt")
 
-          Await.result(googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToCopy, "foo", "text/plain"), Duration.Inf)
-          Await.result(googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToLeave, "bar", "text/plain"), Duration.Inf)
+          googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToCopy, "foo", "text/plain").futureValue
+          googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToLeave, "bar", "text/plain").futureValue
 
-          val initialFiles = Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(bucketName), ""), Duration.Inf).map(_.value)
+          val initialFiles = googleStorageDAO.listObjectsWithPrefix(GcsBucketName(bucketName), "").futureValue.map(_.value)
 
           initialFiles.size shouldBe 2
           initialFiles should contain(fileToCopy.value)
@@ -443,14 +443,14 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           val destWorkspaceName = workspaceName + "_clone"
           Rawls.workspaces.clone(projectName, workspaceName, projectName, destWorkspaceName, Set.empty, Some("/pleasecopythis"))
           val cloneBucketName = Rawls.workspaces.getBucketName(projectName, destWorkspaceName)
-          
+
           val start = System.currentTimeMillis()
           eventually {
-            Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), 1 minute).size shouldBe 1
+            googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.size shouldBe 1
           }
           val finish = System.currentTimeMillis()
 
-          Await.result(googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), ""), 1 minute).map(_.value) should contain only fileToCopy.value
+          googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.map(_.value) should contain only fileToCopy.value
 
           logger.info(s"Copied bucket files visible after ${finish-start} milliseconds")
         }
