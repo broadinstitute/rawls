@@ -4,13 +4,17 @@ import sbt._
 object Testing {
   lazy val validMySqlHost = taskKey[Unit]("Determine if mysql.host is provided.")
 
-  lazy val validMySqlHostSetting = validMySqlHost := Def.taskDyn {
-    val hostName = sys.props.getOrElse("mysql.host", "")
-    if (hostName.length == 0) {
-      streams.map(x => x.log.error("Database host name not set. Please see run instructions in README.md for providing a valid database hostname")).value
+  lazy val validMySqlHostSetting = validMySqlHost := (Def.taskDyn {
+    val hostName = sys.props.get("mysql.host")
+    val log = streams.value.log
+
+    Def.task{
+      if (hostName.isEmpty) {
+        log.error("Database host name not set. Please see run instructions in README.md for providing a valid database hostname")
+        sys.exit(1)
+      }
     }
-    sys.exit()
-  }.value
+  }.value)
 
   def isIntegrationTest(name: String) = name contains "integrationtest"
 
@@ -47,12 +51,10 @@ object Testing {
 
     validMySqlHostSetting,
 
-//    (test in Test) := ((test in Test) dependsOn validMySqlHost).value,
-//    (testOnly in Test) := ((testOnly in Test) dependsOn validMySqlHost).inputTaskValue.evaluated,
+    (test in Test) := ((test in Test) dependsOn validMySqlHost).value,
+    (testOnly in Test) := ((testOnly in Test) dependsOn validMySqlHost).evaluated,
 
     parallelExecution in Test := false
-
-
   )
 
   implicit class ProjectTestSettings(val project: Project) extends AnyVal {
