@@ -162,7 +162,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getUserSharePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel, accessLevelToShareWith: WorkspaceAccessLevel): Future[Boolean] = {
-    if(userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
+    if (userAccessLevel < WorkspaceAccessLevels.Read) Future.successful(false)
+    else if(userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
     else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.sharePolicy(accessLevelToShareWith.toString.toLowerCase), userInfo)
   }
 
