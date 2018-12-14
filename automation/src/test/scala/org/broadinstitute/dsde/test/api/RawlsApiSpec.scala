@@ -8,16 +8,17 @@ import akka.testkit.TestKit
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.service._
-import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyResponseEntry, AccessPolicyMembership}
+import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
+import org.broadinstitute.dsde.workbench.dao.Google
 import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, ServiceAccount}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GoogleProject, ServiceAccount}
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
@@ -415,6 +416,43 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             }
             actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
           }
+        }
+      }
+    }
+
+    "should clone a workspace and only copy files in the specified path" in {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+      implicit val token: AuthToken = studentAToken
+
+      withCleanBillingProject(studentA) { projectName =>
+        withWorkspace(projectName, "test-copy-files", Set.empty) { workspaceName =>
+          val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
+
+          val fileToCopy = GcsObjectName("/pleasecopythis/foo.txt")
+          val fileToLeave = GcsObjectName("/dontcopythis/bar.txt")
+
+          googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToCopy, "foo", "text/plain").futureValue
+          googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToLeave, "bar", "text/plain").futureValue
+
+          val initialFiles = googleStorageDAO.listObjectsWithPrefix(GcsBucketName(bucketName), "").futureValue.map(_.value)
+
+          initialFiles.size shouldBe 2
+          initialFiles should contain(fileToCopy.value)
+          initialFiles should contain(fileToLeave.value)
+
+          val destWorkspaceName = workspaceName + "_clone"
+          Rawls.workspaces.clone(projectName, workspaceName, projectName, destWorkspaceName, Set.empty, Some("/pleasecopythis"))
+          val cloneBucketName = Rawls.workspaces.getBucketName(projectName, destWorkspaceName)
+
+          val start = System.currentTimeMillis()
+          eventually {
+            googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.size shouldBe 1
+          }
+          val finish = System.currentTimeMillis()
+
+          googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.map(_.value) should contain only fileToCopy.value
+
+          logger.info(s"Copied bucket files visible after ${finish-start} milliseconds")
         }
       }
     }

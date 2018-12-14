@@ -28,6 +28,7 @@ import org.joda.time.DateTime
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCodes, Uri}
+import com.google.api.services.storage.model.StorageObject
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
 import spray.json.DefaultJsonProtocol._
@@ -363,6 +364,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
+    destWorkspaceRequest.copyFilesWithPrefix.foreach(prefix => validateFileCopyPrefix(prefix))
+
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
     withAttributeNamespaceCheck(workspaceAttributeNames) {
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
@@ -384,14 +387,33 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                       }
                       DBIO.seq(inserts: _*)
                     } andThen {
-                    DBIO.successful(destWorkspaceContext.workspace)
+                    DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
                   }
                 }
               }
             }
           }
+        }.map { case (sourceWorkspaceContext, destWorkspaceContext) =>
+          //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
+          //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
+          //we also don't want to block returning a response on this call because it's already a slow endpoint
+          destWorkspaceRequest.copyFilesWithPrefix.foreach { prefix =>
+            copyBucketFiles(sourceWorkspaceContext, destWorkspaceContext, prefix)
+          }
+
+          destWorkspaceContext.workspace
         }
       }
+    }
+  }
+
+  private def validateFileCopyPrefix(copyFilesWithPrefix: String): Unit = {
+    if(copyFilesWithPrefix.isEmpty) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""))
+  }
+
+  private def copyBucketFiles(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, copyFilesWithPrefix: String): Future[List[Option[StorageObject]]] = {
+    gcsDAO.listObjectsWithPrefix(sourceWorkspaceContext.workspace.bucketName, copyFilesWithPrefix).flatMap { objectsToCopy =>
+      Future.traverse(objectsToCopy) { objectToCopy =>  gcsDAO.copyFile(sourceWorkspaceContext.workspace.bucketName, objectToCopy.getName, destWorkspaceContext.workspace.bucketName, objectToCopy.getName) }
     }
   }
 

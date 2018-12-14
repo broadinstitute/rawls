@@ -427,6 +427,55 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]] = {
+    implicit val service = GoogleInstrumentedService.Storage
+
+    val copier = getStorage(getBucketServiceAccountCredential).objects.copy(sourceBucket, sourceObject, destinationBucket, destinationObject, new StorageObject())
+    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(copier)) }) {
+      case e: HttpResponseException => {
+        logger.warn(s"encountered error [${e.getStatusMessage}] with status code [${e.getStatusCode}] when copying [$sourceBucket/$sourceObject] to [$destinationBucket]")
+        None
+      }
+    }
+  }
+
+  override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {
+    implicit val service = GoogleInstrumentedService.Storage
+    val getter = getStorage(getBucketServiceAccountCredential).objects().list(bucketName).setPrefix(objectNamePrefix).setMaxResults(maxPageSize.toLong)
+
+    listObjectsRecursive(getter) map { pagesOption =>
+      pagesOption.map { pages =>
+        pages.flatMap { page =>
+          Option(page.getItems) match {
+            case None => List.empty
+            case Some(objects) => objects.toList
+          }
+        }
+      }.getOrElse(List.empty)
+    }
+  }
+
+  private def listObjectsRecursive(fetcher: Storage#Objects#List, accumulated: Option[List[Objects]] = Some(Nil)): Future[Option[List[Objects]]] = {
+    implicit val service = GoogleInstrumentedService.Storage
+
+    accumulated match {
+      // when accumulated has a Nil list then this must be the first request
+      case Some(Nil) => retryWithRecoverWhen500orGoogleError(() => {
+        Option(executeGoogleRequest(fetcher))
+      }) {
+        case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
+      }.flatMap(firstPage => listObjectsRecursive(fetcher, firstPage.map(List(_))))
+
+      // the head is the Objects object of the prior request which contains next page token
+      case Some(head :: _) if head.getNextPageToken != null => retryWhen500orGoogleError(() => {
+        executeGoogleRequest(fetcher.setPageToken(head.getNextPageToken))
+      }).flatMap(nextPage => listObjectsRecursive(fetcher, accumulated.map(pages => nextPage :: pages)))
+
+      // when accumulated is None (bucket does not exist) or next page token is null
+      case _ => Future.successful(accumulated)
+    }
+  }
+
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]] = {
     // we make requests to the target bucket as the default pet, if the user only has read access.
     // the default pet is created in a project without APIs enabled. Due to Google issue #16062674, we cannot

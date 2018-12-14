@@ -83,7 +83,8 @@ case class WorkspaceRequest (
                               namespace: String,
                               name: String,
                               attributes: AttributeMap,
-                              authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty)
+                              authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
+                              copyFilesWithPrefix: Option[String] = None
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName: String = toWorkspaceName.toString
@@ -559,7 +560,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityFormat = jsonFormat3(Entity)
 
-  implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
+  implicit val WorkspaceRequestFormat = jsonFormat5(WorkspaceRequest)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
