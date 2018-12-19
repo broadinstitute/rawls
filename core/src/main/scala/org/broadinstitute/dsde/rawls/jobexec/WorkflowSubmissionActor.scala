@@ -21,6 +21,7 @@ import spray.json._
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 
 object WorkflowSubmissionActor {
@@ -193,12 +194,15 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   }
 
   def getWdl(methodConfig: MethodConfiguration, userCredentials: Credential)(implicit executionContext: ExecutionContext): Future[String] = {
-    dataSource.inTransaction { dataAccess => //this is a transaction that makes no database calls, but the sprawling stack of withFoos was too hard to unpick :(
-      withMethod(methodConfig.methodRepoMethod, UserInfo.buildFromTokens(userCredentials)) { method =>
-        withWdl(method) { wdl =>
-          DBIO.successful(wdl)
-        }
+    // this duplicates logic from withMethod/withWdl but does so outside of DBIO, so it can be used outside a transaction
+    methodRepoDAO.getMethod(methodConfig.methodRepoMethod, UserInfo.buildFromTokens(userCredentials)).map {
+      case Some(meth) => meth.payload match {
+        case Some(wdl) => wdl
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty."))
       }
+      case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodConfig.methodRepoMethod.methodUri} from method repo."))
+    } recover {
+      case t:Throwable => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.", methodRepoDAO.toErrorReport(t)))
     }
   }
 
