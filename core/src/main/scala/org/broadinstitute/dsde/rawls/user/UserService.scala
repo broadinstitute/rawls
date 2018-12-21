@@ -86,7 +86,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def requireProjectAction(projectName: RawlsBillingProjectName, action: SamResourceAction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, userInfo).flatMap {
       case true => op
-      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a project owner.")))
+      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Project does not exist or you do not have appropriate access.")))
     }
   }
 
@@ -144,20 +144,16 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     gcsDAO.listBillingAccounts(userInfo) map(RequestComplete(_))
 
   def getBillingProjectStatus(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-    val statusFuture: Future[Option[RawlsBillingProjectStatus]] = for {
-      policies <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, userInfo)
-      projectDetail <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) }
-    } yield {
-      policies.find { policy =>
-        projectDetail.isDefined &&
-        policy.resourceId.equals(projectDetail.get.projectName.value)
-      }.flatMap { policy =>
-        Some(RawlsBillingProjectStatus(RawlsBillingProjectName(policy.resourceId), projectDetail.get.status))
+    requireProjectAction(projectName, SamBillingProjectActions.viewStatus) {
+      for {
+        projectDetail <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) }
+        status = projectDetail.map(p => RawlsBillingProjectStatus(p.projectName, p.status))
+      } yield {
+        status match {
+          case Some(status) => RequestComplete(StatusCodes.OK, status)
+          case _ => RequestComplete(StatusCodes.NotFound)
+        }
       }
-    }
-    statusFuture.map {
-      case Some(status) => RequestComplete(StatusCodes.OK, status)
-      case _ => RequestComplete(StatusCodes.NotFound)
     }
   }
 
