@@ -86,7 +86,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def requireProjectAction(projectName: RawlsBillingProjectName, action: SamResourceAction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, userInfo).flatMap {
       case true => op
-      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Project does not exist or you do not have appropriate access.")))
+      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "Project does not exist or you do not have appropriate access.")))
     }
   }
 
