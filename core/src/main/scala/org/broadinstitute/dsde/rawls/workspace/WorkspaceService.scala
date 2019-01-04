@@ -249,12 +249,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     for {
       workflowsToAbort <- deletionFuture
 
-      // Delete resource in sam outside of DB transaction
-      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, userInfo)
-      _ <- workspaceContext.workspace.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
-
       // Abort running workflows
       aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) }
+
+      // Delete resource in sam outside of DB transaction
+      _ <- workspaceContext.workspace.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
+      _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, userInfo)
     } yield {
       aborts.onFailure {
         case t: Throwable => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
