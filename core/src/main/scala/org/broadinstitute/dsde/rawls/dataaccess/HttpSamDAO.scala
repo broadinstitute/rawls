@@ -254,7 +254,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
   override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]] = {
-    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/allMembers"
+    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/allMembers"
     retry(when401or500) { () => pipeline[Set[UserIdInfo]](userInfo) apply RequestBuilding.Get(url) }
   }
 
