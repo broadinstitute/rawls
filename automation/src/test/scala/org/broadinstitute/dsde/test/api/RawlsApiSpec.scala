@@ -408,7 +408,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
   }
 
   private def getWorkspaceId(projectName: String, workspaceName: String)(implicit token: AuthToken): String = {
-    import DefaultJsonProtocol._
+import DefaultJsonProtocol._
     Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName).parseJson.asJsObject.getFields("workspace").flatMap { workspace =>
       workspace.asJsObject.getFields("workspaceId")
     }.head.convertTo[String]
