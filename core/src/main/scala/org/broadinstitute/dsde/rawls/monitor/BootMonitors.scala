@@ -19,11 +19,23 @@ import scala.util.Try
 // handles monitors which need to be started at boot time
 object BootMonitors extends LazyLogging {
 
-  def bootMonitors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO,
-                   samDAO: SamDAO, pubSubDAO: GooglePubSubDAO, methodRepoDAO: MethodRepoDAO, dosResolver: DosResolver,
-                   shardedExecutionServiceCluster: ExecutionServiceCluster, maxActiveWorkflowsTotal: Int,
-                   maxActiveWorkflowsPerUser: Int, userServiceConstructor: (UserInfo) => UserService,
-                   projectTemplate: ProjectTemplate, metricsPrefix: String, requesterPaysRole: String): Unit = {
+  def bootMonitors(system: ActorSystem,
+                   conf: Config,
+                   slickDataSource: SlickDataSource,
+                   gcsDAO: GoogleServicesDAO,
+                   samDAO: SamDAO,
+                   pubSubDAO: GooglePubSubDAO,
+                   methodRepoDAO: MethodRepoDAO,
+                   dosResolver: DosResolver,
+                   shardedExecutionServiceCluster: ExecutionServiceCluster,
+                   maxActiveWorkflowsTotal: Int,
+                   maxActiveWorkflowsPerUser: Int,
+                   userServiceConstructor: (UserInfo) => UserService,
+                   projectTemplate: ProjectTemplate,
+                   metricsPrefix: String,
+                   requesterPaysRole: String,
+                   useWorkflowCollectionField: Boolean,
+                   useWorkflowCollectionLabel: Boolean): Unit = {
     //Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
 
@@ -35,7 +47,7 @@ object BootMonitors extends LazyLogging {
     startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, samDAO, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
 
     //Boot workflow submission actors
-    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole)
+    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel)
 
     //Boot bucket deletion monitor
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
@@ -58,7 +70,20 @@ object BootMonitors extends LazyLogging {
     ), "rawls-submission-supervisor")
   }
 
-  private def startWorkflowSubmissionActors(system: ActorSystem, conf: Config, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, methodRepoDAO: MethodRepoDAO, dosResolver: DosResolver, shardedExecutionServiceCluster: ExecutionServiceCluster, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, metricsPrefix: String, requesterPaysRole: String) = {
+  private def startWorkflowSubmissionActors(system: ActorSystem,
+                                            conf: Config,
+                                            slickDataSource: SlickDataSource,
+                                            gcsDAO: GoogleServicesDAO,
+                                            samDAO: SamDAO,
+                                            methodRepoDAO: MethodRepoDAO,
+                                            dosResolver: DosResolver,
+                                            shardedExecutionServiceCluster: ExecutionServiceCluster,
+                                            maxActiveWorkflowsTotal: Int,
+                                            maxActiveWorkflowsPerUser: Int,
+                                            metricsPrefix: String,
+                                            requesterPaysRole: String,
+                                            useWorkflowCollectionField: Boolean,
+                                            useWorkflowCollectionLabel: Boolean) = {
     for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
       system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
@@ -76,7 +101,9 @@ object BootMonitors extends LazyLogging {
         Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption,
         conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),
         metricsPrefix,
-        requesterPaysRole
+        requesterPaysRole,
+        useWorkflowCollectionField,
+        useWorkflowCollectionLabel
       ))
     }
   }

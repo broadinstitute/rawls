@@ -13,8 +13,9 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, addJitter}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, util}
 import akka.http.scaladsl.model.StatusCodes
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -39,8 +40,10 @@ object WorkflowSubmissionActor {
             runtimeOptions: Option[JsValue],
             trackDetailedSubmissionMetrics: Boolean,
             workbenchMetricBaseName: String,
-            requesterPaysRole: String): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole))
+            requesterPaysRole: String,
+            useWorkflowCollectionField: Boolean,
+            useWorkflowCollectionLabel: Boolean): Props = {
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -68,7 +71,9 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val runtimeOptions: Option[JsValue],
                               val trackDetailedSubmissionMetrics: Boolean,
                               override val workbenchMetricBaseName: String,
-                              val requesterPaysRole: String) extends Actor with WorkflowSubmission with LazyLogging {
+                              val requesterPaysRole: String,
+                              val useWorkflowCollectionField: Boolean,
+                              val useWorkflowCollectionLabel: Boolean) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
 
@@ -114,6 +119,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val runtimeOptions: Option[JsValue]
   val trackDetailedSubmissionMetrics: Boolean
   val requesterPaysRole: String
+  val useWorkflowCollectionField: Boolean
+  val useWorkflowCollectionLabel: Boolean
 
   import dataSource.dataAccess.driver.api._
 
@@ -301,6 +308,12 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     } yield {
 
       val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, RawlsUser(RawlsUserSubjectId(userIdInfo), RawlsUserEmail(submissionRec.submitterEmail)), petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
+        val submissionAndWorkspaceLabels = Map("submission-id" -> submissionRec.id.toString,  "workspace-id" -> workspaceRec.id.toString)
+        val wfLabels = workspaceRec.workflowCollection match {
+          case Some(workflowCollection) if useWorkflowCollectionLabel => submissionAndWorkspaceLabels + ("caas-collection-name" -> workflowCollection)
+          case _ => submissionAndWorkspaceLabels
+        }
+        val wfCollection = if (useWorkflowCollectionField) workspaceRec.workflowCollection else None
 
       val wfInputsBatch = workflowBatch map { wf =>
         val methodProps = wf.inputResolutions map {
@@ -311,16 +324,17 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       }
 
       //yield the things we're going to submit to Cromwell
-      (wdl, wfRecs, wfInputsBatch, wfOpts, collectDosUris(workflowBatch), petUserInfo)
+      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, collectDosUris(workflowBatch), petUserInfo)
     }
 
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
-      (wdl, workflowRecs, wfInputsBatch, wfOpts, dosUris, petUserInfo) <- workflowBatchFuture
+      (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo) <- workflowBatchFuture
       dosServiceAccounts <- resolveDosUriServiceAccounts(dosUris)
       _ <- if (dosServiceAccounts.isEmpty) Future.successful(false) else googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(wfOpts.google_project), Map(requesterPaysRole -> dosServiceAccounts.map("user:"+_).toList))
-      workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), petUserInfo)
+      // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
+      workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), Option(wfLabels), wfCollection, petUserInfo)
     } yield {
       // call to submitWorkflows returns a tuple:
       val executionServiceKey = workflowSubmitResult._1
