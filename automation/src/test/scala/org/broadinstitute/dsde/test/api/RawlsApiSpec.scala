@@ -95,57 +95,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
   }
 
   "Rawls" - {
-    "should give pets the same access as their owners" in {
-      withCleanBillingProject(owner) { projectName =>
-        withCleanUp {
-          //Create workspaces for Students
-          Orchestration.billing.addUserToBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
-          register cleanUp Orchestration.billing.removeUserFromBillingProject(projectName, studentA.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
-
-          Orchestration.billing.addUserToBillingProject(projectName, studentB.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
-          register cleanUp Orchestration.billing.removeUserFromBillingProject(projectName, studentB.email, Orchestration.billing.BillingProjectRole.User)(ownerAuthToken)
-
-          val uuid = UUID.randomUUID().toString
-
-          val workspaceNameA = "rawls_test_User_A_Workspace" + uuid
-          Rawls.workspaces.create(projectName, workspaceNameA)(studentAToken)
-          register cleanUp Rawls.workspaces.delete(projectName, workspaceNameA)(studentAToken)
-
-          val workspaceNameB = "rawls_test_User_B_Workspace" + uuid
-          Rawls.workspaces.create(projectName, workspaceNameB)(studentBToken)
-          register cleanUp Rawls.workspaces.delete(projectName, workspaceNameB)(studentBToken)
-
-          //Remove the pet SA for a clean test environment
-          val userAStatus = Sam.user.status()(studentAToken).get
-          val petEmail = Sam.user.petServiceAccountEmail(projectName)(studentAToken)
-          Sam.removePet(projectName, userAStatus.userInfo)
-          implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(5, Seconds)))
-          eventually(findPetInGoogle(projectName, petEmail) shouldBe None)
-
-          //Validate that the pet SA has been created
-          val petAccountEmail = Sam.user.petServiceAccountEmail(projectName)(studentAToken)
-          petAccountEmail.value should not be userAStatus.userInfo.userEmail
-          findPetInGoogle(projectName, petEmail).map(_.email) shouldBe Some(petAccountEmail)
-
-          val petAuthToken = ServiceAccountAuthTokenFromJson(Sam.user.petServiceAccountKey(projectName)(studentAToken))
-
-          //TODO: Deserialize the json instead of checking for substring
-          val petWorkspace = Rawls.workspaces.list()(petAuthToken)
-          petWorkspace should include(workspaceNameA)
-          petWorkspace should not include (workspaceNameB)
-
-          val userAWorkspace = Rawls.workspaces.list()(studentAToken)
-          userAWorkspace should include(workspaceNameA)
-          userAWorkspace should not include (workspaceNameB)
-
-          val userBWorkspace = Rawls.workspaces.list()(studentBToken)
-          userBWorkspace should include(workspaceNameB)
-
-          Sam.removePet(projectName, userAStatus.userInfo)
-        }
-      }
-    }
-
     "should retrieve sub-workflow metadata and outputs from Cromwell" in {
       implicit val token: AuthToken = studentBToken
 
