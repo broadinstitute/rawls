@@ -125,11 +125,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[Workspace] =
     withAttributeNamespaceCheck(workspaceRequest) {
-      dataSource.inTransaction { dataAccess =>
+      dataSource.inTransaction({ dataAccess =>
         withNewWorkspaceContext(workspaceRequest, dataAccess) { workspaceContext =>
           DBIO.successful(workspaceContext.workspace)
         }
-      }
+      }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
     }
 
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
@@ -268,9 +268,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         isCurator <- tryIsCurator(userInfo.userEmail)
         workspace <- getWorkspaceContext(workspaceName) flatMap { ctx =>
           withLibraryPermissions(ctx, operations, userInfo, isCurator) {
-            dataSource.inTransaction { dataAccess =>
+            dataSource.inTransaction ({ dataAccess =>
               updateWorkspace(operations, dataAccess)(ctx)
-            }
+            }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
           }
         }
         authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)
@@ -283,11 +283,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
     withAttributeNamespaceCheck(operations.map(_.name)) {
       for {
-        workspace <- dataSource.inTransaction { dataAccess =>
+        workspace <- dataSource.inTransaction({ dataAccess =>
           withWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, dataAccess) {
             updateWorkspace(operations, dataAccess)
           }
-        }
+        }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
         authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)
       } yield {
         RequestComplete(StatusCodes.OK, WorkspaceDetails(workspace, authDomain))
@@ -370,7 +370,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
     withAttributeNamespaceCheck(workspaceAttributeNames) {
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
-        dataSource.inTransaction { dataAccess =>
+        dataSource.inTransaction({ dataAccess =>
           withWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read, dataAccess) { sourceWorkspaceContext =>
             DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspace.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
               withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
@@ -394,7 +394,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               }
             }
           }
-        }.map { case (sourceWorkspaceContext, destWorkspaceContext) =>
+          // read committed to avoid deadlocks on workspace attr scratch table
+        }, TransactionIsolation.ReadCommitted).map { case (sourceWorkspaceContext, destWorkspaceContext) =>
           //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
           //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
           //we also don't want to block returning a response on this call because it's already a slow endpoint
