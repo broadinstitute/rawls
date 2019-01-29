@@ -21,6 +21,7 @@ case class WorkspaceRecord(
   name: String,
   id: UUID,
   bucketName: String,
+  workflowCollection: Option[String],
   createdDate: Timestamp,
   lastModified: Timestamp,
   createdBy: String,
@@ -44,6 +45,7 @@ trait WorkspaceComponent {
     def namespace = column[String]("namespace", O.Length(254))
     def name = column[String]("name", O.Length(254))
     def bucketName = column[String]("bucket_name", O.Length(128))
+    def workflowCollection = column[Option[String]]("workflow_collection", O.Length(255))
     def createdDate = column[Timestamp]("created_date", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def lastModified = column[Timestamp]("last_modified", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def createdBy = column[String]("created_by", O.Length(254))
@@ -52,7 +54,7 @@ trait WorkspaceComponent {
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
-    def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
@@ -304,11 +306,11 @@ trait WorkspaceComponent {
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace = {
-      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked)
+      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked)
     }
   }
 

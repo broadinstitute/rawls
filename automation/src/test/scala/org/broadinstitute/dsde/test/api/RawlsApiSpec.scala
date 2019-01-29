@@ -7,29 +7,31 @@ import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.broadinstitute.dsde.workbench.service._
-import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry}
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google
 import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
-import org.broadinstitute.dsde.workbench.fixture.BillingFixtures
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO
-import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GoogleProject, ServiceAccount}
+import org.broadinstitute.dsde.workbench.service._
+import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry}
+import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
+import org.scalatest.{FreeSpecLike, Matchers}
 import org.scalatest.time.{Minutes, Seconds, Span}
 import org.scalatest.{FreeSpecLike, Matchers}
-import spray.json._
 
 import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
 import scala.collection.JavaConverters._
-import scala.util.Random
+import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.util.{Random, Try}
+import spray.json._
 
 class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
   with CleanUp with RandomUtil with Retry
@@ -408,8 +410,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
   }
 
   private def getWorkspaceId(projectName: String, workspaceName: String)(implicit token: AuthToken): String = {
-    import DefaultJsonProtocol._
-
+import DefaultJsonProtocol._
     Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName).parseJson.asJsObject.getFields("workspace").flatMap { workspace =>
       workspace.asJsObject.getFields("workspaceId")
     }.head.convertTo[String]

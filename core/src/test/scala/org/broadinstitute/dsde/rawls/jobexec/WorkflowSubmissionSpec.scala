@@ -56,7 +56,9 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val runtimeOptions: Option[JsValue] = None,
     val trackDetailedSubmissionMetrics: Boolean = true,
     override val workbenchMetricBaseName: String = "test",
-    val requesterPaysRole: String = requesterPaysRole) extends WorkflowSubmission {
+    val requesterPaysRole: String = requesterPaysRole,
+    val useWorkflowCollectionField: Boolean = false,
+    val useWorkflowCollectionLabel: Boolean = false) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
@@ -85,6 +87,11 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
                                                pollInterval: FiniteDuration = 1 second) extends TestWorkflowSubmission(dataSource, batchSize, processInterval, pollInterval) {
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), dataSource)
   }
+
+  class TestWorkflowSubmissionWithLabels(dataSource: SlickDataSource,
+                                         useWorkflowCollectionField: Boolean,
+                                         useWorkflowCollectionLabel: Boolean) extends TestWorkflowSubmission(dataSource, 3, 25 milliseconds, 1 second, useWorkflowCollectionField = useWorkflowCollectionField, useWorkflowCollectionLabel = useWorkflowCollectionLabel)
+
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -242,6 +249,48 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     }
   }
 
+  it should "submit a workflow that sets the workflow collection as neither a label nor a field in the request" in withDefaultTestDatabase {
+    testWorkflowCollectionFieldAndLabels(false, false) { (mockExecService: MockExecutionServiceDAO, submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord) =>
+      mockExecService.collection shouldEqual None
+      mockExecService.labels shouldEqual Map("submission-id" -> submissionRec.id.toString, "workspace-id" -> workspaceRec.id.toString)
+    }  }
+
+  it should "submit a workflow that sets the workflow collection as a label" in withDefaultTestDatabase {
+    testWorkflowCollectionFieldAndLabels(false, true) { (mockExecService: MockExecutionServiceDAO, submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord) =>
+      mockExecService.collection shouldEqual None
+      mockExecService.labels shouldEqual Map("submission-id" -> submissionRec.id.toString, "workspace-id" -> workspaceRec.id.toString, "caas-collection-name"  -> workspaceRec.workflowCollection.getOrElse(""))
+    }
+  }
+
+  it should "submit a workflow that sets the workflow collection as a field in the request" in withDefaultTestDatabase {
+    testWorkflowCollectionFieldAndLabels(true, false) { (mockExecService: MockExecutionServiceDAO, submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord) =>
+      mockExecService.collection shouldEqual Some(workspaceRec.workflowCollection.getOrElse(""))
+      mockExecService.labels shouldEqual  Map("submission-id" -> submissionRec.id.toString, "workspace-id" -> workspaceRec.id.toString)
+    }
+  }
+
+  it should "submit a workflow that sets the workflow collection as both a label and a field in the request" in withDefaultTestDatabase {
+    testWorkflowCollectionFieldAndLabels(true, true) { (mockExecService: MockExecutionServiceDAO, submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord) =>
+      mockExecService.labels shouldEqual Map("submission-id" -> submissionRec.id.toString, "workspace-id" -> workspaceRec.id.toString, "caas-collection-name"  -> workspaceRec.workflowCollection.getOrElse(""))
+      mockExecService.collection shouldEqual Some(workspaceRec.workflowCollection.getOrElse(""))
+    }
+  }
+
+  def testWorkflowCollectionFieldAndLabels(useWorkflowCollectionField: Boolean, useWorkflowCollectionLabels: Boolean)(op: (MockExecutionServiceDAO, SubmissionRecord, WorkspaceRecord) => _) = {
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmissionWithLabels(slickDataSource, useWorkflowCollectionField, useWorkflowCollectionLabels) {
+      override val executionServiceCluster = mockExecCluster
+    }
+
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(testData.submission1, testData.workspace)
+      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+
+      val mockExecService = mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO]
+      op(mockExecService, submissionRec, workspaceRec)
+    }
+  }
+
   it should "resolve DOS URIs when submitting workflows" in withDefaultTestDatabase {
     val data = testData
     // Set up system under test
@@ -355,7 +404,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
-        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole)
+        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false)
       )
 
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).exists(_ == WorkflowStatuses.Submitted.toString), 10 seconds)
@@ -390,7 +439,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
-        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole)
+        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false)
       )
 
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)

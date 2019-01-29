@@ -96,6 +96,7 @@ case class Workspace(
                       name: String,
                       workspaceId: String,
                       bucketName: String,
+                      workflowCollectionName: Option[String],
                       createdDate: DateTime,
                       lastModified: DateTime,
                       createdBy: String,
@@ -415,13 +416,14 @@ case class WorkspaceDetails(namespace: String,
                             name: String,
                             workspaceId: String,
                             bucketName: String,
+                            workflowCollectionName: Option[String],
                             createdDate: DateTime,
                             lastModified: DateTime,
                             createdBy: String,
                             attributes: AttributeMap,
                             isLocked: Boolean = false,
                             authorizationDomain: Set[ManagedGroupRef]) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, createdDate, lastModified, createdBy, attributes, isLocked)
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked)
 }
 
 object WorkspaceDetails {
@@ -431,6 +433,7 @@ object WorkspaceDetails {
       workspace.name,
       workspace.workspaceId,
       workspace.bucketName,
+      workspace.workflowCollectionName,
       workspace.createdDate,
       workspace.lastModified,
       workspace.createdBy,
@@ -636,7 +639,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat10(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat11(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 

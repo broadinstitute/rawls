@@ -57,7 +57,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     val wsName = WorkspaceName("ExecClusterTestDataNamespace", "ExecClusterTestDataName")
     val user = RawlsUser(userInfo)
     val ownerGroup = makeRawlsGroup("ExecClusterTestDataOwnerGroup", Set(user))
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "ExecClusterTestDataBucket", currentTime(), currentTime(), "testUser", Map.empty)
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "ExecClusterTestDataBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
     val sample1 = Entity("sample1", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
 
@@ -227,7 +227,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     ) map {
       case (seed, expectedInstanceId) => {
         val batch = batchTestWorkflows(seed)
-        val submissionResult = Await.result(cluster.submitWorkflows(batch, "wdl", Seq.fill(batch.size)("inputs"), None, userInfo), Duration.Inf)
+        val submissionResult = Await.result(cluster.submitWorkflows(batch, "wdl", Seq.fill(batch.size)("inputs"), None, None, None, userInfo), Duration.Inf)
         assertResult(batch.size, s"size for seed $seed") { submissionResult._2.size }
         assertResult(ExecutionServiceId(expectedInstanceId), expectedInstanceId) {submissionResult._1}
 

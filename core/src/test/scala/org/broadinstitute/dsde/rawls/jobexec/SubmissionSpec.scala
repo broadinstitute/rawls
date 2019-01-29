@@ -74,7 +74,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val wsName = WorkspaceName("myNamespacexxx", "myWorkspace")
     val user = RawlsUser(userInfo)
     val ownerGroup = makeRawlsGroup("workspaceOwnerGroup", Set(user))
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty)
+    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
     val sample1 = Entity("sample1", "Sample",
       Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
