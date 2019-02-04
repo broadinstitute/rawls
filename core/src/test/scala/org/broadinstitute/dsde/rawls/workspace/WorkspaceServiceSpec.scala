@@ -981,6 +981,19 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  it should "not clobber catalog permission" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
+    Await.result(services.samDAO.registerUser(aclTestUser), Duration.Inf)
+
+    val aclUpdate = WorkspaceACLUpdate(aclTestUser.userEmail.value, WorkspaceAccessLevels.Write)
+    Await.result(services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCatalog, SamPolicy(Set(WorkbenchEmail(aclUpdate.email)), Set.empty, Set(SamWorkspaceRoles.canCatalog)), userInfo), Duration.Inf)
+    val result = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, Set(aclUpdate), inviteUsersNotFound = false), Duration.Inf)
+
+    withClue(result.toString) {
+      services.samDAO.callsToRemoveFromPolicy should contain theSameElementsAs Set.empty
+    }
+  }
+
 
   def addEmailToPolicy(services: TestApiServiceWithCustomSamDAO, policyName: SamResourcePolicyName, email: String) = {
     val policy = services.samDAO.policies((SamResourceTypeNames.workspace, testData.workspace.workspaceId))(policyName)
