@@ -599,9 +599,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     collectMissingUsers(aclUpdates.map(_.email)).flatMap { userToInvite =>
       if (userToInvite.isEmpty || inviteUsersNotFound) {
         getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
+          // the acl update code does not deal with the can catalog permission, there are separate functions for that.
+          // exclude any existing can catalog policies so we don't inadvertently remove them
+          val existingPoliciesExcludingCatalog = existingPolicies.filterNot(_.policyName == SamWorkspacePolicyNames.canCatalog)
 
           // convert all the existing policy memberships into WorkspaceAclUpdate objects
-          val existingPoliciesWithMembers = existingPolicies.flatMap(p => p.policy.memberEmails.map(email => email -> p.policyName))
+          val existingPoliciesWithMembers = existingPoliciesExcludingCatalog.flatMap(p => p.policy.memberEmails.map(email => email -> p.policyName))
           val existingAcls = existingPoliciesWithMembers.groupBy(_._1).map { case (email, policyNames) =>
             policiesToAclUpdate(email.value, policyNames.map(_._2))
           }.toSet
