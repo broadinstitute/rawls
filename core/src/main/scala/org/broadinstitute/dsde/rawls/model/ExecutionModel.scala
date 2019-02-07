@@ -143,7 +143,7 @@ object SubmissionStatusResponse {
     SubmissionStatusResponse(
       submissionId = submission.submissionId,
       submissionDate = submission.submissionDate,
-      submitter = submission.submissionId,
+      submitter = submission.submitter.value,
       methodConfigurationNamespace = submission.methodConfigurationNamespace,
       methodConfigurationName = submission.methodConfigurationName,
       submissionEntity = submission.submissionEntity,
