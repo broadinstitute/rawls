@@ -13,10 +13,10 @@ fi
 if [ "$SKIP_TESTS" = "skip-tests" ]; then
 	echo skipping tests
 else
-	sbt -batch -J-Xms4g -J-Xmx4g -J-XX:MaxMetaspaceSize=1024m test -Dmysql.host=mysql -Dmysql.port=3306
+	sbt -J-Xms5g -J-Xmx5g -J-XX:MaxMetaspaceSize=2048m test -Dmysql.host=mysql -Dmysql.port=3306
 fi
 
-sbt -batch -J-Xms4g -J-Xmx4g -J-XX:MaxMetaspaceSize=1024m assembly
+sbt -J-Xms5g -J-Xmx5g -J-XX:MaxMetaspaceSize=2048m assembly
 RAWLS_JAR=$(find target | grep 'rawls.*\.jar')
 mv $RAWLS_JAR .
 sbt clean
