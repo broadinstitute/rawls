@@ -75,7 +75,7 @@ case class ExecutionServiceWorkflowOptions(
   final_workflow_log_dir: String,
   default_runtime_attributes: Option[JsValue],
   read_from_cache: Boolean,
-  backend: Option[String],
+  backend: String,
   workflow_failure_mode: Option[WorkflowFailureMode] = None
 )
 

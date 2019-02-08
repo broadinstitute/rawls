@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
 
-case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String])
+case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: String)
 case class RawlsBillingProjectOperationRecord(projectName: String, operationName: String, operationId: String, done: Boolean, errorMessage: Option[String], api: String)
 
 trait RawlsBillingProjectComponent {
@@ -17,7 +17,7 @@ trait RawlsBillingProjectComponent {
     def creationStatus = column[String]("CREATION_STATUS", O.Length(20))
     def billingAccount = column[Option[String]]("BILLING_ACCOUNT", O.Length(100))
     def message = column[Option[String]]("MESSAGE")
-    def cromwellBackend = column[Option[String]]("CROMWELL_BACKEND")
+    def cromwellBackend = column[String]("CROMWELL_BACKEND")
 
     def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount, message, cromwellBackend) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
