@@ -35,7 +35,8 @@ object BootMonitors extends LazyLogging {
                    metricsPrefix: String,
                    requesterPaysRole: String,
                    useWorkflowCollectionField: Boolean,
-                   useWorkflowCollectionLabel: Boolean): Unit = {
+                   useWorkflowCollectionLabel: Boolean,
+                   defaultBackend: String): Unit = {
     //Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
 
@@ -48,7 +49,7 @@ object BootMonitors extends LazyLogging {
     startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, samDAO, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
 
     //Boot workflow submission actors
-    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel)
+    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend)
 
     //Boot bucket deletion monitor
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
@@ -83,7 +84,8 @@ object BootMonitors extends LazyLogging {
                                             metricsPrefix: String,
                                             requesterPaysRole: String,
                                             useWorkflowCollectionField: Boolean,
-                                            useWorkflowCollectionLabel: Boolean) = {
+                                            useWorkflowCollectionLabel: Boolean,
+                                            defaultBackend: String) = {
     for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
       system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
@@ -103,7 +105,8 @@ object BootMonitors extends LazyLogging {
         metricsPrefix,
         requesterPaysRole,
         useWorkflowCollectionField,
-        useWorkflowCollectionLabel
+        useWorkflowCollectionLabel,
+        defaultBackend
       ))
     }
   }

@@ -188,12 +188,13 @@ object Boot extends App with LazyLogging {
     val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt("executionservice.activeWorkflowHogFactor")
     val useWorkflowCollectionField = conf.getBoolean("executionservice.useWorkflowCollectionField")
     val useWorkflowCollectionLabel = conf.getBoolean("executionservice.useWorkflowCollectionLabel")
+    val defaultBackend = conf.getString("executionservice.defaultBackend")
 
     if(conf.getBooleanOption("backRawls").getOrElse(false)) {
       logger.info("This instance has been marked as BACK. Booting monitors...")
       BootMonitors.bootMonitors(
         system, conf, slickDataSource, gcsDAO, samDAO, pubSubDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal,
-        maxActiveWorkflowsPerUser, userServiceConstructor, projectTemplate, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel
+        maxActiveWorkflowsPerUser, userServiceConstructor, projectTemplate, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend
       )
     } else logger.info("This instance has been marked as FRONT. Monitors will not be booted...")
 

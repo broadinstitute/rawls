@@ -42,8 +42,9 @@ object WorkflowSubmissionActor {
             workbenchMetricBaseName: String,
             requesterPaysRole: String,
             useWorkflowCollectionField: Boolean,
-            useWorkflowCollectionLabel: Boolean): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel))
+            useWorkflowCollectionLabel: Boolean,
+            defaultBackend: String): Props = {
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -73,7 +74,8 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               override val workbenchMetricBaseName: String,
                               val requesterPaysRole: String,
                               val useWorkflowCollectionField: Boolean,
-                              val useWorkflowCollectionLabel: Boolean) extends Actor with WorkflowSubmission with LazyLogging {
+                              val useWorkflowCollectionLabel: Boolean,
+                              val defaultBackend: String) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
 
@@ -121,6 +123,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val requesterPaysRole: String
   val useWorkflowCollectionField: Boolean
   val useWorkflowCollectionLabel: Boolean
+  val defaultBackend: String
 
   import dataSource.dataAccess.driver.api._
 
@@ -194,7 +197,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       s"gs://${workspace.bucketName}/${submissionId}/workflow.logs",
       runtimeOptions,
       useCallCache,
-      billingProject.cromwellBackend,
+      billingProject.cromwellBackend.getOrElse(defaultBackend),
       workflowFailureMode
     )
   }
