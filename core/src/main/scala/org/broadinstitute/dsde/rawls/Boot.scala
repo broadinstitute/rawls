@@ -169,6 +169,7 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource.databaseConfig.db.shutdown
       }
 
+//<<<<<<< HEAD
       val executionServiceConfig = conf.getConfig("executionservice")
       val submissionTimeout = util.toScalaDuration(
         executionServiceConfig.getDuration("workflowSubmissionTimeout")
@@ -239,6 +240,19 @@ object Boot extends IOApp with LazyLogging {
       val projectTemplate = ProjectTemplate(
         Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors),
         projectServices
+//=======
+//    val maxActiveWorkflowsTotal = conf.getInt("executionservice.maxActiveWorkflowsPerServer") * executionServiceServers.size
+//    val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt("executionservice.activeWorkflowHogFactor")
+//    val useWorkflowCollectionField = conf.getBoolean("executionservice.useWorkflowCollectionField")
+//    val useWorkflowCollectionLabel = conf.getBoolean("executionservice.useWorkflowCollectionLabel")
+//    val defaultBackend = conf.getString("executionservice.defaultBackend")
+//
+//    if(conf.getBooleanOption("backRawls").getOrElse(false)) {
+//      logger.info("This instance has been marked as BACK. Booting monitors...")
+//      BootMonitors.bootMonitors(
+//        system, conf, slickDataSource, gcsDAO, samDAO, pubSubDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal,
+//        maxActiveWorkflowsPerUser, userServiceConstructor, projectTemplate, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend
+//>>>>>>> change default backend to be taken from config and submitted as workflow option
       )
 
       val notificationDAO = new PubSubNotificationDAO(
@@ -283,6 +297,7 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionField")
       val useWorkflowCollectionLabel =
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
+      val defaultBackend = conf.getString("executionservice.defaultBackend")
 
       if (conf.getBooleanOption("backRawls").getOrElse(false)) {
         logger.info("This instance has been marked as BACK. Booting monitors...")
@@ -303,7 +318,8 @@ object Boot extends IOApp with LazyLogging {
           metricsPrefix,
           requesterPaysRole,
           useWorkflowCollectionField,
-          useWorkflowCollectionLabel
+          useWorkflowCollectionLabel,
+          defaultBackend
         )
       } else
         logger.info(
