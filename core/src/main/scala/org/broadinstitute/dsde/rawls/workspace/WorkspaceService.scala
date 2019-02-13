@@ -1758,9 +1758,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 SamWorkflowCollectionPolicyNames.workflowCollectionOwnerPolicyName ->
                   SamPolicy(Set(policyMap(SamWorkspacePolicyNames.projectOwner), policyMap(SamWorkspacePolicyNames.owner)), Set.empty, Set(SamWorkflowCollectionRoles.owner)),
                 SamWorkflowCollectionPolicyNames.workflowCollectionWriterPolicyName ->
-                  SamPolicy(Set(policyMap(SamWorkspacePolicyNames.writer)), Set.empty, Set(SamWorkflowCollectionRoles.writer)),
+                  SamPolicy(Set(policyMap(SamWorkspacePolicyNames.canCompute)), Set.empty, Set(SamWorkflowCollectionRoles.writer)),
                 SamWorkflowCollectionPolicyNames.workflowCollectionReaderPolicyName ->
-                  SamPolicy(Set(policyMap(SamWorkspacePolicyNames.reader)), Set.empty, Set(SamWorkflowCollectionRoles.reader))
+                  SamPolicy(Set(policyMap(SamWorkspacePolicyNames.reader), policyMap(SamWorkspacePolicyNames.writer)), Set.empty, Set(SamWorkflowCollectionRoles.reader))
               ),
               Set.empty,
               userInfo
