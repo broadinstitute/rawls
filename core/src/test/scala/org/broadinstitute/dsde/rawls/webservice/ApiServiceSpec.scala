@@ -20,7 +20,7 @@ import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.scalatest.concurrent.Eventually
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
@@ -32,6 +32,7 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.{MethodRepoConfig, SwaggerConfig}
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import scala.concurrent.duration._
 
@@ -163,6 +164,11 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
+    val workspaceServiceConfig = WorkspaceServiceConfig(
+      true,
+      "fc-",
+      GcsBucketName("fakeMetadataBucket")
+    )
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       methodRepoDAO,
@@ -177,8 +183,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       submissionCostService,
-      trackDetailedSubmissionMetrics = true,
-      workspaceBucketNamePrefix = "fc-"
+      workspaceServiceConfig
     )_
 
     def cleanupSupervisor = {

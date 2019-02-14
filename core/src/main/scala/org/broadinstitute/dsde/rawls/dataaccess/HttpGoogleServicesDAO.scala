@@ -45,7 +45,9 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
 import org.joda.time
 import spray.json._
 
@@ -94,6 +96,12 @@ class HttpGoogleServicesDAO(
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
+
+  val newGoogleStorage = new HttpGoogleStorageDAO(
+    appName,
+    GoogleCredentialModes.Pem(WorkbenchEmail(clientEmail), new File(pemFile)),
+    workbenchMetricBaseName
+  )
 
   initTokenBucket()
 
@@ -437,6 +445,11 @@ class HttpGoogleServicesDAO(
         None
       }
     }
+  }
+
+
+  override def storeObject(bucketName: GcsBucketName, objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = {
+    newGoogleStorage.storeObject(bucketName, objectName, new ByteArrayInputStream(body), "text/plain")
   }
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {

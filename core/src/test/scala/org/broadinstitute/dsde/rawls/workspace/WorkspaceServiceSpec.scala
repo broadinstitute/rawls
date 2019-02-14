@@ -31,6 +31,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import scala.concurrent.duration.{Duration, FiniteDuration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -115,6 +116,11 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
+    val workspaceServiceConfig = WorkspaceServiceConfig(
+      true,
+      "fc-",
+      GcsBucketName("fakeMetadataBucket")
+    )
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
@@ -132,8 +138,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       submissionCostService,
-      trackDetailedSubmissionMetrics = true,
-      workspaceBucketNamePrefix = "fc-"
+      workspaceServiceConfig
     )_
 
     def cleanupSupervisor = {
