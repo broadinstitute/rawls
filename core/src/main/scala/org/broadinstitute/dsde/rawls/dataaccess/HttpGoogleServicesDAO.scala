@@ -26,6 +26,8 @@ import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.model.UsageExportLocation
 import com.google.api.services.compute.{Compute, ComputeScopes}
+import com.google.api.services.deploymentmanager.model.{ConfigFile, Deployment, ImportFile, TargetConfiguration}
+import com.google.api.services.deploymentmanager.{DeploymentManagerV2Beta}
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.google.api.services.servicemanagement.ServiceManagement
@@ -85,7 +87,8 @@ class HttpGoogleServicesDAO(
   googleServiceHttp: GoogleServiceHttp[IO],
   topicAdmin: GoogleTopicAdmin[IO],
   override val workbenchMetricBaseName: String,
-  proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+  proxyNamePrefix: String,
+  deploymentMgrProject: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
@@ -712,6 +715,60 @@ class HttpGoogleServicesDAO(
     })
   }
 
+  def getDMConfigString(projectName: RawlsBillingProjectName, dmTemplatePath: String, properties: Map[String, String]): String = {
+    import spray.json.DefaultJsonProtocol._
+    import cats.syntax.either._
+    import io.circe.yaml._
+    import io.circe.yaml.syntax._
+
+    case class Resources (
+      name: String,
+      `type`: String,
+      properties: Map[String, String]
+    )
+    case class ConfigContents (
+      resources: Seq[Resources]
+    )
+    val aaJson = jsonFormat1(ConfigContents)
+    val rJson = jsonFormat3(Resources)
+
+    val cc = ConfigContents(Seq(Resources(projectName.value, dmTemplatePath, properties)))
+    val jsonVersion = io.circe.jawn.parse(cc.toJson.toString).valueOr(throw _)
+    jsonVersion.asYaml.spaces2
+  }
+
+  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, pubSubTopic: String, requesterPaysRole: String): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.DeploymentManager
+    val credential = getDeploymentManagerAccountCredential
+    val deploymentManager = getDeploymentManager(credential)
+
+    val properties = Map (
+      "billingAccountId" -> billingAccount.accountName.value,
+      "projectId" -> projectName.value,
+      "parentOrganization" -> "TODO", //TODO
+      "pubsubTopic" -> pubSubTopic,
+      "fcRawlsServiceAccount" -> clientEmail,
+      "fcBillingUser" -> billingEmail, //FIXME: should be the billing GROUP
+      "fcProjectOwnersGroup" -> "TODO",
+      "projectOwnersGroup" -> "TODO", //what is the difference?
+      "projectViewersGroup" -> "TODO",
+      "requesterPaysRole" -> requesterPaysRole,
+      "highSecurityNetwork" -> "OPTIONAL",
+      "labels" -> "OPTIONAL_MAP"
+    )
+
+    //config is a list of one resource: type=composite-type, name=whocares, properties=pokein
+    val confy = new ConfigFile().setContent(getDMConfigString(projectName, dmTemplatePath, properties = Map.empty))
+    val dconf = new TargetConfiguration().setConfig(confy)
+
+    retryWhen500orGoogleError(() => {
+      executeGoogleRequest(
+        deploymentManager.deployments().insert(deploymentMgrProject, new Deployment().setName(s"dm-${projectName.value}").setTarget(dconf))
+      )
+    })
+
+  }
+
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.Billing
     val credential = getBillingServiceAccountCredential
@@ -967,6 +1024,10 @@ class HttpGoogleServicesDAO(
     new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
 
+  def getDeploymentManager(credential: Credential): DeploymentManagerV2Beta = {
+    new DeploymentManagerV2Beta.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+  }
+
   def getStorage(credential: Credential) = {
     new Storage.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
@@ -1006,6 +1067,16 @@ class HttpGoogleServicesDAO(
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(clientEmail)
       .setServiceAccountScopes(genomicsScopes.asJava)
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+      .build()
+  }
+
+  def getDeploymentManagerAccountCredential: Credential = {
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setServiceAccountId(clientEmail)
+      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM))
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
   }

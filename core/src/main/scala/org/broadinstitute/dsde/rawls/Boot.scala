@@ -114,6 +114,7 @@ object Boot extends IOApp with LazyLogging {
     val jsonFactory = JacksonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
+    val dmConfig = gcsConfig.getConfig("deploymentManager")
     val hammCromwellMetadataConfig = gcsConfig.getConfig("hamm-cromwell-metadata")
     val serviceProject = gcsConfig.getString("serviceProject")
     val hammCromwellMetadata = HammCromwellMetadata(
@@ -144,7 +145,8 @@ object Boot extends IOApp with LazyLogging {
         googleServiceHttp = appDependencies.googleServiceHttp,
         topicAdmin = appDependencies.topicAdmin,
         workbenchMetricBaseName = metricsPrefix,
-        proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", "")
+        proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
+        deploymentMgrProject = dmConfig.getString("projectID")
       )
 
       val pubSubDAO = new HttpGooglePubSubDAO(
@@ -259,7 +261,8 @@ object Boot extends IOApp with LazyLogging {
           notificationDAO,
           samDAO,
           projectOwnerGrantableRoles.asScala,
-          requesterPaysRole
+          requesterPaysRole,
+          dmConfig
         )
       val genomicsServiceConstructor: (UserInfo) => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
