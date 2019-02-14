@@ -22,7 +22,7 @@ object GooglePubSubDAO {
   case object MessageNotHandled extends HandledStatus
   case object NoMessage extends HandledStatus
 
-  case class PubSubMessage(ackId: String, contents: String)
+  case class PubSubMessage(ackId: String, contents: String, attributes: Map[String, String])
 }
 
 trait GooglePubSubDAO {
