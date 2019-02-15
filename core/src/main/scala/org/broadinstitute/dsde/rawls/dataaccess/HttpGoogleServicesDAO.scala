@@ -730,7 +730,7 @@ class HttpGoogleServicesDAO(
     jsonVersion.asYaml.spaces2
   }
 
-  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, pubSubTopic: String, requesterPaysRole: String): Future[Unit] = {
+  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, pubSubTopic: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -738,13 +738,21 @@ class HttpGoogleServicesDAO(
     val properties = Map (
       "billingAccountId" -> billingAccount.accountName.value,
       "projectId" -> projectName.value,
-      "parentOrganization" -> "TODO", //TODO
+      "parentOrganization" -> appsDomain,
       "pubsubTopic" -> pubSubTopic,
+
+      //TODO: nix these in favour of fcProjectEditors? YES!
       "fcRawlsServiceAccount" -> clientEmail,
+      "fcCromwellServiceAccount" -> beh,
+
+      //TODO ADD: project owners, project editors from template
+      "fcProjectOwners" -> projectTemplate.owners,
+      "fcProjectEditors" -> projectTemplate.editors,
+
       "fcBillingUser" -> billingEmail, //FIXME: should be the billing GROUP
-      "fcProjectOwnersGroup" -> "TODO",
-      "projectOwnersGroup" -> "TODO", //what is the difference?
-      "projectViewersGroup" -> "TODO",
+
+      "projectOwnersGroup" -> ownerGroupEmail,
+      "projectViewersGroup" -> computeUserGroupEmail,
       "requesterPaysRole" -> requesterPaysRole,
       "highSecurityNetwork" -> "OPTIONAL",
       "labels" -> "OPTIONAL_MAP"

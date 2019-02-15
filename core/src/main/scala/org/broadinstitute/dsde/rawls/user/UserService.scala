@@ -32,15 +32,15 @@ object UserService {
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
-  def getGoogleProjectOwnerGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
+  def getGoogleProjectOwnerGroupEmail(samDAO: SamDAO, projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
-      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectPolicyNames.owner)
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.owner)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
   }
 
-  def getComputeUserGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
+  def getComputeUserGroupEmail(samDAO: SamDAO, projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
-      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectPolicyNames.canComputeUser)
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.canComputeUser)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
   }
 
@@ -230,8 +230,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- samDAO.createResource(SamResourceTypeNames.billingProject, billingProjectName.value, ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), ownerUserInfo)
-      ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, project)
-      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project)
+      ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, project.projectName)
+      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project.projectName)
 
       policiesToAdd = getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole)
 
@@ -338,7 +338,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             //TODO: sub 2 da pub and process it as doned
             //TODO: some DM policy that makes deployments deletable after the fact
             //TODO: delete the deployment after the project has been created fine
-            _ <- gcsDAO.createProject2(projectName, billingAccount, dmTemplatePath).recoverWith {
+
+            //NOTE: we're syncing this to Sam ahead of the resource actually existing. is this fine? (ps these are sam calls)
+            ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, projectName)
+            computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, projectName)
+
+            _ <- gcsDAO.createProject2(projectName, billingAccount, dmTemplatePath, ownerGroupEmail, computeUserGroupEmail).recoverWith {
               case t: Throwable =>
                 // failed to create project in google land, rollback inserts above
                 dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) } map(_ => throw t)
