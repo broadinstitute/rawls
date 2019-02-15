@@ -158,9 +158,9 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
       "runtimeAttributes",
       "jobId",
       "preemptible",
-      "callCaching", //We only need "hit" key in callCaching. Would be nice to filter everything else out, but not sure if cromwell supports that currently
-      "hit",
+      "callCaching:hit",
       "jes",
+      "papi2",
       "executionStatus",
       "backend"
     ), Set.empty, true)

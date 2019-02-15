@@ -278,9 +278,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   private def execServiceOutputs(workflowRec: WorkflowRecord, petUser: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] = {
     WorkflowStatuses.withName(workflowRec.status) match {
       case WorkflowStatuses.Succeeded =>
-        //     asynchronously upload metadata to GCS.
-        //     Currently, this is only used for hamm, and may potentially be removed from RAWLS if design changes
-        // TODO: ideally, we probably only want to upload root workflow, but so far I have't found a way to distinguish root workflow vs subworkflow here
+        // asynchronously upload metadata to GCS.
+        // Currently, this is only used for hamm, and may potentially be removed from RAWLS if design changes
         workflowRec.externalId.traverse{
           workflowId =>
             uploadMetadataToGCS(workflowRec.submissionId.toString, workflowId, petUser)
@@ -293,7 +292,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   private def uploadMetadataToGCS(submissionId: String, workflowId: String, petUser: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
     for{
       metadata <- executionServiceCluster.callLevelMetadataForCostCalculation(submissionId, workflowId, None, petUser)
-      _ <- googleServicesDAO.storeObject(GcsBucketName("cromwell_metadata"), GcsObjectName(workflowId), metadata.compactPrint.getBytes("UTF-8"))
+//    If this is a subworkflow, we don't upload its metadata; else we upload it to GCS
+      _ <- if(metadata.fields.keys.toList.contains("parentWorkflowId")) Future.successful(())
+      else googleServicesDAO.storeObject(GcsBucketName("cromwell_metadata"), GcsObjectName(workflowId), metadata.compactPrint.getBytes("UTF-8"))
     } yield ()
   }
 

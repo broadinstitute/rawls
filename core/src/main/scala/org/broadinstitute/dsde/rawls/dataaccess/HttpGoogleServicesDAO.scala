@@ -95,6 +95,7 @@ class HttpGoogleServicesDAO(
   val jsonFactory = JacksonFactory.getDefaultInstance
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
+  val bucketNameSuffix = "-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
   val newGoogleStorage = new HttpGoogleStorageDAO(
@@ -449,7 +450,7 @@ class HttpGoogleServicesDAO(
 
 
   override def storeObject(bucketName: GcsBucketName, objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = {
-    newGoogleStorage.storeObject(bucketName, objectName, new ByteArrayInputStream(body), "text/plain")
+    newGoogleStorage.storeObject(bucketName.copy(value = bucketName.value + bucketNameSuffix), objectName, new ByteArrayInputStream(body), "text/plain")
   }
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {
