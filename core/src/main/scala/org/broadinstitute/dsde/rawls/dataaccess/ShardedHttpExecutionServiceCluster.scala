@@ -148,6 +148,32 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
     }
   }
 
+  def callLevelMetadataForCostCalculation(submissionId: String, workflowId: String, execId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject] = {
+    val metadataParams = MetadataParams(Set(
+      "id",
+      "start",
+      "end",
+      "labels",
+      "executionEvents",
+      "runtimeAttributes",
+      "jobId",
+      "preemptible",
+      "callCaching", //We only need "hit" key in callCaching. Would be nice to filter everything else out, but not sure if cromwell supports that currently
+      "hit",
+      "jes",
+      "executionStatus",
+      "backend"
+    ), Set.empty, true)
+
+    for {
+      executionServiceId <- findExecService(submissionId, workflowId, userInfo, execId)
+      metadata <- getMember(executionServiceId).dao.callLevelMetadata(workflowId, metadataParams, userInfo)
+    } yield {
+      labelSubWorkflowsWithSubmissionId(submissionId, executionServiceId, metadata, userInfo)
+      metadata
+    }
+  }
+
   // ====================
   // facade-to-cluster entry points
   // ====================

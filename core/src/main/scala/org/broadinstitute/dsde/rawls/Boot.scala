@@ -218,8 +218,7 @@ object Boot extends App with LazyLogging {
 
     val workspaceServiceConfig = WorkspaceServiceConfig(
       conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),
-      gcsConfig.getString("groupsPrefix"),
-      GcsBucketName("cromwell_metadata") //TODO: move this to config
+      gcsConfig.getString("groupsPrefix")
     )
 
     val service = new RawlsApiServiceImpl(

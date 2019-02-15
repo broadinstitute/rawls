@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.UUID
 
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -38,7 +38,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import cats.implicits._
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
 
 /**
  * Created by dvoet on 4/27/15.
@@ -54,7 +53,7 @@ object WorkspaceService {
   val LOW_SECURITY_LABEL = "low"
 }
 
-final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String, metadataBucketName: GcsBucketName)
+final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
 class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(implicit protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
@@ -1566,15 +1565,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       executionServiceCluster.callLevelMetadata(submissionId, workflowId, metadataParams, _, userInfo)
     } map {
       metadata =>
-        // asynchronously upload metadata to GCS.
-        // Currently, this is only used for hamm, and may potentially be removed from RAWLS if design changes
-        uploadMetadataToGCS(workflowId, metadata.compactPrint.getBytes("UTF-8"))
         RequestComplete(StatusCodes.OK, metadata)
     }
-  }
-
-  private def uploadMetadataToGCS(workflowId: String, metadata: Array[Byte]): Future[Unit] = {
-    gcsDAO.storeObject(config.metadataBucketName, GcsObjectName(workflowId), metadata)
   }
 
   def workflowQueueStatus() = {

@@ -208,8 +208,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val maxActiveWorkflowsPerUser = 2
       val workspaceServiceConfig = WorkspaceServiceConfig(
         true,
-        "fc-",
-        GcsBucketName("fakeMetadataBucket")
+        "fc-"
       )
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,

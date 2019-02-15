@@ -166,8 +166,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConfig = WorkspaceServiceConfig(
       true,
-      "fc-",
-      GcsBucketName("fakeMetadataBucket")
+      "fc-"
     )
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
