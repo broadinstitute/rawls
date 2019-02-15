@@ -26,9 +26,12 @@ object CreatingBillingProjectMonitor {
     Props(new CreatingBillingProjectMonitorActor(datasource, gcsDAO, pubSubDAO, samDAO, projectTemplate, requesterPaysRole, dmConfig))
   }
 
+  //shiny new Deployment Manager flow
   sealed trait CreatingBillingProjectMonitorMessage
   case object Startup extends CreatingBillingProjectMonitorMessage
   case object CheckPubSub extends CreatingBillingProjectMonitorMessage
+
+  //old, operation-based way of monitoring BPs
   case object CheckNow extends CreatingBillingProjectMonitorMessage
   case class CheckDone(creatingCount: Int) extends CreatingBillingProjectMonitorMessage
 }
@@ -45,7 +48,7 @@ class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gc
 
     case Failure(t) =>
       logger.error(s"failure monitoring creating billing projects", t)
-      context.system.scheduler.scheduleOnce(1 minute, self, CheckNow)
+      context.system.scheduler.scheduleOnce(1 minute, self, CheckPubSub)
   }
 }
 
@@ -101,6 +104,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     }
   }
 
+  //TODO: bye. also all the oper stuff :)
   def checkCreatingProjects()(implicit executionContext: ExecutionContext): Future[CheckDone] = {
     for {
       (creatingProjects, operations) <- datasource.inTransaction { dataAccess =>
@@ -151,8 +155,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
           case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, None, _)) =>
             // create project operation finished successfully
             for {
-              ownerGroupEmail <- UserService.getGoogleProjectOwnerGroupEmail(samDAO, project)
-              computeUserGroupEmail <- UserService.getComputeUserGroupEmail(samDAO, project)
+              ownerGroupEmail <- UserService.getGoogleProjectOwnerGroupEmail(samDAO, project.projectName)
+              computeUserGroupEmail <- UserService.getComputeUserGroupEmail(samDAO, project.projectName)
 
               updatedTemplate = projectTemplate.copy(
                 policies = projectTemplate.policies ++
@@ -178,8 +182,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
           case operations: Seq[RawlsBillingProjectOperationRecord] if operations.forall(rec => rec.done && rec.errorMessage.isEmpty) =>
             // all operations completed successfully
             for {
-              ownerGroupEmail <- UserService.getGoogleProjectOwnerGroupEmail(samDAO, project)
-              computeUserGroupEmail <- UserService.getComputeUserGroupEmail(samDAO, project)
+              ownerGroupEmail <- UserService.getGoogleProjectOwnerGroupEmail(samDAO, project.projectName)
+              computeUserGroupEmail <- UserService.getComputeUserGroupEmail(samDAO, project.projectName)
               updatedProject <- gcsDAO.completeProjectSetup(project, Set(ownerGroupEmail, computeUserGroupEmail)) map {
                 case util.Failure(t) =>
                   logger.info(s"Failure completing project for $project", t)
