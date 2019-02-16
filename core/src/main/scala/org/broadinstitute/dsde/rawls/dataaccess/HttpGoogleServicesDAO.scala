@@ -448,9 +448,9 @@ class HttpGoogleServicesDAO(
     }
   }
 
-
-  override def storeObject(bucketName: GcsBucketName, objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = {
-    newGoogleStorage.storeObject(bucketName.copy(value = bucketName.value + bucketNameSuffix), objectName, new ByteArrayInputStream(body), "text/plain")
+  // pass in a String bucketName since it's not a real bucket name, real bucket name will be appended with suffix
+  override def storeObject(bucketName: String, objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = {
+    newGoogleStorage.storeObject(GcsBucketName(bucketName + bucketNameSuffix), objectName, new ByteArrayInputStream(body), "text/plain")
   }
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {

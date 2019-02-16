@@ -38,10 +38,9 @@ object SubmissionMonitorActor {
             googleServicesDAO: GoogleServicesDAO,
             executionServiceCluster: ExecutionServiceCluster,
             credential: Credential,
-            submissionPollInterval: FiniteDuration,
-            trackDetailedSubmissionMetrics: Boolean,
+            config: SubmissionMonitorConfig,
             workbenchMetricBaseName: String): Props = {
-    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, samDAO, googleServicesDAO, executionServiceCluster, credential, submissionPollInterval, trackDetailedSubmissionMetrics, workbenchMetricBaseName))
+    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, samDAO, googleServicesDAO, executionServiceCluster, credential, config, workbenchMetricBaseName))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -79,8 +78,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val googleServicesDAO: GoogleServicesDAO,
                              val executionServiceCluster: ExecutionServiceCluster,
                              val credential: Credential,
-                             val submissionPollInterval: FiniteDuration,
-                             val trackDetailedSubmissionMetrics: Boolean,
+                             val config: SubmissionMonitorConfig,
                              override val workbenchMetricBaseName: String) extends Actor with SubmissionMonitor with LazyLogging {
   import context._
 
@@ -120,11 +118,11 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
 
   private def scheduleInitialMonitorPass: Cancellable = {
     //Wait anything _up to_ the poll interval for a much wider distribution of submission monitor start times when Rawls starts up
-    system.scheduler.scheduleOnce(addJitter(0 seconds, submissionPollInterval), self, StartMonitorPass)
+    system.scheduler.scheduleOnce(addJitter(0 seconds, config.submissionPollInterval), self, StartMonitorPass)
   }
 
   private def scheduleNextMonitorPass: Cancellable = {
-    system.scheduler.scheduleOnce(addJitter(submissionPollInterval), self, StartMonitorPass)
+    system.scheduler.scheduleOnce(addJitter(config.submissionPollInterval), self, StartMonitorPass)
   }
 
 }
@@ -140,8 +138,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val googleServicesDAO: GoogleServicesDAO
   val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
-  val submissionPollInterval: Duration
-  val trackDetailedSubmissionMetrics: Boolean
+  val config: SubmissionMonitorConfig
 
   // Cache these metric builders since they won't change for this SubmissionMonitor
   protected lazy val workspaceMetricBuilder: ExpandedMetricBuilder =
@@ -153,7 +150,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   // implicitly passed to WorkflowComponent/SubmissionComponent methods
   // note this returns an Option[Counter] because per-submission metrics can be disabled with the trackDetailedSubmissionMetrics flag.
   private implicit val wfStatusCounter: WorkflowStatus => Option[Counter] = status =>
-    if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder)(status)) else None
+    if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder)(status)) else None
 
   private implicit val subStatusCounter: SubmissionStatus => Counter =
     submissionStatusCounter(workspaceMetricBuilder)
@@ -284,7 +281,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           workflowId =>
             uploadMetadataToGCS(workflowRec.submissionId.toString, workflowId, petUser).recover{
               case e =>
-                logger.warn(s"Failed to upload metadata for ${workflowRec.submissionId}/${workflowId}", e)
+                logger.error(s"Failed to upload metadata for ${workflowRec.submissionId}/${workflowId}", e)
             }
         }
 
@@ -301,7 +298,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       metadata <- executionServiceCluster.callLevelMetadataForCostCalculation(submissionId, workflowId, None, petUser)
 //    If this is a subworkflow, we don't upload its metadata; else we upload it to GCS
       _ <- if(metadata.fields.keys.toList.contains("parentWorkflowId")) Future.successful(())
-      else googleServicesDAO.storeObject(GcsBucketName("cromwell_metadata"), GcsObjectName(workflowId), metadata.compactPrint.getBytes("UTF-8"))
+      else googleServicesDAO.storeObject(config.metadataBucketNamePrefix, GcsObjectName(workflowId), metadata.compactPrint.getBytes("UTF-8"))
     } yield ()
   }
 
@@ -521,3 +518,5 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 }
+
+final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration, trackDetailedSubmissionMetrics: Boolean, metadataBucketNamePrefix: String)

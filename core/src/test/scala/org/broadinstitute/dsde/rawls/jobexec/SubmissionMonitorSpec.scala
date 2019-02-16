@@ -723,6 +723,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   def createSubmissionMonitorActor(dataSource: SlickDataSource, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO, trackDetailedSubmissionMetrics: Boolean = true): TestActorRef[SubmissionMonitorActor] = {
+    val config = SubmissionMonitorConfig(1 second, trackDetailedSubmissionMetrics, "fakeBucketNamePrefix")
     TestActorRef[SubmissionMonitorActor](SubmissionMonitorActor.props(
       wsName,
       UUID.fromString(submission.submissionId),
@@ -731,13 +732,13 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       mockGoogleServicesDAO,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
-      1 second,
-      trackDetailedSubmissionMetrics,
+      config,
       "test"
     ))
   }
 
   def createSubmissionMonitor(dataSource: SlickDataSource, samDAO: SamDAO, googleServicesDAO: GoogleServicesDAO, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO): SubmissionMonitor = {
+    val config = SubmissionMonitorConfig(1 minutes, true, "fakeBucketNamePrefix")
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),
@@ -746,8 +747,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       googleServicesDAO,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
-      1 minutes,
-      trackDetailedSubmissionMetrics = true,
+      config,
       "test"
     )
   }
@@ -803,7 +803,6 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val googleServicesDAO: GoogleServicesDAO,
                             val executionServiceCluster: ExecutionServiceCluster,
                             val credential: Credential,
-                            val submissionPollInterval: Duration,
-                            val trackDetailedSubmissionMetrics: Boolean,
+                            val config: SubmissionMonitorConfig,
                             override val workbenchMetricBaseName: String) extends SubmissionMonitor {
 }

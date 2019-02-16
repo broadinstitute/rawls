@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
+import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, SubmissionMonitorConfig}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -94,6 +94,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       samDAO,
       gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
+      SubmissionMonitorConfig(1 second, true, "fakeBucketNamePrefix"),
       workbenchMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"))
 

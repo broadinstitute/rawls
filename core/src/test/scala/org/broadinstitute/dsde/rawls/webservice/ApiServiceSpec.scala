@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
+import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, SubmissionMonitorConfig}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
@@ -112,14 +112,14 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
+    val config = SubmissionMonitorConfig(5 seconds, true, "fakeBucketNamePrefix")
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       slickDataSource,
       samDAO,
       gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
-      5 seconds,
-      trackDetailedSubmissionMetrics = true,
+      config,
       workbenchMetricBaseName
     ).withDispatcher("submission-monitor-dispatcher"))
 
