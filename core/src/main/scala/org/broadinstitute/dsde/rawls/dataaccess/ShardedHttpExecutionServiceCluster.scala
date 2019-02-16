@@ -168,10 +168,7 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
     for {
       executionServiceId <- findExecService(submissionId, workflowId, userInfo, execId)
       metadata <- getMember(executionServiceId).dao.callLevelMetadata(workflowId, metadataParams, userInfo)
-    } yield {
-      labelSubWorkflowsWithSubmissionId(submissionId, executionServiceId, metadata, userInfo)
-      metadata
-    }
+    } yield metadata
   }
 
   // ====================

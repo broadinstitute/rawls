@@ -277,15 +277,22 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   private def execServiceOutputs(workflowRec: WorkflowRecord, petUser: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] = {
     WorkflowStatuses.withName(workflowRec.status) match {
-      case WorkflowStatuses.Succeeded =>
+      case status if (WorkflowStatuses.terminalStatuses.contains(status)) =>
         // asynchronously upload metadata to GCS.
         // Currently, this is only used for hamm, and may potentially be removed from RAWLS if design changes
         workflowRec.externalId.traverse{
           workflowId =>
-            uploadMetadataToGCS(workflowRec.submissionId.toString, workflowId, petUser)
+            uploadMetadataToGCS(workflowRec.submissionId.toString, workflowId, petUser).recover{
+              case e =>
+                logger.warn(s"Failed to upload metadata for ${workflowRec.submissionId}/${workflowId}", e)
+            }
         }
-        executionServiceCluster.outputs(workflowRec, petUser).map(outputs => Option((workflowRec, Option(outputs))))
-      case _ => Future.successful(Option((workflowRec, None)))
+
+        if(status == WorkflowStatuses.Succeeded)
+          executionServiceCluster.outputs(workflowRec, petUser).map(outputs => Option((workflowRec, Option(outputs))))
+        else
+          Future.successful(Some((workflowRec, None)))
+      case _ => Future.successful(Some((workflowRec, None)))
     }
   }
 
