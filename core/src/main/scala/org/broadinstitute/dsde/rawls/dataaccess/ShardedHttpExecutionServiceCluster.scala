@@ -1,18 +1,22 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowRecord
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.Retry
 import spray.json.JsObject
 
 import scala.collection.immutable.Iterable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.util.{Random, Try}
+import scala.concurrent.duration._
 
 
-class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submitMembers: Set[ClusterMember], dataSource: SlickDataSource) extends ExecutionServiceCluster {
+class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submitMembers: Set[ClusterMember], dataSource: SlickDataSource)(implicit val system: ActorSystem) extends ExecutionServiceCluster with Retry with LazyLogging {
 
   // make a copy of the members map as an array for easy reads; routing algorithm will return an index in this array.
   // ensure we sort the array by key for determinism/easy understanding
@@ -99,7 +103,9 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
   private def labelSubWorkflowsWithSubmissionId(submissionId: String, executionServiceId: ExecutionServiceId, parentWorkflowMetadata: JsObject, userInfo: UserInfo): Unit = {
     // execute but don't wait for completion
     val labelFutureToIgnore = Future.traverse(parseSubWorkflowIdsFromMetadata(parentWorkflowMetadata)) { subWorkflowId =>
-      getMember(executionServiceId).dao.patchLabels(subWorkflowId, userInfo, Map(SUBMISSION_ID_KEY -> submissionId))
+      retryUntilSuccessOrTimeout(failureLogMessage = s"error patching label on workflow [$subWorkflowId], submission [$submissionId]")(2 seconds, 10 seconds) {
+        () => getMember(executionServiceId).dao.patchLabels(subWorkflowId, userInfo, Map(SUBMISSION_ID_KEY -> submissionId))
+      }
     }
   }
 
