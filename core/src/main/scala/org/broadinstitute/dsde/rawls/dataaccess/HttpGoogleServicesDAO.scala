@@ -461,7 +461,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  // pass in a String bucketName since it's not a real bucket name, real bucket name will be appended with suffix
   override def storeCromwellMetadata(objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = {
     newGoogleStorage.storeObject(cromwellMetadataBucketName, objectName, new ByteArrayInputStream(body), "text/plain")
   }
