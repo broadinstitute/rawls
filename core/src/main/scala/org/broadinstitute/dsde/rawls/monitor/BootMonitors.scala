@@ -44,11 +44,7 @@ object BootMonitors extends LazyLogging {
 
     //Boot submission monitor supervisor
     val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
-    val submissionMonitorConfig = SubmissionMonitorConfig(
-      util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")),
-      submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"),
-      submissionmonitorConfigRoot.getString("cromwellMetadataBucketName")
-    )
+    val submissionMonitorConfig = SubmissionMonitorConfig(util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")), submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"))
     startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, samDAO, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
 
     //Boot workflow submission actors

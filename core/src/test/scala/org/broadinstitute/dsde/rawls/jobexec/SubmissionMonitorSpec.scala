@@ -723,7 +723,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   def createSubmissionMonitorActor(dataSource: SlickDataSource, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO, trackDetailedSubmissionMetrics: Boolean = true): TestActorRef[SubmissionMonitorActor] = {
-    val config = SubmissionMonitorConfig(1 second, trackDetailedSubmissionMetrics, "fakeBucketNamePrefix")
+    val config = SubmissionMonitorConfig(1 second, trackDetailedSubmissionMetrics)
     TestActorRef[SubmissionMonitorActor](SubmissionMonitorActor.props(
       wsName,
       UUID.fromString(submission.submissionId),
@@ -738,7 +738,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   def createSubmissionMonitor(dataSource: SlickDataSource, samDAO: SamDAO, googleServicesDAO: GoogleServicesDAO, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO): SubmissionMonitor = {
-    val config = SubmissionMonitorConfig(1 minutes, true, "fakeBucketNamePrefix")
+    val config = SubmissionMonitorConfig(1 minutes, true)
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),

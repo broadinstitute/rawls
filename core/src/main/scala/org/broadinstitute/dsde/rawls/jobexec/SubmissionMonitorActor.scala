@@ -296,9 +296,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   private def uploadMetadataToGCS(submissionId: String, workflowId: String, petUser: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
     for{
       metadata <- executionServiceCluster.callLevelMetadataForCostCalculation(submissionId, workflowId, None, petUser)
-//    If this is a subworkflow, we don't upload its metadata; else we upload it to GCS
-      _ <- if(metadata.fields.keys.toList.contains("parentWorkflowId")) Future.successful(())
-      else googleServicesDAO.storeObject(config.metadataBucketNamePrefix, GcsObjectName(workflowId), metadata.compactPrint.getBytes("UTF-8"))
+      // Rawls only monitor root level workflow
+      _ <- googleServicesDAO.storeCromwellMetadata(GcsObjectName(workflowId), metadata.compactPrint.getBytes("UTF-8"))
     } yield ()
   }
 
@@ -519,4 +518,4 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   }
 }
 
-final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration, trackDetailedSubmissionMetrics: Boolean, metadataBucketNamePrefix: String)
+final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration, trackDetailedSubmissionMetrics: Boolean)

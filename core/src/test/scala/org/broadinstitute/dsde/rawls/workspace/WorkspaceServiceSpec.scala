@@ -94,7 +94,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       samDAO,
       gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
-      SubmissionMonitorConfig(1 second, true, "fakeBucketNamePrefix"),
+      SubmissionMonitorConfig(1 second, true),
       workbenchMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"))
 

@@ -122,7 +122,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = Future.successful(List.empty)
 
-  override def storeObject(bucketName: String, objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = Future.successful(())
+  override def storeCromwellMetadata(objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = Future.successful(())
 
   override def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]] = Future.successful(None)
 

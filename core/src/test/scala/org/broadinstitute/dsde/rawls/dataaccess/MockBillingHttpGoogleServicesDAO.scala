@@ -54,7 +54,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   private var token: String = null
   private var tokenDate: DateTime = null
 
-  protected override def initTokenBucket(): Unit = {}
+  protected override def initBuckets(): Unit = {}
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
   override def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {

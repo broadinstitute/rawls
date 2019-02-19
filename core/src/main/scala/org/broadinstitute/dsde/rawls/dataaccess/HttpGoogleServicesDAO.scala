@@ -95,7 +95,7 @@ class HttpGoogleServicesDAO(
   val jsonFactory = JacksonFactory.getDefaultInstance
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
-  val bucketNameSuffix = "-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
+  val cromwellMetadataBucketName = GcsBucketName("cromwell-metadata-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com"))
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
   val newGoogleStorage = new HttpGoogleStorageDAO(
@@ -104,10 +104,13 @@ class HttpGoogleServicesDAO(
     workbenchMetricBaseName
   )
 
-  initTokenBucket()
+  initBuckets()
 
-  protected def initTokenBucket(): Unit = {
+  protected def initBuckets(): Unit = {
     implicit val service = GoogleInstrumentedService.Storage
+    val bucketAcls = List(new BucketAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
+    val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
+
     try {
       getStorage(getBucketServiceAccountCredential).buckets().get(tokenBucketName).executeUsingHead()
     } catch {
@@ -118,15 +121,25 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(logInserter)
         allowGoogleCloudStorageWrite(logBucket.getName)
 
-        val bucketAcls = List(new BucketAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
-        val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
-        val bucket = new Bucket().
+        val tokenBucket = new Bucket().
           setName(tokenBucketName).
           setAcl(bucketAcls).
           setDefaultObjectAcl(defaultObjectAcls).
           setLogging(new Logging().setLogBucket(logBucket.getName))
-        val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, bucket)
-        executeGoogleRequest(inserter)
+        val insertTokenBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, tokenBucket)
+        executeGoogleRequest(insertTokenBucket)
+    }
+
+    try {
+      getStorage(getBucketServiceAccountCredential).buckets().get(cromwellMetadataBucketName.value).executeUsingHead()
+    } catch {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue =>
+        val metadataBucket = new Bucket().
+          setName(cromwellMetadataBucketName.value).
+          setAcl(bucketAcls).
+          setDefaultObjectAcl(defaultObjectAcls)
+        val insertMetadataBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, metadataBucket)
+        executeGoogleRequest(insertMetadataBucket)
     }
   }
 
@@ -449,8 +462,8 @@ class HttpGoogleServicesDAO(
   }
 
   // pass in a String bucketName since it's not a real bucket name, real bucket name will be appended with suffix
-  override def storeObject(bucketName: String, objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = {
-    newGoogleStorage.storeObject(GcsBucketName(bucketName + bucketNameSuffix), objectName, new ByteArrayInputStream(body), "text/plain")
+  override def storeCromwellMetadata(objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = {
+    newGoogleStorage.storeObject(cromwellMetadataBucketName, objectName, new ByteArrayInputStream(body), "text/plain")
   }
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {
