@@ -64,6 +64,21 @@ import scala.concurrent.{Future, _}
 import scala.io.Source
 import scala.util.Try
 
+case class Resources (
+                       name: String,
+                       `type`: String,
+                       properties: Map[String, String]
+                     )
+case class ConfigContents (
+                            resources: Seq[Resources]
+                          )
+
+object DeploymentManagerJsonSupport {
+  import spray.json.DefaultJsonProtocol._
+  implicit val rJson = jsonFormat3(Resources)
+  implicit val aaJson = jsonFormat1(ConfigContents)
+}
+
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
   val clientSecrets: GoogleClientSecrets,
@@ -716,28 +731,17 @@ class HttpGoogleServicesDAO(
   }
 
   def getDMConfigString(projectName: RawlsBillingProjectName, dmTemplatePath: String, properties: Map[String, String]): String = {
-    import spray.json.DefaultJsonProtocol._
+    import DeploymentManagerJsonSupport._
     import cats.syntax.either._
     import io.circe.yaml._
     import io.circe.yaml.syntax._
-
-    case class Resources (
-      name: String,
-      `type`: String,
-      properties: Map[String, String]
-    )
-    case class ConfigContents (
-      resources: Seq[Resources]
-    )
-    val aaJson = jsonFormat1(ConfigContents)
-    val rJson = jsonFormat3(Resources)
 
     val cc = ConfigContents(Seq(Resources(projectName.value, dmTemplatePath, properties)))
     val jsonVersion = io.circe.jawn.parse(cc.toJson.toString).valueOr(throw _)
     jsonVersion.asYaml.spaces2
   }
 
-  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, pubSubTopic: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail): Future[Unit] = {
+  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, pubSubTopic: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -748,13 +752,8 @@ class HttpGoogleServicesDAO(
       "parentOrganization" -> appsDomain,
       "pubsubTopic" -> pubSubTopic,
 
-      //TODO: nix these in favour of fcProjectEditors? YES!
-      "fcRawlsServiceAccount" -> clientEmail,
-      "fcCromwellServiceAccount" -> beh,
-
-      //TODO ADD: project owners, project editors from template
-      "fcProjectOwners" -> projectTemplate.owners,
-      "fcProjectEditors" -> projectTemplate.editors,
+      "fcProjectOwners" -> projectTemplate.policies("roles/owner"),
+      "fcProjectEditors" -> projectTemplate.policies("roles/editor"),
 
       "fcBillingUser" -> billingEmail, //FIXME: should be the billing GROUP
 

@@ -171,6 +171,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
    */
   def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord]
 
+  //v2
+  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, pubSubTopic: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[Unit]
+
   /**
     * Adds the IAM policies to the project's existing policies
     * @return true if the policy was actually changed

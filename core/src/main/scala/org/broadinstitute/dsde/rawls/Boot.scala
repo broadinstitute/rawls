@@ -262,7 +262,8 @@ object Boot extends IOApp with LazyLogging {
           samDAO,
           projectOwnerGrantableRoles.asScala,
           requesterPaysRole,
-          dmConfig
+          dmConfig,
+          projectTemplate
         )
       val genomicsServiceConstructor: (UserInfo) => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
