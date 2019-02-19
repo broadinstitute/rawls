@@ -136,7 +136,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       notificationDAO,
       samDAO,
       Seq("bigquery.jobUser"),
-      "requesterPaysRole"
+      "requesterPaysRole",
+      //TODO: dmConfig, projectTemplate
     )_
 
 
