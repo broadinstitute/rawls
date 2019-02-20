@@ -31,6 +31,7 @@ import spray.json._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{MethodRepoConfig, SwaggerConfig}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
@@ -123,6 +124,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       workbenchMetricBaseName
     ).withDispatcher("submission-monitor-dispatcher"))
 
+    val testConf = ConfigFactory.load()
+
     val googleGroupSyncTopic = "test-topic-name"
 
     val notificationTopic = "test-notification-topic"
@@ -137,7 +140,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       samDAO,
       Seq("bigquery.jobUser"),
       "requesterPaysRole",
-      //TODO: dmConfig, projectTemplate
+      testConf.getConfig("gcs.deploymentManager"),
+      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"), "requesterPaysRole")
     )_
 
 
