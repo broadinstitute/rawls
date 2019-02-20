@@ -11,7 +11,7 @@ import org.scalatest.concurrent.Eventually
 
 class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFixtures with WorkspaceFixtures with GroupFixtures with RandomUtil with Eventually with BeforeAndAfterAll {
 
-  implicit val patienceConfig = PatienceConfig(timeout = 2 minutes)
+  implicit val patienceConfig = PatienceConfig(timeout = scaled(2.minutes))
   lazy val projectOwner = UserPool.chooseProjectOwner
   lazy val (projectUser, groupOwner) = {
     val users = UserPool.chooseStudents(2)
