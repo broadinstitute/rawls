@@ -10,6 +10,8 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import org.scalatest.concurrent.Eventually
 
 class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFixtures with WorkspaceFixtures with GroupFixtures with RandomUtil with Eventually with BeforeAndAfterAll {
+
+  implicit val patienceConfig = PatienceConfig(timeout = 2 minutes)
   lazy val projectOwner = UserPool.chooseProjectOwner
   lazy val (projectUser, groupOwner) = {
     val users = UserPool.chooseStudents(2)
@@ -71,8 +73,10 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
 
               // remove user from realmGroup2 and they should lose access
               Orchestration.groups.removeUserFromGroup(realmGroup2, user.email, GroupRole.Member)(groupOwnerToken)
-              intercept[RestException] {
-                Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar"))(userToken)
+              eventually {
+                intercept[RestException] {
+                  Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar"))(userToken)
+                }
               }
 
               // add user back to realmGroup2 and they should have access
@@ -81,10 +85,11 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
 
               // remove user from realmGroup and they should lose access
               Orchestration.groups.removeUserFromGroup(realmGroup, user.email, GroupRole.Member)(groupOwnerToken)
-              intercept[RestException] {
-                Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar"))(userToken)
+              eventually {
+                intercept[RestException] {
+                  Orchestration.workspaces.setAttributes(project.projectName, workspace, Map("foo" -> "bar"))(userToken)
+                }
               }
-
               // add users back so the cleanup part of withGroup doesn't have a fit
               Orchestration.groups.addUserToGroup(realmGroup2, user.email, GroupRole.Member)(groupOwnerToken)
               Orchestration.groups.addUserToGroup(realmGroup, user.email, GroupRole.Member)(groupOwnerToken)
@@ -120,20 +125,22 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
 
               // remove user from nestedGroup and they should lose access
               Orchestration.groups.removeUserFromGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
+              eventually {
               intercept[RestException] {
                 Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
               }
-
+            }
               // add user back to nestedGroup and they should have access
               Orchestration.groups.addUserToGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
               Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
 
               // remove accessGroup from acl and user should lose access
               Orchestration.workspaces.updateAcl(localProject, workspace, accessGroupFull.groupEmail, WorkspaceAccessLevel.NoAccess, None, None)(workspaceOwnerToken)
-              intercept[RestException] {
-                Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
+              eventually {
+                intercept[RestException] {
+                  Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
+                }
               }
-
               // add users back so the cleanup part of withGroup doesn't have a fit
               Orchestration.groups.addUserToGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
 
@@ -159,10 +166,11 @@ class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFix
               Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
 
               Orchestration.groups.removeUserFromGroup(realmGroup2, projectUser.email, GroupRole.Member)(authToken)
-              intercept[RestException] {
-                Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
+              eventually {
+                intercept[RestException] {
+                  Orchestration.workspaces.setAttributes(project.projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
+                }
               }
-
               // add users back so the cleanup part of withGroup doesn't have a fit
               Orchestration.groups.addUserToGroup(realmGroup2, projectUser.email, GroupRole.Member)(authToken)
             }
