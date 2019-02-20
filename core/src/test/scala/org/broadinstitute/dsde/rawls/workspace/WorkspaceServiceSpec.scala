@@ -29,6 +29,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
@@ -87,6 +88,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
 
+    val testConf = ConfigFactory.load()
+
     val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
@@ -104,7 +107,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       notificationDAO,
       samDAO,
       Seq("bigquery.jobUser"),
-      "requesterPaysRole"
+      "requesterPaysRole",
+      testConf.getConfig("gcs.deploymentManager"),
+      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"), "requesterPaysRole")
     )_
 
     val genomicsServiceConstructor = GenomicsService.constructor(

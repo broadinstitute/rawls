@@ -21,6 +21,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
@@ -188,6 +189,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
       gcsDAO.storeToken(userInfo, subTestData.refreshToken)
 
+      val testConf = ConfigFactory.load()
+
       val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")
 
       val userServiceConstructor = UserService.constructor(
@@ -196,7 +199,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         notificationDAO,
         samDAO,
         Seq("bigquery.jobUser"),
-        "requesterPaysRole"
+        "requesterPaysRole",
+        testConf.getConfig("gcs.deploymentManager"),
+        ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"), "requesterPaysRole")
       )_
 
       val genomicsServiceConstructor = GenomicsService.constructor(
