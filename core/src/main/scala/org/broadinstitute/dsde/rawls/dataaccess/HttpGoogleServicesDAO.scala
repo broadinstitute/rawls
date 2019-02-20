@@ -765,7 +765,7 @@ class HttpGoogleServicesDAO(
     )
 
     //config is a list of one resource: type=composite-type, name=whocares, properties=pokein
-    val confy = new ConfigFile().setContent(getDMConfigString(projectName, dmTemplatePath, properties = Map.empty))
+    val confy = new ConfigFile().setContent(getDMConfigString(projectName, dmTemplatePath, properties))
     val dconf = new TargetConfiguration().setConfig(confy)
 
     retryWhen500orGoogleError(() => {
