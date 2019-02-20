@@ -162,7 +162,8 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
       "jes",
       "papi2",
       "executionStatus",
-      "backend"
+      "backend",
+      "attempt"
     ), Set.empty, true)
 
     for {
