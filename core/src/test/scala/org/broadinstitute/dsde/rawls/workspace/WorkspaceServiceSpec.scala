@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
+import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, SubmissionMonitorConfig}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -31,6 +31,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import scala.concurrent.duration.{Duration, FiniteDuration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -93,6 +94,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       samDAO,
       gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
+      SubmissionMonitorConfig(1 second, true),
       workbenchMetricBaseName = "test"
     ).withDispatcher("submission-monitor-dispatcher"))
 
@@ -115,6 +117,10 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
+    val workspaceServiceConfig = WorkspaceServiceConfig(
+      true,
+      "fc-"
+    )
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
@@ -132,8 +138,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       submissionCostService,
-      trackDetailedSubmissionMetrics = true,
-      workspaceBucketNamePrefix = "fc-"
+      workspaceServiceConfig
     )_
 
     def cleanupSupervisor = {

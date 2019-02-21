@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.scalatest.concurrent.Eventually
@@ -23,6 +23,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import spray.json._
 
 import scala.concurrent.Await
@@ -171,6 +172,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     withDataOp { dataSource =>
       val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
 
+      val config = SubmissionMonitorConfig(250 milliseconds, true)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val samDAO = new MockSamDAO(dataSource)
       val gpsDAO = new MockGooglePubSubDAO
@@ -180,7 +182,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         samDAO,
         gcsDAO,
         gcsDAO.getBucketServiceAccountCredential,
-        250 milliseconds,
+        config,
         workbenchMetricBaseName = workbenchMetricBaseName
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
 
@@ -205,6 +207,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val execServiceBatchSize = 3
       val maxActiveWorkflowsTotal = 10
       val maxActiveWorkflowsPerUser = 2
+      val workspaceServiceConfig = WorkspaceServiceConfig(
+        true,
+        "fc-"
+      )
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
         new HttpMethodRepoDAO(
@@ -222,8 +228,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName,
         mockSubmissionCostService,
-        trackDetailedSubmissionMetrics = true,
-        workspaceBucketNamePrefix = "fc-"
+        workspaceServiceConfig
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {

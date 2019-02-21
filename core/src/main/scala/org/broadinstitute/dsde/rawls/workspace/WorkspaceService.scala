@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.UUID
 
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -44,8 +44,8 @@ import cats.implicits._
  */
 
 object WorkspaceService {
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) = {
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService, trackDetailedSubmissionMetrics, workspaceBucketNamePrefix)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) = {
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService, config)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -53,7 +53,9 @@ object WorkspaceService {
   val LOW_SECURITY_LABEL = "low"
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)(implicit protected val executionContext: ExecutionContext)
+final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
+
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(implicit protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
 
   import dataSource.dataAccess.driver.api._
@@ -226,7 +228,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
           case wf if !WorkflowStatuses.withName(wf.status).isDone =>
             dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted) { status =>
-              if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
+              if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, wf.submissionId))(status))
               else None
             }
         }}
@@ -1406,7 +1408,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           // implicitly passed to SubmissionComponent.create
           implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceName))
           implicit val wfStatusCounter = (status: WorkflowStatus) =>
-            if (trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, submissionId))(status))
+            if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceName, submissionId))(status))
             else None
 
           dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
@@ -1561,7 +1563,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // query the execution service(s) for the metadata
     execIdFutOpt flatMap {
       executionServiceCluster.callLevelMetadata(submissionId, workflowId, metadataParams, _, userInfo)
-    } map(RequestComplete(StatusCodes.OK, _))
+    } map {
+      metadata =>
+        RequestComplete(StatusCodes.OK, metadata)
+    }
   }
 
   def workflowQueueStatus() = {
@@ -1772,7 +1777,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
-    def getBucketName(workspaceId: String, secure: Boolean) = s"${workspaceBucketNamePrefix}-${if(secure) "secure-" else ""}${workspaceId}"
+    def getBucketName(workspaceId: String, secure: Boolean) = s"${config.workspaceBucketNamePrefix}-${if(secure) "secure-" else ""}${workspaceId}"
     def getLabels(authDomain: List[ManagedGroupRef]) = authDomain match {
       case Nil => Map(WorkspaceService.SECURITY_LABEL_KEY -> WorkspaceService.LOW_SECURITY_LABEL)
       case ads => Map(WorkspaceService.SECURITY_LABEL_KEY -> WorkspaceService.HIGH_SECURITY_LABEL) ++ ads.map(ad => gcsDAO.labelSafeString(ad.membersGroupName.value, "ad-") -> "")
@@ -1816,7 +1821,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
               // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
               // the limit of 2000
-              Future.successful()
+              Future.successful(())
             } else {
               samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName)
             }

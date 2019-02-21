@@ -30,7 +30,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
@@ -41,6 +41,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 object Boot extends App with LazyLogging {
   private def startup(): Unit = {
@@ -215,6 +216,11 @@ object Boot extends App with LazyLogging {
 
     val statusServiceConstructor: () => StatusService = StatusService.constructor(healthMonitor)
 
+    val workspaceServiceConfig = WorkspaceServiceConfig(
+      conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),
+      gcsConfig.getString("groupsPrefix")
+    )
+
     val service = new RawlsApiServiceImpl(
       WorkspaceService.constructor(
         slickDataSource,
@@ -230,8 +236,8 @@ object Boot extends App with LazyLogging {
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName = metricsPrefix,
         submissionCostService,
-        conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),
-        gcsConfig.getString("groupsPrefix")),
+        workspaceServiceConfig
+      ),
       userServiceConstructor,
       genomicsServiceConstructor,
       statisticsServiceConstructor,

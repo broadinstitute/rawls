@@ -5,7 +5,7 @@ import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource, _}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor}
+import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, WorkflowSubmissionActor, SubmissionMonitorConfig}
 import org.broadinstitute.dsde.rawls.model.{UserInfo, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util
@@ -43,7 +43,8 @@ object BootMonitors extends LazyLogging {
     startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
 
     //Boot submission monitor supervisor
-    val submissionMonitorConfig = conf.getConfig("submissionmonitor")
+    val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
+    val submissionMonitorConfig = SubmissionMonitorConfig(util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")), submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"))
     startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, samDAO, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
 
     //Boot workflow submission actors
@@ -57,15 +58,14 @@ object BootMonitors extends LazyLogging {
     system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole))
   }
 
-  private def startSubmissionMonitorSupervisor(system: ActorSystem, submissionMonitorConfig: Config, slickDataSource: SlickDataSource, samDAO: SamDAO, gcsDAO: GoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {
+  private def startSubmissionMonitorSupervisor(system: ActorSystem, submissionMonitorConfig: SubmissionMonitorConfig, slickDataSource: SlickDataSource, samDAO: SamDAO, gcsDAO: GoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {
     system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
       slickDataSource,
       samDAO,
       gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
-      util.toScalaDuration(submissionMonitorConfig.getDuration("submissionPollInterval")),
-      submissionMonitorConfig.getBoolean("trackDetailedSubmissionMetrics"),
+      submissionMonitorConfig,
       workbenchMetricBaseName = metricsPrefix
     ), "rawls-submission-supervisor")
   }

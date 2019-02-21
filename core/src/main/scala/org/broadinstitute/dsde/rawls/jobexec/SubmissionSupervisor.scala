@@ -46,10 +46,9 @@ object SubmissionSupervisor {
             samDAO: SamDAO,
             googleServicesDAO: GoogleServicesDAO,
             bucketCredential: Credential,
-            submissionPollInterval: FiniteDuration = 1 minutes,
-            trackDetailedSubmissionMetrics: Boolean = true,
+            submissionMonitorConfig: SubmissionMonitorConfig,
             workbenchMetricBaseName: String): Props = {
-    Props(new SubmissionSupervisor(executionServiceCluster, datasource, samDAO, googleServicesDAO, bucketCredential, submissionPollInterval, trackDetailedSubmissionMetrics, workbenchMetricBaseName))
+    Props(new SubmissionSupervisor(executionServiceCluster, datasource, samDAO, googleServicesDAO, bucketCredential, submissionMonitorConfig, workbenchMetricBaseName))
   }
 }
 
@@ -66,8 +65,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            samDAO: SamDAO,
                            googleServicesDAO: GoogleServicesDAO,
                            bucketCredential: Credential,
-                           submissionPollInterval: FiniteDuration,
-                           trackDetailedSubmissionMetrics: Boolean,
+                           submissionMonitorConfig: SubmissionMonitorConfig,
                            override val workbenchMetricBaseName: String) extends Actor with LazyLogging with RawlsInstrumented {
   import context._
 
@@ -101,7 +99,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
 
     scheduleInitialMonitorPass
     registerGlobalJobExecGauges()
-    system.scheduler.schedule(0 seconds, submissionPollInterval, self, RefreshGlobalJobExecGauges)
+    system.scheduler.schedule(0 seconds, submissionMonitorConfig.submissionPollInterval, self, RefreshGlobalJobExecGauges)
   }
 
   override def receive = {
@@ -138,11 +136,11 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def scheduleInitialMonitorPass: Cancellable = {
-    system.scheduler.scheduleOnce(submissionPollInterval, self, StartMonitorPass)
+    system.scheduler.scheduleOnce(submissionMonitorConfig.submissionPollInterval, self, StartMonitorPass)
   }
 
   private def scheduleNextMonitorPass: Cancellable = {
-    system.scheduler.scheduleOnce(submissionPollInterval, self, StartMonitorPass)
+    system.scheduler.scheduleOnce(submissionMonitorConfig.submissionPollInterval, self, StartMonitorPass)
   }
 
   private def restartCounter(workspaceName: WorkspaceName, submissionId: UUID, cause: Throwable): Counter = {
@@ -152,11 +150,11 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential): ActorRef = {
-    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, samDAO, googleServicesDAO, executionServiceCluster, credential, submissionPollInterval, trackDetailedSubmissionMetrics, workbenchMetricBaseName).withDispatcher("submission-monitor-dispatcher"), submissionId.toString)
+    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, samDAO, googleServicesDAO, executionServiceCluster, credential, submissionMonitorConfig, workbenchMetricBaseName).withDispatcher("submission-monitor-dispatcher"), submissionId.toString)
   }
 
   private def scheduleNextCheckCurrentWorkflowStatus(actor: ActorRef): Cancellable = {
-    system.scheduler.scheduleOnce(submissionPollInterval, actor, CheckCurrentWorkflowStatusCounts)
+    system.scheduler.scheduleOnce(submissionMonitorConfig.submissionPollInterval, actor, CheckCurrentWorkflowStatusCounts)
   }
 
   private def refreshGlobalJobExecGauges: Future[SaveGlobalJobExecCounts] = {
@@ -232,7 +230,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def registerDetailedJobExecGauges(workspaceName: WorkspaceName, submissionId: UUID): Unit = {
-    if( trackDetailedSubmissionMetrics ) {
+    if(submissionMonitorConfig.trackDetailedSubmissionMetrics ) {
       try {
         WorkflowStatuses.allStatuses.foreach { status =>
           workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).transient().asGaugeIfAbsent("current") {
@@ -251,7 +249,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def unregisterWorkflowGauges(workspaceName: WorkspaceName, submissionId: UUID): Unit = {
-    if( trackDetailedSubmissionMetrics ) {
+    if(submissionMonitorConfig.trackDetailedSubmissionMetrics ) {
       WorkflowStatuses.allStatuses.foreach { status =>
         workspaceSubmissionMetricBuilder(workspaceName, submissionId).expand(WorkflowStatusMetricKey, status).transient().unregisterMetric("current")
       }
@@ -260,7 +258,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def unregisterSubmissionGauges(workspaceName: WorkspaceName): Unit = {
-    if( trackDetailedSubmissionMetrics ) {
+    if(submissionMonitorConfig.trackDetailedSubmissionMetrics ) {
       SubmissionStatuses.allStatuses.foreach { status =>
         workspaceMetricBuilder(workspaceName).expand(SubmissionStatusMetricKey, status).transient().unregisterMetric("current")
       }

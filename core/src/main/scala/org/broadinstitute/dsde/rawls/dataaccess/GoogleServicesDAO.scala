@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperati
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
 import org.joda.time.DateTime
 import spray.json.JsObject
 
@@ -95,6 +96,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]]
 
+  def storeCromwellMetadata(objectName: GcsObjectName, body: Array[Byte]): Future[Unit]
+
   def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]]
 
   def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
@@ -114,7 +117,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @return sequence of RawlsBillingAccounts
     */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
-
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
   def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]
   def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[DateTime]]

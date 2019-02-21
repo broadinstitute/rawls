@@ -38,6 +38,8 @@ trait ExecutionServiceCluster extends ErrorReportable {
   def findExecService(submissionId: String, workflowId: String, userInfo: UserInfo, execId: Option[ExecutionServiceId] = None): Future[ExecutionServiceId]
 
   def callLevelMetadata(submissionId: String, workflowId: String, metadataParams: MetadataParams, execServiceId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject]
+
+  def callLevelMetadataForCostCalculation(submissionId: String, workflowId: String, execId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject]
 }
 
 class ExecutionServiceId(val id: String) {

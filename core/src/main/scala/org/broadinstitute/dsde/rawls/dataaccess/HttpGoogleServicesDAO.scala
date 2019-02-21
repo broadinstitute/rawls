@@ -45,7 +45,9 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
 import org.joda.time
 import spray.json._
 
@@ -93,12 +95,22 @@ class HttpGoogleServicesDAO(
   val jsonFactory = JacksonFactory.getDefaultInstance
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
+  val cromwellMetadataBucketName = GcsBucketName("cromwell-metadata-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com"))
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
-  initTokenBucket()
+  val newGoogleStorage = new HttpGoogleStorageDAO(
+    appName,
+    GoogleCredentialModes.Pem(WorkbenchEmail(clientEmail), new File(pemFile)),
+    workbenchMetricBaseName
+  )
 
-  protected def initTokenBucket(): Unit = {
+  initBuckets()
+
+  protected def initBuckets(): Unit = {
     implicit val service = GoogleInstrumentedService.Storage
+    val bucketAcls = List(new BucketAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
+    val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
+
     try {
       getStorage(getBucketServiceAccountCredential).buckets().get(tokenBucketName).executeUsingHead()
     } catch {
@@ -109,15 +121,25 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(logInserter)
         allowGoogleCloudStorageWrite(logBucket.getName)
 
-        val bucketAcls = List(new BucketAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
-        val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
-        val bucket = new Bucket().
+        val tokenBucket = new Bucket().
           setName(tokenBucketName).
           setAcl(bucketAcls).
           setDefaultObjectAcl(defaultObjectAcls).
           setLogging(new Logging().setLogBucket(logBucket.getName))
-        val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, bucket)
-        executeGoogleRequest(inserter)
+        val insertTokenBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, tokenBucket)
+        executeGoogleRequest(insertTokenBucket)
+    }
+
+    try {
+      getStorage(getBucketServiceAccountCredential).buckets().get(cromwellMetadataBucketName.value).executeUsingHead()
+    } catch {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue =>
+        val metadataBucket = new Bucket().
+          setName(cromwellMetadataBucketName.value).
+          setAcl(bucketAcls).
+          setDefaultObjectAcl(defaultObjectAcls)
+        val insertMetadataBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, metadataBucket)
+        executeGoogleRequest(insertMetadataBucket)
     }
   }
 
@@ -437,6 +459,10 @@ class HttpGoogleServicesDAO(
         None
       }
     }
+  }
+
+  override def storeCromwellMetadata(objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = {
+    newGoogleStorage.storeObject(cromwellMetadataBucketName, objectName, new ByteArrayInputStream(body), "text/plain")
   }
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {

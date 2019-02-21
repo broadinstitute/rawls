@@ -154,6 +154,30 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
     }
   }
 
+  def callLevelMetadataForCostCalculation(submissionId: String, workflowId: String, execId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject] = {
+    val metadataParams = MetadataParams(Set(
+      "id",
+      "start",
+      "end",
+      "labels",
+      "executionEvents",
+      "runtimeAttributes",
+      "jobId",
+      "preemptible",
+      "callCaching:hit",
+      "jes",
+      "papi2",
+      "executionStatus",
+      "backend",
+      "attempt"
+    ), Set.empty, true)
+
+    for {
+      executionServiceId <- findExecService(submissionId, workflowId, userInfo, execId)
+      metadata <- getMember(executionServiceId).dao.callLevelMetadata(workflowId, metadataParams, userInfo)
+    } yield metadata
+  }
+
   // ====================
   // facade-to-cluster entry points
   // ====================
