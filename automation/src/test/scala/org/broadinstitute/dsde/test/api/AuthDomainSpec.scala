@@ -13,7 +13,7 @@ import org.scalatest.time.{Seconds, Span}
 class AuthDomainSpec extends FlatSpec with Matchers with CleanUp with BillingFixtures with WorkspaceFixtures with GroupFixtures with RandomUtil with Eventually with BeforeAndAfterAll {
 
   val `override`: Nothing = null
-  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(120, Seconds)), interval = scaled(Span(2, Seconds)))
+  implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(120, Seconds)), interval = scaled(Span(2, Seconds)))
   lazy val projectOwner = UserPool.chooseProjectOwner
   lazy val (projectUser, groupOwner) = {
     val users = UserPool.chooseStudents(2)
