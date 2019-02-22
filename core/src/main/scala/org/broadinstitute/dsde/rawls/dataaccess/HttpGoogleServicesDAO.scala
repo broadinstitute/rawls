@@ -111,6 +111,7 @@ class HttpGoogleServicesDAO(
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
   val API_SERVICE_MANAGEMENT = "ServiceManagement"
   val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
+  val API_DEPLOYMENT_MANAGER = "DeploymentManager"
 
   // modify these if we need more granular access in the future
   val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
@@ -767,8 +768,10 @@ class HttpGoogleServicesDAO(
       executeGoogleRequest(
         deploymentManager.deployments().insert(deploymentMgrProject, new Deployment().setName(s"dm-${projectName.value}").setTarget(dconf))
       )
-    })
-
+    }) map { googleOperation =>
+      val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
+      RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, googleOperation.getName, false, errorStr, API_CLOUD_RESOURCE_MANAGER)
+    }
   }
 
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] = {
@@ -815,6 +818,16 @@ class HttpGoogleServicesDAO(
         }).map { op =>
           rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
         }
+
+      case API_DEPLOYMENT_MANAGER =>
+        val deploymentManager = getDeploymentManager(credential)
+
+        retryWhen500orGoogleError(() => {
+          executeGoogleRequest(deploymentManager.operations().get(rawlsBillingProjectOperation.projectName, rawlsBillingProjectOperation.operationId))
+        }).map { op =>
+          val errorStr = Option(op.getError).map(errors => errors.getErrors.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
+          rawlsBillingProjectOperation.copy(done = op.getStatus == "DONE", errorMessage = errorStr)
+        }
     }
 
   }
@@ -823,6 +836,10 @@ class HttpGoogleServicesDAO(
    * converts a possibly null java boolean to a scala boolean, null is treated as false
    */
   private def toScalaBool(b: java.lang.Boolean) = Option(b).contains(java.lang.Boolean.TRUE)
+
+  private def toErrorMessage(message: String, code: String): String = {
+    s"${Option(message).getOrElse("")} - code ${code}"
+  }
 
   private def toErrorMessage(message: String, code: Int): String = {
     s"${Option(message).getOrElse("")} - code ${code}"
