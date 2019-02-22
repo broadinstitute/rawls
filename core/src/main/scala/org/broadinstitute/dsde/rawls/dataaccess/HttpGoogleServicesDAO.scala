@@ -67,7 +67,7 @@ import scala.util.Try
 case class Resources (
                        name: String,
                        `type`: String,
-                       properties: Map[String, String]
+                       properties: Map[String, JsValue]
                      )
 case class ConfigContents (
                             resources: Seq[Resources]
@@ -730,7 +730,7 @@ class HttpGoogleServicesDAO(
     })
   }
 
-  def getDMConfigString(projectName: RawlsBillingProjectName, dmTemplatePath: String, properties: Map[String, String]): String = {
+  def getDMConfigString(projectName: RawlsBillingProjectName, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
     import DeploymentManagerJsonSupport._
     import cats.syntax.either._
     import io.circe.yaml._
@@ -752,20 +752,22 @@ class HttpGoogleServicesDAO(
       "parentOrganization" -> appsDomain,
       "pubsubTopic" -> pubSubTopic,
 
-      "fcProjectOwners" -> projectTemplate.policies("roles/owner"),
-      "fcProjectEditors" -> projectTemplate.policies("roles/editor"),
-
       "fcBillingUser" -> billingEmail, //FIXME: should be the billing GROUP
 
-      "projectOwnersGroup" -> ownerGroupEmail,
-      "projectViewersGroup" -> computeUserGroupEmail,
+      "projectOwnersGroup" -> ownerGroupEmail.value,
+      "projectViewersGroup" -> computeUserGroupEmail.value,
       "requesterPaysRole" -> requesterPaysRole,
       "highSecurityNetwork" -> "OPTIONAL",
       "labels" -> "OPTIONAL_MAP"
     )
 
+    val seqprops = Map (
+      "fcProjectOwners" -> projectTemplate.policies("roles/owner"), //FIXME these are seqs
+      "fcProjectEditors" -> projectTemplate.policies("roles/editor")
+    )
+
     //config is a list of one resource: type=composite-type, name=whocares, properties=pokein
-    val confy = new ConfigFile().setContent(getDMConfigString(projectName, dmTemplatePath, properties))
+    val confy = new ConfigFile().setContent(getDMConfigString(projectName, dmTemplatePath, properties.mapValues(_.toJson) ++ seqprops.mapValues(_.toJson)))
     val dconf = new TargetConfiguration().setConfig(confy)
 
     retryWhen500orGoogleError(() => {
