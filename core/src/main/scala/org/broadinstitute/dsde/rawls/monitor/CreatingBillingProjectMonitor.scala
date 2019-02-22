@@ -22,52 +22,50 @@ import scala.util.Success
  * Created by dvoet on 8/22/16.
  */
 object CreatingBillingProjectMonitor {
-  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, pubSubDAO: GooglePubSubDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String, dmPubSubTopic: String, dmPubSubSubscription: String)(implicit executionContext: ExecutionContext): Props = {
-    Props(new CreatingBillingProjectMonitorActor(datasource, gcsDAO, pubSubDAO, samDAO, projectTemplate, requesterPaysRole, dmPubSubTopic, dmPubSubSubscription))
+  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String)(implicit executionContext: ExecutionContext): Props = {
+    Props(new CreatingBillingProjectMonitorActor(datasource, gcsDAO, samDAO, projectTemplate, requesterPaysRole))
   }
 
-  //shiny new Deployment Manager flow
   sealed trait CreatingBillingProjectMonitorMessage
-  case object Startup extends CreatingBillingProjectMonitorMessage
-  case object CheckPubSub extends CreatingBillingProjectMonitorMessage
-
-  //old, operation-based way of monitoring BPs
   case object CheckNow extends CreatingBillingProjectMonitorMessage
   case class CheckDone(creatingCount: Int) extends CreatingBillingProjectMonitorMessage
 }
 
-class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val pubSubDAO: GooglePubSubDAO, val samDAO: SamDAO, val projectTemplate: ProjectTemplate, val requesterPaysRole: String, val dmPubSubTopic: String, val dmPubSubSubscription: String)(implicit executionContext: ExecutionContext) extends Actor with CreatingBillingProjectMonitor with LazyLogging {
-  self ! Startup
+class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, val projectTemplate: ProjectTemplate, val requesterPaysRole: String)(implicit executionContext: ExecutionContext) extends Actor with CreatingBillingProjectMonitor with LazyLogging {
+  self ! CheckNow
 
   override def receive = {
-    case Startup => startup pipeTo self
-    case CheckPubSub => checkPubSub pipeTo self
+    case CheckNow => checkCreatingProjects pipeTo self
 
-    case CheckDone(creatingCount) if creatingCount > 0 => context.system.scheduler.scheduleOnce(5 seconds, self, CheckPubSub)
-    case CheckDone(creatingCount) => context.system.scheduler.scheduleOnce(1 minute, self, CheckPubSub)
+    case CheckDone(creatingCount) if creatingCount > 0 => context.system.scheduler.scheduleOnce(5 seconds, self, CheckNow)
+    case CheckDone(creatingCount) => context.system.scheduler.scheduleOnce(1 minute, self, CheckNow)
 
     case Failure(t) =>
       logger.error(s"failure monitoring creating billing projects", t)
-      context.system.scheduler.scheduleOnce(1 minute, self, CheckPubSub)
+      context.system.scheduler.scheduleOnce(1 minute, self, CheckNow)
   }
 }
 
 trait CreatingBillingProjectMonitor extends LazyLogging {
   val datasource: SlickDataSource
   val gcsDAO: GoogleServicesDAO
-  val pubSubDAO: GooglePubSubDAO
   val projectTemplate: ProjectTemplate
   val samDAO: SamDAO
   val requesterPaysRole: String
-  val dmPubSubTopic: String
-  val dmPubSubSubscription: String
 
-  def startup()(implicit executionContext: ExecutionContext): Future[CreatingBillingProjectMonitorMessage] = {
+  def checkCreatingProjects()(implicit executionContext: ExecutionContext): Future[CheckDone] = {
     for {
-      _ <- pubSubDAO.createTopic(dmPubSubTopic)
-      _ <- pubSubDAO.createSubscription(dmPubSubTopic, dmPubSubSubscription)
+      (creatingProjects, operations) <- datasource.inTransaction { dataAccess =>
+        for {
+          projects <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Creating)
+          operations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projects.map(_.projectName))
+        } yield {
+          (projects, operations)
+        }
+      }
+      updatedProjectCount <- setupProjects(creatingProjects, operations)
     } yield {
-      CheckPubSub
+      CheckDone(creatingProjects.size - updatedProjectCount)
     }
   }
 
@@ -89,16 +87,5 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
         dataAccess.rawlsBillingProjectQuery.updateBillingProjects(bpUpdates)
       }
     }.mapTo[Unit]
-  }
-
-  def checkPubSub()(implicit executionContext: ExecutionContext): Future[CreatingBillingProjectMonitorMessage] = {
-    for {
-      psMessages <- pubSubDAO.pullMessages(dmPubSubSubscription, 100)
-      projectMap = psMessages.map(m => RawlsBillingProjectName(m.attributes("projectId")) -> m ).toMap
-      _ <- updateBillingProjects(projectMap)
-      _ <- pubSubDAO.acknowledgeMessages(dmPubSubSubscription, psMessages)
-    } yield {
-      CheckDone(psMessages.size)
-    }
   }
 }
