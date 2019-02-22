@@ -22,8 +22,8 @@ import scala.util.Success
  * Created by dvoet on 8/22/16.
  */
 object CreatingBillingProjectMonitor {
-  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, pubSubDAO: GooglePubSubDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String, dmConfig: Config)(implicit executionContext: ExecutionContext): Props = {
-    Props(new CreatingBillingProjectMonitorActor(datasource, gcsDAO, pubSubDAO, samDAO, projectTemplate, requesterPaysRole, dmConfig))
+  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, pubSubDAO: GooglePubSubDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String, dmPubSubTopic: String, dmPubSubSubscription: String)(implicit executionContext: ExecutionContext): Props = {
+    Props(new CreatingBillingProjectMonitorActor(datasource, gcsDAO, pubSubDAO, samDAO, projectTemplate, requesterPaysRole, dmPubSubTopic, dmPubSubSubscription))
   }
 
   //shiny new Deployment Manager flow
@@ -36,7 +36,7 @@ object CreatingBillingProjectMonitor {
   case class CheckDone(creatingCount: Int) extends CreatingBillingProjectMonitorMessage
 }
 
-class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val pubSubDAO: GooglePubSubDAO, val samDAO: SamDAO, val projectTemplate: ProjectTemplate, val requesterPaysRole: String, val dmConfig: Config)(implicit executionContext: ExecutionContext) extends Actor with CreatingBillingProjectMonitor with LazyLogging {
+class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val pubSubDAO: GooglePubSubDAO, val samDAO: SamDAO, val projectTemplate: ProjectTemplate, val requesterPaysRole: String, val dmPubSubTopic: String, val dmPubSubSubscription: String)(implicit executionContext: ExecutionContext) extends Actor with CreatingBillingProjectMonitor with LazyLogging {
   self ! Startup
 
   override def receive = {
@@ -59,12 +59,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
   val projectTemplate: ProjectTemplate
   val samDAO: SamDAO
   val requesterPaysRole: String
-  val dmConfig: Config
-
-  val dmPubSubTopic = dmConfig.getString("pubSubTopic")
-  val dmPubSubSubscription = dmConfig.getString("pubSubSubscription")
-  val dmTemplatePath = dmConfig.getString("templatePath")
-  val dmProject = dmConfig.getString("projectID")
+  val dmPubSubTopic: String
+  val dmPubSubSubscription: String
 
   def startup()(implicit executionContext: ExecutionContext): Future[CreatingBillingProjectMonitorMessage] = {
     for {
