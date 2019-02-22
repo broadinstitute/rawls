@@ -95,7 +95,7 @@ class HttpGoogleServicesDAO(
   val jsonFactory = JacksonFactory.getDefaultInstance
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
-  val cromwellMetadataBucketName = GcsBucketName("cromwell-metadata-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com"))
+  val cromwellMetadataBucketName = GcsBucketName("cromwell-meta-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com"))
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
   val newGoogleStorage = new HttpGoogleStorageDAO(
