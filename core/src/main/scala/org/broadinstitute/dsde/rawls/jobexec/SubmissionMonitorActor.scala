@@ -281,7 +281,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           workflowId =>
             uploadMetadataToGCS(workflowRec.submissionId.toString, workflowId, petUser).recover{
               case e =>
-                logger.error(s"Failed to upload metadata for ${workflowRec.submissionId}/${workflowId}", e)
+                logger.error(s"Failed to upload metadata for ${workflowRec.submissionId}/${workflowId} due to ${e}")
             }
         }
 
