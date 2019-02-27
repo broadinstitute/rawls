@@ -279,7 +279,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         // Currently, this is only used for hamm, and may potentially be removed from RAWLS if design changes
         workflowRec.externalId.traverse{
           workflowId =>
-            uploadMetadataToGCS(workflowRec.submissionId.toString, workflowId, petUser).recover{
+            uploadMetadataToGCS(workflowRec.submissionId.toString, workflowId, petUser).recover {
               case e =>
                 logger.error(s"Failed to upload metadata for ${workflowRec.submissionId}/${workflowId}", e)
             }
@@ -295,9 +295,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   private def uploadMetadataToGCS(submissionId: String, workflowId: String, petUser: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
     for{
-      metadata <- executionServiceCluster.callLevelMetadataForCostCalculation(submissionId, workflowId, None, petUser)
-      // Rawls only monitor root level workflow
-      _ <- googleServicesDAO.storeCromwellMetadata(GcsObjectName(workflowId), metadata.compactPrint.getBytes("UTF-8"))
+      execIdOpt <- datasource.inTransaction {
+        dataAccess =>
+            dataAccess.workflowQuery.getExecutionServiceIdByExternalId(workflowId, submissionId)
+      }
+      _ <- execIdOpt.traverse {
+        execId =>
+          for {
+            metadata <- executionServiceCluster.callLevelMetadataForCostCalculation(submissionId, workflowId, Some(ExecutionServiceId(execId)), petUser)
+            // Rawls only monitor root level workflow
+            _ <- googleServicesDAO.storeCromwellMetadata(GcsObjectName(workflowId), metadata.compactPrint.getBytes("UTF-8"))
+          } yield ()
+      }
     } yield ()
   }
 
