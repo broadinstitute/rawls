@@ -742,6 +742,21 @@ class HttpGoogleServicesDAO(
     jsonVersion.asYaml.spaces2
   }
 
+  /*
+   * Set the deployment policy to "abandon" -- i.e. allows the created project to persist even if the deployment is deleted --
+   * and then delete the deployment. There's a limit of 1000 deployments so this is important to do.
+   */
+  override def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.DeploymentManager
+    val credential = getDeploymentManagerAccountCredential
+    val deploymentManager = getDeploymentManager(credential)
+
+    executeGoogleRqWithRetry(
+      deploymentManager.deployments().delete(deploymentMgrProject, projectToDM(projectName)).setDeletePolicy("ABANDON")).mapTo[Unit]
+  }
+
+  def projectToDM(projectName: RawlsBillingProjectName) = s"dm-${projectName.value}"
+
   def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, pubSubTopic: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
@@ -767,17 +782,20 @@ class HttpGoogleServicesDAO(
       "fcProjectEditors" -> projectTemplate.policies("roles/editor")
     )
 
+    import spray.json.DefaultJsonProtocol._
     //config is a list of one resource: type=composite-type, name=whocares, properties=pokein
     val confy = new ConfigFile().setContent(getDMConfigString(projectName, dmTemplatePath, properties.mapValues(_.toJson) ++ seqprops.mapValues(_.toJson)))
     val dconf = new TargetConfiguration().setConfig(confy)
 
+    //TODO: add ?deletePolicy=ABANDON on the API call
+
     retryWhen500orGoogleError(() => {
-      executeGoogleRequest(
-        deploymentManager.deployments().insert(deploymentMgrProject, new Deployment().setName(s"dm-${projectName.value}").setTarget(dconf))
-      )
+      executeGoogleRequest {
+        deploymentManager.deployments().insert(deploymentMgrProject, new Deployment().setName(projectToDM(projectName)).setTarget(dconf))
+      }
     }) map { googleOperation =>
       val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
-      RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, googleOperation.getName, false, errorStr, API_CLOUD_RESOURCE_MANAGER)
+      RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, googleOperation.getName, false, errorStr, API_CLOUD_RESOURCE_MANAGER)
     }
   }
 
@@ -796,7 +814,7 @@ class HttpGoogleServicesDAO(
       if (toScalaBool(googleOperation.getDone) && Option(googleOperation.getError).exists(_.getCode.intValue() == Code.ALREADY_EXISTS.value())) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
       }
-      RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, googleOperation.getName, toScalaBool(googleOperation.getDone), Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_CLOUD_RESOURCE_MANAGER)
+      RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, googleOperation.getName, toScalaBool(googleOperation.getDone), Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_CLOUD_RESOURCE_MANAGER)
     })
   }
 

@@ -74,13 +74,11 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
                     operations: Seq[RawlsBillingProjectOperationRecord])(implicit executionContext: ExecutionContext): Future[Int] = {
 
     for {
-      updatedOperations <- Future.traverse(operations) { operation =>
-        operation match {
-          case RawlsBillingProjectOperationRecord(_, _, _, true, _, _) => Future.successful(operation)
-          case RawlsBillingProjectOperationRecord(_, _, _, false, _, _) => gcsDAO.pollOperation(operation).recover {
-            // if we don't mark this as done we might continue retrying forever and pollOperation already does some retrying
-            case t: Throwable => operation.copy(done = true, errorMessage = Option(s"error getting ${operation.operationName} operation status: ${t.getMessage}"))
-          }
+      updatedOperations <- Future.traverse(operations) {
+        case operation@RawlsBillingProjectOperationRecord(_, _, _, true, _, _) => Future.successful(operation)
+        case operation@RawlsBillingProjectOperationRecord(_, _, _, false, _, _) => gcsDAO.pollOperation(operation).recover {
+          // if we don't mark this as done we might continue retrying forever and pollOperation already does some retrying
+          case t: Throwable => operation.copy(done = true, errorMessage = Option(s"error getting ${operation.operationName} operation status: ${t.getMessage}"))
         }
       }
 
@@ -93,24 +91,30 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
       operationsByProject = updatedOperations.groupBy(rec => RawlsBillingProjectName(rec.projectName))
 
       maybeUpdatedProjects <- Future.traverse(projects) { project =>
-        // this match figures out the current state of the project and progresses it to the next step when appropriate
-        // see GoogleServicesDAO.createProject for more details
+        // figure out if the project creation is done yet and set the project status accordingly
         val nextStepFuture = operationsByProject(project.projectName) match {
           case Seq() =>
             // there are no operations, there is a small window when this can happen but it should resolve itself so let it pass
             Future.successful(project)
 
-          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, None, _)) =>
+          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, true, None, _)) =>
             // create project operation finished successfully
-            Future.successful(project.copy(status = CreationStatuses.Ready))
+            gcsDAO.cleanupDMProject(project.projectName) map { _ =>
+              project.copy(status = CreationStatuses.Ready)
+            }
 
-          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, Some(error), _)) =>
+          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, true, Some(error), _)) =>
             // create project operation finished with an error
             logger.debug(s"project ${project.projectName} creation finished with errors: $error")
-            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(error)))
+            gcsDAO.cleanupDMProject(project.projectName) map { _ =>
+              project.copy(status = CreationStatuses.Error, message = Option(error))
+            }
+
+          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, _, _, _)) =>
+            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(s"failure processing new project ${project.projectName.value}: old-style project creation no longer supported")))
 
           case bp :: bp2 :: bps =>
-            Future.failed(new RuntimeException("really not expecting multiple operation records any more"))
+            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(s"failure processing new project ${project.projectName.value}: multiple BillingProjectOperationRecords (probably an old project)")))
 
           case _ =>
             // still running
@@ -124,10 +128,6 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
         }
       }
 
-      //TODO: if we're done, delete the deployment
-      //TODO: restructure the rest of this function
-
-
       _ <- datasource.inTransaction { dataAccess =>
         // save project updates
         val updatedProjects = maybeUpdatedProjects.toSet -- projects.toSet
@@ -136,25 +136,5 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     } yield {
       maybeUpdatedProjects.count(project => CreationStatuses.terminal.contains(project.status))
     }
-  }
-
-  def updateBillingProjects(projectMap: Map[RawlsBillingProjectName, GooglePubSubDAO.PubSubMessage])(implicit executionContext: ExecutionContext): Future[Unit] = {
-    datasource.inTransaction { dataAccess =>
-      //these messages will include info from all projects from all rawlses, not just this one.
-      // get the BPs we know about in the db and iterate over them.
-      dataAccess.rawlsBillingProjectQuery.getBillingProjects(projectMap.keySet) flatMap { projectsOwnedByMe =>
-        val bpUpdates = projectsOwnedByMe map { project =>
-          if (projectMap(project.projectName).attributes("status") == "ERROR") {
-            //assuming that the error is showing up in the body of the message here.
-            project.copy(status = CreationStatuses.Error, message = Some(projectMap(project.projectName).contents))
-          } else {
-            //TODO: delete the deployment after the project has been created fine, as there's a limit (~1000)
-            //this will require setting up the deployment to be deletable (else deleting the deployment will delete the project too)
-            project.copy(status = CreationStatuses.Ready)
-          }
-        }
-        dataAccess.rawlsBillingProjectQuery.updateBillingProjects(bpUpdates)
-      }
-    }.mapTo[Unit]
   }
 }

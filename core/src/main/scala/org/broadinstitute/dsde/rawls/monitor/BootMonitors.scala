@@ -41,7 +41,7 @@ object BootMonitors extends LazyLogging {
     resetLaunchingWorkflows(slickDataSource)
 
     //Boot billing project creation monitor
-    startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, pubSubDAO, samDAO, projectTemplate, requesterPaysRole, conf.getConfig("gcs").getConfig("deploymentManager"))
+    startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
 
     //Boot submission monitor supervisor
     val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
@@ -55,8 +55,8 @@ object BootMonitors extends LazyLogging {
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
   }
 
-  private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, pubSubDAO: GooglePubSubDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String, dmConfig: Config): Unit = {
-    system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, pubSubDAO, samDAO, projectTemplate, requesterPaysRole, dmConfig))
+  private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
+    system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole))
   }
 
   private def startSubmissionMonitorSupervisor(system: ActorSystem, submissionMonitorConfig: SubmissionMonitorConfig, slickDataSource: SlickDataSource, samDAO: SamDAO, gcsDAO: GoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {

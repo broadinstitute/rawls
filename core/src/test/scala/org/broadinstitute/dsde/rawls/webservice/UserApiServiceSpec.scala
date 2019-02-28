@@ -144,12 +144,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
         override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty, Seq("foo", "bar", "baz"))
         override val gcsDAO = new MockGoogleServicesDAO("foo")
         override val samDAO = new MockSamDAO(dataSource)
-        override val pubSubDAO = new MockGooglePubSubDAO
-        override val dmConfig = testConf.getConfig("gcs.deploymentManager")
         override val requesterPaysRole: String = "requesterPaysRole"
       }
 
-      assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkPubSub(), Duration.Inf) }
+      assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(1) {
         runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
@@ -171,7 +169,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkPubSub(), Duration.Inf) }
+      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(4) {
         runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
@@ -247,12 +245,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
           override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = failureMode(rawlsBillingProjectOperation)
         }
         override val samDAO = new MockSamDAO(dataSource)
-        override val pubSubDAO = new MockGooglePubSubDAO
-        override val dmConfig = testConf.getConfig("gcs.deploymentManager")
         override val requesterPaysRole: String = "requesterPaysRole"
       }
 
-      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkPubSub(), Duration.Inf) }
+      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(1) {
         runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
@@ -325,13 +321,11 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
         override val samDAO = new MockSamDAO(dataSource)
-        override val pubSubDAO = new MockGooglePubSubDAO
-        override val dmConfig = testConf.getConfig("gcs.deploymentManager")
         override val requesterPaysRole: String = "requesterPaysRole"
 
       }
 
-      assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkPubSub(), Duration.Inf) }
+      assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(1) {
         runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
@@ -353,7 +347,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkPubSub(), Duration.Inf) }
+      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(4) {
         runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
