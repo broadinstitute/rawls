@@ -787,8 +787,6 @@ class HttpGoogleServicesDAO(
     val confy = new ConfigFile().setContent(getDMConfigString(projectName, dmTemplatePath, properties.mapValues(_.toJson) ++ seqprops.mapValues(_.toJson)))
     val dconf = new TargetConfiguration().setConfig(confy)
 
-    //TODO: add ?deletePolicy=ABANDON on the API call
-
     retryWhen500orGoogleError(() => {
       executeGoogleRequest {
         deploymentManager.deployments().insert(deploymentMgrProject, new Deployment().setName(projectToDM(projectName)).setTarget(dconf))

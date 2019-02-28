@@ -46,7 +46,7 @@ trait GoogleUtilities extends LazyLogging with InstrumentedRetry with GoogleInst
     }
   }
 
-  protected def executeGoogleRqWithRetry[T](request: AbstractGoogleClientRequest[T])(implicit counters: GoogleCounters): Future[T] = {
+  protected def executeGoogleRqWithRetry[T](request: AbstractGoogleClientRequest[T])(implicit counters: GoogleCounters, histo: Histogram): Future[T] = {
     retryWhen500orGoogleError(() => executeGoogleRequest(request))
   }
 
