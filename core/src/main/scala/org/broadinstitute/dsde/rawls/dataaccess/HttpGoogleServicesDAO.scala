@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.io._
-import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
@@ -10,6 +9,7 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
+import cats.effect.IO
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -35,6 +35,8 @@ import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
+import com.google.pubsub.v1.ProjectTopicName
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.grpc.Status.Code
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -46,8 +48,11 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleStorageDAO}
+import org.broadinstitute.dsde.workbench.google2.{Filters, GoogleStorageNotificationCreater, GoogleTopicAdmin, MetadataNotificationCreaterConfig, NotificationEventTypes}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
+import org.http4s.Uri
+import org.http4s.client.blaze.BlazeClientBuilder
 import org.joda.time
 import spray.json._
 
@@ -62,6 +67,7 @@ class HttpGoogleServicesDAO(
   clientEmail: String,
   subEmail: String,
   pemFile: String,
+  pathToCredentialJson: String,
   appsDomain: String,
   groupsPrefix: String,
   appName: String,
@@ -75,7 +81,7 @@ class HttpGoogleServicesDAO(
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
   override val workbenchMetricBaseName: String,
-  proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+  proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
 
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
@@ -90,12 +96,14 @@ class HttpGoogleServicesDAO(
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val genomicsScopes = Seq(GenomicsScopes.GENOMICS) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
+  val googleApiUri = Uri.unsafeFromString("https://www.googleapis.com")
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
-  val cromwellMetadataBucketName = GcsBucketName("cromwell-meta-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com"))
+  val cromwellMetadataBucketName = GcsBucketName("cromwell-metadata-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com"))
+  val cromwellMetadataTopicName = ProjectTopicName.of(serviceProject, "cromwell-metadata-topic") //TODO what's good suffix for topic name?
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
   val newGoogleStorage = new HttpGoogleStorageDAO(
@@ -103,6 +111,8 @@ class HttpGoogleServicesDAO(
     GoogleCredentialModes.Pem(WorkbenchEmail(clientEmail), new File(pemFile)),
     workbenchMetricBaseName
   )
+
+  implicit val cs = IO.contextShift(executionContext)
 
   initBuckets()
 
@@ -141,6 +151,23 @@ class HttpGoogleServicesDAO(
         val insertMetadataBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, metadataBucket)
         executeGoogleRequest(insertMetadataBucket)
     }
+
+    // unsafeRunSync is not desired, but return type for initBuckets dictates execution has to be happen immediately when the method is called.
+    // Changing initBuckets's signature requires larger effort which doesn't seem to worth it
+    createMetadataBucketNotification.unsafeRunSync()
+    createTopic.unsafeRunSync()
+  }
+
+  val createMetadataBucketNotification: IO[Unit] = BlazeClientBuilder[IO](executionContext).resource.use {
+    httpClient =>
+      val metadataNotificationConfig = MetadataNotificationCreaterConfig(pathToCredentialJson, googleApiUri)
+      val storageNotificationCreater = GoogleStorageNotificationCreater(httpClient, metadataNotificationConfig)
+      storageNotificationCreater.createNotification(cromwellMetadataTopicName, cromwellMetadataBucketName, Filters(List(NotificationEventTypes.ObjectFinalize), None))
+  }
+
+  implicit val log4CatsLogger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.unsafeCreate[IO]
+  val createTopic: IO[Unit] = GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson).use{
+    topicAdmin => topicAdmin.create(cromwellMetadataTopicName)
   }
 
   def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
