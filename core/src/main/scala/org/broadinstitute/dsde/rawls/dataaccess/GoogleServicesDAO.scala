@@ -26,6 +26,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val errorReportSource = ErrorReportSource("google")
 
   val CREATE_PROJECT_OPERATION = "create_project"
+  val DEPLOYMENT_MANAGER_CREATE_PROJECT = "dm_create_project"
 
   val billingEmail: String
 
@@ -173,6 +174,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   //v2
   def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, pubSubTopic: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[Unit]
+
+  override def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   /**
     * Adds the IAM policies to the project's existing policies
