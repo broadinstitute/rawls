@@ -55,6 +55,7 @@ import org.http4s.Uri
 import org.http4s.client.blaze.BlazeClientBuilder
 import org.joda.time
 import spray.json._
+import fs2.Stream
 
 import scala.collection.JavaConversions._
 import scala.concurrent.{Future, _}
@@ -154,8 +155,8 @@ class HttpGoogleServicesDAO(
 
     // unsafeRunSync is not desired, but return type for initBuckets dictates execution has to be happen immediately when the method is called.
     // Changing initBuckets's signature requires larger effort which doesn't seem to worth it
-    createMetadataBucketNotification.unsafeRunSync()
     createTopic.unsafeRunSync()
+    createMetadataBucketNotification.unsafeRunSync()
   }
 
   val createMetadataBucketNotification: IO[Unit] = BlazeClientBuilder[IO](executionContext).resource.use {
@@ -167,7 +168,7 @@ class HttpGoogleServicesDAO(
 
   implicit val log4CatsLogger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.unsafeCreate[IO]
   val createTopic: IO[Unit] = GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson).use{
-    topicAdmin => topicAdmin.create(cromwellMetadataTopicName)
+    topicAdmin => topicAdmin.create(cromwellMetadataTopicName) //TODO: need to test to see if publisher member needs to be added
   }
 
   def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
@@ -488,8 +489,9 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def storeCromwellMetadata(objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = {
-    newGoogleStorage.storeObject(cromwellMetadataBucketName, objectName, new ByteArrayInputStream(body), "text/plain")
+  override def storeCromwellMetadata(objectName: GcsObjectName, body: Stream[fs2.INothing, Byte]): Future[Unit] = {
+    val gzipped = (body through fs2.compress.gzip(2048)).to[Array]
+    newGoogleStorage.storeObject(cromwellMetadataBucketName, objectName, new ByteArrayInputStream(gzipped), "text/plain")
   }
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {

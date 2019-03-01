@@ -14,6 +14,7 @@ import akka.util.Timeout
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.cloud.Identity
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
@@ -99,6 +100,9 @@ object Boot extends App with LazyLogging {
     val jsonFactory = JacksonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
+//    val metadataTopicMembers = gcsConfig.getStringList("metadata-topic-members").map(
+//      s => Identity.serviceAccount(s)
+//    ).toList
     val gcsDAO = new HttpGoogleServicesDAO(
       false,
       clientSecrets,
