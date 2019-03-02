@@ -59,6 +59,7 @@ import fs2.Stream
 
 import scala.collection.JavaConversions._
 import scala.concurrent.{Future, _}
+import scala.concurrent.duration._
 import scala.io.Source
 import scala.util.Try
 
@@ -150,6 +151,7 @@ class HttpGoogleServicesDAO(
           setAcl(bucketAcls).
           setDefaultObjectAcl(defaultObjectAcls)
         val insertMetadataBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, metadataBucket)
+        Await.result(newGoogleStorage.setBucketLifecycle(cromwellMetadataBucketName, 30), 5 seconds)
         executeGoogleRequest(insertMetadataBucket)
     }
 
