@@ -85,13 +85,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     }
   }
 
-  def parseWorkflowStatusFromMetadata(metadata: String): String = {
-    val mapper = new ObjectMapper()
-    mapper.registerModule(DefaultScalaModule)
-
-    mapper.readTree(metadata).get("status").textValue()
-  }
-
   // if these prove useful anywhere else, they should move into workbench-libs
   def getSubmissionResponse(billingProject: String, workspaceName: String, submissionId: String)(implicit token: AuthToken): String = {
     Rawls.parseResponse(Rawls.getRequest(s"${Rawls.url}api/workspaces/$billingProject/$workspaceName/submissions/$submissionId"))
