@@ -86,6 +86,13 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     }
   }
 
+  def parseWorkflowStatusFromMetadata(metadata: String): String = {
+    val mapper = new ObjectMapper()
+    mapper.registerModule(DefaultScalaModule)
+
+    mapper.readTree(metadata).get("status").textValue()
+  }
+
   // if these prove useful anywhere else, they should move into workbench-libs
   def getSubmissionResponse(billingProject: String, workspaceName: String, submissionId: String)(implicit token: AuthToken): String = {
     Rawls.parseResponse(Rawls.getRequest(s"${Rawls.url}api/workspaces/$billingProject/$workspaceName/submissions/$submissionId"))
@@ -410,16 +417,14 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     }
 
     "should support running workflows with private docker images" in {
-      // going to setup the billing project, workspace etc, wait for bucket access. then can use MethodData.SimpleMethod, but with modified docker image (use .copy)
       implicit val token: AuthToken = ownerAuthToken
 
       val privateMethod: Method = MethodData.SimpleMethod.copy(
         methodName = s"${UUID.randomUUID().toString()}-private_test_method",
-        payload = "task hello {\n  String? name\n\n  command {\n    echo 'hello ${name}!'\n  }\n  output {\n    File response = stdout()\n  }\n  runtime {\n    docker: \"fakefakefake/not a real image\"\n  }\n}\n\nworkflow test {\n  call hello\n}"
-      ) // docker stuff still needs to be changed, which docker image?
+        payload = "task hello {\n  String? name\n\n  command {\n    echo 'hello ${name}!'\n  }\n  output {\n    File response = stdout()\n  }\n  runtime {\n    docker: \"mtalbott/mtalbott-papi-v2\"\n  }\n}\n\nworkflow test {\n  call hello\n}"
+      )
 
       withCleanBillingProject(owner) { projectName =>
-        println(s"quick go change the backend for $projectName, you have 60 seconds!")
         Thread.sleep(60.seconds.toMillis)
         withWorkspace(projectName, "rawls-private-image") { workspaceName =>
           withCleanUp {
@@ -447,19 +452,27 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
-            // may need to wait for Cromwell to start processing workflows.  we want the workflow to just run right?
-
             val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
-            val firstWorkflowId = eventually {
+            val workflowId = eventually {
               val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
               withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
-                status should be("Done") // very unlikely it's already done, but let's handle that case.
+                status should be("Done")
                 workflows should not be (empty)
                 workflows.head
               }
             }
+
+            val metadata = eventually {
+              Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, workflowId)
+            }
+
+            val outputs = eventually {
+              Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, workflowId)
+            }
+
+            parseWorkflowStatusFromMetadata(metadata) should be("Succeeded")
           }
         }
       }
