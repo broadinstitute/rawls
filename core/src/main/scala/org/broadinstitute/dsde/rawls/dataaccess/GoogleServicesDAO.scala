@@ -96,7 +96,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]]
 
-  def storeCromwellMetadata(objectName: GcsObjectName, body: fs2.Stream[fs2.INothing, Byte]): Future[Unit]
+  def storeCromwellMetadata(objectName: GcsObjectName, body: fs2.Stream[fs2.Pure, Byte]): Future[Unit]
 
   def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]]
 

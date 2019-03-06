@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.io._
+import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
@@ -9,7 +10,7 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
-import cats.effect.IO
+import cats.effect.{ContextShift, IO, Timer}
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -48,14 +49,14 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.google2.{Filters, GoogleStorageNotificationCreater, GoogleTopicAdmin, MetadataNotificationCreaterConfig, NotificationEventTypes}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.google2.{Filters, GoogleStorageNotificationCreater, GoogleTopicAdmin, NotificationCreaterConfig, NotificationEventTypes}
+import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
 import org.http4s.Uri
 import org.http4s.client.blaze.BlazeClientBuilder
 import org.joda.time
 import spray.json._
-import fs2.Stream
+import fs2._
 
 import scala.collection.JavaConversions._
 import scala.concurrent.{Future, _}
@@ -83,7 +84,7 @@ class HttpGoogleServicesDAO(
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
   override val workbenchMetricBaseName: String,
-  proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+  proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
 
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
@@ -113,8 +114,6 @@ class HttpGoogleServicesDAO(
     GoogleCredentialModes.Pem(WorkbenchEmail(clientEmail), new File(pemFile)),
     workbenchMetricBaseName
   )
-
-  implicit val cs = IO.contextShift(executionContext)
 
   initBuckets()
 
@@ -163,14 +162,21 @@ class HttpGoogleServicesDAO(
 
   val createMetadataBucketNotification: IO[Unit] = BlazeClientBuilder[IO](executionContext).resource.use {
     httpClient =>
-      val metadataNotificationConfig = MetadataNotificationCreaterConfig(pathToCredentialJson, googleApiUri)
+      val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
       val storageNotificationCreater = GoogleStorageNotificationCreater(httpClient, metadataNotificationConfig)
       storageNotificationCreater.createNotification(cromwellMetadataTopicName, cromwellMetadataBucketName, Filters(List(NotificationEventTypes.ObjectFinalize), None))
   }
 
-  implicit val log4CatsLogger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.unsafeCreate[IO]
-  val createTopic: IO[Unit] = GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson).use{
-    topicAdmin => topicAdmin.create(cromwellMetadataTopicName) //TODO: need to test to see if publisher member needs to be added
+  implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
+  val createTopic: IO[Unit] = GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson).use {
+    topicAdmin =>
+      //TODO: need to test to see if publisher member needs to be added
+      val result = for {
+        traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
+        _ <- topicAdmin.create(cromwellMetadataTopicName, Some(traceId))
+      } yield ()
+
+      result.compile.lastOrError
   }
 
   def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
@@ -491,8 +497,8 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def storeCromwellMetadata(objectName: GcsObjectName, body: Stream[fs2.INothing, Byte]): Future[Unit] = {
-    val gzipped = (body through fs2.compress.gzip(2048)).to[Array]
+  override def storeCromwellMetadata(objectName: GcsObjectName, body: fs2.Stream[fs2.Pure, Byte]): Future[Unit] = {
+    val gzipped = (body through fs2.compress.gzip[fs2.Pure](2048)).compile.toList.toArray //after fs2 1.0.4, we can `to[Array]` directly
     newGoogleStorage.storeObject(cromwellMetadataBucketName, objectName, new ByteArrayInputStream(gzipped), "text/plain")
   }
 

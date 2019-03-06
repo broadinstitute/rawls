@@ -33,10 +33,6 @@ trait SamDAO {
   def getAccessInstructions(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Option[String]]
 
   def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]]
-
-  @deprecated
-  def requestAccessToManagedGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit]
-
   /**
     * @return a json blob
     */

@@ -2,22 +2,20 @@ package org.broadinstitute.dsde.rawls
 
 import java.io.StringReader
 import java.net.InetAddress
-import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.io.IO
-import akka.pattern.ask
 import akka.stream.ActorMaterializer
-import akka.util.Timeout
+import cats.effect.IO
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.google.cloud.Identity
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
+import net.ceedubs.ficus.Ficus._
+import org.broadinstitute.dsde.rawls.config._
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -32,17 +30,12 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
-import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
-import net.ceedubs.ficus.Ficus._
-import org.apache.commons.io.FileUtils
-import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 object Boot extends App with LazyLogging {
   private def startup(): Unit = {
@@ -53,6 +46,8 @@ object Boot extends App with LazyLogging {
     // we need an ActorSystem to host our application in
     implicit val system = ActorSystem("rawls")
     implicit val materializer = ActorMaterializer()
+    implicit val cs = IO.contextShift(global)
+    implicit val timer = IO.timer(global)
 
     val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", conf))
 
@@ -80,7 +75,7 @@ object Boot extends App with LazyLogging {
     if (metricsConf.getBooleanOption("enabled").getOrElse(false)) {
       metricsConf.getObjectOption("reporters") match {
         case Some(configObject) =>
-          configObject.entrySet.map(_.toTuple).foreach {
+          configObject.entrySet.asScala.map(_.toTuple).foreach {
             case ("statsd", conf: ConfigObject) =>
               val statsDConf = conf.toConfig
               startStatsDReporter(
@@ -151,22 +146,28 @@ object Boot extends App with LazyLogging {
     val executionServiceConfig = conf.getConfig("executionservice")
     val submissionTimeout = util.toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
 
-    val executionServiceAbortServers: Map[String, ExecutionServiceDAO] = executionServiceConfig.getObjectOption("abortServers").map(_.map {
-      case (strName, strHostname) => (strName->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix))
+    val executionServiceAbortServers: Map[String, ExecutionServiceDAO] = executionServiceConfig.getObjectOption("abortServers").map(_.entrySet().asScala.map {
+      entry =>
+        val (strName, strHostname) = entry.toTuple
+        strName -> new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix)
     }.toMap).getOrElse(Map.empty)
 
-    val executionServiceServers: Set[ClusterMember] = executionServiceConfig.getObject("readServers").map {
-      case (strName, strHostname) => ClusterMember(ExecutionServiceId(strName), new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix), executionServiceAbortServers.get(strName))
+    val executionServiceServers: Set[ClusterMember] = executionServiceConfig.getObject("readServers").entrySet().asScala.map {
+      entry =>
+        val (strName, strHostname) = entry.toTuple
+        ClusterMember(ExecutionServiceId(strName), new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix), executionServiceAbortServers.get(strName))
     }.toSet
 
-    val executionServiceSubmitServers: Set[ClusterMember] = executionServiceConfig.getObject("submitServers").map {
-      case (strName, strHostname) => ClusterMember(ExecutionServiceId(strName), new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix), executionServiceAbortServers.get(strName))
+    val executionServiceSubmitServers: Set[ClusterMember] = executionServiceConfig.getObject("submitServers").entrySet().asScala.map {
+      entry =>
+        val (strName, strHostname) = entry.toTuple
+        ClusterMember(ExecutionServiceId(strName), new HttpExecutionServiceDAO(strHostname.unwrapped.toString, metricsPrefix), executionServiceAbortServers.get(strName))
     }.toSet
 
     val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, executionServiceSubmitServers, slickDataSource)
-    val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
-    val projectEditors = gcsConfig.getStringList("projectTemplate.editors")
-    val projectServices = gcsConfig.getStringList("projectTemplate.services")
+    val projectOwners = gcsConfig.getStringList("projectTemplate.owners").asScala
+    val projectEditors = gcsConfig.getStringList("projectTemplate.editors").asScala
+    val projectServices = gcsConfig.getStringList("projectTemplate.services").asScala
     val projectOwnerGrantableRoles = gcsConfig.getStringList("projectTemplate.ownerGrantableRoles")
     val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
     val projectTemplate = ProjectTemplate(Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices)
@@ -174,7 +175,7 @@ object Boot extends App with LazyLogging {
     val notificationDAO = new PubSubNotificationDAO(pubSubDAO, gcsConfig.getString("notifications.topicName"))
     val marthaConfig = conf.getConfig("martha")
     val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl"))
-    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO,  notificationDAO, samDAO, projectOwnerGrantableRoles, requesterPaysRole)
+    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO,  notificationDAO, samDAO, projectOwnerGrantableRoles.asScala, requesterPaysRole)
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO)
     val submissionCostService: SubmissionCostService =
@@ -219,7 +220,7 @@ object Boot extends App with LazyLogging {
     logger.info("Starting health monitor...")
     system.scheduler.schedule(10 seconds, 1 minute, healthMonitor, HealthMonitor.CheckAll)
 
-    val statusServiceConstructor: () => StatusService = StatusService.constructor(healthMonitor)
+    val statusServiceConstructor: () => StatusService = () => StatusService.constructor(healthMonitor)
 
     val workspaceServiceConfig = WorkspaceServiceConfig(
       conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),

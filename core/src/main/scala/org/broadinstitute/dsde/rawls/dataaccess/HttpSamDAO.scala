@@ -231,15 +231,6 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or500) { () => pipeline[String](userInfo) apply RequestBuilding.Get(url) }
   }
 
-  //managed group apis
-
-  override def requestAccessToManagedGroup(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/groups/v1/${groupName.value}/requestAccess"
-    val httpRequest = RequestBuilding.Post(url)
-
-    doSuccessOrFailureRequest(httpRequest, userInfo)
-  }
-
   private def getServiceAccountAccessToken = {
     val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
     if (expiresInSeconds < 60*5) {

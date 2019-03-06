@@ -1,16 +1,14 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
+import akka.stream.Materializer
+import cats.effect.{ContextShift, IO, Timer}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
-import com.google.api.client.http.HttpResponseException
 import com.google.api.services.cloudbilling.model.BillingAccount
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import akka.http.scaladsl.model.StatusCodes
-import akka.stream.Materializer
 
 import scala.collection.mutable
 import scala.concurrent._
@@ -20,6 +18,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   clientEmail: String,
   subEmail: String,
   pemFile: String,
+  pathToCredentialJson: String,
   appsDomain: String,
   groupsPrefix: String,
   appName: String,
@@ -31,13 +30,14 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   billingPemFile: String,
   billingEmail: String,
   bucketLogsMaxAge: Int)
-  (implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext)
+  (implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val cs: ContextShift[IO], override val timer: Timer[IO])
   extends HttpGoogleServicesDAO(
     true,
     clientSecrets,
     clientEmail,
     subEmail,
     pemFile,
+    pathToCredentialJson,
     appsDomain,
     groupsPrefix,
     appName,
@@ -49,7 +49,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     billingPemFile,
     billingEmail,
     bucketLogsMaxAge,
-    workbenchMetricBaseName = "test", proxyNamePrefix = "")(system, materializer, executionContext) {
+    workbenchMetricBaseName = "test", proxyNamePrefix = "")(system, materializer, executionContext, cs, timer) {
 
   private var token: String = null
   private var tokenDate: DateTime = null
