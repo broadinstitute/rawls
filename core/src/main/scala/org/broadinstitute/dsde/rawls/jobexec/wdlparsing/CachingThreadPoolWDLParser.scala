@@ -167,6 +167,6 @@ class CallableParser(wdl: String) extends Callable[Try[ParsedWdlWorkflow]] {
       Failure(new RawlsException("Failed to parse WDL: " + t.getMessage()))
     }
 
-    parsed map { p => ParsedWdlWorkflow(p.workflow.inputs, p.workflow.outputs.map(o => MethodOutput(o.locallyQualifiedName(p.workflow), o.womType.toDisplayString))) }
+    parsed map { p => ParsedWdlWorkflow(p.workflow.inputs, p.workflow.outputs.map(o => MethodOutput(o.locallyQualifiedName(p.workflow), o.womType.stableName))) }
   }
 }
