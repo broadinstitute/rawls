@@ -140,7 +140,7 @@ object MethodConfigResolver {
 
   def getMethodInputsOutputs(wdl: String): Try[MethodInputsOutputs] = parseWDL(wdl) map { parsedWdlWorkflow =>
     val inputs = parsedWdlWorkflow.inputs map {
-      case (fqn: FullyQualifiedName, wfInput: InputDefinition) => model.MethodInput(fqn, wfInput.womType.toDisplayString, wfInput.optional)
+      case (fqn: FullyQualifiedName, wfInput: InputDefinition) => model.MethodInput(fqn, wfInput.womType.stableName, wfInput.optional)
     }
     MethodInputsOutputs(inputs.toSeq, parsedWdlWorkflow.outputs)
   }
