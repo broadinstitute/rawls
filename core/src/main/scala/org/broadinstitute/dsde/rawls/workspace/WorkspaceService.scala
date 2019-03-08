@@ -1822,8 +1822,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
               // the limit of 2000
               Future.successful(())
-            } else {
+            } else if (WorkspaceAccessLevels.withPolicyName(policyName.value).isDefined) {
+              // only sync policies that have corresponding WorkspaceAccessLevels to google because only those are
+              // granted bucket access (and thus need a google group)
               samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName)
+            } else {
+              Future.successful(())
             }
           })
         } yield workspace
