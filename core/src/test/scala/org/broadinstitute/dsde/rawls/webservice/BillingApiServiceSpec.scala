@@ -186,6 +186,8 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     when(services.samDAO.createResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), any[UserInfo])).thenReturn(Future.successful(()))
     when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.workspaceCreator), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator))), any[UserInfo])).thenReturn(Future.successful(()))
     when(services.samDAO.overwritePolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.canComputeUser), ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser))), any[UserInfo])).thenReturn(Future.successful(()))
+    when(services.samDAO.syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))).thenReturn(Future.successful(Map(WorkbenchEmail("owner-policy@google.group") -> Seq())))
+    when(services.samDAO.syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.canComputeUser))).thenReturn(Future.successful(Map(WorkbenchEmail("can-compute-policy@google.group") -> Seq())))
 
     Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
       sealRoute(services.billingRoutes) ~>
