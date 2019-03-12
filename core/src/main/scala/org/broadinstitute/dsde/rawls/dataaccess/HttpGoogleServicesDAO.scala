@@ -757,7 +757,7 @@ class HttpGoogleServicesDAO(
 
   def projectToDM(projectName: RawlsBillingProjectName) = s"dm-${projectName.value}"
 
-  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, pubSubTopic: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[Unit] = {
+  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -766,7 +766,6 @@ class HttpGoogleServicesDAO(
       "billingAccountId" -> billingAccount.accountName.value,
       "projectId" -> projectName.value,
       "parentOrganization" -> appsDomain,
-      "pubsubTopic" -> pubSubTopic,
 
       "fcBillingUser" -> billingEmail, //FIXME: should be the billing GROUP
 
