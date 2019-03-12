@@ -37,6 +37,7 @@ import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.pubsub.v1.ProjectTopicName
+import com.google.cloud.Identity
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.grpc.Status.Code
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
@@ -105,8 +106,8 @@ class HttpGoogleServicesDAO(
   val jsonFactory = JacksonFactory.getDefaultInstance
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
-  val cromwellMetadataBucketName = GcsBucketName("cromwell-metadata-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com"))
-  val cromwellMetadataTopicName = ProjectTopicName.of(serviceProject, "cromwell-metadata-topic") //TODO what's good suffix for topic name?
+  val cromwellMetadataBucketName = GcsBucketName("cromwell-metadata-" + proxyNamePrefix)
+  val cromwellMetadataTopicName = ProjectTopicName.of(serviceProject, "cromwell-metadata-topic-" + proxyNamePrefix)
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
   val newGoogleStorage = new HttpGoogleStorageDAO(
@@ -154,7 +155,7 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(insertMetadataBucket)
     }
 
-    // unsafeRunSync is not desired, but return type for initBuckets dictates execution has to be happen immediately when the method is called.
+    // unsafeRunSync is not desired, but return type for initBuckets dictates execution has to happen immediately when the method is called.
     // Changing initBuckets's signature requires larger effort which doesn't seem to worth it
     createTopic.unsafeRunSync()
     createMetadataBucketNotification.unsafeRunSync()
@@ -170,10 +171,10 @@ class HttpGoogleServicesDAO(
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
   val createTopic: IO[Unit] = GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson).use {
     topicAdmin =>
-      //TODO: need to test to see if publisher member needs to be added
+      val publisherMembers = List(Identity.serviceAccount(clientEmail))
       val result = for {
         traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-        _ <- topicAdmin.create(cromwellMetadataTopicName, Some(traceId))
+        _ <- topicAdmin.createWithPublisherMembers(cromwellMetadataTopicName, publisherMembers, Some(traceId))
       } yield ()
 
       result.compile.lastOrError
