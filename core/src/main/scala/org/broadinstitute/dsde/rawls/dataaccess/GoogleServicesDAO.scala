@@ -175,7 +175,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord]
 
   //v2
-  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[Unit]
+  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord]
 
   def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit]
 
@@ -195,15 +195,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def grantReadAccess(billingProject: RawlsBillingProjectName,
                       bucketName: String,
                       readers: Set[WorkbenchEmail]): Future[String]
-
-  /**
-   * Second step of project creation. See createProject for more details.
-   *
-   * @param project
-   * @param projectTemplate
-   * @return an operation for each service api specified in projectTemplate
-   */
-  def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Seq[RawlsBillingProjectOperationRecord]]]
 
   /**
    * Last step of project creation. See createProject for more details.
@@ -228,14 +219,13 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 }
 
 case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
-case class ProjectTemplate(policies: Map[String, Seq[String]], services: Seq[String])
+case class ProjectTemplate(policies: Map[String, Seq[String]])
 final case class HammCromwellMetadata(bucketName: GcsBucketName, topicName: ProjectTopicName)
 
 case object ProjectTemplate {
   def from(projectTemplateConfig: Config, requesterPaysRole: String): ProjectTemplate = {
     val projectOwners = projectTemplateConfig.getStringList("owners")
     val projectEditors = projectTemplateConfig.getStringList("editors")
-    val projectServices = projectTemplateConfig.getStringList("services")
-    ProjectTemplate(Map("roles/owner" -> projectOwners.asScala, "roles/editor" -> projectEditors.asScala), projectServices.asScala)
+    ProjectTemplate(Map("roles/owner" -> projectOwners.asScala, "roles/editor" -> projectEditors.asScala))
   }
 }

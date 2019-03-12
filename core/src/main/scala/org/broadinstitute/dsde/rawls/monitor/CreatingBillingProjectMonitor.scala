@@ -63,7 +63,6 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
           (projects, operations)
         }
       }
-      _ <- Future.traverse(operations)(gcsDAO.pollOperation)
       updatedProjectCount <- setupProjects(creatingProjects, operations)
     } yield {
       CheckDone(creatingProjects.size - updatedProjectCount)
@@ -105,9 +104,9 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
           case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, true, Some(error), _)) =>
             // create project operation finished with an error
-            logger.debug(s"project ${project.projectName} creation finished with errors: $error")
+            logger.debug(s"project ${project.projectName.value} creation finished with errors: $error")
             gcsDAO.cleanupDMProject(project.projectName) map { _ =>
-              project.copy(status = CreationStatuses.Error, message = Option(error))
+              project.copy(status = CreationStatuses.Error, message = Option(s"project ${project.projectName.value} creation finished with errors: $error"))
             }
 
           case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, _, _, _)) =>

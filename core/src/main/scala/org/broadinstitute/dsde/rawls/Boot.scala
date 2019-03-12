@@ -238,14 +238,11 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getStringList("projectTemplate.owners").asScala
       val projectEditors =
         gcsConfig.getStringList("projectTemplate.editors").asScala
-      val projectServices =
-        gcsConfig.getStringList("projectTemplate.services").asScala
       val projectOwnerGrantableRoles =
         gcsConfig.getStringList("projectTemplate.ownerGrantableRoles")
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
       val projectTemplate = ProjectTemplate(
-        Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors),
-        projectServices
+        Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors)
       )
 
       val notificationDAO = new PubSubNotificationDAO(

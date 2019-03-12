@@ -199,7 +199,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] =
     Future.successful(RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, "opid", false, None, "create"))
 
-  override def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[Unit] =
+  override def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] =
     Future.successful(RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, "opid", false, None, "create"))
 
   override def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(())
@@ -227,12 +227,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def grantReadAccess(billingProject: RawlsBillingProjectName,
                                bucketName: String,
                                readers: Set[WorkbenchEmail]): Future[String] = Future(bucketName)
-
-  override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = Future.successful {
-    Try(projectTemplate.services.map { service =>
-      RawlsBillingProjectOperationRecord(project.projectName.value, service, UUID.randomUUID().toString, false, None, "services")
-    })
-  }
 
   override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
     Future.successful(rawlsBillingProjectOperation.copy(done = true))
