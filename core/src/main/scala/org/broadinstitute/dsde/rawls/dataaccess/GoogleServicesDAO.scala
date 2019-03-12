@@ -173,7 +173,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord]
 
   //v2
-  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, pubSubTopic: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[Unit]
+  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[Unit]
 
   def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit]
 

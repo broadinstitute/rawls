@@ -84,8 +84,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def AdminAddLibraryCurator(userEmail: RawlsUserEmail) = asFCAdmin { addLibraryCurator(userEmail) }
   def AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) = asFCAdmin { removeLibraryCurator(userEmail) }
 
-  val dmPubSubTopic = dmConfig.getString("pubSubTopic")
-  val dmPubSubSubscription = dmConfig.getString("pubSubSubscription")
   val dmTemplatePath = dmConfig.getString("templatePath")
   val dmProject = dmConfig.getString("projectID")
 
@@ -343,7 +341,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
               policies = projectTemplate.policies ++
                 getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole))
 
-            _ <- gcsDAO.createProject2(projectName, billingAccount, dmTemplatePath, dmPubSubTopic, requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, updatedTemplate).recoverWith {
+            _ <- gcsDAO.createProject2(projectName, billingAccount, dmTemplatePath, requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, updatedTemplate).recoverWith {
               case t: Throwable =>
                 // failed to create project in google land, rollback inserts above
                 dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) } map(_ => throw t)
