@@ -750,7 +750,7 @@ class HttpGoogleServicesDAO(
 
   def projectToDM(projectName: RawlsBillingProjectName) = s"dm-${projectName.value}"
 
-  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[Unit] = {
+  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -925,39 +925,6 @@ class HttpGoogleServicesDAO(
       })
 
     } yield updated
-  }
-
-  override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = {
-    implicit val instrumentedService = GoogleInstrumentedService.Billing
-    val projectName = project.projectName
-    val credential = getBillingServiceAccountCredential
-
-    val billingManager = getCloudBillingManager(credential)
-    val serviceManager = getServicesManager(credential)
-
-    val projectResourceName = s"projects/${projectName.value}"
-
-    // all of these things should be idempotent
-    toFutureTry(for {
-      // set the billing account
-      billing <- retryWhen500orGoogleError(() => {
-        val billingAccount = project.billingAccount.getOrElse(throw new RawlsException(s"billing account undefined for project ${project.projectName.value}")).value
-        executeGoogleRequest(billingManager.projects().updateBillingInfo(projectResourceName, new ProjectBillingInfo().setBillingEnabled(true).setBillingAccountName(billingAccount)))
-      })
-
-      // add new policies to the project
-      _ <- addPolicyBindings(projectName, projectTemplate.policies.mapValues(_.toList))
-
-      // enable appropriate google apis
-      operations <- Future.sequence(projectTemplate.services.map { service => retryWhen500orGoogleError(() => {
-        executeGoogleRequest(serviceManager.services().enable(service, new EnableServiceRequest().setConsumerId(s"project:${projectName.value}")))
-      }) map { googleOperation =>
-        RawlsBillingProjectOperationRecord(projectName.value, service, googleOperation.getName, toScalaBool(googleOperation.getDone), Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_SERVICE_MANAGEMENT)
-      }})
-
-    } yield {
-      operations
-    })
   }
 
   override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = {
