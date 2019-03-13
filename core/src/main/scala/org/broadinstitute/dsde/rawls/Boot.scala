@@ -11,6 +11,7 @@ import cats.effect.IO
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.pubsub.v1.ProjectTopicName
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
@@ -32,6 +33,7 @@ import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -95,6 +97,12 @@ object Boot extends App with LazyLogging {
     val jsonFactory = JacksonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
+    val hammCromwellMetadataConfig = gcsConfig.getConfig("hamm-cromwell-metadata")
+    val serviceProject = gcsConfig.getString("serviceProject")
+    val hammCromwellMetadata = HammCromwellMetadata(
+      GcsBucketName(hammCromwellMetadataConfig.getString("bucket-name")),
+      ProjectTopicName.of(serviceProject, hammCromwellMetadataConfig.getString("topic-name "))
+    )
     val gcsDAO = new HttpGoogleServicesDAO(
       false,
       clientSecrets,
@@ -106,13 +114,14 @@ object Boot extends App with LazyLogging {
       gcsConfig.getString("groupsPrefix"),
       gcsConfig.getString("appName"),
       gcsConfig.getInt("deletedBucketCheckSeconds"),
-      gcsConfig.getString("serviceProject"),
+      serviceProject,
       gcsConfig.getString("tokenEncryptionKey"),
       gcsConfig.getString("tokenSecretsJson"),
       gcsConfig.getString("billingPemEmail"),
       gcsConfig.getString("pathToBillingPem"),
       gcsConfig.getString("billingEmail"),
       gcsConfig.getInt("bucketLogsMaxAge"),
+      hammCromwellMetadata = hammCromwellMetadata,
       workbenchMetricBaseName = metricsPrefix,
       proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", "")
     )

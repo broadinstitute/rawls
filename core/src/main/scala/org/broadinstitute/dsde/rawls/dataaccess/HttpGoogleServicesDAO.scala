@@ -84,6 +84,7 @@ class HttpGoogleServicesDAO(
   val billingEmail: String,
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
+  hammCromwellMetadata: HammCromwellMetadata,
   override val workbenchMetricBaseName: String,
   proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
 
@@ -106,8 +107,6 @@ class HttpGoogleServicesDAO(
   val jsonFactory = JacksonFactory.getDefaultInstance
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
-  val cromwellMetadataBucketName = GcsBucketName("cromwell-metadata-" + proxyNamePrefix)
-  val cromwellMetadataTopicName = ProjectTopicName.of(serviceProject, "cromwell-metadata-topic-" + proxyNamePrefix)
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
   val newGoogleStorage = new HttpGoogleStorageDAO(
@@ -117,6 +116,25 @@ class HttpGoogleServicesDAO(
   )
 
   initBuckets()
+
+  val createMetadataBucketNotification: IO[Unit] = BlazeClientBuilder[IO](executionContext).resource.use {
+    httpClient =>
+      val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
+      val storageNotificationCreater = GoogleStorageNotificationCreater(httpClient, metadataNotificationConfig)
+      storageNotificationCreater.createNotification(hammCromwellMetadata.topicName, hammCromwellMetadata.bucketName, Filters(List(NotificationEventTypes.ObjectFinalize), None))
+  }
+
+  implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
+  val createTopic: IO[Unit] = GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson).use {
+    topicAdmin =>
+      val publisherMembers = List(Identity.serviceAccount(clientEmail))
+      val result = for {
+        traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
+        _ <- topicAdmin.createWithPublisherMembers(hammCromwellMetadata.topicName, publisherMembers, Some(traceId))
+      } yield ()
+
+      result.compile.lastOrError
+  }
 
   protected def initBuckets(): Unit = {
     implicit val service = GoogleInstrumentedService.Storage
@@ -143,41 +161,22 @@ class HttpGoogleServicesDAO(
     }
 
     try {
-      getStorage(getBucketServiceAccountCredential).buckets().get(cromwellMetadataBucketName.value).executeUsingHead()
+      getStorage(getBucketServiceAccountCredential).buckets().get(hammCromwellMetadata.bucketName.value).executeUsingHead()
     } catch {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue =>
         val metadataBucket = new Bucket().
-          setName(cromwellMetadataBucketName.value).
+          setName(hammCromwellMetadata.bucketName.value).
           setAcl(bucketAcls).
           setDefaultObjectAcl(defaultObjectAcls)
         val insertMetadataBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, metadataBucket)
-        Await.result(newGoogleStorage.setBucketLifecycle(cromwellMetadataBucketName, 30), 5 seconds)
         executeGoogleRequest(insertMetadataBucket)
+        Await.result(newGoogleStorage.setBucketLifecycle(hammCromwellMetadata.bucketName, 30), 5 seconds)
     }
 
     // unsafeRunSync is not desired, but return type for initBuckets dictates execution has to happen immediately when the method is called.
     // Changing initBuckets's signature requires larger effort which doesn't seem to worth it
     createTopic.unsafeRunSync()
     createMetadataBucketNotification.unsafeRunSync()
-  }
-
-  val createMetadataBucketNotification: IO[Unit] = BlazeClientBuilder[IO](executionContext).resource.use {
-    httpClient =>
-      val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
-      val storageNotificationCreater = GoogleStorageNotificationCreater(httpClient, metadataNotificationConfig)
-      storageNotificationCreater.createNotification(cromwellMetadataTopicName, cromwellMetadataBucketName, Filters(List(NotificationEventTypes.ObjectFinalize), None))
-  }
-
-  implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
-  val createTopic: IO[Unit] = GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson).use {
-    topicAdmin =>
-      val publisherMembers = List(Identity.serviceAccount(clientEmail))
-      val result = for {
-        traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-        _ <- topicAdmin.createWithPublisherMembers(cromwellMetadataTopicName, publisherMembers, Some(traceId))
-      } yield ()
-
-      result.compile.lastOrError
   }
 
   def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
@@ -500,7 +499,7 @@ class HttpGoogleServicesDAO(
 
   override def storeCromwellMetadata(objectName: GcsObjectName, body: fs2.Stream[fs2.Pure, Byte]): Future[Unit] = {
     val gzipped = (body through fs2.compress.gzip[fs2.Pure](2048)).compile.toList.toArray //after fs2 1.0.4, we can `to[Array]` directly
-    newGoogleStorage.storeObject(cromwellMetadataBucketName, objectName, new ByteArrayInputStream(gzipped), "text/plain")
+    newGoogleStorage.storeObject(hammCromwellMetadata.bucketName, objectName, new ByteArrayInputStream(gzipped), "text/plain")
   }
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {

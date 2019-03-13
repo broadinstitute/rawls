@@ -6,6 +6,7 @@ import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.genomics.model.Operation
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
+import com.google.pubsub.v1.ProjectTopicName
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
@@ -216,3 +217,4 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
 case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
 case class ProjectTemplate(policies: Map[String, Seq[String]], services: Seq[String])
+final case class HammCromwellMetadata(bucketName: GcsBucketName, topicName: ProjectTopicName)

@@ -7,7 +7,9 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.cloudbilling.model.BillingAccount
+import com.google.pubsub.v1.ProjectTopicName
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 
 import scala.collection.mutable
@@ -49,6 +51,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     billingPemFile,
     billingEmail,
     bucketLogsMaxAge,
+    hammCromwellMetadata = HammCromwellMetadata(GcsBucketName("fakeBucketName"), ProjectTopicName.of(serviceProject, "fakeTopic")),
     workbenchMetricBaseName = "test", proxyNamePrefix = "")(system, materializer, executionContext, cs, timer) {
 
   private var token: String = null
