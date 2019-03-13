@@ -750,7 +750,7 @@ class HttpGoogleServicesDAO(
 
   def projectToDM(projectName: RawlsBillingProjectName) = s"dm-${projectName.value}"
 
-  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] = {
+  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -933,38 +933,6 @@ class HttpGoogleServicesDAO(
 
   override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = {
     removePolicyBindings(projectName, Map(s"roles/$role" -> Seq(s"group:${groupEmail.value}")))
-  }
-
-  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[WorkbenchEmail]): Future[Try[Unit]] = {
-    implicit val service = GoogleInstrumentedService.Billing
-    val projectName = project.projectName
-    val credential = getBillingServiceAccountCredential
-
-    val computeManager = getComputeManager(credential)
-
-    // all of these things should be idempotent
-    toFutureTry(for {
-      // create project usage export bucket
-      exportBucket <- retryWithRecoverWhen500orGoogleError(() => {
-        val bucket = new Bucket().setName(projectUsageExportBucketName(projectName))
-        executeGoogleRequest(getStorage(credential).buckets.insert(projectName.value, bucket))
-      }) { case t: HttpResponseException if t.getStatusCode == 409 => new Bucket().setName(projectUsageExportBucketName(projectName)) }
-
-      // create bucket for workspace bucket storage/usage logs
-      storageLogsBucket <- createStorageLogsBucket(projectName)
-      _ <- retryWhen500orGoogleError(() => { allowGoogleCloudStorageWrite(storageLogsBucket) })
-
-      googleProject <- getGoogleProject(projectName)
-
-      cromwellAuthBucket <- createCromwellAuthBucket(projectName, googleProject.getProjectNumber, authBucketReaders)
-
-      _ <- retryWhen500orGoogleError(() => {
-        val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
-        executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, usageLoc))
-      })
-    } yield {
-      // nothing
-    })
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {

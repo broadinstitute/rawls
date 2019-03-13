@@ -152,29 +152,19 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getServiceAccountUserInfo(): Future[UserInfo]
 
   /**
-   * The project creation process has 3 steps of which this function is the first:
+   * The project creation process is now mostly handled by Deployment Manager.
    *
-   * - createProject creates the project in google, reserving the name if it does not exist or throwing an exception (usually) if it does.
-   * This returns an asynchronous operation that creates the project which may fail. This function should do nothing else,
-   * it should be fast and just get the process started.
+   * - First, we call Deployment Manager, telling it to kick off its template and create the new project. This gives us back
+   * an operation that needs to be polled.
    *
-   * - beginProjectSetup runs once a project is successfully created. It sets up the billing and security then enables appropriate services.
-   * Enabling a service is another asynchronous operation. There will be an asynchronous operation for each service enabled
-   * but it seems Google is smrt and will group some operations together
-   * so the operation ids may not be unique. All google calls that do NOT require enabled services should go in this function.
-   *
-   * - completeProjectSetup once all the services are enabled (specifically compute and storage) we can create buckets and set the
-   * compute usage export bucket. All google calls that DO require enabled APIs should go in this function.
-   *
-   * @param projectName
-   * @param billingAccount used for a label on the project
-   * @return an operation for creating the project
+   * - Polling is handled by CreatingBillingProjectMonitor. Once the deployment is completed, CBPM deletes the deployment, as
+   * there is a per-project limit on number of deployments, and then marks the project as fully created.
    */
-  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord]
+  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord]
 
-  //v2
-  def createProject2(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord]
-
+  /**
+    *
+    */
   def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   /**
@@ -193,13 +183,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def grantReadAccess(billingProject: RawlsBillingProjectName,
                       bucketName: String,
                       readers: Set[WorkbenchEmail]): Future[String]
-
-  /**
-   * Last step of project creation. See createProject for more details.
-   * @param project
-   * @return
-   */
-  def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[WorkbenchEmail]): Future[Try[Unit]]
 
   def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
