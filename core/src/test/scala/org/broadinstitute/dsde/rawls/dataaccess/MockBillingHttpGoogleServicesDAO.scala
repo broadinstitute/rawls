@@ -39,7 +39,6 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     clientEmail,
     subEmail,
     pemFile,
-    pathToCredentialJson,
     appsDomain,
     groupsPrefix,
     appName,
@@ -52,6 +51,9 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     billingEmail,
     bucketLogsMaxAge,
     hammCromwellMetadata = HammCromwellMetadata(GcsBucketName("fakeBucketName"), ProjectTopicName.of(serviceProject, "fakeTopic")),
+    googleStorageService = null,
+    googleServiceHttp = null,
+    topicAdmin = null,
     workbenchMetricBaseName = "test", proxyNamePrefix = "")(system, materializer, executionContext, cs, timer) {
 
   private var token: String = null

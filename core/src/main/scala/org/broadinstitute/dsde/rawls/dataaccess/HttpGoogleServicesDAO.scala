@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.io._
 import java.util.UUID
 
+//import _root_.io.chrisdavenport.log4cats.Logger
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
@@ -36,10 +37,11 @@ import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
-import com.google.pubsub.v1.ProjectTopicName
 import com.google.cloud.Identity
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import com.google.cloud.storage.BucketInfo.LifecycleRule
+import com.google.cloud.storage.BucketInfo.LifecycleRule.LifecycleAction
 import io.grpc.Status.Code
+import fs2._
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.GoogleUtilities
@@ -49,19 +51,14 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.google2.{Filters, GoogleStorageNotificationCreater, GoogleTopicAdmin, NotificationCreaterConfig, NotificationEventTypes}
+import org.broadinstitute.dsde.workbench.google2._
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
-import org.http4s.Uri
-import org.http4s.client.blaze.BlazeClientBuilder
 import org.joda.time
 import spray.json._
-import fs2._
-
+import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import scala.collection.JavaConversions._
 import scala.concurrent.{Future, _}
-import scala.concurrent.duration._
 import scala.io.Source
 import scala.util.Try
 
@@ -71,7 +68,6 @@ class HttpGoogleServicesDAO(
   clientEmail: String,
   subEmail: String,
   pemFile: String,
-  pathToCredentialJson: String,
   appsDomain: String,
   groupsPrefix: String,
   appName: String,
@@ -85,11 +81,14 @@ class HttpGoogleServicesDAO(
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
   hammCromwellMetadata: HammCromwellMetadata,
+  googleStorageService: GoogleStorageService[IO],
+  googleServiceHttp: GoogleServiceHttp[IO],
+  topicAdmin: GoogleTopicAdmin[IO],
   override val workbenchMetricBaseName: String,
   proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
-
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
+  implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
   val API_SERVICE_MANAGEMENT = "ServiceManagement"
@@ -101,7 +100,6 @@ class HttpGoogleServicesDAO(
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val genomicsScopes = Seq(GenomicsScopes.GENOMICS) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
-  val googleApiUri = Uri.unsafeFromString("https://www.googleapis.com")
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
@@ -109,32 +107,8 @@ class HttpGoogleServicesDAO(
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
-  val newGoogleStorage = new HttpGoogleStorageDAO(
-    appName,
-    GoogleCredentialModes.Pem(WorkbenchEmail(clientEmail), new File(pemFile)),
-    workbenchMetricBaseName
-  )
-
-  val createMetadataBucketNotification: IO[Unit] = BlazeClientBuilder[IO](executionContext).resource.use {
-    httpClient =>
-      val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
-      val storageNotificationCreater = GoogleStorageNotificationCreater(httpClient, metadataNotificationConfig)
-      storageNotificationCreater.createNotification(hammCromwellMetadata.topicName, hammCromwellMetadata.bucketName, Filters(List(NotificationEventTypes.ObjectFinalize), None))
-  }
-
-  implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
-  val createTopic: IO[Unit] = GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson).use {
-    topicAdmin =>
-      val publisherMembers = List(Identity.serviceAccount(clientEmail))
-      val result = for {
-        traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-        _ <- topicAdmin.createWithPublisherMembers(hammCromwellMetadata.topicName, publisherMembers, Some(traceId))
-      } yield ()
-
-      result.compile.lastOrError
-  }
-
   initBuckets()
+
   protected def initBuckets(): Unit = {
     implicit val service = GoogleInstrumentedService.Storage
     val bucketAcls = List(new BucketAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
@@ -159,23 +133,20 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(insertTokenBucket)
     }
 
-    try {
-      getStorage(getBucketServiceAccountCredential).buckets().get(hammCromwellMetadata.bucketName.value).executeUsingHead()
-    } catch {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue =>
-        val metadataBucket = new Bucket().
-          setName(hammCromwellMetadata.bucketName.value).
-          setAcl(bucketAcls).
-          setDefaultObjectAcl(defaultObjectAcls)
-        val insertMetadataBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, metadataBucket)
-        executeGoogleRequest(insertMetadataBucket)
-        Await.result(newGoogleStorage.setBucketLifecycle(hammCromwellMetadata.bucketName, 30), 5 seconds)
-    }
+    val lifecyleRule = new LifecycleRule(
+      LifecycleAction.newDeleteAction(), LifecycleRule.LifecycleCondition.newBuilder().setAge(30).build())
 
+    val result = for{
+      traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
+      _ <- googleStorageService.createBucketWithAdminRole(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, Identity.serviceAccount(clientEmail), Some(traceId))
+      _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
+      projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
+      _ <- topicAdmin.createWithPublisherMembers(hammCromwellMetadata.topicName, List(projectServiceAccount), Some(traceId))
+      _ <- Stream.eval(googleServiceHttp.createNotification(hammCromwellMetadata.topicName, hammCromwellMetadata.bucketName, Filters(List(NotificationEventTypes.ObjectFinalize), None), Some(traceId)))
+    } yield ()
     // unsafeRunSync is not desired, but return type for initBuckets dictates execution has to happen immediately when the method is called.
     // Changing initBuckets's signature requires larger effort which doesn't seem to worth it
-    createTopic.unsafeRunSync()
-    createMetadataBucketNotification.unsafeRunSync()
+    result.compile.drain.unsafeRunSync()
   }
 
   def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
@@ -496,9 +467,9 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def storeCromwellMetadata(objectName: GcsObjectName, body: fs2.Stream[fs2.Pure, Byte]): Future[Unit] = {
+  override def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): IO[Unit] = {
     val gzipped = (body through fs2.compress.gzip[fs2.Pure](2048)).compile.toList.toArray //after fs2 1.0.4, we can `to[Array]` directly
-    newGoogleStorage.storeObject(hammCromwellMetadata.bucketName, objectName, new ByteArrayInputStream(gzipped), "text/plain")
+    googleStorageService.storeObject(hammCromwellMetadata.bucketName, objectName, gzipped, "text/plain")
   }
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {
