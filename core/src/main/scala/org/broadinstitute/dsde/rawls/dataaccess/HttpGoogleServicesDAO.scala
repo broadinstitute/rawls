@@ -115,8 +115,6 @@ class HttpGoogleServicesDAO(
     workbenchMetricBaseName
   )
 
-  initBuckets()
-
   val createMetadataBucketNotification: IO[Unit] = BlazeClientBuilder[IO](executionContext).resource.use {
     httpClient =>
       val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
@@ -136,6 +134,7 @@ class HttpGoogleServicesDAO(
       result.compile.lastOrError
   }
 
+  initBuckets()
   protected def initBuckets(): Unit = {
     implicit val service = GoogleInstrumentedService.Storage
     val bucketAcls = List(new BucketAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
