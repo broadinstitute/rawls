@@ -77,13 +77,13 @@ trait RawlsBillingProjectComponent {
       rawlsBillingProjectQuery.filter(_.projectName === billingProjectName.value).delete map { count => count > 0 }
     }
 
-    def getBillingProjectDetails(projectNames: Set[RawlsBillingProjectName]): ReadAction[Map[String, (CreationStatuses.CreationStatus, Option[String])]] = {
+    def getBillingProjectDetails(projectNames: Set[RawlsBillingProjectName]): ReadAction[Map[String, (CreationStatuses.CreationStatus, Option[String], Option[String])]] = {
       val query = for {
         project <- rawlsBillingProjectQuery if (project.projectName.inSetBind(projectNames.map(_.value)))
       } yield project
 
       query.result.map(_.map { project =>
-        project.projectName -> (CreationStatuses.withName(project.creationStatus), project.message)
+        project.projectName -> (CreationStatuses.withName(project.creationStatus), project.message, project.billingAccount)
       }.toMap)
     }
 

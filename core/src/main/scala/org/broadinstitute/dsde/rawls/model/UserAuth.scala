@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import spray.json._
 
-case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole, creationStatus: CreationStatuses.CreationStatus, message: Option[String] = None)
+case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole, creationStatus: CreationStatuses.CreationStatus, message: Option[String] = None, billingAccount: Option[RawlsBillingAccountName] = None)
 case class RawlsBillingProjectStatus(projectName: RawlsBillingProjectName, creationStatus: CreationStatuses.CreationStatus)
 case class RawlsBillingProjectMember(email: RawlsUserEmail, role: ProjectRoles.ProjectRole)
 case class RawlsGroupMemberList(userEmails: Option[Seq[String]] = None, subGroupEmails: Option[Seq[String]] = None, userSubjectIds: Option[Seq[String]] = None, subGroupNames: Option[Seq[String]] = None)
@@ -146,7 +146,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val BillingAccountScopesFormat = jsonFormat1(BillingAccountScopes)
 
-  implicit val RawlsBillingProjectMembershipFormat = jsonFormat4(RawlsBillingProjectMembership)
+  implicit val RawlsBillingProjectMembershipFormat = jsonFormat5(RawlsBillingProjectMembership)
 
   implicit val RawlsBillingProjectStatusFormat = jsonFormat2(RawlsBillingProjectStatus)
 
