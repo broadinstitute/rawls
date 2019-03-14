@@ -41,7 +41,7 @@ object Dependencies {
   val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev14-" + googleV)
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev17-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
-  val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.16.1"
+  val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.17.1"
   val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
@@ -82,7 +82,7 @@ object Dependencies {
   val workbenchGoogleV = "0.18-f3a0a5a"
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
   val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests"
-  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.1-09ee655" excludeAll(excludeWorkbenchModel)
+  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.1-f79b89d-SNAP" excludeAll(excludeWorkbenchModel)
 
   val metricsDependencies = Seq(
     metricsScala,
