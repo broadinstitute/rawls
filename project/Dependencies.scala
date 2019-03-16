@@ -1,8 +1,8 @@
 import sbt._
 
 object Dependencies {
-  val akkaV = "2.5.16"
-  val akkaHttpV = "10.1.3"
+  val akkaV = "2.5.19"
+  val akkaHttpV = "10.1.7"
   val slickV = "3.2.3"
 
   val googleV = "1.22.0"
@@ -119,6 +119,7 @@ object Dependencies {
     cats,
     akkaHttpTestKit,
     scalatest,
+    akkaTestKit,
     mockito
   )
 
