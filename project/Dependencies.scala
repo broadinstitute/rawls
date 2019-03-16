@@ -119,6 +119,7 @@ object Dependencies {
     cats,
     akkaHttpTestKit,
     scalatest,
+    akkaTestKit,
     mockito
   )
 

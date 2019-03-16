@@ -88,7 +88,7 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
   "retryWhen500orGoogleError" should "retry once per backoff interval and then fail" in {
     withStatsD {
       val counter = new Counter()
-      whenReady(retryWhen500orGoogleError(counter.alwaysBoom).failed) { f =>
+      whenReady(retryWhen500orGoogleError(() => counter.alwaysBoom()).failed) { f =>
         f shouldBe a[IOException]
         counter.counter shouldBe 4 //extra one for the first attempt
       }
@@ -101,7 +101,7 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
   it should "not retry after a success" in {
     withStatsD {
       val counter = new Counter()
-      whenReady(retryWhen500orGoogleError(counter.boomOnce)) { s =>
+      whenReady(retryWhen500orGoogleError(() => counter.boomOnce())) { s =>
         s shouldBe 42
         counter.counter shouldBe 2
       }
@@ -119,7 +119,7 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
         case _: IOException => 42
       }
 
-      whenReady(retryWithRecoverWhen500orGoogleError(counter.alwaysBoom)(recoverIO)) { s =>
+      whenReady(retryWithRecoverWhen500orGoogleError(() => counter.alwaysBoom())(recoverIO)) { s =>
         s shouldBe 42
         counter.counter shouldBe 1
       }
@@ -137,7 +137,7 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
         case h: HttpResponseException if h.getStatusCode == 404 => 42
       }
 
-      whenReady(retryWithRecoverWhen500orGoogleError(counter.httpBoom)(recoverHttp).failed) { f =>
+      whenReady(retryWithRecoverWhen500orGoogleError(() => counter.httpBoom())(recoverHttp).failed) { f =>
         f shouldBe a[HttpResponseException]
         counter.counter shouldBe 4 //extra one for the first attempt
       }
