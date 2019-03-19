@@ -83,7 +83,7 @@ object Dependencies {
   val workbenchGoogleV = "0.18-f3a0a5a"
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
   val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests" excludeAll(excludeWorkbenchModel)
-  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.2-cc7db08-SNAP" excludeAll(excludeWorkbenchUtil, excludeWorkbenchModel)
+  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.2-58e89a5-SNAP" excludeAll(excludeWorkbenchUtil, excludeWorkbenchModel)
   val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
 
   val metricsDependencies = Seq(

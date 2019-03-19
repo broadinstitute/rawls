@@ -11,6 +11,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
 import cats.effect.{ContextShift, IO, Timer}
+import cats.data.NonEmptyList
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -137,7 +138,8 @@ class HttpGoogleServicesDAO(
 
     val result = for{
       traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-      _ <- googleStorageService.createBucketWithAdminRole(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, Identity.serviceAccount(clientEmail), Some(traceId))
+      _ <- googleStorageService.createBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Some(traceId))
+      _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
       _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
       projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
       _ <- topicAdmin.createWithPublisherMembers(hammCromwellMetadata.topicName, List(projectServiceAccount), Some(traceId))
