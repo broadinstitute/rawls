@@ -196,9 +196,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Seq(new Operation))
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] =
-    Future.successful(RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, "opid", false, None, "create"))
-
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] =
     Future.successful(RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, "opid", false, None, "create"))
 
