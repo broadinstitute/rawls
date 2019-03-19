@@ -95,6 +95,7 @@ class HttpGoogleServicesDAO(
   billingPemEmail: String,
   billingPemFile: String,
   val billingEmail: String,
+  val billingGroupEmail: String,
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
   hammCromwellMetadata: HammCromwellMetadata,
@@ -757,33 +758,31 @@ class HttpGoogleServicesDAO(
 
   def projectToDM(projectName: RawlsBillingProjectName) = s"dm-${projectName.value}"
 
-  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] = {
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
 
-    val properties = Map (
-      "billingAccountId" -> billingAccount.accountName.value,
-      "projectId" -> projectName.value,
-      "parentOrganization" -> appsDomain,
-
-      "fcBillingUser" -> billingEmail, //FIXME: should be the billing GROUP
-
-      "projectOwnersGroup" -> ownerGroupEmail.value,
-      "projectViewersGroup" -> computeUserGroupEmail.value,
-      "requesterPaysRole" -> requesterPaysRole,
-      "highSecurityNetwork" -> "OPTIONAL",
-      "labels" -> "OPTIONAL_MAP"
-    )
-
-    val seqprops = Map (
-      "fcProjectOwners" -> projectTemplate.policies("roles/owner"), //FIXME these are seqs
-      "fcProjectEditors" -> projectTemplate.policies("roles/editor")
-    )
-
+    import spray.json._
     import spray.json.DefaultJsonProtocol._
+
+    val properties = Map (
+      "billingAccountId" -> billingAccount.accountName.value.toJson,
+      "projectId" -> projectName.value.toJson,
+      "parentOrganization" -> appsDomain.toJson,
+      "fcBillingUser" -> billingGroupEmail.toJson,
+      "projectOwnersGroup" -> ownerGroupEmail.value.toJson,
+      "projectViewersGroup" -> computeUserGroupEmail.value.toJson,
+      "requesterPaysRole" -> requesterPaysRole.toJson,
+      "highSecurityNetwork" -> false.toJson,
+      "fcProjectOwners" -> projectTemplate.policies("roles/owner").toJson,
+      "fcProjectEditors" -> projectTemplate.policies("roles/editor").toJson,
+      "labels" ->
+        Map("templatePath" -> dmTemplatePath.toJson).toJson
+    )
+
     //config is a list of one resource: type=composite-type, name=whocares, properties=pokein
-    val confy = new ConfigFile().setContent(getDMConfigString(projectName, dmTemplatePath, properties.mapValues(_.toJson) ++ seqprops.mapValues(_.toJson)))
+    val confy = new ConfigFile().setContent(getDMConfigString(projectName, dmTemplatePath, properties))
     val dconf = new TargetConfiguration().setConfig(confy)
 
     retryWhen500orGoogleError(() => {
@@ -794,25 +793,6 @@ class HttpGoogleServicesDAO(
       val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
       RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, googleOperation.getName, false, errorStr, API_CLOUD_RESOURCE_MANAGER)
     }
-  }
-
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] = {
-    implicit val service = GoogleInstrumentedService.Billing
-    val credential = getBillingServiceAccountCredential
-
-    val cloudResManager = getCloudResourceManager(credential)
-
-    retryWhen500orGoogleError(() => {
-      executeGoogleRequest(cloudResManager.projects().create(new Project().setName(projectName.value).setProjectId(projectName.value).setLabels(Map("billingaccount" -> labelSafeString(billingAccount.displayName)).asJava)))
-    }).recover {
-      case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
-    } map ( googleOperation => {
-      if (toScalaBool(googleOperation.getDone) && Option(googleOperation.getError).exists(_.getCode.intValue() == Code.ALREADY_EXISTS.value())) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
-      }
-      RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, googleOperation.getName, toScalaBool(googleOperation.getDone), Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_CLOUD_RESOURCE_MANAGER)
-    })
   }
 
   override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {

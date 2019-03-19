@@ -31,6 +31,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   billingPemEmail: String,
   billingPemFile: String,
   billingEmail: String,
+  billingGroupEmail: String,
   bucketLogsMaxAge: Int)
   (implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val cs: ContextShift[IO], override val timer: Timer[IO])
   extends HttpGoogleServicesDAO(
@@ -49,6 +50,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     billingPemEmail,
     billingPemFile,
     billingEmail,
+    billingGroupEmail,
     bucketLogsMaxAge,
     hammCromwellMetadata = HammCromwellMetadata(GcsBucketName("fakeBucketName"), ProjectTopicName.of(serviceProject, "fakeTopic")),
     googleStorageService = null,

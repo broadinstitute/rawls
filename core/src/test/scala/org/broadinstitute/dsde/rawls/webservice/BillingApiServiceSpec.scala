@@ -212,7 +212,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
 
   it should "rollback billing project inserts when there is a google error" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource, new MockGoogleServicesDAO("test") {
-      override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] = {
+      override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] = {
         Future.failed(new Exception("test exception"))
       }
     }) { services =>
