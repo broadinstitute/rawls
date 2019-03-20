@@ -827,7 +827,7 @@ class HttpGoogleServicesDAO(
         val deploymentManager = getDeploymentManager(credential)
 
         retryWhen500orGoogleError(() => {
-          executeGoogleRequest(deploymentManager.operations().get(rawlsBillingProjectOperation.projectName, rawlsBillingProjectOperation.operationId))
+          executeGoogleRequest(deploymentManager.operations().get(deploymentMgrProject, rawlsBillingProjectOperation.operationId))
         }).map { op =>
           val errorStr = Option(op.getError).map(errors => errors.getErrors.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
           rawlsBillingProjectOperation.copy(done = op.getStatus == "DONE", errorMessage = errorStr)
