@@ -12,6 +12,8 @@ import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
 import cats.effect.{ContextShift, IO, Timer}
 import cats.data.NonEmptyList
+import cats.syntax.functor._
+import cats.instances.future._
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -753,7 +755,7 @@ class HttpGoogleServicesDAO(
     val deploymentManager = getDeploymentManager(credential)
 
     executeGoogleRqWithRetry(
-      deploymentManager.deployments().delete(deploymentMgrProject, projectToDM(projectName)).setDeletePolicy("ABANDON")).mapTo[Unit]
+      deploymentManager.deployments().delete(deploymentMgrProject, projectToDM(projectName)).setDeletePolicy("ABANDON")).void
   }
 
   def projectToDM(projectName: RawlsBillingProjectName) = s"dm-${projectName.value}"
@@ -791,7 +793,7 @@ class HttpGoogleServicesDAO(
       }
     }) map { googleOperation =>
       val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
-      RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, googleOperation.getName, false, errorStr, API_CLOUD_RESOURCE_MANAGER)
+      RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, googleOperation.getName, false, errorStr, API_DEPLOYMENT_MANAGER)
     }
   }
 
