@@ -88,6 +88,7 @@ class HttpGoogleServicesDAO(
   subEmail: String,
   pemFile: String,
   appsDomain: String,
+  orgID: Int,
   groupsPrefix: String,
   appName: String,
   deletedBucketCheckSeconds: Int,
@@ -793,6 +794,7 @@ class HttpGoogleServicesDAO(
   override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.Billing
     val credential = getBillingServiceAccountCredential
+    val dmCredential = getDeploymentManagerAccountCredential
 
     // this code is a colossal DRY violation but because the operations collection is different
     // for cloudResManager and servicesManager and they return different but identical Status objects
@@ -817,7 +819,7 @@ class HttpGoogleServicesDAO(
         }
 
       case API_DEPLOYMENT_MANAGER =>
-        val deploymentManager = getDeploymentManager(credential)
+        val deploymentManager = getDeploymentManager(dmCredential)
 
         retryWhen500orGoogleError(() => {
           executeGoogleRequest(deploymentManager.operations().get(deploymentMgrProject, rawlsBillingProjectOperation.operationId))
