@@ -130,7 +130,7 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("subEmail"),
         gcsConfig.getString("pathToPem"),
         gcsConfig.getString("appsDomain"),
-        gcsConfig.getString("groupsPrefix"),
+        dmConfig.getInt("orgID"),gcsConfig.getString("groupsPrefix"),
         gcsConfig.getString("appName"),
         gcsConfig.getInt("deletedBucketCheckSeconds"),
         serviceProject,
