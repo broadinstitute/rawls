@@ -88,7 +88,7 @@ class HttpGoogleServicesDAO(
   subEmail: String,
   pemFile: String,
   appsDomain: String,
-  orgID: Int,
+  orgID: Long,
   groupsPrefix: String,
   appName: String,
   deletedBucketCheckSeconds: Int,
