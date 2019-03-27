@@ -766,7 +766,7 @@ class HttpGoogleServicesDAO(
       "billingAccountId" -> billingAccount.accountName.value.toJson,
       "projectId" -> projectName.value.toJson,
       "parentOrganization" -> orgID.toJson,
-      "fcBillingUser" -> billingGroupEmail.toJson,
+      "fcBillingGroup" -> billingGroupEmail.toJson,
       "projectOwnersGroup" -> ownerGroupEmail.value.toJson,
       "projectViewersGroup" -> computeUserGroupEmail.value.toJson,
       "requesterPaysRole" -> requesterPaysRole.toJson,
