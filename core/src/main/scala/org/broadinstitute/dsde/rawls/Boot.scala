@@ -114,13 +114,29 @@ object Boot extends IOApp with LazyLogging {
     val jsonFactory = JacksonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
-    val dmConfig = gcsConfig.getConfig("deploymentManager")
+
     val hammCromwellMetadataConfig = gcsConfig.getConfig("hamm-cromwell-metadata")
     val serviceProject = gcsConfig.getString("serviceProject")
     val hammCromwellMetadata = HammCromwellMetadata(
       GcsBucketName(hammCromwellMetadataConfig.getString("bucket-name")),
       ProjectTopicName.of(serviceProject, hammCromwellMetadataConfig.getString("topic-name "))
     )
+
+    //Sanity check deployment manager template path.
+    val dmConfig = gcsConfig.getConfig("deploymentManager")
+    val dmTemplatePath = dmConfig.getString("dmTemplatePath")
+    val badPathBecauseGithub = dmTemplatePath.contains("github.com")
+    if(badPathBecauseGithub) {
+      logger.error("dmConfig.dmTemplatePath refers to GitHub; make sure you hit the Raw button to get the non-HTML version at the https://raw.githubusercontent.com/ domain")
+    }
+    val badPathBecauseBranchName = dmTemplatePath.contains("githubusercontent.com") &&
+      (dmTemplatePath.contains("/blob/master") || dmTemplatePath.contains("/blob/develop"))
+    if(badPathBecauseBranchName) {
+      logger.error("dmConfig.dmTemplatePath refers to a branch of a GitHub repo. This makes it impossible to know which template was used to create a project. Please use a specific commit instead.")
+    }
+    if(badPathBecauseGithub || badPathBecauseBranchName) {
+      sys.exit(1)
+    }
 
     initAppDependencies[IO](conf).use { appDependencies =>
       val gcsDAO = new HttpGoogleServicesDAO(
