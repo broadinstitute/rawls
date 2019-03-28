@@ -425,7 +425,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       )
 
       withCleanBillingProject(owner) { projectName =>
-        Thread.sleep(60.seconds.toMillis)
         withWorkspace(projectName, "rawls-private-image") { workspaceName =>
           withCleanUp {
             Orchestration.methods.createMethod(privateMethod.creationAttributes)
