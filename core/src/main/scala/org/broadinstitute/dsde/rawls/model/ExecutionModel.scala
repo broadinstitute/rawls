@@ -3,11 +3,12 @@ package org.broadinstitute.dsde.rawls.model
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.CromwellBackends.CromwellBackend
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.workbench.model.{ValueObject, WorkbenchEmail}
+import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat, WorkbenchEmail}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
 import org.joda.time.DateTime
 import spray.json._
@@ -75,7 +76,7 @@ case class ExecutionServiceWorkflowOptions(
   final_workflow_log_dir: String,
   default_runtime_attributes: Option[JsValue],
   read_from_cache: Boolean,
-  backend: String,
+  backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None
 )
 
@@ -304,6 +305,8 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowFailureModeFormat = rawlsEnumerationFormat(WorkflowFailureModes.withName)
 
+  implicit val CromwellBackendFormat = rawlsEnumerationFormat(CromwellBackends.withName)
+
   implicit object ExecutionOutputFormat extends RootJsonFormat[OutputType] {
     override def write(obj: OutputType): JsValue = obj match {
       case Left(attribute) => attributeFormat.write(attribute)
@@ -503,6 +506,28 @@ object WorkflowFailureModes {
 
   case object ContinueWhilePossible extends WorkflowFailureMode
   case object NoNewCalls extends WorkflowFailureMode
+}
+
+object CromwellBackends {
+  val allCromwellBackends: Seq[CromwellBackend] = List(JES, PAPIv2)
+
+  sealed trait CromwellBackend extends RawlsEnumeration[CromwellBackend] {
+    override def toString: String = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String): CromwellBackend = CromwellBackends.withName(name)
+  }
+
+  def withName(name: String): CromwellBackend = name.toLowerCase() match {
+    case "jes" => JES
+    case "papiv2" => PAPIv2
+    case _ => throw new RawlsException(s"Invalid backend: $name")
+  }
+
+  def withNameOpt(nameOpt: Option[String]): Option[CromwellBackend] = {
+    nameOpt.flatMap(name => Try(withName(name)).toOption)
+  }
+
+  final case object JES extends CromwellBackend
+  final case object PAPIv2 extends CromwellBackend
 }
 
 object ExecutionJsonSupport extends ExecutionJsonSupport

@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.model.CromwellBackends.PAPIv2
 import org.scalatest.{FlatSpec, Matchers}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import spray.json._
@@ -88,7 +89,7 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
       "final_workflow_log_dir",
       None,
       true,
-      "PAPIv2",
+      PAPIv2,
       Some(WorkflowFailureModes.ContinueWhilePossible)
     )
 

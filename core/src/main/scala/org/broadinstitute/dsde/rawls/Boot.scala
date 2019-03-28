@@ -25,7 +25,7 @@ import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, UserInfo}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
@@ -46,6 +46,11 @@ import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.util.{Failure, Success}
+import net.ceedubs.ficus.Ficus._
+import org.apache.commons.io.FileUtils
+import org.broadinstitute.dsde.rawls.model.CromwellBackends.CromwellBackend
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 object Boot extends IOApp with LazyLogging {
   override def run(
@@ -169,7 +174,6 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource.databaseConfig.db.shutdown
       }
 
-//<<<<<<< HEAD
       val executionServiceConfig = conf.getConfig("executionservice")
       val submissionTimeout = util.toScalaDuration(
         executionServiceConfig.getDuration("workflowSubmissionTimeout")
@@ -240,19 +244,6 @@ object Boot extends IOApp with LazyLogging {
       val projectTemplate = ProjectTemplate(
         Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors),
         projectServices
-//=======
-//    val maxActiveWorkflowsTotal = conf.getInt("executionservice.maxActiveWorkflowsPerServer") * executionServiceServers.size
-//    val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt("executionservice.activeWorkflowHogFactor")
-//    val useWorkflowCollectionField = conf.getBoolean("executionservice.useWorkflowCollectionField")
-//    val useWorkflowCollectionLabel = conf.getBoolean("executionservice.useWorkflowCollectionLabel")
-//    val defaultBackend = conf.getString("executionservice.defaultBackend")
-//
-//    if(conf.getBooleanOption("backRawls").getOrElse(false)) {
-//      logger.info("This instance has been marked as BACK. Booting monitors...")
-//      BootMonitors.bootMonitors(
-//        system, conf, slickDataSource, gcsDAO, samDAO, pubSubDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal,
-//        maxActiveWorkflowsPerUser, userServiceConstructor, projectTemplate, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend
-//>>>>>>> change default backend to be taken from config and submitted as workflow option
       )
 
       val notificationDAO = new PubSubNotificationDAO(
@@ -297,7 +288,7 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionField")
       val useWorkflowCollectionLabel =
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
-      val defaultBackend = conf.getString("executionservice.defaultBackend")
+      val defaultBackend = CromwellBackends.withName(conf.getString("executionservice.defaultBackend"))
 
       if (conf.getBooleanOption("backRawls").getOrElse(false)) {
         logger.info("This instance has been marked as BACK. Booting monitors...")

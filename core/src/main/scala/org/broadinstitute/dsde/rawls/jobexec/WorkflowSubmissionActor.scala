@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, addJitter
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, util}
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.model.CromwellBackends.CromwellBackend
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json.DefaultJsonProtocol._
@@ -44,7 +45,7 @@ object WorkflowSubmissionActor {
             requesterPaysRole: String,
             useWorkflowCollectionField: Boolean,
             useWorkflowCollectionLabel: Boolean,
-            defaultBackend: String): Props = {
+            defaultBackend: CromwellBackend): Props = {
     Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend))
   }
 
@@ -76,7 +77,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val requesterPaysRole: String,
                               val useWorkflowCollectionField: Boolean,
                               val useWorkflowCollectionLabel: Boolean,
-                              val defaultBackend: String) extends Actor with WorkflowSubmission with LazyLogging {
+                              val defaultBackend: CromwellBackend) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
 
@@ -124,7 +125,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val requesterPaysRole: String
   val useWorkflowCollectionField: Boolean
   val useWorkflowCollectionLabel: Boolean
-  val defaultBackend: String
+  val defaultBackend: CromwellBackend
 
   import dataSource.dataAccess.driver.api._
 
