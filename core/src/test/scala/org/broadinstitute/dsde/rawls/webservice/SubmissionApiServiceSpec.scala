@@ -21,7 +21,6 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.testkit.RouteTestTimeout
-import org.broadinstitute.dsde.rawls.model.CromwellBackends.PAPIv2
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.ExecutionContext
@@ -96,7 +95,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       "requesterPays",
       false,
       false,
-      PAPIv2
+      CromwellBackend("PAPIv2")
     ))
 
     try {

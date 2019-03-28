@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.model
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.CromwellBackends.CromwellBackend
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
@@ -79,6 +78,9 @@ case class ExecutionServiceWorkflowOptions(
   backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None
 )
+
+// current possible backends are "JES" and "PAPIv2" but this is subject to change in the future
+final case class CromwellBackend(value: String) extends ValueObject
 
 case class ExecutionServiceLabelResponse(
   id: String,
@@ -305,7 +307,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowFailureModeFormat = rawlsEnumerationFormat(WorkflowFailureModes.withName)
 
-  implicit val CromwellBackendFormat = rawlsEnumerationFormat(CromwellBackends.withName)
+  implicit val CromwellBackendFormat = ValueObjectFormat(CromwellBackend)
 
   implicit object ExecutionOutputFormat extends RootJsonFormat[OutputType] {
     override def write(obj: OutputType): JsValue = obj match {
@@ -506,28 +508,6 @@ object WorkflowFailureModes {
 
   case object ContinueWhilePossible extends WorkflowFailureMode
   case object NoNewCalls extends WorkflowFailureMode
-}
-
-object CromwellBackends {
-  val allCromwellBackends: Seq[CromwellBackend] = List(JES, PAPIv2)
-
-  sealed trait CromwellBackend extends RawlsEnumeration[CromwellBackend] {
-    override def toString: String = getClass.getSimpleName.stripSuffix("$")
-    override def withName(name: String): CromwellBackend = CromwellBackends.withName(name)
-  }
-
-  def withName(name: String): CromwellBackend = name.toLowerCase() match {
-    case "jes" => JES
-    case "papiv2" => PAPIv2
-    case _ => throw new RawlsException(s"Invalid backend: $name")
-  }
-
-  def withNameOpt(nameOpt: Option[String]): Option[CromwellBackend] = {
-    nameOpt.flatMap(name => Try(withName(name)).toOption)
-  }
-
-  final case object JES extends CromwellBackend
-  final case object PAPIv2 extends CromwellBackend
 }
 
 object ExecutionJsonSupport extends ExecutionJsonSupport

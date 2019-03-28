@@ -21,7 +21,6 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
-import org.broadinstitute.dsde.rawls.model.CromwellBackends.{CromwellBackend, PAPIv2}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -60,7 +59,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val requesterPaysRole: String = requesterPaysRole,
     val useWorkflowCollectionField: Boolean = false,
     val useWorkflowCollectionLabel: Boolean = false,
-    val defaultBackend: CromwellBackend = PAPIv2) extends WorkflowSubmission {
+    val defaultBackend: CromwellBackend = CromwellBackend("PAPIv2")) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
@@ -244,7 +243,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
             Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
             false,
-            PAPIv2
+            CromwellBackend("PAPIv2")
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }
@@ -406,7 +405,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
-        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, PAPIv2)
+        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"))
       )
 
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).exists(_ == WorkflowStatuses.Submitted.toString), 10 seconds)
@@ -441,7 +440,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
-        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, PAPIv2)
+        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"))
       )
 
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)

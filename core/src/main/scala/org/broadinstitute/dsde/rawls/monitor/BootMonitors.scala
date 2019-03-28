@@ -6,8 +6,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource, _}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
-import org.broadinstitute.dsde.rawls.model.CromwellBackends.CromwellBackend
-import org.broadinstitute.dsde.rawls.model.{UserInfo, WorkflowStatuses}
+import org.broadinstitute.dsde.rawls.model.{UserInfo, WorkflowStatuses, CromwellBackend}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util
 import spray.json._

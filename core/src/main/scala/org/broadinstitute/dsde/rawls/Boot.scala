@@ -49,7 +49,6 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
-import org.broadinstitute.dsde.rawls.model.CromwellBackends.CromwellBackend
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 object Boot extends IOApp with LazyLogging {
@@ -288,7 +287,7 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionField")
       val useWorkflowCollectionLabel =
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
-      val defaultBackend = CromwellBackends.withName(conf.getString("executionservice.defaultBackend"))
+      val defaultBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultBackend"))
 
       if (conf.getBooleanOption("backRawls").getOrElse(false)) {
         logger.info("This instance has been marked as BACK. Booting monitors...")
