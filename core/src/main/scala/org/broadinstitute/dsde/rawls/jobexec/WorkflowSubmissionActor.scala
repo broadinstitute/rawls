@@ -17,6 +17,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -177,7 +178,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
   }
 
-  def buildWorkflowOpts(workspace: WorkspaceRecord, submissionId: UUID, user: RawlsUser, petSAJson: String, billingProject: RawlsBillingProject, useCallCache: Boolean, workflowFailureMode: Option[WorkflowFailureMode]) = {
+  def buildWorkflowOpts(workspace: WorkspaceRecord, submissionId: UUID, userEmail: RawlsUserEmail, petSAJson: String, billingProject: RawlsBillingProject, useCallCache: Boolean, workflowFailureMode: Option[WorkflowFailureMode]) = {
     val petSAEmail = petSAJson.parseJson.asJsObject.getFields("client_email").headOption match {
       case Some(JsString(value)) => value
       case Some(x) => throw new RawlsException(s"unexpected json value for client_email [$x] in service account key")
@@ -187,7 +188,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     ExecutionServiceWorkflowOptions(
       s"gs://${workspace.bucketName}/${submissionId}",
       workspace.namespace,
-      user.userEmail.value,
+      userEmail.value,
       petSAEmail,
       petSAJson,
       billingProject.cromwellAuthBucketUrl,
@@ -199,9 +200,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     )
   }
 
-  def getWdl(methodConfig: MethodConfiguration, userCredentials: Credential)(implicit executionContext: ExecutionContext): Future[String] = {
+  def getWdl(methodConfig: MethodConfiguration, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[String] = {
     dataSource.inTransaction { dataAccess => //this is a transaction that makes no database calls, but the sprawling stack of withFoos was too hard to unpick :(
-      withMethod(methodConfig.methodRepoMethod, UserInfo.buildFromTokens(userCredentials)) { method =>
+      withMethod(methodConfig.methodRepoMethod, userInfo) { method =>
         withWdl(method) { wdl =>
           DBIO.successful(wdl)
         }
@@ -298,16 +299,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, RawlsUserEmail(submissionRec.submitterEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
 
-      userIdInfo <- samDAO.getUserIdInfo(submissionRec.submitterEmail,  UserInfo.buildFromTokens(credential)).map {
-        case SamDAO.User(userIdInfo) => userIdInfo.googleSubjectId.getOrElse(throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}"))
-        case _ => throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}")
-      }
-
-      userCredentials <- googleServicesDAO.getUserCredentials(RawlsUserRef(RawlsUserSubjectId(userIdInfo))).map(_.getOrElse(throw new RawlsException(s"cannot find credentials for ${submissionRec.submitterEmail}")))
-      wdl <- getWdl(methodConfig, userCredentials)
+      wdl <- getWdl(methodConfig, petUserInfo)
     } yield {
 
-      val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, RawlsUser(RawlsUserSubjectId(userIdInfo), RawlsUserEmail(submissionRec.submitterEmail)), petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
+      val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, RawlsUserEmail(submissionRec.submitterEmail), petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
         val submissionAndWorkspaceLabels = Map("submission-id" -> submissionRec.id.toString,  "workspace-id" -> workspaceRec.id.toString)
         val wfLabels = workspaceRec.workflowCollection match {
           case Some(workflowCollection) if useWorkflowCollectionLabel => submissionAndWorkspaceLabels + ("caas-collection-name" -> workflowCollection)
