@@ -1,14 +1,17 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorRef
+import cats.effect.IO
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.genomics.model.Operation
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
+import com.google.pubsub.v1.ProjectTopicName
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
 import org.joda.time.DateTime
@@ -96,7 +99,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]]
 
-  def storeCromwellMetadata(objectName: GcsObjectName, body: Array[Byte]): Future[Unit]
+  def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): IO[Unit]
 
   def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String): Future[Option[StorageObject]]
 
@@ -216,3 +219,4 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
 case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
 case class ProjectTemplate(policies: Map[String, Seq[String]], services: Seq[String])
+final case class HammCromwellMetadata(bucketName: GcsBucketName, topicName: ProjectTopicName)

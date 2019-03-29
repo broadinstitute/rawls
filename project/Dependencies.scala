@@ -17,6 +17,8 @@ object Dependencies {
 
   val excludeAkkaActor =        ExclusionRule(organization = "com.typesafe.akka", name = "akka-actor_2.12")
   val excludeAkkaStream =       ExclusionRule(organization = "com.typesafe.akka", name = "akka-stream_2.12")
+  val excludeWorkbenchModel =   ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-model_2.12")
+  val excludeWorkbenchUtil =   ExclusionRule(organization = "org.broadinstitute.dsde.workbench", name = "workbench-util_2.12")
 
   val akkaActor: ModuleID =         "com.typesafe.akka"   %%  "akka-actor"           % akkaV
   val akkaStream: ModuleID =        "com.typesafe.akka"   %%  "akka-stream"          % akkaV
@@ -40,7 +42,7 @@ object Dependencies {
   val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev14-" + googleV)
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev17-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
-  val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.5.0"
+  val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.17.1"
   val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
@@ -76,11 +78,13 @@ object Dependencies {
     exclude("com.typesafe.akka", "akka-actor_2.12")
     exclude("com.typesafe.akka", "akka-http_2.12"))
 
-  val workbenchModelV  = "0.10-6800f3a"
+  val workbenchModelV  = "0.13-4c7acd5"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
-  val workbenchGoogleV = "0.18-f3a0a5a"
+  val workbenchGoogleV = "0.18-4c7acd5"
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
-  val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests"
+  val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests" excludeAll(excludeWorkbenchModel)
+  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.2-4c7acd5"
+  val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
 
   val metricsDependencies = Seq(
     metricsScala,
@@ -158,8 +162,10 @@ object Dependencies {
     mockserverNetty,
     mockito,
     googleRpc,
+    log4cats,
     workbenchModel,
     workbenchGoogle,
+    workbenchGoogle2,
     workbenchGoogleMocks,
     ficus,
     scalaCache

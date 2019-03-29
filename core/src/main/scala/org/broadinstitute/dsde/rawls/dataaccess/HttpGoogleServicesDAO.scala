@@ -10,6 +10,8 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
+import cats.effect.{ContextShift, IO, Timer}
+import cats.data.NonEmptyList
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -35,7 +37,11 @@ import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
+import com.google.cloud.Identity
+import com.google.cloud.storage.BucketInfo.LifecycleRule
+import com.google.cloud.storage.BucketInfo.LifecycleRule.LifecycleAction
 import io.grpc.Status.Code
+import fs2._
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.GoogleUtilities
@@ -45,13 +51,13 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
+import org.broadinstitute.dsde.workbench.google2._
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
-
-import scala.collection.JavaConversions._
+import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
 import scala.io.Source
 import scala.util.Try
@@ -74,11 +80,15 @@ class HttpGoogleServicesDAO(
   val billingEmail: String,
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
+  hammCromwellMetadata: HammCromwellMetadata,
+  googleStorageService: GoogleStorageService[IO],
+  googleServiceHttp: GoogleServiceHttp[IO],
+  topicAdmin: GoogleTopicAdmin[IO],
   override val workbenchMetricBaseName: String,
-  proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
-
+  proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
+  implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
   val API_SERVICE_MANAGEMENT = "ServiceManagement"
@@ -95,14 +105,7 @@ class HttpGoogleServicesDAO(
   val jsonFactory = JacksonFactory.getDefaultInstance
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
-  val cromwellMetadataBucketName = GcsBucketName("cromwell-meta-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com"))
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
-
-  val newGoogleStorage = new HttpGoogleStorageDAO(
-    appName,
-    GoogleCredentialModes.Pem(WorkbenchEmail(clientEmail), new File(pemFile)),
-    workbenchMetricBaseName
-  )
 
   initBuckets()
 
@@ -123,24 +126,28 @@ class HttpGoogleServicesDAO(
 
         val tokenBucket = new Bucket().
           setName(tokenBucketName).
-          setAcl(bucketAcls).
-          setDefaultObjectAcl(defaultObjectAcls).
+          setAcl(bucketAcls.asJava).
+          setDefaultObjectAcl(defaultObjectAcls.asJava).
           setLogging(new Logging().setLogBucket(logBucket.getName))
         val insertTokenBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, tokenBucket)
         executeGoogleRequest(insertTokenBucket)
     }
 
-    try {
-      getStorage(getBucketServiceAccountCredential).buckets().get(cromwellMetadataBucketName.value).executeUsingHead()
-    } catch {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue =>
-        val metadataBucket = new Bucket().
-          setName(cromwellMetadataBucketName.value).
-          setAcl(bucketAcls).
-          setDefaultObjectAcl(defaultObjectAcls)
-        val insertMetadataBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, metadataBucket)
-        executeGoogleRequest(insertMetadataBucket)
-    }
+    val lifecyleRule = new LifecycleRule(
+      LifecycleAction.newDeleteAction(), LifecycleRule.LifecycleCondition.newBuilder().setAge(30).build())
+
+    val result = for{
+      traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
+      _ <- googleStorageService.createBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Some(traceId))
+      _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
+      _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
+      projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
+      _ <- topicAdmin.createWithPublisherMembers(hammCromwellMetadata.topicName, List(projectServiceAccount), Some(traceId))
+      _ <- Stream.eval(googleServiceHttp.createNotification(hammCromwellMetadata.topicName, hammCromwellMetadata.bucketName, Filters(List(NotificationEventTypes.ObjectFinalize), None), Some(traceId)))
+    } yield ()
+    // unsafeRunSync is not desired, but return type for initBuckets dictates execution has to happen immediately when the method is called.
+    // Changing initBuckets's signature requires larger effort which doesn't seem to worth it
+    result.compile.drain.unsafeRunSync()
   }
 
   def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
@@ -183,10 +190,10 @@ class HttpGoogleServicesDAO(
 
           val bucket = new Bucket().
             setName(bucketName).
-            setAcl(bucketAcls).
-            setDefaultObjectAcl(defaultObjectAcls).
+            setAcl(bucketAcls.asJava).
+            setDefaultObjectAcl(defaultObjectAcls.asJava).
             setLogging(logging).
-            setLabels(labels)
+            setLabels(labels.asJava)
           val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
           executeGoogleRequest(inserter)
 
@@ -237,7 +244,7 @@ class HttpGoogleServicesDAO(
           newObjectAccessControl("project-owners-" + projectNumber, "OWNER")) ++
           authBucketReaders.map(email => newObjectAccessControl(makeGroupEntityString(email.value), "READER")).toList
 
-        val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
+        val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls.asJava).setDefaultObjectAcl(defaultObjectAcls.asJava)
         val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(billingProject.value, bucket)
         executeGoogleRequest(inserter)
 
@@ -260,8 +267,7 @@ class HttpGoogleServicesDAO(
         getStorage(getBucketServiceAccountCredential).bucketAccessControls.insert(bucketName, bucketAcls),
         getStorage(getBucketServiceAccountCredential).defaultObjectAccessControls.insert(bucketName, defaultObjectAcls))
 
-      inserter <- inserters
-      _ <- executeGoogleRequest(inserter)
+       _ <- inserters.map(inserter => executeGoogleRequest(inserter))
     } yield ()
 
     retryWithRecoverWhen500orGoogleError(
@@ -281,7 +287,7 @@ class HttpGoogleServicesDAO(
       val storageLogExpiration = new Lifecycle.Rule()
         .setAction(new Action().setType("Delete"))
         .setCondition(new Condition().setAge(bucketLogsMaxAge))
-      bucket.setLifecycle(new Lifecycle().setRule(List(storageLogExpiration)))
+      bucket.setLifecycle(new Lifecycle().setRule(List(storageLogExpiration).asJava))
       val inserter = getStorage(getBucketServiceAccountCredential).buckets().insert(billingProject.value, bucket)
       executeGoogleRequest(inserter)
 
@@ -315,7 +321,7 @@ class HttpGoogleServicesDAO(
         val deleteEverythingRule = new Lifecycle.Rule()
           .setAction(new Action().setType("Delete"))
           .setCondition(new Condition().setAge(0))
-        val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule))
+        val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule).asJava)
         val patcher = buckets.patch(bucketName, new Bucket().setLifecycle(lifecycle))
         retryWhen500orGoogleError(() => { executeGoogleRequest(patcher) })
 
@@ -400,7 +406,7 @@ class HttpGoogleServicesDAO(
           /* Objects are returned "in alphabetical order" (http://stackoverflow.com/a/36786877/244191). Because of the
            * timestamp, they are also in increasing chronological order. Therefore, the last one is the most recent.
            */
-          usageFromLogObject(items.last)
+          usageFromLogObject(items.asScala.last)
       }
     }
 
@@ -410,7 +416,7 @@ class HttpGoogleServicesDAO(
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = {
     implicit val service = GoogleInstrumentedService.Storage
     val aclGetter = getStorage(getBucketServiceAccountCredential).bucketAccessControls().list(bucketName)
-    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(aclGetter).getItems.toList) }) {
+    retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(aclGetter).getItems.asScala.toList) }) {
       case e: HttpResponseException => None
     }
   }
@@ -461,8 +467,9 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def storeCromwellMetadata(objectName: GcsObjectName, body: Array[Byte]): Future[Unit] = {
-    newGoogleStorage.storeObject(cromwellMetadataBucketName, objectName, new ByteArrayInputStream(body), "text/plain")
+  override def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): IO[Unit] = {
+    val gzipped = (body through fs2.compress.gzip[fs2.Pure](2048)).compile.toList.toArray //after fs2 1.0.4, we can `to[Array]` directly
+    googleStorageService.storeObject(hammCromwellMetadata.bucketName, objectName, gzipped, "text/plain")
   }
 
   override def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String): Future[List[StorageObject]] = {
@@ -474,7 +481,7 @@ class HttpGoogleServicesDAO(
         pages.flatMap { page =>
           Option(page.getItems) match {
             case None => List.empty
-            case Some(objects) => objects.toList
+            case Some(objects) => objects.asScala.toList
           }
         }
       }.getOrElse(List.empty)
@@ -559,7 +566,7 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(fetcher)
       }
       // option-wrap getBillingAccounts because it returns null for an empty list
-      Option(list.getBillingAccounts).map(_.toSeq).getOrElse(Seq.empty)
+      Option(list.getBillingAccounts.asScala).map(_.toSeq).getOrElse(Seq.empty)
     }) {
       case gjre: GoogleJsonResponseException
         if gjre.getStatusCode == StatusCodes.Forbidden.intValue &&
@@ -598,7 +605,7 @@ class HttpGoogleServicesDAO(
     retryWhen500orGoogleError(() => {
       val so = new StorageObject().setName(userInfo.userSubjectId.value)
       val encryptedToken = Aes256Cbc.encrypt(refreshToken.getBytes, tokenSecretKey).get
-      so.setMetadata(Map("iv" -> encryptedToken.base64Iv))
+      so.setMetadata(Map("iv" -> encryptedToken.base64Iv).asJava)
       val media = new InputStreamContent("text/plain", new ByteArrayInputStream(encryptedToken.base64CipherText.getBytes))
       val inserter = getStorage(getBucketServiceAccountCredential).objects().insert(tokenBucketName, so, media)
       inserter.getMediaHttpUploader().setDirectUploadEnabled(true)
@@ -683,7 +690,7 @@ class HttpGoogleServicesDAO(
     val operationRequest = genomicsApi.operations().list(opId).setFilter(filter)
     retryWhen500orGoogleError(() => {
       val list = executeGoogleRequest(operationRequest)
-      list.getOperations
+      list.getOperations.asScala
     })
   }
 
@@ -705,7 +712,7 @@ class HttpGoogleServicesDAO(
     val cloudResManager = getCloudResourceManager(credential)
 
     retryWhen500orGoogleError(() => {
-      executeGoogleRequest(cloudResManager.projects().create(new Project().setName(projectName.value).setProjectId(projectName.value).setLabels(Map("billingaccount" -> labelSafeString(billingAccount.displayName)))))
+      executeGoogleRequest(cloudResManager.projects().create(new Project().setName(projectName.value).setProjectId(projectName.value).setLabels(Map("billingaccount" -> labelSafeString(billingAccount.displayName)).asJava)))
     }).recover {
       case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
@@ -765,7 +772,7 @@ class HttpGoogleServicesDAO(
       })
 
       _ <- retryWhen500orGoogleError(() => {
-        val existingPolicies: Map[String, Seq[String]] = existingPolicy.getBindings.map { policy => policy.getRole -> policy.getMembers.toSeq }.toMap
+        val existingPolicies: Map[String, Seq[String]] = existingPolicy.getBindings.asScala.map { policy => policy.getRole -> policy.getMembers.asScala.toSeq }.toMap
 
         // this may result in keys with empty-seq values.  That's ok, we will ignore those later
         val updatedKeysWithRemovedPolicies: Map[String, Seq[String]] = policiesToRemove.keys.map { k =>
@@ -778,11 +785,11 @@ class HttpGoogleServicesDAO(
         val newPolicies = existingPolicies ++ updatedKeysWithRemovedPolicies
 
         val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
-          new Binding().setRole(role).setMembers(members.distinct)
+          new Binding().setRole(role).setMembers(members.distinct.asJava)
         }.toSeq
 
         // when setting IAM policies, always reuse the existing policy so the etag is preserved.
-        val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings))
+        val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings.asJava))
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
       })
     } yield ()
@@ -798,7 +805,7 @@ class HttpGoogleServicesDAO(
         // getIamPolicy gets the etag that is used in setIamPolicy, the etag is used to detect concurrent
         // modifications and if that happens we need to be sure to get a new etag before retrying setIamPolicy
         val existingPolicy = executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
-        val existingPolicies: Map[String, List[String]] = existingPolicy.getBindings.map { policy => policy.getRole -> policy.getMembers.toList }.toMap
+        val existingPolicies: Map[String, List[String]] = existingPolicy.getBindings.asScala.map { policy => policy.getRole -> policy.getMembers.asScala.toList }.toMap
 
         // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
         import cats.implicits._
@@ -809,11 +816,11 @@ class HttpGoogleServicesDAO(
         } else {
 
           val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
-            new Binding().setRole(role).setMembers(members.distinct)
+            new Binding().setRole(role).setMembers(members.distinct.asJava)
           }.toSeq
 
           // when setting IAM policies, always reuse the existing policy so the etag is preserved.
-          val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings))
+          val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings.asJava))
           executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
           true
         }
@@ -951,7 +958,7 @@ class HttpGoogleServicesDAO(
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(clientEmail)
-      .setServiceAccountScopes(directoryScopes)
+      .setServiceAccountScopes(directoryScopes.asJava)
       .setServiceAccountUser(subEmail)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
@@ -962,7 +969,7 @@ class HttpGoogleServicesDAO(
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(clientEmail)
-      .setServiceAccountScopes(storageScopes) // grant bucket-creation powers
+      .setServiceAccountScopes(storageScopes.asJava) // grant bucket-creation powers
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
   }
@@ -972,7 +979,7 @@ class HttpGoogleServicesDAO(
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(clientEmail)
-      .setServiceAccountScopes(genomicsScopes)
+      .setServiceAccountScopes(genomicsScopes.asJava)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
   }
@@ -981,7 +988,7 @@ class HttpGoogleServicesDAO(
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM)) // need this broad scope to create/manage projects
+      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM).asJava) // need this broad scope to create/manage projects
       .setServiceAccountId(billingPemEmail)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(billingPemFile))
       .setServiceAccountUser(billingEmail)
@@ -1013,7 +1020,7 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.OAuth
     retryWhen500orGoogleError(() => {
       val keyStream = new ByteArrayInputStream(saKey.getBytes)
-      val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(storageScopes)
+      val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(storageScopes.asJava)
       credential.refreshAccessToken.getTokenValue
     })
   }
@@ -1022,7 +1029,7 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.OAuth
     retryWhen500orGoogleError(() => {
       val keyStream = new ByteArrayInputStream(saKey.getBytes)
-      val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(storageScopes)
+      val credential = ServiceAccountCredentials.fromStream(keyStream).createScoped(storageScopes.asJava)
       UserInfo.buildFromTokens(credential)
     })
   }

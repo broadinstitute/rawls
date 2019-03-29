@@ -20,7 +20,7 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, addJitter}
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
+import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -304,7 +304,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           for {
             metadata <- executionServiceCluster.callLevelMetadataForCostCalculation(submissionId, workflowId, Some(ExecutionServiceId(execId)), petUser)
             // Rawls only monitor root level workflow
-            _ <- googleServicesDAO.storeCromwellMetadata(GcsObjectName(workflowId), metadata.compactPrint.getBytes("UTF-8"))
+            _ <- googleServicesDAO.storeCromwellMetadata(GcsBlobName(workflowId), fs2.Stream.emits(metadata.compactPrint.getBytes("UTF-8"))).unsafeToFuture()
           } yield ()
       }
     } yield ()
