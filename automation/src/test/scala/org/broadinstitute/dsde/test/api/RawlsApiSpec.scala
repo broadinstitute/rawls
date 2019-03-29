@@ -451,7 +451,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(16, Minutes)), interval = scaled(Span(30, Seconds)))
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(25, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
             val workflowId = eventually {
