@@ -457,21 +457,14 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val workflowId = eventually {
               val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
               withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
-                status should be("Done")
                 workflows should not be (empty)
                 workflows.head
               }
             }
 
-            val metadata = eventually {
-              Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, workflowId)
+            eventually {
+              parseWorkflowStatusFromMetadata(Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, workflowId)) should be("Succeeded")
             }
-
-            val outputs = eventually {
-              Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, workflowId)
-            }
-
-            parseWorkflowStatusFromMetadata(metadata) should be("Succeeded")
           }
         }
       }
