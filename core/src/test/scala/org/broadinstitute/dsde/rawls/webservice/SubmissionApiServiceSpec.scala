@@ -94,7 +94,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       "test",
       "requesterPays",
       false,
-      false
+      false,
+      CromwellBackend("PAPIv2")
     ))
 
     try {
