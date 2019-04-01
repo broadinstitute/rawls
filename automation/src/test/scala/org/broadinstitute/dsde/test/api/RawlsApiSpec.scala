@@ -105,6 +105,60 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
   }
 
   "Rawls" - {
+    "should support running workflows with private docker images" in {
+      implicit val token: AuthToken = ownerAuthToken
+
+      val privateMethod: Method = MethodData.SimpleMethod.copy(
+        methodName = s"${UUID.randomUUID().toString()}-private_test_method",
+        payload = "task hello {\n  String? name\n\n  command {\n    echo 'hello ${name}!'\n  }\n  output {\n    File response = stdout()\n  }\n  runtime {\n    docker: \"mtalbott/mtalbott-papi-v2\"\n  }\n}\n\nworkflow test {\n  call hello\n}"
+      )
+
+      withCleanBillingProject(owner) { projectName =>
+        withWorkspace(projectName, "rawls-private-image") { workspaceName =>
+          withCleanUp {
+            Orchestration.methods.createMethod(privateMethod.creationAttributes)
+            register cleanUp Orchestration.methods.redact(privateMethod)
+
+            Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+              projectName, workspaceName,
+              privateMethod,
+              SimpleMethodConfig.configNamespace, SimpleMethodConfig.configName, SimpleMethodConfig.snapshotId,
+              SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, SimpleMethodConfig.rootEntityType)
+
+            Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
+
+            // it currently takes ~ 5 min for google bucket read permissions to propagate.
+            // We can't launch a workflow until this happens.
+            // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
+
+            Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+
+            val submissionId = Rawls.submissions.launchWorkflow(
+              projectName, workspaceName,
+              SimpleMethodConfig.configNamespace, SimpleMethodConfig.configName,
+              "participant", SingleParticipant.entityId, "this", useCallCache = false)
+            // clean up: Abort submission
+            register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(16, Minutes)), interval = scaled(Span(30, Seconds)))
+            implicit val patienceConfig: PatienceConfig = submissionPatience
+
+            val workflowId = eventually {
+              val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+              withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
+                workflows should not be (empty)
+                workflows.head
+              }
+            }
+
+            eventually {
+              parseWorkflowStatusFromMetadata(Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, workflowId)) should be("Succeeded")
+            }
+          }
+        }
+      }
+    }
+
     "should retrieve sub-workflow metadata and outputs from Cromwell" in {
       implicit val token: AuthToken = studentBToken
 
@@ -412,60 +466,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.map(_.value) should contain only fileToCopy.value
 
           logger.info(s"Copied bucket files visible after ${finish-start} milliseconds")
-        }
-      }
-    }
-
-    "should support running workflows with private docker images" in {
-      implicit val token: AuthToken = ownerAuthToken
-
-      val privateMethod: Method = MethodData.SimpleMethod.copy(
-        methodName = s"${UUID.randomUUID().toString()}-private_test_method",
-        payload = "task hello {\n  String? name\n\n  command {\n    echo 'hello ${name}!'\n  }\n  output {\n    File response = stdout()\n  }\n  runtime {\n    docker: \"mtalbott/mtalbott-papi-v2\"\n  }\n}\n\nworkflow test {\n  call hello\n}"
-      )
-
-      withCleanBillingProject(owner) { projectName =>
-        withWorkspace(projectName, "rawls-private-image") { workspaceName =>
-          withCleanUp {
-            Orchestration.methods.createMethod(privateMethod.creationAttributes)
-            register cleanUp Orchestration.methods.redact(privateMethod)
-
-            Orchestration.methodConfigurations.createMethodConfigInWorkspace(
-              projectName, workspaceName,
-              privateMethod,
-              SimpleMethodConfig.configNamespace, SimpleMethodConfig.configName, SimpleMethodConfig.snapshotId,
-              SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, SimpleMethodConfig.rootEntityType)
-
-            Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
-
-            // it currently takes ~ 5 min for google bucket read permissions to propagate.
-            // We can't launch a workflow until this happens.
-            // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
-
-            Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
-
-            val submissionId = Rawls.submissions.launchWorkflow(
-              projectName, workspaceName,
-              SimpleMethodConfig.configNamespace, SimpleMethodConfig.configName,
-              "participant", SingleParticipant.entityId, "this", useCallCache = false)
-            // clean up: Abort submission
-            register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
-
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(60, Minutes)), interval = scaled(Span(30, Seconds)))
-            implicit val patienceConfig: PatienceConfig = submissionPatience
-
-            val workflowId = eventually {
-              val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
-              withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
-                workflows should not be (empty)
-                workflows.head
-              }
-            }
-
-            eventually {
-              parseWorkflowStatusFromMetadata(Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, workflowId)) should be("Succeeded")
-            }
-          }
         }
       }
     }
