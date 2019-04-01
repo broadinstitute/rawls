@@ -105,316 +105,316 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
   }
 
   "Rawls" - {
-    "should retrieve sub-workflow metadata and outputs from Cromwell" in {
-      implicit val token: AuthToken = studentBToken
-
-      // this will run scatterCount^levels workflows, so be careful if increasing these values!
-      val topLevelMethod: Method = methodTree(levels = 3, scatterCount = 3)
-
-      withCleanBillingProject(studentB) { projectName =>
-        withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
-          withCleanUp {
-            Orchestration.methodConfigurations.createMethodConfigInWorkspace(
-              projectName, workspaceName,
-              topLevelMethod,
-              topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
-              topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
-
-            Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
-
-            // it currently takes ~ 5 min for google bucket read permissions to propagate.
-            // We can't launch a workflow until this happens.
-            // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
-
-            Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
-
-            val submissionId = Rawls.submissions.launchWorkflow(
-              projectName, workspaceName,
-              topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
-              "participant", SingleParticipant.entityId, "this", useCallCache = false)
-            // clean up: Abort submission
-            register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
-
-            // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
-
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
-            implicit val patienceConfig: PatienceConfig = submissionPatience
-
-            val firstWorkflowId = eventually {
-              val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
-              withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
-                status should (be("Submitted") or be("Done")) // very unlikely it's already done, but let's handle that case.
-                workflows should not be (empty)
-                workflows.head
-              }
-            }
-
-            // retrieve the workflow's metadata.  May need to wait for a subworkflow to appear.  Take the first one we see.
-
-            val firstSubWorkflowId = eventually {
-              val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstWorkflowId)
-              val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
-              withClue(getWorkflowResponse(projectName, workspaceName, submissionId, firstWorkflowId)) {
-                subIds should not be (empty)
-                subIds.head
-              }
-            }
-
-            // can we also retrieve the subworkflow's metadata?  Get a sub-sub-workflow ID while we're doing this.
-
-            val firstSubSubWorkflowId = eventually {
-              val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubWorkflowId)
-              val subSubIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
-              withClue(getWorkflowResponse(projectName, workspaceName, submissionId, firstSubWorkflowId)) {
-                subSubIds should not be (empty)
-                subSubIds.head
-              }
-            }
-
-            // verify that Rawls can retrieve the sub-sub-workflow's metadata without throwing an exception.
-
-            eventually {
-              Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
-            }
-
-            // verify that Rawls can retrieve the workflows' outputs from Cromwell without error
-            // https://github.com/DataBiosphere/firecloud-app/issues/157
-
-            val outputsTimeout = Timeout(scaled(Span(10, Seconds)))
-            eventually(outputsTimeout) {
-              Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstWorkflowId)
-              // nope https://github.com/DataBiosphere/firecloud-app/issues/160
-              //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubWorkflowId)
-              //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
-            }
-          }
-        }
-      }
-
-    }
-
-    "should retrieve metadata with widely scattered sub-workflows in a short time" in {
-      implicit val token: AuthToken = studentAToken
-
-      val scatterWidth = 500
-
-      // this will run scatterCount^levels workflows, so be careful if increasing these values!
-      val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
-
-      withCleanBillingProject(studentA) { projectName =>
-        withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
-          Orchestration.methodConfigurations.createMethodConfigInWorkspace(
-            projectName, workspaceName,
-            topLevelMethod,
-            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
-            topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
-
-          Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
-
-          // it currently takes ~ 5 min for google bucket read permissions to propagate.
-          // We can't launch a workflow until this happens.
-          // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
-
-          Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
-
-          val submissionId = Rawls.submissions.launchWorkflow(
-            projectName, workspaceName,
-            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
-            "participant", SingleParticipant.entityId, "this", useCallCache = false)
-
-          // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
-
-          val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
-          implicit val patienceConfig: PatienceConfig = submissionPatience
-
-          val firstWorkflowId = eventually {
-            val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
-
-            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
-              workflows should not be (empty)
-              workflows.head
-            }
-          }
-
-          // retrieve the workflow's metadata.
-          // Orchestration times out in 1 minute, so we want to be well below that
-
-          // we also need to check that it returns *at all* in under a minute
-          // `eventually` won't cover this if the call itself is slow and synchronous
-
-          val myTimeout = Timeout(scaled(Span(45, Seconds)))
-          val myInterval = Interval(scaled(Span(10, Seconds)))
-
-          implicit val ec: ExecutionContextExecutor = system.dispatcher
-
-          def cromwellMetadata(wfId: String) = Future {
-            Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, wfId)
-          }.futureValue(timeout = myTimeout)
-
-          val subworkflowIds = eventually(myTimeout, myInterval) {
-            val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata(firstWorkflowId))
-            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
-              subIds.size shouldBe scatterWidth
-            }
-            subIds
-          }
-
-          // can we also quickly retrieve metadata for a few of the subworkflows?
-
-          Random.shuffle(subworkflowIds.take(10)).foreach {
-            cromwellMetadata(_)
-          }
-
-          // clean up: Abort and wait for one minute or Aborted, whichever comes first
-          // Timeout is OK here: just make a best effort
-
-          Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
-
-          val abortOrGiveUp = retryUntilSuccessOrTimeout()(timeout = 1.minute, interval = 10.seconds) { () =>
-            Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId) match {
-              case (status, _) if status == "Aborted" => Future.successful(())
-              case (status, _) => Future.failed(new Exception(s"Expected Aborted, saw $status"))
-            }
-          }
-
-          // wait on the future's execution
-          abortOrGiveUp.futureValue
-        }
-      }
-
-    }
-
-    "should label low security bucket" in {
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = studentAToken
-
-      withCleanBillingProject(studentA) { projectName =>
-        withWorkspace(projectName, "rawls-bucket-test") { workspaceName =>
-          val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
-          val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
-
-          bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "low")
-        }
-      }
-    }
-
-    "should label high security bucket" in {
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = studentAToken
-
-      withGroup("ad") { realmGroup =>
-        withGroup("ad2") { realmGroup2 =>
-          withCleanBillingProject(studentA) { projectName =>
-            withWorkspace(projectName, "rawls-bucket-test", Set(realmGroup, realmGroup2)) { workspaceName =>
-              val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
-              val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
-
-              bucketName should startWith("fc-secure-")
-              bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "high", "ad-" + realmGroup.toLowerCase -> "", "ad-" + realmGroup2.toLowerCase -> "")
-            }
-          }
-        }
-      }
-    }
-
-    // bucket and object access levels for sam policies as described in comments in insertBucket function in HttpGoogleServicesDAO
-    val policyToBucketAccessLevel = Map("project-owner" -> "WRITER", "owner" -> "WRITER", "writer" -> "WRITER", "reader" -> "READER")
-    val policyToObjectAccessLevel = Map("project-owner" -> "READER", "owner" -> "READER", "writer" -> "READER", "reader" -> "READER")
-
-    "should have correct policies in Sam and ACLs in Google when an unconstrained workspace is created" in {
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = ownerAuthToken
-
-      withCleanBillingProject(owner) { projectName =>
-        withWorkspace(projectName, s"unconstrained-workspace") { workspaceName =>
-          val workspaceId = getWorkspaceId(projectName, workspaceName)
-          val samPolicies = verifySamPolicies(workspaceId)
-          val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
-
-          // check bucket acls
-          val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
-          val expectedBucketRolesWithEmails = samPolicies.collect {
-            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("WRITER", emails.head)
-            case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
-          }
-          actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
-
-          // check object acls
-          val actualObjectRolesWithEmails = getObjectRolesWithEmails(bucketName)
-          val expectedObjectRolesWithEmails = samPolicies.collect {
-            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("READER", emails.head)
-            case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
-          }
-          actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
-        }
-      }
-    }
-
-    "should have correct policies in Sam and ACLs in Google when a constrained workspace is created" in {
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = ownerAuthToken
-
-      withCleanBillingProject(owner) { projectName =>
-        withGroup("authDomain", List(owner.email)) { authDomain =>
-          withWorkspace(projectName, s"constrained-workspace", Set(authDomain)) { workspaceName =>
-            val workspaceId = getWorkspaceId(projectName, workspaceName)
-            val samPolicies = verifySamPolicies(workspaceId)
-            val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
-
-            // check bucket acls
-            val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
-            val expectedBucketRolesWithEmails = samPolicies.collect {
-              case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
-            }
-            actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
-
-            // check object acls
-            val actualObjectRolesWithEmails = getObjectRolesWithEmails(bucketName)
-            val expectedObjectRolesWithEmails = samPolicies.collect {
-              case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
-            }
-            actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
-          }
-        }
-      }
-    }
-
-    "should clone a workspace and only copy files in the specified path" in {
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = studentAToken
-
-      withCleanBillingProject(studentA) { projectName =>
-        withWorkspace(projectName, "test-copy-files", Set.empty) { workspaceName =>
-          val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
-
-          val fileToCopy = GcsObjectName("/pleasecopythis/foo.txt")
-          val fileToLeave = GcsObjectName("/dontcopythis/bar.txt")
-
-          googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToCopy, "foo", "text/plain").futureValue
-          googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToLeave, "bar", "text/plain").futureValue
-
-          val initialFiles = googleStorageDAO.listObjectsWithPrefix(GcsBucketName(bucketName), "").futureValue.map(_.value)
-
-          initialFiles.size shouldBe 2
-          initialFiles should contain(fileToCopy.value)
-          initialFiles should contain(fileToLeave.value)
-
-          val destWorkspaceName = workspaceName + "_clone"
-          Rawls.workspaces.clone(projectName, workspaceName, projectName, destWorkspaceName, Set.empty, Some("/pleasecopythis"))
-          val cloneBucketName = Rawls.workspaces.getBucketName(projectName, destWorkspaceName)
-
-          val start = System.currentTimeMillis()
-          eventually {
-            googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.size shouldBe 1
-          }
-          val finish = System.currentTimeMillis()
-
-          googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.map(_.value) should contain only fileToCopy.value
-
-          logger.info(s"Copied bucket files visible after ${finish-start} milliseconds")
-        }
-      }
-    }
+//    "should retrieve sub-workflow metadata and outputs from Cromwell" in {
+//      implicit val token: AuthToken = studentBToken
+//
+//      // this will run scatterCount^levels workflows, so be careful if increasing these values!
+//      val topLevelMethod: Method = methodTree(levels = 3, scatterCount = 3)
+//
+//      withCleanBillingProject(studentB) { projectName =>
+//        withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
+//          withCleanUp {a
+//            Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+//              projectName, workspaceName,
+//              topLevelMethod,
+//              topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
+//              topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
+//
+//            Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
+//
+//            // it currently takes ~ 5 min for google bucket read permissions to propagate.
+//            // We can't launch a workflow until this happens.
+//            // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
+//
+//            Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+//
+//            val submissionId = Rawls.submissions.launchWorkflow(
+//              projectName, workspaceName,
+//              topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
+//              "participant", SingleParticipant.entityId, "this", useCallCache = false)
+//            // clean up: Abort submission
+//            register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+//
+//            // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
+//
+//            val submissionPatience = PatienceConfig(timeout = scaled(Span(8, Minutes)), interval = scaled(Span(30, Seconds)))
+//            implicit val patienceConfig: PatienceConfig = submissionPatience
+//
+//            val firstWorkflowId = eventually {
+//              val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+//              withClue(s"queue status: ${getQueueStatus()}, submission status: ${getSubmissionResponse(projectName, workspaceName, submissionId)}") {
+//                status should (be("Submitted") or be("Done")) // very unlikely it's already done, but let's handle that case.
+//                workflows should not be (empty)
+//                workflows.head
+//              }
+//            }
+//
+//            // retrieve the workflow's metadata.  May need to wait for a subworkflow to appear.  Take the first one we see.
+//
+//            val firstSubWorkflowId = eventually {
+//              val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstWorkflowId)
+//              val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
+//              withClue(getWorkflowResponse(projectName, workspaceName, submissionId, firstWorkflowId)) {
+//                subIds should not be (empty)
+//                subIds.head
+//              }
+//            }
+//
+//            // can we also retrieve the subworkflow's metadata?  Get a sub-sub-workflow ID while we're doing this.
+//
+//            val firstSubSubWorkflowId = eventually {
+//              val cromwellMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubWorkflowId)
+//              val subSubIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata)
+//              withClue(getWorkflowResponse(projectName, workspaceName, submissionId, firstSubWorkflowId)) {
+//                subSubIds should not be (empty)
+//                subSubIds.head
+//              }
+//            }
+//
+//            // verify that Rawls can retrieve the sub-sub-workflow's metadata without throwing an exception.
+//
+//            eventually {
+//              Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
+//            }
+//
+//            // verify that Rawls can retrieve the workflows' outputs from Cromwell without error
+//            // https://github.com/DataBiosphere/firecloud-app/issues/157
+//
+//            val outputsTimeout = Timeout(scaled(Span(10, Seconds)))
+//            eventually(outputsTimeout) {
+//              Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstWorkflowId)
+//              // nope https://github.com/DataBiosphere/firecloud-app/issues/160
+//              //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubWorkflowId)
+//              //Rawls.submissions.getWorkflowOutputs(projectName, workspaceName, submissionId, firstSubSubWorkflowId)
+//            }
+//          }
+//        }
+//      }
+//
+//    }
+
+//    "should retrieve metadata with widely scattered sub-workflows in a short time" in {
+//      implicit val token: AuthToken = studentAToken
+//
+//      val scatterWidth = 500
+//
+//      // this will run scatterCount^levels workflows, so be careful if increasing these values!
+//      val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
+//
+//      withCleanBillingProject(studentA) { projectName =>
+//        withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
+//          Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+//            projectName, workspaceName,
+//            topLevelMethod,
+//            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
+//            topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
+//
+//          Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
+//
+//          // it currently takes ~ 5 min for google bucket read permissions to propagate.
+//          // We can't launch a workflow until this happens.
+//          // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
+//
+//          Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+//
+//          val submissionId = Rawls.submissions.launchWorkflow(
+//            projectName, workspaceName,
+//            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
+//            "participant", SingleParticipant.entityId, "this", useCallCache = false)
+//
+//          // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
+//
+//          val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+//          implicit val patienceConfig: PatienceConfig = submissionPatience
+//
+//          val firstWorkflowId = eventually {
+//            val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+//
+//            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
+//              workflows should not be (empty)
+//              workflows.head
+//            }
+//          }
+//
+//          // retrieve the workflow's metadata.
+//          // Orchestration times out in 1 minute, so we want to be well below that
+//
+//          // we also need to check that it returns *at all* in under a minute
+//          // `eventually` won't cover this if the call itself is slow and synchronous
+//
+//          val myTimeout = Timeout(scaled(Span(45, Seconds)))
+//          val myInterval = Interval(scaled(Span(10, Seconds)))
+//
+//          implicit val ec: ExecutionContextExecutor = system.dispatcher
+//
+//          def cromwellMetadata(wfId: String) = Future {
+//            Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, wfId)
+//          }.futureValue(timeout = myTimeout)
+//
+//          val subworkflowIds = eventually(myTimeout, myInterval) {
+//            val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata(firstWorkflowId))
+//            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
+//              subIds.size shouldBe scatterWidth
+//            }
+//            subIds
+//          }
+//
+//          // can we also quickly retrieve metadata for a few of the subworkflows?
+//
+//          Random.shuffle(subworkflowIds.take(10)).foreach {
+//            cromwellMetadata(_)
+//          }
+//
+//          // clean up: Abort and wait for one minute or Aborted, whichever comes first
+//          // Timeout is OK here: just make a best effort
+//
+//          Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+//
+//          val abortOrGiveUp = retryUntilSuccessOrTimeout()(timeout = 1.minute, interval = 10.seconds) { () =>
+//            Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId) match {
+//              case (status, _) if status == "Aborted" => Future.successful(())
+//              case (status, _) => Future.failed(new Exception(s"Expected Aborted, saw $status"))
+//            }
+//          }
+//
+//          // wait on the future's execution
+//          abortOrGiveUp.futureValue
+//        }
+//      }
+//
+//    }
+
+//    "should label low security bucket" in {
+//      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+//      implicit val token: AuthToken = studentAToken
+//
+//      withCleanBillingProject(studentA) { projectName =>
+//        withWorkspace(projectName, "rawls-bucket-test") { workspaceName =>
+//          val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
+//          val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
+//
+//          bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "low")
+//        }
+//      }
+//    }
+//
+//    "should label high security bucket" in {
+//      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+//      implicit val token: AuthToken = studentAToken
+//
+//      withGroup("ad") { realmGroup =>
+//        withGroup("ad2") { realmGroup2 =>
+//          withCleanBillingProject(studentA) { projectName =>
+//            withWorkspace(projectName, "rawls-bucket-test", Set(realmGroup, realmGroup2)) { workspaceName =>
+//              val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
+//              val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
+//
+//              bucketName should startWith("fc-secure-")
+//              bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "high", "ad-" + realmGroup.toLowerCase -> "", "ad-" + realmGroup2.toLowerCase -> "")
+//            }
+//          }
+//        }
+//      }
+//    }
+
+//    // bucket and object access levels for sam policies as described in comments in insertBucket function in HttpGoogleServicesDAO
+//    val policyToBucketAccessLevel = Map("project-owner" -> "WRITER", "owner" -> "WRITER", "writer" -> "WRITER", "reader" -> "READER")
+//    val policyToObjectAccessLevel = Map("project-owner" -> "READER", "owner" -> "READER", "writer" -> "READER", "reader" -> "READER")
+//
+//    "should have correct policies in Sam and ACLs in Google when an unconstrained workspace is created" in {
+//      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+//      implicit val token: AuthToken = ownerAuthToken
+//
+//      withCleanBillingProject(owner) { projectName =>
+//        withWorkspace(projectName, s"unconstrained-workspace") { workspaceName =>
+//          val workspaceId = getWorkspaceId(projectName, workspaceName)
+//          val samPolicies = verifySamPolicies(workspaceId)
+//          val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
+//
+//          // check bucket acls
+//          val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
+//          val expectedBucketRolesWithEmails = samPolicies.collect {
+//            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("WRITER", emails.head)
+//            case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
+//          }
+//          actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
+//
+//          // check object acls
+//          val actualObjectRolesWithEmails = getObjectRolesWithEmails(bucketName)
+//          val expectedObjectRolesWithEmails = samPolicies.collect {
+//            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("READER", emails.head)
+//            case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
+//          }
+//          actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
+//        }
+//      }
+//    }
+
+//    "should have correct policies in Sam and ACLs in Google when a constrained workspace is created" in {
+//      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+//      implicit val token: AuthToken = ownerAuthToken
+//
+//      withCleanBillingProject(owner) { projectName =>
+//        withGroup("authDomain", List(owner.email)) { authDomain =>
+//          withWorkspace(projectName, s"constrained-workspace", Set(authDomain)) { workspaceName =>
+//            val workspaceId = getWorkspaceId(projectName, workspaceName)
+//            val samPolicies = verifySamPolicies(workspaceId)
+//            val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
+//
+//            // check bucket acls
+//            val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
+//            val expectedBucketRolesWithEmails = samPolicies.collect {
+//              case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
+//            }
+//            actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
+//
+//            // check object acls
+//            val actualObjectRolesWithEmails = getObjectRolesWithEmails(bucketName)
+//            val expectedObjectRolesWithEmails = samPolicies.collect {
+//              case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
+//            }
+//            actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
+//          }
+//        }
+//      }
+//    }
+
+//    "should clone a workspace and only copy files in the specified path" in {
+//      implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
+//      implicit val token: AuthToken = studentAToken
+//
+//      withCleanBillingProject(studentA) { projectName =>
+//        withWorkspace(projectName, "test-copy-files", Set.empty) { workspaceName =>
+//          val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
+//
+//          val fileToCopy = GcsObjectName("/pleasecopythis/foo.txt")
+//          val fileToLeave = GcsObjectName("/dontcopythis/bar.txt")
+//
+//          googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToCopy, "foo", "text/plain").futureValue
+//          googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToLeave, "bar", "text/plain").futureValue
+//
+//          val initialFiles = googleStorageDAO.listObjectsWithPrefix(GcsBucketName(bucketName), "").futureValue.map(_.value)
+//
+//          initialFiles.size shouldBe 2
+//          initialFiles should contain(fileToCopy.value)
+//          initialFiles should contain(fileToLeave.value)
+//
+//          val destWorkspaceName = workspaceName + "_clone"
+//          Rawls.workspaces.clone(projectName, workspaceName, projectName, destWorkspaceName, Set.empty, Some("/pleasecopythis"))
+//          val cloneBucketName = Rawls.workspaces.getBucketName(projectName, destWorkspaceName)
+//
+//          val start = System.currentTimeMillis()
+//          eventually {
+//            googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.size shouldBe 1
+//          }
+//          val finish = System.currentTimeMillis()
+//
+//          googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.map(_.value) should contain only fileToCopy.value
+//
+//          logger.info(s"Copied bucket files visible after ${finish-start} milliseconds")
+//        }
+//      }
+//    }
 
     "should support running workflows with private docker images" in {
       implicit val token: AuthToken = ownerAuthToken
