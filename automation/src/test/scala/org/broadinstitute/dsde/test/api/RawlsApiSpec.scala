@@ -193,96 +193,98 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
     }
 
-    "should retrieve metadata with widely scattered sub-workflows in a short time" in {
-      implicit val token: AuthToken = studentAToken
+//    Disabling this test until we decide what to do with it. See AP-177
 
-      val scatterWidth = 500
-
-      // this will run scatterCount^levels workflows, so be careful if increasing these values!
-      val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
-
-      withCleanBillingProject(studentA) { projectName =>
-        withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
-          Orchestration.methodConfigurations.createMethodConfigInWorkspace(
-            projectName, workspaceName,
-            topLevelMethod,
-            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
-            topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
-
-          Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
-
-          // it currently takes ~ 5 min for google bucket read permissions to propagate.
-          // We can't launch a workflow until this happens.
-          // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
-
-          Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
-
-          val submissionId = Rawls.submissions.launchWorkflow(
-            projectName, workspaceName,
-            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
-            "participant", SingleParticipant.entityId, "this", useCallCache = false)
-
-          // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
-
-          val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
-          implicit val patienceConfig: PatienceConfig = submissionPatience
-
-          val firstWorkflowId = eventually {
-            val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
-
-            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
-              workflows should not be (empty)
-              workflows.head
-            }
-          }
-
-          // retrieve the workflow's metadata.
-          // Orchestration times out in 1 minute, so we want to be well below that
-
-          // we also need to check that it returns *at all* in under a minute
-          // `eventually` won't cover this if the call itself is slow and synchronous
-
-          val myTimeout = Timeout(scaled(Span(45, Seconds)))
-          val myInterval = Interval(scaled(Span(10, Seconds)))
-
-          implicit val ec: ExecutionContextExecutor = system.dispatcher
-
-          def cromwellMetadata(wfId: String) = Future {
-            Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, wfId)
-          }.futureValue(timeout = myTimeout)
-
-          val subworkflowIds = eventually(myTimeout, myInterval) {
-            val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata(firstWorkflowId))
-            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
-              subIds.size shouldBe scatterWidth
-            }
-            subIds
-          }
-
-          // can we also quickly retrieve metadata for a few of the subworkflows?
-
-          Random.shuffle(subworkflowIds.take(10)).foreach {
-            cromwellMetadata(_)
-          }
-
-          // clean up: Abort and wait for one minute or Aborted, whichever comes first
-          // Timeout is OK here: just make a best effort
-
-          Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
-
-          val abortOrGiveUp = retryUntilSuccessOrTimeout()(timeout = 1.minute, interval = 10.seconds) { () =>
-            Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId) match {
-              case (status, _) if status == "Aborted" => Future.successful(())
-              case (status, _) => Future.failed(new Exception(s"Expected Aborted, saw $status"))
-            }
-          }
-
-          // wait on the future's execution
-          abortOrGiveUp.futureValue
-        }
-      }
-
-    }
+//    "should retrieve metadata with widely scattered sub-workflows in a short time" in {
+//      implicit val token: AuthToken = studentAToken
+//
+//      val scatterWidth = 500
+//
+//      // this will run scatterCount^levels workflows, so be careful if increasing these values!
+//      val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
+//
+//      withCleanBillingProject(studentA) { projectName =>
+//        withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
+//          Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+//            projectName, workspaceName,
+//            topLevelMethod,
+//            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
+//            topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
+//
+//          Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
+//
+//          // it currently takes ~ 5 min for google bucket read permissions to propagate.
+//          // We can't launch a workflow until this happens.
+//          // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
+//
+//          Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+//
+//          val submissionId = Rawls.submissions.launchWorkflow(
+//            projectName, workspaceName,
+//            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
+//            "participant", SingleParticipant.entityId, "this", useCallCache = false)
+//
+//          // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
+//
+//          val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+//          implicit val patienceConfig: PatienceConfig = submissionPatience
+//
+//          val firstWorkflowId = eventually {
+//            val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+//
+//            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
+//              workflows should not be (empty)
+//              workflows.head
+//            }
+//          }
+//
+//          // retrieve the workflow's metadata.
+//          // Orchestration times out in 1 minute, so we want to be well below that
+//
+//          // we also need to check that it returns *at all* in under a minute
+//          // `eventually` won't cover this if the call itself is slow and synchronous
+//
+//          val myTimeout = Timeout(scaled(Span(45, Seconds)))
+//          val myInterval = Interval(scaled(Span(10, Seconds)))
+//
+//          implicit val ec: ExecutionContextExecutor = system.dispatcher
+//
+//          def cromwellMetadata(wfId: String) = Future {
+//            Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, wfId)
+//          }.futureValue(timeout = myTimeout)
+//
+//          val subworkflowIds = eventually(myTimeout, myInterval) {
+//            val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata(firstWorkflowId))
+//            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
+//              subIds.size shouldBe scatterWidth
+//            }
+//            subIds
+//          }
+//
+//          // can we also quickly retrieve metadata for a few of the subworkflows?
+//
+//          Random.shuffle(subworkflowIds.take(10)).foreach {
+//            cromwellMetadata(_)
+//          }
+//
+//          // clean up: Abort and wait for one minute or Aborted, whichever comes first
+//          // Timeout is OK here: just make a best effort
+//
+//          Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+//
+//          val abortOrGiveUp = retryUntilSuccessOrTimeout()(timeout = 1.minute, interval = 10.seconds) { () =>
+//            Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId) match {
+//              case (status, _) if status == "Aborted" => Future.successful(())
+//              case (status, _) => Future.failed(new Exception(s"Expected Aborted, saw $status"))
+//            }
+//          }
+//
+//          // wait on the future's execution
+//          abortOrGiveUp.futureValue
+//        }
+//      }
+//
+//    }
 
     "should label low security bucket" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
@@ -451,7 +453,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(60, Minutes)), interval = scaled(Span(30, Seconds)))
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(16, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
             val workflowId = eventually {
