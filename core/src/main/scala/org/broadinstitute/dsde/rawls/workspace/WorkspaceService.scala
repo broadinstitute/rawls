@@ -108,7 +108,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) = createMethodConfigurationTemplate(methodRepoMethod)
   def GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) = getMethodInputsOutputs(methodRepoMethod)
   def GetAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) = getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
-  def GetGenomicsOperation(workspaceName: WorkspaceName, jobId: String) = getGenomicsOperation(workspaceName, jobId)
 
   def ListSubmissions(workspaceName: WorkspaceName) = listSubmissions(workspaceName)
   def CountSubmissions(workspaceName: WorkspaceName) = countSubmissions(workspaceName)
@@ -1703,21 +1702,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     } yield RequestComplete(StatusCodes.OK, instructions.flatten)
-  }
-
-  def getGenomicsOperation(workspaceName: WorkspaceName, jobId: String): Future[PerRequestMessage] = {
-    // First check the workspace context and permissions in a DB transaction.
-    // We don't need any DB information beyond that, so just return Unit on success.
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, dataAccess) { _ =>
-        DBIO.successful(())
-      }
-    }
-    // Next call GenomicsService, which actually makes the Google Genomics API call.
-    .flatMap { _ =>
-      val genomicsServiceRef = genomicsServiceConstructor(userInfo)
-      genomicsServiceRef.GetOperation(jobId)
-    }
   }
 
   // helper methods
