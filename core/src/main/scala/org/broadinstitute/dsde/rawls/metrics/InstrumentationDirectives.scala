@@ -44,9 +44,6 @@ trait InstrumentationDirectives extends RawlsInstrumented {
   private val redactMethodConfigs =
     (Slash ~ "api").? / "workspaces" / Segment / Segment / "methodconfigs" / Segment / (Segment ~ SegmentIgnore.repeat(0, Int.MaxValue, separator = Slash))
 
-  private val redactGenomicsOperations =
-    (Slash ~ "api").? / "workspaces" / Segment / Segment / "genomics" / "operations" / Segment
-
   private val redactWorkspaceNames =
     (Slash ~ "api").? / "workspaces" / (!"entities" ~ Segment) / (Segment ~ SegmentIgnore.repeat(0, Int.MaxValue, separator = Slash))
 
