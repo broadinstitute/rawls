@@ -20,6 +20,8 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
+import cats.implicits._
+
 /**
  * Created by dvoet on 10/27/15.
  */
@@ -194,11 +196,21 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def unregisterBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
     val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
     for {
+      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
+      _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
       _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
       _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) }
     } yield {
       RequestComplete(StatusCodes.NoContent)
     }
+  }
+
+  private def destroyPet(userIdInfo: UserIdInfo, projectName: RawlsBillingProjectName): Future[Unit] = {
+    for {
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName.value, RawlsUserEmail(userIdInfo.userEmail))
+      petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName.value, petUserInfo)
+    } yield ()
   }
 
   def deleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
