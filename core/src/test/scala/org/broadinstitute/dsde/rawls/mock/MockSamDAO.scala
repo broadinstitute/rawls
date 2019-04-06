@@ -90,7 +90,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getStatus(): Future[SubsystemStatus] = Future.successful(SubsystemStatus(true, None))
 
-  override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]] = ???
+  override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]] = Future.successful(Set.empty)
 
   override def getAccessInstructions(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Option[String]] = ???
 }

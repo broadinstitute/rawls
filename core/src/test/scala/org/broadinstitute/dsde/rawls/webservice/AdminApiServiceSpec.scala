@@ -107,7 +107,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Delete(s"/admin/project/registration/$projectName", httpJson(Map("newOwnerEmail" -> userInfo.userEmail.value, "newOwnerToken" -> userInfo.accessToken.token))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.NoContent) {
+        assertResult(StatusCodes.NoContent, responseAs[String]) {
           status
         }
       }
