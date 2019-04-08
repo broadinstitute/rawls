@@ -226,6 +226,11 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or500) { () => asRawlsSAPipeline[String] apply RequestBuilding.Get(url) }
   }
 
+  override def deleteUserPetServiceAccount(googleProject: String, userInfo: UserInfo): Future[Unit] = {
+    val url = samServiceURL + s"/api/google/v1/user/petServiceAccount/$googleProject"
+    doSuccessOrFailureRequest(RequestBuilding.Delete(url), userInfo)
+  }
+
   override def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String] = {
     val url = samServiceURL + "/api/google/v1/user/petServiceAccount/key"
     retry(when401or500) { () => pipeline[String](userInfo) apply RequestBuilding.Get(url) }
@@ -254,4 +259,6 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     val httpRequest = RequestBuilding.Get(url).addHeader(authHeader(userInfo))
     retry(when401or500) { () => httpClientUtils.executeRequestUnmarshalResponseAcceptNoContent[String](http, httpRequest) }
   }
+
+
 }
