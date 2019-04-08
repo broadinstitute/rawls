@@ -29,7 +29,7 @@ import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.model.UsageExportLocation
 import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.deploymentmanager.model.{ConfigFile, Deployment, ImportFile, TargetConfiguration}
-import com.google.api.services.deploymentmanager.{DeploymentManagerV2Beta}
+import com.google.api.services.deploymentmanager.DeploymentManagerV2Beta
 import com.google.api.services.genomics.model.Operation
 import com.google.api.services.genomics.{Genomics, GenomicsScopes}
 import com.google.api.services.oauth2.Oauth2.Builder
@@ -44,8 +44,8 @@ import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.BucketInfo.LifecycleRule
 import com.google.cloud.storage.BucketInfo.LifecycleRule.LifecycleAction
+import fs2.Stream
 import io.grpc.Status.Code
-import fs2._
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.GoogleUtilities
@@ -61,6 +61,7 @@ import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
 import scala.io.Source
@@ -786,7 +787,7 @@ class HttpGoogleServicesDAO(
         deploymentManager.deployments().insert(deploymentMgrProject, new Deployment().setName(projectToDM(projectName)).setTarget(dconf))
       }
     }) map { googleOperation =>
-      val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
+      val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
       RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, googleOperation.getName, false, errorStr, API_DEPLOYMENT_MANAGER)
     }
   }
@@ -824,7 +825,7 @@ class HttpGoogleServicesDAO(
         retryWhen500orGoogleError(() => {
           executeGoogleRequest(deploymentManager.operations().get(deploymentMgrProject, rawlsBillingProjectOperation.operationId))
         }).map { op =>
-          val errorStr = Option(op.getError).map(errors => errors.getErrors.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
+          val errorStr = Option(op.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
           rawlsBillingProjectOperation.copy(done = op.getStatus == "DONE", errorMessage = errorStr)
         }
     }
@@ -1012,7 +1013,7 @@ class HttpGoogleServicesDAO(
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(clientEmail)
-      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM))
+      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM).asJavaCollection)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
   }
