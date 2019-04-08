@@ -18,8 +18,6 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.SamModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard, Retry}
-import org.broadinstitute.dsde.workbench.client.sam.ApiClient
-import org.broadinstitute.dsde.workbench.client.sam.api.UsersApi
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.WorkbenchEmailFormat
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 import spray.json.DefaultJsonProtocol._
@@ -263,13 +261,4 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
 
-}
-
-object SamClient {
-  private def samUserApi(baseSamUrl: String, accessToken: String) = {
-    val apiClient = new ApiClient()
-    apiClient.setAccessToken(accessToken)
-    apiClient.setBasePath(baseSamUrl)
-    new UsersApi(apiClient)
-  }
 }

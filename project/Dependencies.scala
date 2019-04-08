@@ -70,8 +70,6 @@ object Dependencies {
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
   val scalaCache: ModuleID =      "com.github.cb372"              %% "scalacache-caffeine"  % "0.24.2"
 
-  val samClient: ModuleID = "org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-f6bf0ec"
-
   val cromwellWdl: ModuleID = ("org.broadinstitute" %% "wdl-draft2" % cromwellVersion
     exclude("org.typelevel", "cats_2.12")
     exclude("io.spray", "spray-json_2.12")
@@ -170,7 +168,6 @@ object Dependencies {
     workbenchGoogle2,
     workbenchGoogleMocks,
     ficus,
-    scalaCache,
-    samClient
+    scalaCache
   )
 }
