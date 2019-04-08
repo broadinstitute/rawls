@@ -771,6 +771,7 @@ class HttpGoogleServicesDAO(
 
     val properties = Map (
       "billingAccountId" -> billingAccount.accountName.value.toJson,
+      "billingAccountFriendlyName" -> billingAccount.displayName.toJson,
       "projectId" -> projectName.value.toJson,
       "parentOrganization" -> orgID.toJson,
       "fcBillingGroup" -> billingGroupEmail.toJson,
