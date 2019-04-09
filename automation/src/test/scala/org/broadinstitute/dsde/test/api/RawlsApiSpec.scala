@@ -471,31 +471,10 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
         }
       }
     }
-
-    "should allow project owners to create, clone, and delete workspaces" in {
-      implicit val token: AuthToken = ownerAuthToken
-
-      withCleanBillingProject(owner) { projectName =>
-        val workspaceName = s"${UUID.randomUUID().toString()}-owner-test-workspace"
-        val workspaceCloneName = s"$workspaceName-copy"
-
-        Rawls.workspaces.create(projectName, workspaceName)
-        getWorkspaceId(projectName, workspaceName) should not be empty
-
-        Rawls.workspaces.clone(projectName, workspaceName, projectName, workspaceCloneName)
-        getWorkspaceId(projectName, workspaceCloneName) should not be empty
-
-        Rawls.workspaces.delete(projectName, workspaceName)
-        assertThrows[RestException](Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
-
-        Rawls.workspaces.delete(projectName, workspaceCloneName)
-        assertThrows[RestException](Rawls.workspaces.getWorkspaceDetails(projectName, workspaceCloneName))
-      }
-    }
   }
 
   private def getWorkspaceId(projectName: String, workspaceName: String)(implicit token: AuthToken): String = {
-import DefaultJsonProtocol._
+    import DefaultJsonProtocol._
     Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName).parseJson.asJsObject.getFields("workspace").flatMap { workspace =>
       workspace.asJsObject.getFields("workspaceId")
     }.head.convertTo[String]
