@@ -1,16 +1,16 @@
 package org.broadinstitute.dsde.test.api
 
-import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.UserPool
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls}
 import org.broadinstitute.dsde.workbench.service.test.RandomUtil
-import org.scalatest.FreeSpec
+import org.scalatest.{FreeSpec, Matchers}
+import spray.json.pimpString
 
 class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLogging with BillingFixtures with RandomUtil
-  with MethodFixtures {
+  with MethodFixtures with Matchers {
 
   /*
    * This test does
@@ -39,8 +39,10 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
 
         withMethod("MethodConfigApiSpec_from_workspace", MethodData.SimpleMethod, 1) { methodName =>
           val method = MethodData.SimpleMethod.copy(methodName = methodName)
-          Rawls.methodconfigs.createMethodConfigInWorkspace(
-            billingProject, sourceWorkspaceName, method, method.methodNamespace, method.methodName, 1, Map.empty, Map.empty, method.rootEntityType)
+
+          Rawls.methodConfigs.createMethodConfigInWorkspace(
+            billingProject, sourceWorkspaceName, method, method.methodNamespace, method.methodName, 1,
+            Map.empty, Map.empty, method.rootEntityType)
 
           Orchestration.workspaces.waitForBucketReadAccess(billingProject, destWorkspaceName)
 
@@ -63,17 +65,16 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
           )
 
           // copy method config from source workspace to destination workspace
-          Rawls.methodconfigs.copyMethodConfigFromWorkspace(sourceMethodConfig, destMethodConfig)
+          Rawls.methodConfigs.copyMethodConfigFromWorkspace(sourceMethodConfig, destMethodConfig)
 
           // verify method config in destination workspace
-          val response: HttpResponse = Rawls.methodconfigs.getMethodConfigInWorkspace(billingProject, destWorkspaceName, destMethodNamespace, destMethodName)
-          assertResult(StatusCodes.OK) {
-            response.status
-          }
+          val response = Rawls.methodConfigs.getMethodConfigInWorkspace(billingProject, destWorkspaceName,
+            destMethodNamespace, destMethodName)
+          val parsedStr = response.parseJson.asJsObject.getFields("methodRepoMethod")
+          parsedStr should not be empty
+
         }
-
       }
-
     }
   }
 
@@ -116,13 +117,12 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
         )
       )
 
-      Rawls.methodconfigs.copyMethodConfigFromMethodRepo(request)
+      Rawls.methodConfigs.copyMethodConfigFromMethodRepo(request)
 
       // verify copy was successful
-      val response: HttpResponse = Rawls.methodconfigs.getMethodConfigInWorkspace(billingProject, workspaceName, namespace, name)
-      assertResult(StatusCodes.OK) {
-        response.status
-      }
+      val response = Rawls.methodConfigs.getMethodConfigInWorkspace(billingProject, workspaceName, namespace, name)
+      val parsedStr = response.parseJson.asJsObject.getFields("methodRepoMethod")
+      parsedStr should not be empty
     }
   }
 
