@@ -10,13 +10,12 @@ import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.util.Retry
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
-import org.scalatest.concurrent.Eventually
 import org.scalatest.{FreeSpecLike, Matchers}
 import spray.json._
 
-class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with GroupFixtures
+class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers
   with CleanUp with RandomUtil with Retry
-  with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures {
+  with BillingFixtures with WorkspaceFixtures {
 
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
   val studentAToken: AuthToken = studentA.makeAuthToken()
