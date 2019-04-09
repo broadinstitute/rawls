@@ -83,7 +83,7 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
    * Given) a clean billing project and a registered user
    * When)  the user can create a new workspace
    * and)   the user can create a method in workspace
-   * Then)  the user can import the method config from method repo in workspace
+   * Then)  the user can import a method config from method repo in workspace
    *
    */
   "import method config from method repo" in {
@@ -102,9 +102,6 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
       Orchestration.methods.createMethod(attributes)
       register cleanUp Orchestration.methods.redact(namespace, name, SimpleMethodConfig.snapshotId)
 
-      //val methodNameCopy = uuidWithPrefix("MethodConfigApiSpec_CopyMethodName")
-      //val methodNamespaceCopy = MethodData.SimpleMethod.creationAttributes.get("namespace").head + randomUuid
-
       val request = Map(
         "methodRepoNamespace" -> SimpleMethodConfig.configNamespace,
         "methodRepoName" -> SimpleMethodConfig.configName,
@@ -120,11 +117,6 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
       )
 
       Rawls.methodconfigs.copyMethodConfigFromMethodRepo(request)
-
-      // 19:56:05.755 [ScalaTest-run-running-MethodConfigApiSpec] INFO org.broadinstitute.dsde.workbench.service.Rawls$ - Getting method configuration automationmethods3c8e4fa9-b938-47a1-8522-418dddbd2db5/MethodConfigApiSpec_CopyMethodName_04d496bc-b717-407d-a001-0b1acd3e2a26 for workspace gpalloc-dev-master-0uzkc4s/MethodConfigApiSpec_workspace_1f3b666d-0fe9-4ec7-9dfd-614052edfad9
-      // 19:56:05.853 [default-akka.actor.default-dispatcher-4] INFO org.broadinstitute.dsde.workbench.service.Rawls$ - API request: HttpRequest(HttpMethod(GET),https://rawls-fiab.dsde-dev.broadinstitute.org:24443/api/workspaces/gpalloc-dev-master-0uzkc4s/MethodConfigApiSpec_workspace_1f3b666d-0fe9-4ec7-9dfd-614052edfad9/methodconfigs/automationmethods3c8e4fa9-b938-47a1-8522-418dddbd2db5/MethodConfigApiSpec_CopyMethodName_04d496bc-b717-407d-a001-0b1acd3e2a26,List(Authorization: Bearer ya29.GoEB5gbFkaUtoxICzZ_KcXTcRmGGEXgNuquGU3tW0kTqXXQpHGY7dds7kIIMmjf5BJP580KO8GZye4nJiZpZIPjVANC_YEvl01UxNfYouuCZS01KnRhAmYdSphhNKzTZGhu1Luh2-d3XXUa-WEBdZluDLCdXIuLN4j_QOXuM_azfban8),HttpEntity.Strict(none/none,ByteString()),HttpProtocol(HTTP/1.1))
-      // API response: HttpResponse(404 Not Found,List(Date: Mon, 08 Apr 2019 23:56:05 GMT, Server: akka-http/10.1.7, X-Frame-Options: SAMEORIGIN, Access-Control-Allow-Origin: *, Access-Control-Allow-Headers: authorization, content-type, accept, origin, x-app-id, Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD, Access-Control-Max-Age: 1728000),HttpEntity.Strict(application/json,{"causes":[],"message":"automationmethods3c8e4fa9-b938-47a1-8522-418dddbd2db5/MethodConfigApiSpec_CopyMethodName_04d496bc-b717-407d-a001-0b1acd3e2a26 does not exist in SlickWorkspaceContext(Workspace(gpalloc-dev-master-0uzkc4s,MethodConfigApiSpec_workspace_1f3b666d-0fe9-4ec7-9dfd-614052edfad9,b63ea63d-d520-47b7-9327-11aafa16cdd3,fc-b63ea63d-d520-47b7-9327-11aafa16cdd3,Some(b63ea63d-d520-47b7-9327-11aafa16cdd3),2019-04-08T23:56:01.009Z,2019-04-08T23:56:05.663Z,hermione.owner@test.firecloud.org,Map(),false))","source":"rawls","stackTrace":[],"statusCode":404}),HttpProtocol(HTTP/1.1))
-      // Expected 200 OK, but got 404 Not Found
 
       // verify copy was successful
       val response: HttpResponse = Rawls.methodconfigs.getMethodConfigInWorkspace(billingProject, workspaceName, namespace, name)
