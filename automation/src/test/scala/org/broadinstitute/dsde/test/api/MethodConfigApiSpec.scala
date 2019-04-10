@@ -15,10 +15,12 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
   /*
    * This test does
    *
-   * Given) a clean billing project and a registered user
-   * When)  the user can create two new workspaces
-   * and)   the user can create new method config in one workspace
-   * Then)  the user can copy the method config from one workspace to another workspace
+   * Given) a registered user
+   * When) the user is authenticated with access token
+   * Then) the user can get a clean billing project
+   * and)  the user can create two new workspaces
+   * and)  the user can create new method config in one workspace
+   * and)  the user can copy the method config from one workspace to another workspace
    *
    */
   "import method config" - {
@@ -81,10 +83,12 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
   /*
    * This test does
    *
-   * Given) a clean billing project and a registered user
-   * When)  the user can create a new workspace
-   * and)   the user can create a method in workspace
-   * Then)  the user can import a method config from method repo in workspace
+   * Given) a registered user
+   * When) the user is authenticated with access token
+   * Then) the user can get a clean billing project
+   * and)  the user can create a new workspace
+   * and)  the user can create a method in workspace
+   * and)  the user can import a method config from method repo in workspace
    *
    */
   "import method config from method repo" in {
