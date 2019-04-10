@@ -31,11 +31,11 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
 
       withCleanBillingProject(user) { billingProject =>
 
-        val copyFromWorkspaceSource = uuidWithPrefix("copyMethodConfigFromWorkspaceSource")
+        val copyFromWorkspaceSource = uuidWithPrefix("MethodConfigApiSpec_copyMethodConfigFromWorkspaceSource")
         Rawls.workspaces.create(billingProject, copyFromWorkspaceSource);
         register cleanUp Orchestration.workspaces.delete(billingProject, copyFromWorkspaceSource)
 
-        val copyToWorkspaceDestination = uuidWithPrefix("copyMethodConfigToWorkspaceDestination")
+        val copyToWorkspaceDestination = uuidWithPrefix("MethodConfigApiSpec_copyMethodConfigToWorkspaceDestination")
         Rawls.workspaces.create(billingProject, copyToWorkspaceDestination);
         register cleanUp Orchestration.workspaces.delete(billingProject, copyToWorkspaceDestination)
 
@@ -94,13 +94,14 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
   "import method config from method repo" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
+    
     withCleanBillingProject(user) { billingProject =>
 
-      val workspaceName = uuidWithPrefix("MethodConfigApiSpec_workspace")
+      val workspaceName = uuidWithPrefix("MethodConfigApiSpec_importMethodConfigFromMethodRepoWorkspace")
       Rawls.workspaces.create(billingProject, workspaceName);
       register cleanUp Orchestration.workspaces.delete(billingProject, workspaceName)
 
-      val name = uuidWithPrefix("MethodConfigApiSpec_Method")
+      val name = uuidWithPrefix("MethodConfigApiSpec_method")
       val namespace = MethodData.SimpleMethod.creationAttributes.get("namespace").head + randomUuid
       val attributes = MethodData.SimpleMethod.creationAttributes ++ Map("name" -> name, "namespace" -> namespace)
 
