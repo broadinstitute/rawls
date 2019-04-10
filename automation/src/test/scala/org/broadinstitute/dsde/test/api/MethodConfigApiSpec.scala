@@ -7,7 +7,8 @@ import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls}
 import org.broadinstitute.dsde.workbench.service.test.RandomUtil
 import org.scalatest.{FreeSpec, Matchers}
-import spray.json.pimpString
+import spray.json.{JsValue, JsonParser}
+
 
 class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLogging with BillingFixtures with RandomUtil
   with MethodFixtures with Matchers {
@@ -70,17 +71,14 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
           Rawls.methodConfigs.copyMethodConfigFromWorkspace(sourceMethodConfig, destMethodConfig)
 
           // verify method config in destination workspace
-          val response = Rawls.methodConfigs.getMethodConfigInWorkspace(billingProject, copyToWorkspaceDestination,
+          assertMethodConfigInWorkspace(billingProject, copyToWorkspaceDestination,
             destMethodNamespace, destMethodName)
-          val jsonStr = response.parseJson.asJsObject.getFields("methodRepoMethod")
-          jsonStr should not be empty
 
         }
       }
     }
-  }
 
-  /*
+    /*
    * This test does
    *
    * Given) a registered user
@@ -91,44 +89,52 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
    * and)  the user can import a method config from method repo in workspace
    *
    */
-  "import method config from method repo" in {
-    val user = UserPool.chooseProjectOwner
-    implicit val authToken: AuthToken = user.makeAuthToken()
-    
-    withCleanBillingProject(user) { billingProject =>
+    "copy from method repo" in {
+      val user = UserPool.chooseProjectOwner
+      implicit val authToken: AuthToken = user.makeAuthToken()
 
-      val workspaceName = uuidWithPrefix("MethodConfigApiSpec_importMethodConfigFromMethodRepoWorkspace")
-      Rawls.workspaces.create(billingProject, workspaceName);
-      register cleanUp Orchestration.workspaces.delete(billingProject, workspaceName)
+      withCleanBillingProject(user) { billingProject =>
 
-      val name = uuidWithPrefix("MethodConfigApiSpec_method")
-      val namespace = MethodData.SimpleMethod.creationAttributes.get("namespace").head + randomUuid
-      val attributes = MethodData.SimpleMethod.creationAttributes ++ Map("name" -> name, "namespace" -> namespace)
+        val workspaceName = uuidWithPrefix("MethodConfigApiSpec_importMethodConfigFromMethodRepoWorkspace")
+        Rawls.workspaces.create(billingProject, workspaceName);
+        register cleanUp Orchestration.workspaces.delete(billingProject, workspaceName)
 
-      Orchestration.methods.createMethod(attributes)
-      register cleanUp Orchestration.methods.redact(namespace, name, SimpleMethodConfig.snapshotId)
+        val name = uuidWithPrefix("MethodConfigApiSpec_method")
+        val namespace = MethodData.SimpleMethod.creationAttributes.get("namespace").head + randomUuid
+        val attributes = MethodData.SimpleMethod.creationAttributes ++ Map("name" -> name, "namespace" -> namespace)
 
-      val request = Map(
-        "methodRepoNamespace" -> SimpleMethodConfig.configNamespace,
-        "methodRepoName" -> SimpleMethodConfig.configName,
-        "methodRepoSnapshotId" -> SimpleMethodConfig.snapshotId,
-        "destination" -> Map(
-          "name" -> name,
-          "namespace" -> namespace,
-          "workspaceName" -> Map(
-            "namespace" -> billingProject,
-            "name" -> workspaceName
+        Orchestration.methods.createMethod(attributes)
+        register cleanUp Orchestration.methods.redact(namespace, name, SimpleMethodConfig.snapshotId)
+
+        val request = Map(
+          "methodRepoNamespace" -> SimpleMethodConfig.configNamespace,
+          "methodRepoName" -> SimpleMethodConfig.configName,
+          "methodRepoSnapshotId" -> SimpleMethodConfig.snapshotId,
+          "destination" -> Map(
+            "name" -> name,
+            "namespace" -> namespace,
+            "workspaceName" -> Map(
+              "namespace" -> billingProject,
+              "name" -> workspaceName
+            )
           )
         )
-      )
 
-      Rawls.methodConfigs.copyMethodConfigFromMethodRepo(request)
+        Rawls.methodConfigs.copyMethodConfigFromMethodRepo(request)
 
-      // verify copy was successful
-      val response = Rawls.methodConfigs.getMethodConfigInWorkspace(billingProject, workspaceName, namespace, name)
-      val parsedStr = response.parseJson.asJsObject.getFields("methodRepoMethod")
-      parsedStr should not be empty
+        // verify copied method config is in workspace
+        assertMethodConfigInWorkspace(billingProject, workspaceName, namespace, name)
+      }
     }
+
+  }
+
+
+  private def assertMethodConfigInWorkspace(billingProject: String, workspaceName: String, namespace: String, name: String)(implicit token: AuthToken): Unit = {
+    val response = Rawls.methodConfigs.getMethodConfigInWorkspace(billingProject, workspaceName, namespace, name)
+    val json: JsValue = JsonParser(response)
+    val field: JsValue = json.asJsObject.fields("methodRepoMethod")
+    assert(field.toString().contains(""""sourceRepo":"agora""""))
   }
 
 }
