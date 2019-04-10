@@ -11,8 +11,8 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{FreeSpec, Matchers}
 
 
-class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures with SubWorkflowFixtures with Matchers
-  with Eventually {
+class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures with SubWorkflowFixtures
+  with Matchers with Eventually {
 
   /**
     * This test does
@@ -28,6 +28,7 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
     * and)   the project owner can delete Google billing project
     *
     */
+  
   "A user" - {
     "with a billing account" - {
       "create a new billing project" in {
