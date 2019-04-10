@@ -8,7 +8,6 @@ object Settings {
   val artifactory = "https://broadinstitute.jfrog.io/broadinstitute/"
   val commonResolvers = List(
     "artifactory-releases" at artifactory + "libs-release",
-    "artifactory-releases" at artifactory + "libs-release-local",
     "artifactory-snapshots" at artifactory + "libs-snapshot"
   )
 

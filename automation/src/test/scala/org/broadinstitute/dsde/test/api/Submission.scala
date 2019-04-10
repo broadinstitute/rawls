@@ -2,15 +2,14 @@ package org.broadinstitute.dsde.test.api
 
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.auth.AuthToken
-import org.broadinstitute.dsde.workbench.fixture.{Method, MethodData, MethodFixtures, SimpleMethodConfig}
+import org.broadinstitute.dsde.workbench.fixture.{Method, MethodData, SimpleMethodConfig}
 import org.broadinstitute.dsde.workbench.service.test.RandomUtil
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls}
-import org.scalatest.Assertions
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Minutes, Seconds, Span}
 
-object Workflow extends LazyLogging with Eventually with RandomUtil {
+object Submission extends LazyLogging with Eventually with RandomUtil {
 
   def launchWorkflowOnSimpleMethod(billingProjectName: String, workspaceName: String)(implicit token: AuthToken): String = {
 
@@ -46,7 +45,7 @@ object Workflow extends LazyLogging with Eventually with RandomUtil {
       "this",
       useCallCache = false)
 
-    // pause a min for cromwell to start work its magic
+    // pause a minute because cromwell isn't fast
     Thread.sleep(60 * 1000)
 
     // Orchestration.methods.redact(configNamespace, configName, SimpleMethodConfig.snapshotId)
@@ -60,13 +59,13 @@ object Workflow extends LazyLogging with Eventually with RandomUtil {
     status
   }
 
-  def waitForSubmissionIsStatus(billingProjectName: String, workspaceName: String, submissionId: String, expectedStatus: String)(implicit token: AuthToken): Unit = {
+  def waitUntilSubmissionIsStatus(billingProjectName: String, workspaceName: String, submissionId: String, expectedStatus: String)(implicit token: AuthToken): Unit = {
     implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(20, Minutes)), interval = scaled(Span(30, Seconds)))
-    // wait for submission to complete successfully
+    // wait for submission status becomes expected status
     eventually {
-      val status = getSubmissionStatus(billingProjectName, workspaceName, submissionId)
-      withClue(s"Monitoring Submission $billingProjectName/$workspaceName/$submissionId. Status shouldBe $expectedStatus") {
-        status shouldEqual expectedStatus
+      val actualStatus = getSubmissionStatus(billingProjectName, workspaceName, submissionId)
+      withClue(s"Monitoring submission $billingProjectName/$workspaceName/$submissionId. Status shouldBe $expectedStatus") {
+        actualStatus shouldEqual expectedStatus
       }
     }
   }
