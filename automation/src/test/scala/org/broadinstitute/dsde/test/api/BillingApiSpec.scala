@@ -48,8 +48,8 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
         Rawls.billing.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
 
         // verify the google billing project is created and associated with the billing account
-        val associatedBillingAccount = Google.billing.getBillingProjectAccount(billingProjectName)
         eventually {
+          val associatedBillingAccount = Google.billing.getBillingProjectAccount(billingProjectName)
           associatedBillingAccount shouldBe Some(ServiceTestConfig.Projects.billingAccountId)
         }
 
