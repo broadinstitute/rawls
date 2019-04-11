@@ -3,12 +3,14 @@ package org.broadinstitute.dsde.test.api
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
-import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, MethodFixtures, SubWorkflowFixtures}
+import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.model.{UserInfo, WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
-import org.broadinstitute.dsde.workbench.service.{Google, Orchestration, Rawls}
+import org.broadinstitute.dsde.workbench.service.{Google, Orchestration, Rawls, RestException}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{FreeSpec, Matchers}
+
+import scala.util.Try
 
 
 class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures with SubWorkflowFixtures
@@ -18,13 +20,15 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
     * This test does
     *
     * Given) a registered user who is project owner
+    * and)   the project owner can access to the Google billing account
     * When)  the project owner is authenticated with access token
     * Then)  the project owner can create a new Google billing project
-    * and)   the project owner can add a second user to Google billing project
+    * and)   the project owner can add another user to Google billing project
     * and)   the project owner can create a new workspace with Google billing project
     * and)   the project owner can create new method and method config
     * and)   the project owner can run an analysis and wait for complete successfully
     * and)   the project owner can delete method config
+    * and)   the project owner can delete workspace
     * and)   the project owner can delete Google billing project
     *
     */
@@ -38,7 +42,9 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
 
         // create a new google billing project
         val billingProjectName = "rawls-billingapispec-" + makeRandomId()
-        register cleanUp deleteBillingProject(billingProjectName)
+        register cleanUp Try(deleteBillingProject(billingProjectName)).recover {
+          case _: RestException =>
+        }
         Rawls.billing.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
 
         // verify the google billing project is created and associated with the billing account
@@ -59,17 +65,56 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
 
         // create new workspace
         val workspaceName = randomIdWithPrefix("BillingApiSpec")
-        register cleanUp Rawls.workspaces.delete(billingProjectName, workspaceName)
+        register cleanUp Try(Rawls.workspaces.delete(billingProjectName, workspaceName)).recover {
+          case _: RestException =>
+        }
         Rawls.workspaces.create(billingProjectName, workspaceName)
         Orchestration.workspaces.waitForBucketReadAccess(billingProjectName, workspaceName)
 
-        // run analysis and wait for complete successfully
-        val submissionId = Submission.launchWorkflowOnSimpleMethod(billingProjectName, workspaceName)
-        val submissionStatus = "Done"
-        Submission.waitUntilSubmissionIsStatus(billingProjectName, workspaceName, submissionId, submissionStatus)
+        // create a method
+        withMethod("BillingApiSpec_workspace", MethodData.SimpleMethod) { methodName =>
+          val method: Method = MethodData.SimpleMethod.copy(methodName = methodName)
 
+         // val configNamespace = billingProjectName
+         // val configName = s"${workspaceName}_${SimpleMethodConfig.configName}"
+          val participantId = randomIdWithPrefix("participant")
+          val participantEntity = s"entity:participant_id\n$participantId"
+          Orchestration.importMetaData(billingProjectName, workspaceName, "entities", participantEntity)
+
+          // create method config in workspace
+          Rawls.methodConfigs.createMethodConfigInWorkspace(
+            billingProjectName,
+            workspaceName,
+            method,
+            SimpleMethodConfig.configNamespace,
+            SimpleMethodConfig.configName,
+            1,
+            SimpleMethodConfig.inputs,
+            SimpleMethodConfig.outputs,
+            SimpleMethodConfig.rootEntityType)
+
+          // launch submission
+          val submissionId = Rawls.submissions.launchWorkflow(
+            billingProjectName,
+            workspaceName,
+            SimpleMethodConfig.configNamespace,
+            SimpleMethodConfig.configName,
+            SimpleMethodConfig.rootEntityType,
+            participantId,
+            "this",
+            useCallCache = false)
+
+          // pause a minute because cromwell isn't fast
+          Thread.sleep(60 * 1000)
+
+          // monitor submission status until Done
+          val submissionStatus = "Done" // submission complete successfully
+          Submission.waitUntilSubmissionIsStatus(billingProjectName, workspaceName, submissionId, submissionStatus)
+        }
+
+        // clean up
+        Rawls.workspaces.delete(billingProjectName, workspaceName)
         deleteBillingProject(billingProjectName)
-
       }
     }
 
