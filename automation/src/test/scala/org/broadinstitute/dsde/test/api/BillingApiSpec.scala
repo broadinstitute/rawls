@@ -75,8 +75,6 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
         withMethod("BillingApiSpec_workspace", MethodData.SimpleMethod) { methodName =>
           val method: Method = MethodData.SimpleMethod.copy(methodName = methodName)
 
-         // val configNamespace = billingProjectName
-         // val configName = s"${workspaceName}_${SimpleMethodConfig.configName}"
           val participantId = randomIdWithPrefix("participant")
           val participantEntity = s"entity:participant_id\n$participantId"
           Orchestration.importMetaData(billingProjectName, workspaceName, "entities", participantEntity)
@@ -104,12 +102,15 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
             "this",
             useCallCache = false)
 
-          // pause a minute because cromwell isn't fast
-          Thread.sleep(60 * 1000)
+          // wait until submission complete
+          Submission.waitUntilSubmissionComplete(billingProjectName, workspaceName, submissionId)
 
-          // monitor submission status until Done
-          val submissionStatus = "Done" // submission complete successfully
-          Submission.waitUntilSubmissionIsStatus(billingProjectName, workspaceName, submissionId, submissionStatus)
+          // verify submission status is Done
+          val expectedStatus = "Done"
+          val actualStatus = Submission.getSubmissionStatus(billingProjectName, workspaceName, submissionId)
+          withClue(s"Submission $billingProjectName/$workspaceName/$submissionId status should be $expectedStatus") {
+            actualStatus shouldBe expectedStatus
+          }
         }
 
         // clean up

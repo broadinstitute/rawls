@@ -11,19 +11,42 @@ import org.scalatest.time.{Minutes, Seconds, Span}
 
 object Submission extends LazyLogging with Eventually with RandomUtil {
 
+  val SUCCESS_STATUS = "Succeeded"
+  val FAILED_STATUS  = "Failed"
+  val ABORTED_STATUS  = "Aborted"
+  val DONE_STATUS = "Done"
+
+  private val SUBMISSION_COMPLETED_STATES = List(DONE_STATUS, SUCCESS_STATUS, FAILED_STATUS, ABORTED_STATUS)
+
+  def isSubmissionDone(status: String): Boolean = {
+    SUBMISSION_COMPLETED_STATES.contains(status)
+  }
+
+  /**
+    * Important:
+    *
+    * in-progress submissions have a status of "Submitted". The successful path for a submission
+    *  is Submitted -> Done; aborted submissions move Submitted -> Aborting -> Aborted.
+    *
+    * Workflows have a Running status, but submissions do not.
+    *
+    * see Rawls' SubmissionStatuses object for canonical submission status values.
+    */
   def getSubmissionStatus(billingProject: String, workspaceName: String, submissionId: String)(implicit token: AuthToken): String = {
-    val (status, workflows) = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
-    logger.info(s"Submission $billingProject/$workspaceName/$submissionId status is $status")
+    val (status, _) = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
     status
   }
 
-  def waitUntilSubmissionIsStatus(billingProjectName: String, workspaceName: String, submissionId: String, expectedStatus: String)(implicit token: AuthToken): Unit = {
+  /*
+   * wait for submission complete. max wait time is 20 minutes
+   */
+  def waitUntilSubmissionComplete(billingProjectName: String, workspaceName: String, submissionId: String)(implicit token: AuthToken): Unit = {
     implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(20, Minutes)), interval = scaled(Span(30, Seconds)))
-    // wait for submission status becomes expected status
+
     eventually {
       val actualStatus = getSubmissionStatus(billingProjectName, workspaceName, submissionId)
-      withClue(s"Monitoring submission $billingProjectName/$workspaceName/$submissionId. Status shouldBe $expectedStatus") {
-        actualStatus shouldEqual expectedStatus
+      withClue(s"Monitoring submission $billingProjectName/$workspaceName/$submissionId until finish") {
+        isSubmissionDone(actualStatus) shouldBe true
       }
     }
   }
