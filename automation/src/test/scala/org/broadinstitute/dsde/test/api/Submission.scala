@@ -11,12 +11,10 @@ import org.scalatest.time.{Minutes, Seconds, Span}
 
 object Submission extends LazyLogging with Eventually with RandomUtil {
 
-  val SUCCESS_STATUS = "Succeeded"
-  val FAILED_STATUS  = "Failed"
   val ABORTED_STATUS  = "Aborted"
   val DONE_STATUS = "Done"
 
-  private val SUBMISSION_COMPLETED_STATES = List(DONE_STATUS, SUCCESS_STATUS, FAILED_STATUS, ABORTED_STATUS)
+  private val SUBMISSION_COMPLETED_STATES = List(DONE_STATUS, ABORTED_STATUS)
 
   def isSubmissionDone(status: String): Boolean = {
     SUBMISSION_COMPLETED_STATES.contains(status)
