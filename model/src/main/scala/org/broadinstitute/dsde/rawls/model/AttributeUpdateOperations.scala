@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.json._
 
@@ -34,7 +35,7 @@ object AttributeUpdateOperations {
   private val AddListMemberFormat = jsonFormat2(AddListMember)
   private val RemoveListMemberFormat = jsonFormat2(RemoveListMember)
 
-  implicit object AttributeUpdateOperationFormat extends RootJsonFormat[AttributeUpdateOperation] {
+  implicit object AttributeUpdateOperationFormat extends RootJsonFormat[AttributeUpdateOperation] with LazyLogging {
 
     override def write(obj: AttributeUpdateOperation): JsValue = {
       val json = obj match {
@@ -49,20 +50,23 @@ object AttributeUpdateOperations {
       JsObject(json.asJsObject.fields + ("op" -> JsString(obj.getClass.getSimpleName)))
     }
 
-    override def read(json: JsValue) : AttributeUpdateOperation = json match {
-      case JsObject(fields) =>
-        val op = fields.getOrElse("op", throw new DeserializationException("missing op property"))
-        op match {
-          case JsString("AddUpdateAttribute") => AddUpdateAttributeFormat.read(json)
-          case JsString("RemoveAttribute") => RemoveAttributeFormat.read(json)
-          case JsString("CreateAttributeEntityReferenceList") => CreateAttributeEntityReferenceListFormat.read(json)
-          case JsString("CreateAttributeValueList") => CreateAttributeValueListFormat.read(json)
-          case JsString("AddListMember") => AddListMemberFormat.read(json)
-          case JsString("RemoveListMember") => RemoveListMemberFormat.read(json)
-          case x => throw new DeserializationException("unrecognized op: " + x)
-        }
+    override def read(json: JsValue) : AttributeUpdateOperation = {
+      logger.info(s"Reading some json: $json")
+      json match {
+        case JsObject(fields) =>
+          val op = fields.getOrElse("op", throw new DeserializationException("missing op property"))
+          op match {
+            case JsString("AddUpdateAttribute") => AddUpdateAttributeFormat.read(json)
+            case JsString("RemoveAttribute") => RemoveAttributeFormat.read(json)
+            case JsString("CreateAttributeEntityReferenceList") => CreateAttributeEntityReferenceListFormat.read(json)
+            case JsString("CreateAttributeValueList") => CreateAttributeValueListFormat.read(json)
+            case JsString("AddListMember") => AddListMemberFormat.read(json)
+            case JsString("RemoveListMember") => RemoveListMemberFormat.read(json)
+            case x => throw new DeserializationException("unrecognized op: " + x)
+          }
 
-      case _ => throw new DeserializationException("unexpected json type")
+        case _ => throw new DeserializationException("unexpected json type")
+      }
     }
   }
 

@@ -15,8 +15,10 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.scalatest.{FreeSpecLike, Matchers}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Minutes, Seconds, Span}
+
 import spray.json._
 import DefaultJsonProtocol._
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AddUpdateAttribute
 
 class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
   with CleanUp with RandomUtil with Retry
@@ -191,6 +193,43 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
               newOwnerWorkspaceDetails.canShare should be(true)
             }
           }(ownerAuthToken)
+        }
+      }
+
+      "to add workspace attributes" in {
+        implicit val token: AuthToken = ownerAuthToken
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("add-attributes")) { workspaceName =>
+            val testAttrName = AttributeName(projectName, "attrName")
+            val testAttr = AttributeString("attrValue")
+            val attributes = List(AddUpdateAttribute(testAttrName, testAttr))
+
+            val written = attributes.map(attr => AttributeUpdateOperations.AttributeUpdateOperationFormat.write(attr))
+            println("-----------" + written)
+
+            val read = written.map(attr => AttributeUpdateOperations.AttributeUpdateOperationFormat.read(attr))
+            println("r/w =======" + read)
+
+            Rawls.workspaces.updateAttributes(projectName, workspaceName, attributes)
+          }
+        }
+      }
+
+      "to delete workspace attributes" - {
+        "from the top" in {
+
+        }
+
+        "from the middle" in {
+
+        }
+
+        "from the bottom" in {
+
+        }
+
+        "after adding them" in {
+
         }
       }
     }
