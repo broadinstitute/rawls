@@ -45,7 +45,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
              |  }
              |]""".stripMargin
         println("test entity: " + entity.parseJson.toString)
-        Rawls.entities.importMetaData(billingProject, workspaceName, entity)
+        Rawls.entities.importMetaData(billingProject, workspaceName, entity.parseJson.compactPrint)
         withMethod("MethodLaunchSpec_input_undefined", MethodData.InputRequiredMethod, 1) { methodName =>
           val method = MethodData.InputRequiredMethod.copy(methodName = methodName)
           Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName, method,
