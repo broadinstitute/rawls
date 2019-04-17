@@ -952,8 +952,6 @@ class HttpGoogleServicesDAO(
     val projectNameString = projectName.value
     for {
       _ <- retryWhen500orGoogleError(() => {
-        //FIXME: this is failing with PERMISSION_DENIED, so the rawls billing@domain SA doesn't have access to update billing on this project
-        //FIXME: i think the template needs to be updated to give that group those permissions
         executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)))
       })
       _ <- retryWithRecoverWhen500orGoogleError(() => {
