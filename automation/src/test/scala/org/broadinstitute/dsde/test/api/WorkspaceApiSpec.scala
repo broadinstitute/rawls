@@ -12,14 +12,14 @@ import org.broadinstitute.dsde.workbench.util.Retry
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.scalatest.{FreeSpecLike, Matchers}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 import spray.json._
 import DefaultJsonProtocol._
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AddUpdateAttribute
 
 class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
   with CleanUp with RandomUtil with Retry
@@ -32,7 +32,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
   val owner: Credentials = UserPool.chooseProjectOwner
   val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
-  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+  implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
 
   "Rawls" - {
     "should allow project owners" - {
@@ -197,19 +197,8 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
         }
       }
 
-//      val attributeMap: AttributeMap = Map(AttributeName("default", "A-key") -> AttributeString("A-value"),
-//        AttributeName("default", "B-key") -> AttributeString("B-value"),
-//        AttributeName("default", "C-key") -> AttributeString("C-value"))
-
-      val attributeListMap: List[Map[String, String]] = List(Map("attributeName" -> "A-key","addUpdateAttribute" -> "A-value","op" -> "AddUpdateAttribute"),
-        Map("attributeName" -> "B-key","addUpdateAttribute" -> "B-value","op" -> "AddUpdateAttribute"),
-        Map("attributeName" -> "C-key","addUpdateAttribute" -> "C-value","op" -> "AddUpdateAttribute"))
-
       val testAttributes: Map[String, String] = Map("A-key" -> "A-value", "B-key" -> "B-value", "C-key" -> "C-value")
-
       val attributeMap: AttributeMap = testAttributes.map(keyValuePairs => AttributeName("default", keyValuePairs._1) -> AttributeString(keyValuePairs._2))
-
-      // TODO: rebase and add eventuallys!!
 
       "to add workspace attributes" in {
         implicit val token: AuthToken = ownerAuthToken
@@ -217,8 +206,10 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           withWorkspace(projectName, prependUUID("add-attributes")) { workspaceName =>
             val attributeUpdates = attributeMap.map(attrTuple => AddUpdateAttribute(attrTuple._1, attrTuple._2)).toList
 
-            Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeListMap)
-            workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap)
+            Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
+            eventually {
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap)
+            }
           }
         }
       }
@@ -228,10 +219,13 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           implicit val token: AuthToken = ownerAuthToken
           withCleanBillingProject(owner) { projectName =>
             withWorkspace(projectName, prependUUID("delete-from-the-top"), attributes = Some(testAttributes)) { workspaceName =>
-              val deleteTopAttribute = List(Map("attributeName" -> "A-key", "op" -> "RemoveAttribute"))
+              val attributeNameToRemove = getAttributeName("A")
+              val deleteTopAttribute = List(RemoveAttribute(attributeNameToRemove))
 
               Rawls.workspaces.updateAttributes(projectName, workspaceName, deleteTopAttribute)
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap.filter(attribute => attribute._1.name != "A-key"))
+              eventually {
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap.filter(attribute => attribute._1.name != "A-key"))
+              }
             }
           }
         }
@@ -240,10 +234,13 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           implicit val token: AuthToken = ownerAuthToken
           withCleanBillingProject(owner) { projectName =>
             withWorkspace(projectName, prependUUID("delete-from-the-middle"), attributes = Some(testAttributes)) { workspaceName =>
-              val deleteMiddleAttribute = List(Map("attributeName" -> "B-key", "op" -> "RemoveAttribute"))
+              val attributeNameToRemove = getAttributeName("B")
+              val deleteMiddleAttribute = List(RemoveAttribute(attributeNameToRemove))
 
               Rawls.workspaces.updateAttributes(projectName, workspaceName, deleteMiddleAttribute)
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap.filter(attribute => attribute._1.name != "B-key"))
+              eventually {
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap.filter(attribute => attribute._1.name != "B-key"))
+              }
             }
           }
         }
@@ -252,10 +249,13 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           implicit val token: AuthToken = ownerAuthToken
           withCleanBillingProject(owner) { projectName =>
             withWorkspace(projectName, prependUUID("delete-from-the-bottom"), attributes = Some(testAttributes)) { workspaceName =>
-              val deleteBottomAttribute = List(Map("attributeName" -> "C-key", "op" -> "RemoveAttribute"))
+              val attributeNameToRemove = getAttributeName("C")
+              val deleteBottomAttribute = List(RemoveAttribute(attributeNameToRemove))
 
               Rawls.workspaces.updateAttributes(projectName, workspaceName, deleteBottomAttribute)
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap.filter(attribute => attribute._1.name != "C-key"))
+              eventually {
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap.filter(attribute => attribute._1.name != "C-key"))
+              }
             }
           }
         }
@@ -264,23 +264,34 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           implicit val token: AuthToken = ownerAuthToken
           withCleanBillingProject(owner) { projectName =>
             withWorkspace(projectName, prependUUID("add-then-delete")) { workspaceName =>
-              Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeListMap)
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap)
+              val attributeUpdates = attributeMap.map(attrTuple => AddUpdateAttribute(attrTuple._1, attrTuple._2)).toList
 
-              val addAnotherAttribute = List(Map("attributeName" -> "D-key","addUpdateAttribute" -> "D-value","op" -> "AddUpdateAttribute"))
-              val updatedAttributeMap = attributeMap ++ Map(AttributeName("default", "D-key") -> AttributeString("D-value"))
+              Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
+              eventually {
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap)
+              }
+
+              val attributeToAdd = getAttributeNameAndValue("D")
+              val addAnotherAttribute = List(AddUpdateAttribute(attributeToAdd.name, attributeToAdd.value))
+              val attributeMapOneAdded = attributeMap + (attributeToAdd.name -> attributeToAdd.value)
               Rawls.workspaces.updateAttributes(projectName, workspaceName, addAnotherAttribute)
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (updatedAttributeMap)
+              eventually {
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMapOneAdded)
+              }
 
-              val nowDeleteOne = List(Map("attributeName" -> "B-key", "op" -> "RemoveAttribute"))
-              val superUpdatedMap = updatedAttributeMap.filter(entry => entry._1.name != "B-key")
-              Rawls.workspaces.updateAttributes(projectName, workspaceName, nowDeleteOne)
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (superUpdatedMap)
+              val removeOneAttribute = List(RemoveAttribute(getAttributeName("B")))
+              val attributeMapOneRemoved = attributeMapOneAdded.filter(entry => entry._1.name != "B-key")
+              Rawls.workspaces.updateAttributes(projectName, workspaceName, removeOneAttribute)
+              eventually {
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMapOneRemoved)
+              }
 
-              val deleteOneMore = List(Map("attributeName" -> "C-key", "op" -> "RemoveAttribute"))
-              val updateItAgain = superUpdatedMap.filter(entry => entry._1.name != "C-key")
-              Rawls.workspaces.updateAttributes(projectName, workspaceName, deleteOneMore)
-              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (updateItAgain)
+              val removeOneMoreAttribute = List(RemoveAttribute(getAttributeName("C")))
+              val attributeMapTwoRemoved = attributeMapOneRemoved.filter(entry => entry._1.name != "C-key")
+              Rawls.workspaces.updateAttributes(projectName, workspaceName, removeOneMoreAttribute)
+              eventually {
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMapTwoRemoved)
+              }
             }
           }
         }
@@ -316,4 +327,9 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
   }
 
   private def prependUUID(suffix: String): String = { s"${UUID.randomUUID().toString()}-$suffix" }
+
+  private case class AttributeNameAndValue(name: AttributeName, value: Attribute)
+
+  private def getAttributeNameAndValue(letter: String): AttributeNameAndValue = AttributeNameAndValue(getAttributeName(letter), AttributeString(s"$letter-value"))
+  private def getAttributeName(letter: String): AttributeName = AttributeName("default", s"$letter-key")
 }

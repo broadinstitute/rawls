@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.model
 
-import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.json._
 
@@ -35,7 +34,7 @@ object AttributeUpdateOperations {
   private val AddListMemberFormat = jsonFormat2(AddListMember)
   private val RemoveListMemberFormat = jsonFormat2(RemoveListMember)
 
-  implicit object AttributeUpdateOperationFormat extends RootJsonFormat[AttributeUpdateOperation] with LazyLogging {
+  implicit object AttributeUpdateOperationFormat extends RootJsonFormat[AttributeUpdateOperation] {
 
     override def write(obj: AttributeUpdateOperation): JsValue = {
       val json = obj match {
@@ -50,9 +49,7 @@ object AttributeUpdateOperations {
       JsObject(json.asJsObject.fields + ("op" -> JsString(obj.getClass.getSimpleName)))
     }
 
-    override def read(json: JsValue) : AttributeUpdateOperation = {
-      logger.info(s"Reading some json: $json")
-      json match {
+    override def read(json: JsValue) : AttributeUpdateOperation = json match {
         case JsObject(fields) =>
           val op = fields.getOrElse("op", throw new DeserializationException("missing op property"))
           op match {
@@ -67,7 +64,6 @@ object AttributeUpdateOperations {
 
         case _ => throw new DeserializationException("unexpected json type")
       }
-    }
   }
 
   case class EntityUpdateDefinition(
