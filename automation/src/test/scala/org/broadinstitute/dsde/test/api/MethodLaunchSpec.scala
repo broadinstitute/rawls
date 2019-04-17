@@ -30,21 +30,24 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
     withCleanBillingProject(user) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_input_not_defined") { workspaceName =>
         val entity =
-          s"""
-             |[
-             |  {
-             |   "name": "participant1","entityType": "participant",
-             |   "operations":
-             |     [
-             |       {
-             |         "op": "AddUpdateAttribute",
-             |         "attributeName": "partipant1",
-             |         "addUpdateAttribute": "testparticipant"
-             |       }
-             |     ]
-             |  }
-             |]""".stripMargin
+          """
+            |[
+            |  {
+            |   "name": "participant1",
+            |   "entityType": "participant",
+            |   "operations":
+            |     [
+            |       {
+            |         "op": "AddUpdateAttribute",
+            |         "attributeName": "participant1",
+            |         "addUpdateAttribute": "testparticipant"
+            |       }
+            |     ]
+            |  }
+            |]
+          """.stripMargin
         println("test entity: " + entity.parseJson.toString)
+        println("test entity cp: " + entity.parseJson.compactPrint)
         Rawls.entities.importMetaData(billingProject, workspaceName, entity.parseJson.compactPrint)
         withMethod("MethodLaunchSpec_input_undefined", MethodData.InputRequiredMethod, 1) { methodName =>
           val method = MethodData.InputRequiredMethod.copy(methodName = methodName)
