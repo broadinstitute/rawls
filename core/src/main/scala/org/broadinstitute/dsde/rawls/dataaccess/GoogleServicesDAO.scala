@@ -193,9 +193,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getAccessTokenUsingJson(saKey: String) : Future[String]
   def getUserInfoUsingJson(saKey: String): Future[UserInfo]
 
-  def labelSafeString(s: String, prefix: String = "fc-"): String = {
+  def labelSafeString(s: String, prefix: String = "fc-", maxLen: Int = 63): String = {
     // https://cloud.google.com/compute/docs/labeling-resources#restrictions
-    prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(63)
+    prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(maxLen)
   }
 }
 

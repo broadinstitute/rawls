@@ -776,7 +776,7 @@ class HttpGoogleServicesDAO(
       "fcProjectOwners" -> projectTemplate.policies("roles/owner").toJson,
       "fcProjectEditors" -> projectTemplate.policies("roles/editor").toJson,
       "labels" ->
-        Map("template_path" -> dmTemplatePath.toJson).toJson
+        Map("template_path" -> labelSafeString(dmTemplatePath, "", 1024).toJson).toJson
     )
 
     //config is a list of one resource: type=composite-type, name=whocares, properties=pokein
