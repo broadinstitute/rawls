@@ -18,6 +18,7 @@ import org.scalatest.time.{Minutes, Seconds, Span}
 
 import spray.json._
 import DefaultJsonProtocol._
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AddUpdateAttribute
 
 class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
@@ -196,40 +197,92 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
         }
       }
 
+//      val attributeMap: AttributeMap = Map(AttributeName("default", "A-key") -> AttributeString("A-value"),
+//        AttributeName("default", "B-key") -> AttributeString("B-value"),
+//        AttributeName("default", "C-key") -> AttributeString("C-value"))
+
+      val attributeListMap: List[Map[String, String]] = List(Map("attributeName" -> "A-key","addUpdateAttribute" -> "A-value","op" -> "AddUpdateAttribute"),
+        Map("attributeName" -> "B-key","addUpdateAttribute" -> "B-value","op" -> "AddUpdateAttribute"),
+        Map("attributeName" -> "C-key","addUpdateAttribute" -> "C-value","op" -> "AddUpdateAttribute"))
+
+      val testAttributes: Map[String, String] = Map("A-key" -> "A-value", "B-key" -> "B-value", "C-key" -> "C-value")
+
+      val attributeMap: AttributeMap = testAttributes.map(keyValuePairs => AttributeName("default", keyValuePairs._1) -> AttributeString(keyValuePairs._2))
+
+      // TODO: rebase and add eventuallys!!
+
       "to add workspace attributes" in {
         implicit val token: AuthToken = ownerAuthToken
         withCleanBillingProject(owner) { projectName =>
           withWorkspace(projectName, prependUUID("add-attributes")) { workspaceName =>
-            val testAttrName = AttributeName(projectName, "attrName")
-            val testAttr = AttributeString("attrValue")
-            val attributes = List(AddUpdateAttribute(testAttrName, testAttr))
+            val attributeUpdates = attributeMap.map(attrTuple => AddUpdateAttribute(attrTuple._1, attrTuple._2)).toList
 
-            val written = attributes.map(attr => AttributeUpdateOperations.AttributeUpdateOperationFormat.write(attr))
-            println("-----------" + written)
-
-            val read = written.map(attr => AttributeUpdateOperations.AttributeUpdateOperationFormat.read(attr))
-            println("r/w =======" + read)
-
-            Rawls.workspaces.updateAttributes(projectName, workspaceName, attributes)
+            Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeListMap)
+            workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap)
           }
         }
       }
 
       "to delete workspace attributes" - {
         "from the top" in {
+          implicit val token: AuthToken = ownerAuthToken
+          withCleanBillingProject(owner) { projectName =>
+            withWorkspace(projectName, prependUUID("delete-from-the-top"), attributes = Some(testAttributes)) { workspaceName =>
+              val deleteTopAttribute = List(Map("attributeName" -> "A-key", "op" -> "RemoveAttribute"))
 
+              Rawls.workspaces.updateAttributes(projectName, workspaceName, deleteTopAttribute)
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap.filter(attribute => attribute._1.name != "A-key"))
+            }
+          }
         }
 
         "from the middle" in {
+          implicit val token: AuthToken = ownerAuthToken
+          withCleanBillingProject(owner) { projectName =>
+            withWorkspace(projectName, prependUUID("delete-from-the-middle"), attributes = Some(testAttributes)) { workspaceName =>
+              val deleteMiddleAttribute = List(Map("attributeName" -> "B-key", "op" -> "RemoveAttribute"))
 
+              Rawls.workspaces.updateAttributes(projectName, workspaceName, deleteMiddleAttribute)
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap.filter(attribute => attribute._1.name != "B-key"))
+            }
+          }
         }
 
         "from the bottom" in {
+          implicit val token: AuthToken = ownerAuthToken
+          withCleanBillingProject(owner) { projectName =>
+            withWorkspace(projectName, prependUUID("delete-from-the-bottom"), attributes = Some(testAttributes)) { workspaceName =>
+              val deleteBottomAttribute = List(Map("attributeName" -> "C-key", "op" -> "RemoveAttribute"))
 
+              Rawls.workspaces.updateAttributes(projectName, workspaceName, deleteBottomAttribute)
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap.filter(attribute => attribute._1.name != "C-key"))
+            }
+          }
         }
 
         "after adding them" in {
+          implicit val token: AuthToken = ownerAuthToken
+          withCleanBillingProject(owner) { projectName =>
+            withWorkspace(projectName, prependUUID("add-then-delete")) { workspaceName =>
+              Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeListMap)
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap)
 
+              val addAnotherAttribute = List(Map("attributeName" -> "D-key","addUpdateAttribute" -> "D-value","op" -> "AddUpdateAttribute"))
+              val updatedAttributeMap = attributeMap ++ Map(AttributeName("default", "D-key") -> AttributeString("D-value"))
+              Rawls.workspaces.updateAttributes(projectName, workspaceName, addAnotherAttribute)
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (updatedAttributeMap)
+
+              val nowDeleteOne = List(Map("attributeName" -> "B-key", "op" -> "RemoveAttribute"))
+              val superUpdatedMap = updatedAttributeMap.filter(entry => entry._1.name != "B-key")
+              Rawls.workspaces.updateAttributes(projectName, workspaceName, nowDeleteOne)
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (superUpdatedMap)
+
+              val deleteOneMore = List(Map("attributeName" -> "C-key", "op" -> "RemoveAttribute"))
+              val updateItAgain = superUpdatedMap.filter(entry => entry._1.name != "C-key")
+              Rawls.workspaces.updateAttributes(projectName, workspaceName, deleteOneMore)
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (updateItAgain)
+            }
+          }
         }
       }
     }
