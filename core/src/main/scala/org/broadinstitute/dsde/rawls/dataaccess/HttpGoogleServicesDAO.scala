@@ -64,7 +64,7 @@ import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes, mode
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
 import scala.io.Source
-import scala.util.Try
+import scala.util.matching.Regex
 
 case class Resources (
                        name: String,
@@ -75,10 +75,19 @@ case class ConfigContents (
                             resources: Seq[Resources]
                           )
 
+//we're not using camelcase here because these become GCS labels, which all have to be lowercase.
+case class TemplateLocation(
+                             template_org: String,
+                             template_repo: String,
+                             template_branch: String,
+                             template_path: String
+                           )
+
 object DeploymentManagerJsonSupport {
   import spray.json.DefaultJsonProtocol._
-  implicit val rJson = jsonFormat3(Resources)
-  implicit val aaJson = jsonFormat1(ConfigContents)
+  implicit val resourceJsonFormat = jsonFormat3(Resources)
+  implicit val configContentsJsonFormat = jsonFormat1(ConfigContents)
+  implicit val templateLocationJsonFormat = jsonFormat4(TemplateLocation)
 }
 
 class HttpGoogleServicesDAO(
@@ -761,6 +770,18 @@ class HttpGoogleServicesDAO(
 
   def projectToDM(projectName: RawlsBillingProjectName) = s"dm-${projectName.value}"
 
+
+  def parseTemplateLocation(path: String): Option[TemplateLocation] = {
+    val rx: Regex = "https://raw.githubusercontent.com/(.*)/(.*)/(.*)/(.*)".r
+    rx.findAllMatchIn(path).toList.headOption map { groups =>
+      TemplateLocation(
+        labelSafeString(groups.subgroups(0), ""),
+        labelSafeString(groups.subgroups(1), ""),
+        labelSafeString(groups.subgroups(2), ""),
+        labelSafeString(groups.subgroups(3), ""))
+    }
+  }
+
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
@@ -768,6 +789,9 @@ class HttpGoogleServicesDAO(
 
     import spray.json._
     import spray.json.DefaultJsonProtocol._
+    import DeploymentManagerJsonSupport._
+
+    val templateLabels = parseTemplateLocation(dmTemplatePath).map(_.toJson).getOrElse(Map("template_path" -> labelSafeString(dmTemplatePath)).toJson)
 
     val properties = Map (
       "billingAccountId" -> billingAccount.accountName.value.toJson,
@@ -781,8 +805,7 @@ class HttpGoogleServicesDAO(
       "highSecurityNetwork" -> false.toJson,
       "fcProjectOwners" -> projectTemplate.policies("roles/owner").toJson,
       "fcProjectEditors" -> projectTemplate.policies("roles/editor").toJson,
-      "labels" ->
-        Map("template_path" -> labelSafeString(dmTemplatePath, "", 1024).toJson).toJson
+      "labels" -> templateLabels
     )
 
     //config is a list of one resource: type=composite-type, name=whocares, properties=pokein
