@@ -106,7 +106,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
             // create project operation finished with an error
             logger.debug(s"project ${project.projectName.value} creation finished with errors: $error")
             gcsDAO.cleanupDMProject(project.projectName) map { _ =>
-              project.copy(status = CreationStatuses.Error, message = Option(s"project ${project.projectName.value} creation finished with errors: $error \n ${fail.head}"))
+              project.copy(status = CreationStatuses.Error, message = Option(s"project ${project.projectName.value} creation finished with errors: $error"))
             }
 
           case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, _, _, _)) =>
