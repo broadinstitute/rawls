@@ -50,20 +50,20 @@ object AttributeUpdateOperations {
     }
 
     override def read(json: JsValue) : AttributeUpdateOperation = json match {
-        case JsObject(fields) =>
-          val op = fields.getOrElse("op", throw new DeserializationException("missing op property"))
-          op match {
-            case JsString("AddUpdateAttribute") => AddUpdateAttributeFormat.read(json)
-            case JsString("RemoveAttribute") => RemoveAttributeFormat.read(json)
-            case JsString("CreateAttributeEntityReferenceList") => CreateAttributeEntityReferenceListFormat.read(json)
-            case JsString("CreateAttributeValueList") => CreateAttributeValueListFormat.read(json)
-            case JsString("AddListMember") => AddListMemberFormat.read(json)
-            case JsString("RemoveListMember") => RemoveListMemberFormat.read(json)
-            case x => throw new DeserializationException("unrecognized op: " + x)
-          }
+      case JsObject(fields) =>
+        val op = fields.getOrElse("op", throw new DeserializationException("missing op property"))
+        op match {
+          case JsString("AddUpdateAttribute") => AddUpdateAttributeFormat.read(json)
+          case JsString("RemoveAttribute") => RemoveAttributeFormat.read(json)
+          case JsString("CreateAttributeEntityReferenceList") => CreateAttributeEntityReferenceListFormat.read(json)
+          case JsString("CreateAttributeValueList") => CreateAttributeValueListFormat.read(json)
+          case JsString("AddListMember") => AddListMemberFormat.read(json)
+          case JsString("RemoveListMember") => RemoveListMemberFormat.read(json)
+          case x => throw new DeserializationException("unrecognized op: " + x)
+        }
 
-        case _ => throw new DeserializationException("unexpected json type")
-      }
+      case _ => throw new DeserializationException("unexpected json type")
+    }
   }
 
   case class EntityUpdateDefinition(
