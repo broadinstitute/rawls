@@ -250,7 +250,7 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("notifications.topicName")
       )
       val marthaConfig = conf.getConfig("martha")
-      val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl"))
+      val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl_v2"))
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
           slickDataSource,
