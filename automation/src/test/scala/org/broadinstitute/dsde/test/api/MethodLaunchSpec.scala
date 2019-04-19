@@ -25,7 +25,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
   val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
   val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
 
-  "launch workflow with input not defined" - {
+  "launch workflow with input not defined" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
     withCleanBillingProject(user) { billingProject =>
@@ -68,45 +68,52 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 //    implicit val authToken: AuthToken = user.makeAuthToken()
 //    withCleanBillingProject(user) { billingProject =>
 //      withWorkspace(billingProject, "MethodLaunchSpec_abort_submission") { workspaceName =>
-//      //  api.workspaces.waitForBucketReadAccess(billingProject, workspaceName)
+//        //  api.workspaces.waitForBucketReadAccess(billingProject, workspaceName)
 //
 //        val shouldUseCallCaching = false
 //        Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 //
 //        withMethod("MethodLaunchSpec_abort", MethodData.SimpleMethod) { methodName =>
 //          val method = MethodData.SimpleMethod.copy(methodName = methodName)
-//          api.methodConfigurations.createMethodConfigInWorkspace(billingProject, workspaceName,
-//            method, SimpleMethodConfig.configNamespace, methodName, 1,
-//            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, MethodData.SimpleMethod.rootEntityType)
+//          Rawls.methodConfigs.createMethodConfigInWorkspace(
+//            billingProject, workspaceName, method, method.methodNamespace, method.methodName, 1,
+//            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
 //
-//          withWebDriver { implicit driver =>
-//            withSignIn(user) { _ =>
-//              val methodConfigDetailsPage = new WorkspaceMethodConfigDetailsPage(billingProject, workspaceName, SimpleMethodConfig.configNamespace, methodName).open
-//              val submissionDetailsPage = methodConfigDetailsPage.launchAnalysis(MethodData.SimpleMethod.rootEntityType, testData.participantId, "", shouldUseCallCaching)
-//              val submissionId = submissionDetailsPage.getSubmissionId
+//          //          api.methodConfigurations.createMethodConfigInWorkspace(billingProject, workspaceName,
+//          //            method, SimpleMethodConfig.configNamespace, methodName, 1,
+//          //            SimpleMethodConfig.inputs,  SimpleMethodConfig.inputs, MethodData.SimpleMethod.rootEntityType)
 //
-//              submissionDetailsPage.abortSubmission()
 //
-//              implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+//          val submissionId = Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "", false)
 //
-//              // wait api status becomes Aborted
-//              eventually {
-//                val status = submissionDetailsPage.getApiSubmissionStatus(billingProject, workspaceName, submissionId)
-//                logger.info(s"Status is $status in Submission $billingProject/$workspaceName/$submissionId")
-//                withClue(s"Monitoring Submission $billingProject/$workspaceName/$submissionId. Waited for status Aborted.") {
-//                  status shouldBe "Aborted"
-//                }
-//              }
+//          //val submissionDetailsPage = methodConfigDetailsPage.launchAnalysis(MethodData.SimpleMethod.rootEntityType, testData.participantId, "", shouldUseCallCaching)
 //
-//              // verifiy on UI
-//              submissionDetailsPage.waitUntilSubmissionCompletes()
-//              submissionDetailsPage.getSubmissionStatus shouldBe submissionDetailsPage.ABORTED_STATUS
+//          Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)
 //
-//              // once aborted, the abort button should no longer be visible
-//              submissionDetailsPage should not be 'abortButtonVisible
+//         // val submissionId = submissionDetailsPage.getSubmissionId
 //
+//          //submissionDetailsPage.abortSubmission()
+//
+//          Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
+//
+//          implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+//
+//          // wait api status becomes Aborted
+//          eventually {
+//            val status = submissionDetailsPage.getApiSubmissionStatus(billingProject, workspaceName, submissionId)
+//            logger.info(s"Status is $status in Submission $billingProject/$workspaceName/$submissionId")
+//            withClue(s"Monitoring Submission $billingProject/$workspaceName/$submissionId. Waited for status Aborted.") {
+//              status shouldBe "Aborted"
 //            }
 //          }
+//
+//          // verifiy on UI
+//          submissionDetailsPage.waitUntilSubmissionCompletes()
+//          submissionDetailsPage.getSubmissionStatus shouldBe submissionDetailsPage.ABORTED_STATUS
+//
+//          // once aborted, the abort button should no longer be visible
+//          submissionDetailsPage should not be 'abortButtonVisible
+//
 //        }
 //      }
 //    }
