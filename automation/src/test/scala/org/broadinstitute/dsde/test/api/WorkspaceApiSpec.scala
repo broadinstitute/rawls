@@ -12,9 +12,12 @@ import org.broadinstitute.dsde.workbench.util.Retry
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.scalatest.{FreeSpecLike, Matchers}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Minutes, Seconds, Span}
+
 import spray.json._
 import DefaultJsonProtocol._
 
@@ -29,7 +32,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
   val owner: Credentials = UserPool.chooseProjectOwner
   val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
-  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+  implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
 
   "Rawls" - {
     "should allow project owners" - {
@@ -191,6 +194,39 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
               newOwnerWorkspaceDetails.canShare should be(true)
             }
           }(ownerAuthToken)
+        }
+      }
+
+      val testAttributes: Map[String, String] = Map("A-key" -> "A-value", "B-key" -> "B-value", "C-key" -> "C-value")
+      val testAttributeNamespace = "default"
+      val attributeMap: AttributeMap = testAttributes.map(keyValuePairs => AttributeName(testAttributeNamespace, keyValuePairs._1) -> AttributeString(keyValuePairs._2))
+
+      "to add workspace attributes" in {
+        implicit val token: AuthToken = ownerAuthToken
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("add-attributes")) { workspaceName =>
+            val attributeUpdates = attributeMap.map(attrTuple => AddUpdateAttribute(attrTuple._1, attrTuple._2)).toList
+
+            Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
+            eventually {
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap)
+            }
+          }
+        }
+      }
+
+      "to remove workspace attributes" in {
+        implicit val token: AuthToken = ownerAuthToken
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("delete-attributes"), attributes = Some(testAttributes)) { workspaceName =>
+            val attributeNameToRemove = testAttributes.keys.head
+            val attributeUpdates = List(RemoveAttribute(AttributeName(testAttributeNamespace, attributeNameToRemove)))
+
+            Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
+            eventually {
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (attributeMap.filter(attribute => attribute._1.name != attributeNameToRemove))
+            }
+          }
         }
       }
     }
