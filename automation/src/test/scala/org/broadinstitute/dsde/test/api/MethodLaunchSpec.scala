@@ -93,7 +93,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
             logger.info(s"Status is $status in Submission $billingProject/$workspaceName/$submissionId")
             withClue(s"Monitoring Submission $billingProject/$workspaceName/$submissionId. Waited for status Aborted.") {
-              status shouldBe "Aborted"
+              status._1 shouldBe "Aborted"
             }
           }
 
@@ -109,67 +109,72 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
     }
   }
 
-//  "reader does not see an abort button for a launched submission" in {
-//    val owner = UserPool.chooseProjectOwner
-//    val reader = UserPool.chooseStudent
-//
-//    implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
-//
-//    val readerAuthToken: AuthToken = reader.makeAuthToken()
-//
-//    withCleanBillingProject(owner) { billingProject =>
-//      withWorkspace(billingProject, "MethodLaunchSpec_reader_cannot_abort_submission", aclEntries = List(AclEntry(reader.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
-////        api.workspaces.waitForBucketReadAccess(billingProject, workspaceName)(ownerAuthToken)
-////        api.workspaces.waitForBucketReadAccess(billingProject, workspaceName)(readerAuthToken)
-//
-//        val shouldUseCallCaching = false
-//        //api.importMetaData(billingProject, workspaceName, "entities", testData.participantEntity)
-//        Rawls.entities.importMetaData(billingProject, workspaceName, entity)
-//
-//        withMethod("MethodLaunchSpec_abort_reader", MethodData.SimpleMethod) { methodName =>
-//          val method = MethodData.SimpleMethod.copy(methodName = methodName)
-//          //          api.methodConfigurations.createMethodConfigInWorkspace(billingProject, workspaceName,
-//          //            method, SimpleMethodConfig.configNamespace, methodName, 1,
-//          //            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, MethodData.SimpleMethod.rootEntityType)
-//          Rawls.methodConfigs.createMethodConfigInWorkspace(
-//            billingProject, workspaceName, method, method.methodNamespace, method.methodName, 1,
-//            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
-//
-//
-//          // TODO: avoid using var?
-//          var submissionId: String = ""
-//
-//          // as owner, launch a submission
-//          withSignIn(owner) { _ =>
-//            val methodConfigDetailsPage = new WorkspaceMethodConfigDetailsPage(billingProject, workspaceName, SimpleMethodConfig.configNamespace, methodName).open
-//            val submissionDetailsPage = methodConfigDetailsPage.launchAnalysis(MethodData.SimpleMethod.rootEntityType, testData.participantId, "", shouldUseCallCaching)
-//            submissionId = submissionDetailsPage.getSubmissionId
-//          }
-//
-//          // as reader, view submission details and validate the abort button doesn't appear
-//          withSignIn(reader) { _ =>
-//            withClue("submissionId as returned by owner block: ") {
-//              submissionId should not be ""
-//            }
-//            val submissionDetailsPage = new SubmissionDetailsPage(billingProject, workspaceName, submissionId).open
-//            val status = submissionDetailsPage.getApiSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
-//            withClue("When the reader views the owner's submission, the submission status: ") {
-//              // the UI shows the abort button for the following statuses:
-//              List("Accepted", "Evaluating", "Submitting", "Submitted") should contain(status)
-//            }
-//
-//            // test the page's display of the submission ID against the tests' knowledge of the ID. This verifies
-//            // we have landed on the right page. Without this test, the next assertion on the abort button's visibility
-//            // is a weak assertion - we could be on the wrong page, which means the abort button would also not be visible.
-//            submissionDetailsPage.getSubmissionId shouldBe submissionId
-//
-//            // is the abort button visible?
-//            submissionDetailsPage should not be 'abortButtonVisible
-//          }
-//
-//        }
-//      }
-//    }
-//  }
+  "reader does not see an abort button for a launched submission" in {
+    val owner = UserPool.chooseProjectOwner
+    val reader = UserPool.chooseStudent
+
+    implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
+    val readerAuthToken: AuthToken = reader.makeAuthToken()
+
+    withCleanBillingProject(owner) { billingProject =>
+      withWorkspace(billingProject, "MethodLaunchSpec_reader_cannot_abort_submission", aclEntries = List(AclEntry(reader.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
+        //        api.workspaces.waitForBucketReadAccess(billingProject, workspaceName)(ownerAuthToken)
+        //        api.workspaces.waitForBucketReadAccess(billingProject, workspaceName)(readerAuthToken)
+
+        val shouldUseCallCaching = false
+        //api.importMetaData(billingProject, workspaceName, "entities", testData.participantEntity)
+        Rawls.entities.importMetaData(billingProject, workspaceName, entity)
+
+        withMethod("MethodLaunchSpec_abort_reader", MethodData.SimpleMethod) { methodName =>
+          val method = MethodData.SimpleMethod.copy(methodName = methodName)
+          //          api.methodConfigurations.createMethodConfigInWorkspace(billingProject, workspaceName,
+          //            method, SimpleMethodConfig.configNamespace, methodName, 1,
+          //            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, MethodData.SimpleMethod.rootEntityType)
+          Rawls.methodConfigs.createMethodConfigInWorkspace(
+            billingProject, workspaceName, method, method.methodNamespace, method.methodName, 1,
+            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
+
+
+          // TODO: avoid using var?
+          //var submissionId: String = ""
+
+          // as owner, launch a submission
+          //          withSignIn(owner) { _ =>
+          //            val methodConfigDetailsPage = new WorkspaceMethodConfigDetailsPage(billingProject, workspaceName, SimpleMethodConfig.configNamespace, methodName).open
+          //            val submissionDetailsPage = methodConfigDetailsPage.launchAnalysis(MethodData.SimpleMethod.rootEntityType, testData.participantId, "", shouldUseCallCaching)
+          //            submissionId = submissionDetailsPage.getSubmissionId
+          //          }
+
+          val submissionId = Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(ownerAuthToken)
+
+          withClue("submissionId as returned by owner block: ") {
+            submissionId should not be ""
+          }
+
+          // as reader, view submission details and validate the abort button doesn't appear
+          //withSignIn(reader) { _ =>
+          //val submissionDetailsPage = new SubmissionDetailsPage(billingProject, workspaceName, submissionId).open
+          //val status = submissionDetailsPage.getApiSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
+          val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
+
+          withClue("When the reader views the owner's submission, the submission status: ") {
+            // the UI shows the abort button for the following statuses:
+            List("Accepted", "Evaluating", "Submitting", "Submitted") should contain(status)
+          }
+
+          // test the page's display of the submission ID against the tests' knowledge of the ID. This verifies
+          // we have landed on the right page. Without this test, the next assertion on the abort button's visibility
+          // is a weak assertion - we could be on the wrong page, which means the abort button would also not be visible.
+          //submissionDetailsPage.getSubmissionId shouldBe submissionId
+
+          // is the abort button visible?
+          //submissionDetailsPage should not be 'abortButtonVisible
+          val abortResponse = Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)
+          println("abortResponse: " + abortResponse)
+
+        }
+      }
+    }
+  }
 
 }
