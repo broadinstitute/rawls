@@ -52,8 +52,6 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
     implicit val authToken: AuthToken = user.makeAuthToken()
     withCleanBillingProject(user) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_abort_submission") { workspaceName =>
-        //  api.workspaces.waitForBucketReadAccess(billingProject, workspaceName)
-
         val shouldUseCallCaching = false
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 
@@ -62,54 +60,24 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName,
             method, method.methodNamespace, method.methodName, 1,
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
-
-          //          api.methodConfigurations.createMethodConfigInWorkspace(billingProject, workspaceName,
-          //            method, SimpleMethodConfig.configNamespace, methodName, 1,
-          //            SimpleMethodConfig.inputs,  SimpleMethodConfig.inputs, MethodData.SimpleMethod.rootEntityType)
-
           val getmc = Rawls.methodConfigs.getMethodConfigInWorkspace(billingProject, workspaceName, method.methodNamespace, method.methodName)
           val validatemc = Rawls.methodConfigs.getMethodConfigSyntaxValidationInWorkspace(billingProject, workspaceName, method.methodNamespace, method.methodName)
-
-          println("getmc: " + getmc)
-          println("validatemc: " + validatemc)
-
           val submissionId = Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)
-
-          //val submissionDetailsPage = methodConfigDetailsPage.launchAnalysis(MethodData.SimpleMethod.rootEntityType, testData.participantId, "", shouldUseCallCaching)
-
           Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)
-
-          // val submissionId = submissionDetailsPage.getSubmissionId
-
-          //submissionDetailsPage.abortSubmission()
-
-          // Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
-
           implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
-
-          // wait api status becomes Aborted
           eventually {
-            // val status = submissionDetailsPage.getApiSubmissionStatus(billingProject, workspaceName, submissionId)
             val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
             logger.info(s"Status is $status in Submission $billingProject/$workspaceName/$submissionId")
             withClue(s"Monitoring Submission $billingProject/$workspaceName/$submissionId. Waited for status Aborted.") {
               status._1 shouldBe "Aborted"
             }
           }
-
-          //          // verifiy on UI
-          //          submissionDetailsPage.waitUntilSubmissionCompletes()
-          //          submissionDetailsPage.getSubmissionStatus shouldBe submissionDetailsPage.ABORTED_STATUS
-          //
-          //          // once aborted, the abort button should no longer be visible
-          //          submissionDetailsPage should not be 'abortButtonVisible
-
         }
       }
     }
   }
 
-  "reader does not see an abort button for a launched submission" in {
+  "reader cannot abort a launched submission" in {
     val owner = UserPool.chooseProjectOwner
     val reader = UserPool.chooseStudent
 
@@ -159,7 +127,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 
           withClue("When the reader views the owner's submission, the submission status: ") {
             // the UI shows the abort button for the following statuses:
-            List("Accepted", "Evaluating", "Submitting", "Submitted") should contain(status)
+            List("Accepted", "Evaluating", "Submitting", "Submitted") should contain(status._1)
           }
 
           // test the page's display of the submission ID against the tests' knowledge of the ID. This verifies
