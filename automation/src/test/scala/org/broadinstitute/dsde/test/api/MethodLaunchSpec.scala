@@ -39,7 +39,6 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             method.methodNamespace, methodConfigName, 1, Map.empty, Map.empty, method.rootEntityType)
           val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
           "participant1", "this", false))
-          println("launch ws exception + " + exception.message.toString)
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
         }
       }
@@ -53,16 +52,14 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
     withCleanBillingProject(user) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_abort_submission") { workspaceName =>
 
-        val shouldUseCallCaching = false
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 
         withMethod("MethodLaunchSpec_abort", MethodData.SimpleMethod) { methodName =>
           val method = MethodData.SimpleMethod.copy(methodName = methodName)
+
           Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName,
             method, method.methodNamespace, method.methodName, 1,
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
-
-          //Rawls.methodConfigs.getMethodConfigSyntaxValidationInWorkspace(billingProject, workspaceName, method.methodNamespace, method.methodName)
 
           val submissionId = Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)
 
@@ -92,25 +89,20 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
     withCleanBillingProject(owner) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_reader_cannot_abort_submission", aclEntries = List(AclEntry(reader.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
-        val shouldUseCallCaching = false
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 
         withMethod("MethodLaunchSpec_abort_reader", MethodData.SimpleMethod) { methodName =>
           val method = MethodData.SimpleMethod.copy(methodName = methodName)
+
           Rawls.methodConfigs.createMethodConfigInWorkspace(
             billingProject, workspaceName, method, method.methodNamespace, method.methodName, 1,
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
 
           val submissionId = Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(ownerAuthToken)
 
-          withClue("submissionId as returned by owner block: ") {
-            submissionId should not be ""
-          }
-
           val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
 
           withClue("When the reader views the owner's submission, the submission status: ") {
-            // the UI shows the abort button for the following statuses:
             List("Accepted", "Evaluating", "Submitting", "Submitted") should contain(status._1)
           }
 
