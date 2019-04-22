@@ -137,7 +137,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 
           // is the abort button visible?
           //submissionDetailsPage should not be 'abortButtonVisible
-          val abortResponse = Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)
+          val abortResponse = Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)(readerAuthToken)
           println("abortResponse: " + abortResponse)
 
         }
