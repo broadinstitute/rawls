@@ -570,23 +570,16 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  /**
-    * NOTE: This function will returns "false" in both of the following cases:
-    * if you don't have sufficient scopes
-    *   - Google's JSON response body will contain "message": "Request had insufficient authentication scopes."
-    * if you're not authorized to see the billing account
-    *   - Google's JSON response body will contain "message" : "The caller does not have permission"
-    */
-  protected def credentialOwnsBillingAccount(credential: Credential, billingAccountName: String): Future[Boolean] = {
+  protected def billingAccountContainsFCBillingGroup(credential: Credential, billingAccountId: String): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.Billing
-    val fetcher = getCloudBillingManager(credential).billingAccounts().get(billingAccountName)
-    retryWithRecoverWhen500orGoogleError(() => {
+    val fetcher = getCloudBillingManager(credential).billingAccounts().getIamPolicy(billingAccountId)
+    retryWhen500orGoogleError(() => {
       blocking {
         executeGoogleRequest(fetcher)
       }
-      true //if the request succeeds, it has access.
-    }) {
-      case e: HttpResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue => false
+    }) map { iamPolicy =>
+      val billingUsersOpt = iamPolicy.getBindings.asScala.find(_.getRole == "roles/billing.user")
+      billingUsersOpt.exists(_.getMembers.asScala.contains(s"group:$billingGroupEmail"))
     }
   }
 
@@ -612,13 +605,10 @@ class HttpGoogleServicesDAO(
 
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
     val cred = getUserCredential(userInfo)
-    val billingSvcCred = getBillingServiceAccountCredential
     listBillingAccounts(cred) flatMap { accountList =>
       Future.sequence(accountList map { acct =>
         val acctName = acct.getName
-        //NOTE: We guarantee that the firecloud billing service account always has the correct scopes.
-        //So credentialOwnsBillingAccount == false definitely means no access (rather than no scopes).
-        credentialOwnsBillingAccount(billingSvcCred, acctName) map { firecloudHasAccount =>
+        billingAccountContainsFCBillingGroup(cred, acctName) map { firecloudHasAccount =>
           RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount, acct.getDisplayName)
         }
       })
