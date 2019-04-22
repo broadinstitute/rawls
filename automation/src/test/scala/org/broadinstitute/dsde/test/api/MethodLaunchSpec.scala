@@ -8,8 +8,6 @@ import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.UserPool
 import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, MethodData, WorkspaceFixtures}
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Rawls, RestException, WorkspaceAccessLevel}
-import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
-import org.broadinstitute.dsde.workbench.util.Retry
 import org.scalatest.{FreeSpecLike, Matchers}
 import org.broadinstitute.dsde.workbench.fixture._
 import spray.json._
@@ -18,15 +16,15 @@ import org.scalatest.time.{Minutes, Seconds, Span}
 import org.scalatest.concurrent.Eventually
 
 
-class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers
-  with CleanUp with RandomUtil with Retry with Eventually
+class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
   with BillingFixtures with WorkspaceFixtures with MethodFixtures {
 
   val methodConfigName: String = SimpleMethodConfig.configName + "_" + UUID.randomUUID().toString
   val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
   val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
+  val inFlightSubmissionStatuses = List("Accepted", "Evaluating", "Submitting", "Submitted")
 
-  "launch workflow with input not defined" in {
+  "launching a workflow with input not defined should throw exception" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
     withCleanBillingProject(user) { billingProject =>
@@ -62,6 +60,10 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
 
           val submissionId = Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)
+
+          // make sure the submission has not errored out
+          val submissionStatus = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)._1
+          inFlightSubmissionStatuses should contain (submissionStatus)
 
           Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)
 
@@ -103,7 +105,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
 
           withClue("When the reader views the owner's submission, the submission status: ") {
-            List("Accepted", "Evaluating", "Submitting", "Submitted") should contain(status._1)
+            inFlightSubmissionStatuses should contain (status._1)
           }
 
           val exception = intercept[RestException](Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)(readerAuthToken))
@@ -113,5 +115,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
       }
     }
   }
+
+
 
 }
