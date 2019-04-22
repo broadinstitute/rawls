@@ -52,6 +52,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
     implicit val authToken: AuthToken = user.makeAuthToken()
     withCleanBillingProject(user) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_abort_submission") { workspaceName =>
+
         val shouldUseCallCaching = false
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 
@@ -60,11 +61,15 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName,
             method, method.methodNamespace, method.methodName, 1,
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
-          val getmc = Rawls.methodConfigs.getMethodConfigInWorkspace(billingProject, workspaceName, method.methodNamespace, method.methodName)
-          val validatemc = Rawls.methodConfigs.getMethodConfigSyntaxValidationInWorkspace(billingProject, workspaceName, method.methodNamespace, method.methodName)
+
+          //Rawls.methodConfigs.getMethodConfigSyntaxValidationInWorkspace(billingProject, workspaceName, method.methodNamespace, method.methodName)
+
           val submissionId = Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)
+
           Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)
+
           implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+
           eventually {
             val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
             logger.info(s"Status is $status in Submission $billingProject/$workspaceName/$submissionId")
@@ -86,32 +91,15 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 
     withCleanBillingProject(owner) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_reader_cannot_abort_submission", aclEntries = List(AclEntry(reader.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
-        //        api.workspaces.waitForBucketReadAccess(billingProject, workspaceName)(ownerAuthToken)
-        //        api.workspaces.waitForBucketReadAccess(billingProject, workspaceName)(readerAuthToken)
 
         val shouldUseCallCaching = false
-        //api.importMetaData(billingProject, workspaceName, "entities", testData.participantEntity)
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 
         withMethod("MethodLaunchSpec_abort_reader", MethodData.SimpleMethod) { methodName =>
           val method = MethodData.SimpleMethod.copy(methodName = methodName)
-          //          api.methodConfigurations.createMethodConfigInWorkspace(billingProject, workspaceName,
-          //            method, SimpleMethodConfig.configNamespace, methodName, 1,
-          //            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, MethodData.SimpleMethod.rootEntityType)
           Rawls.methodConfigs.createMethodConfigInWorkspace(
             billingProject, workspaceName, method, method.methodNamespace, method.methodName, 1,
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
-
-
-          // TODO: avoid using var?
-          //var submissionId: String = ""
-
-          // as owner, launch a submission
-          //          withSignIn(owner) { _ =>
-          //            val methodConfigDetailsPage = new WorkspaceMethodConfigDetailsPage(billingProject, workspaceName, SimpleMethodConfig.configNamespace, methodName).open
-          //            val submissionDetailsPage = methodConfigDetailsPage.launchAnalysis(MethodData.SimpleMethod.rootEntityType, testData.participantId, "", shouldUseCallCaching)
-          //            submissionId = submissionDetailsPage.getSubmissionId
-          //          }
 
           val submissionId = Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(ownerAuthToken)
 
@@ -119,10 +107,6 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             submissionId should not be ""
           }
 
-          // as reader, view submission details and validate the abort button doesn't appear
-          //withSignIn(reader) { _ =>
-          //val submissionDetailsPage = new SubmissionDetailsPage(billingProject, workspaceName, submissionId).open
-          //val status = submissionDetailsPage.getApiSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
           val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
 
           withClue("When the reader views the owner's submission, the submission status: ") {
@@ -130,15 +114,8 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             List("Accepted", "Evaluating", "Submitting", "Submitted") should contain(status._1)
           }
 
-          // test the page's display of the submission ID against the tests' knowledge of the ID. This verifies
-          // we have landed on the right page. Without this test, the next assertion on the abort button's visibility
-          // is a weak assertion - we could be on the wrong page, which means the abort button would also not be visible.
-          //submissionDetailsPage.getSubmissionId shouldBe submissionId
-
-          // is the abort button visible?
-          //submissionDetailsPage should not be 'abortButtonVisible
-          val abortResponse = Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)(readerAuthToken)
-          println("abortResponse: " + abortResponse)
+          val exception = intercept[RestException](Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)(readerAuthToken))
+          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("insufficient permissions") shouldBe true
 
         }
       }
