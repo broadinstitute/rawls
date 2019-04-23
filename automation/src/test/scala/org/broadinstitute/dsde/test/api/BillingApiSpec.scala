@@ -53,7 +53,6 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
 
       // add studentA to google billing project with USER role
       val studentA = UserPool.chooseStudent
-      Rawls.billing.addUserToBillingProject(billingProjectName, owner.email, BillingProjectRole.Owner)
       Rawls.billing.addUserToBillingProject(billingProjectName, studentA.email, BillingProjectRole.User)
 
       // verify studentA is a member in google billing project
