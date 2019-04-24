@@ -21,11 +21,9 @@ class AuthDomainGroupApiSpec extends FreeSpec with Matchers with WorkspaceFixtur
 
   val defaultUser: Credentials = UserPool.chooseCurator
   val authTokenDefault: AuthToken = defaultUser.makeAuthToken()
-
-  // One Auth-Domain group tests
-
+  
   "A workspace" - {
-    "with one group inside of it" - {
+    "with one group in its auth domain" - {
 
       "can be created" in {
         val user = UserPool.chooseAuthDomainUser

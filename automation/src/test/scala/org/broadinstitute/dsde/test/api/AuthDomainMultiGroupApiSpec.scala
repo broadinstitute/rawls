@@ -25,7 +25,7 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
 
 
   "A workspace" - {
-    "with multiple groups inside of it" - {
+    "with multiple groups in its auth domain" - {
 
       "can be created" in {
 
@@ -220,14 +220,16 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
               implicit val authToken: AuthToken = authTokenDefault
 
               withGroup("AuthDomainOne") { groupOne =>
-                withCleanBillingProject(defaultUser, List(user.email)) { projectName =>
-                  withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne)) { workspaceName =>
+                withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
+                  withCleanBillingProject(defaultUser, List(user.email)) { projectName =>
+                    withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne)) { workspaceName =>
 
-                    // user can see workspace but user cannot access workspace
-                    AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(defaultUser.makeAuthToken())
+                      // user can see workspace but user cannot access workspace
+                      AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(defaultUser.makeAuthToken())
 
-                  }(user.makeAuthToken())
-                }
+                    }(user.makeAuthToken())
+                  }
+                }(user.makeAuthToken())
               }(user.makeAuthToken())
             }
           }
@@ -292,6 +294,8 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
 
                       val level = getWorkspaceAccessLevel(projectName, workspaceName)(user.makeAuthToken())
                       level should (be("WRITER"))
+
+                      AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
                     }
                   }
                 }
@@ -372,28 +376,6 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
 
                     // user cannot see workspace and user cannot access workspace
                     AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        //TCGA controlled access workspaces use-case
-        "when the workspace is shared with the group" - {
-          "can be seen and is accessible" in {
-
-            val user = UserPool.chooseAuthDomainUser
-            implicit val authToken: AuthToken = authTokenDefault
-
-            withGroup("AuthDomainOne", List(user.email)) { groupOne =>
-              withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
-
-                withCleanBillingProject(defaultUser) { projectName =>
-                  withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(groupNameToEmail(groupOne), WorkspaceAccessLevel.Reader))) { workspaceName =>
-
-                    // user can see workspace and user can access workspace and see two authdomain groups
-                    AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
                   }
                 }
               }
