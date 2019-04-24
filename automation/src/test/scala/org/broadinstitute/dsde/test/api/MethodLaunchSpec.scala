@@ -116,6 +116,57 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
     }
   }
 
+  "launch workflow with wrong root entity" in {
+    val user = UserPool.chooseProjectOwner
+    implicit val authToken: AuthToken = user.makeAuthToken()
+    withCleanBillingProject(user) { billingProject =>
+      withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_input_not_defined") { workspaceName =>
+        Rawls.entities.importMetaData(billingProject, workspaceName, entity)
+
+        withMethod("MethodLaunchSpec_input_undefined", MethodData.InputRequiredMethod, 1) { methodName =>
+          val method = MethodData.InputRequiredMethod.copy(methodName = methodName)
+          Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName, method,
+            method.methodNamespace, methodConfigName, 1, Map.empty, Map.empty, "sample")
+          val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
+            "participant1", "this", false))
+          println("launchexception: " + exception.message)
+          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
+        }
+      }
+    }
+  }
+
+
+
+//  "launch workflow on set without expression" in {
+//    val user = UserPool.chooseProjectOwner
+//    implicit val authToken: AuthToken = user.makeAuthToken()
+//    withCleanBillingProject(user) { billingProject =>
+//      withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_on_set_without_expression") { workspaceName =>
+//        api.workspaces.waitForBucketReadAccess(billingProject, workspaceName)
+//        api.importMetaData(billingProject, workspaceName, "entities", testData.participantEntity)
+//        api.importMetaData(billingProject, workspaceName, "entities", testData.hundredAndOneSet.samples)
+//        api.importMetaData(billingProject, workspaceName, "entities", testData.hundredAndOneSet.sampleSetCreation)
+//        api.importMetaData(billingProject, workspaceName, "entities", testData.hundredAndOneSet.sampleSetMembership)
+//        api.methodConfigurations.copyMethodConfigFromMethodRepo(billingProject, workspaceName, SimpleMethodConfig.configNamespace,
+//          SimpleMethodConfig.configName, SimpleMethodConfig.snapshotId, SimpleMethodConfig.configNamespace, methodConfigName)
+//
+//        withWebDriver { implicit driver =>
+//          withSignIn(user) { _ =>
+//            val methodConfigDetailsPage = new WorkspaceMethodConfigDetailsPage(billingProject, workspaceName, SimpleMethodConfig.configNamespace, methodConfigName).open
+//            methodConfigDetailsPage.editMethodConfig(newRootEntityType = Some("sample"))
+//            val launchModal = methodConfigDetailsPage.openLaunchAnalysisModal()
+//            launchModal.filterRootEntityType("sample_set")
+//            launchModal.searchAndSelectEntity(testData.hundredAndOneSet.sampleSetId)
+//            launchModal.clickLaunchButton()
+//            launchModal.verifyErrorText(noExpressionErrorText) shouldBe true
+//            launchModal.xOut()
+//          }
+//        }
+//      }
+//    }
+//  }
+//
 
 
 }
