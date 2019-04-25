@@ -36,7 +36,6 @@ trait DataAccess
       TableQuery[SubmissionAttributeTable].delete andThen         // FK to entity, submissionvalidation
       TableQuery[MethodConfigurationInputTable].delete andThen    // FK to MC
       TableQuery[MethodConfigurationOutputTable].delete andThen   // FK to MC
-      TableQuery[MethodConfigurationPrereqTable].delete andThen   // FK to MC
       TableQuery[SubmissionValidationTable].delete andThen        // FK to workflow, workflowfailure
       TableQuery[WorkflowMessageTable].delete andThen             // FK to workflow
       TableQuery[WorkflowTable].delete andThen                    // FK to submission, entity

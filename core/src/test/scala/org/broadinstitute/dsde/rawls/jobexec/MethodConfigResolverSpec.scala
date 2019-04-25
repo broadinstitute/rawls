@@ -146,26 +146,26 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val dummyMethod = AgoraMethod("method_namespace", "test_method", 1)
 
   val configGood = MethodConfiguration("config_namespace", "configGood", Some("Sample"),
-    Map.empty, Map(intArgName -> AttributeString("this.blah")), Map.empty, dummyMethod)
+    None, Map(intArgName -> AttributeString("this.blah")), Map.empty, dummyMethod)
 
   val configEvenBetter = MethodConfiguration("config_namespace", "configGood", Some("Sample"),
-    Map.empty, Map(intArgName -> AttributeString("this.blah"), intOptName -> AttributeString("this.blah")),
+    None, Map(intArgName -> AttributeString("this.blah"), intOptName -> AttributeString("this.blah")),
     Map.empty, dummyMethod)
 
   val configMissingExpr = MethodConfiguration("config_namespace", "configMissingExpr", Some("Sample"),
-    Map.empty, Map.empty, Map.empty, dummyMethod)
+    None, Map.empty, Map.empty, dummyMethod)
 
   val configSampleSet = MethodConfiguration("config_namespace", "configSampleSet", Some("SampleSet"),
-    Map.empty, Map(intArrayName -> AttributeString("this.samples.blah")), Map.empty, dummyMethod)
+    None, Map(intArrayName -> AttributeString("this.samples.blah")), Map.empty, dummyMethod)
 
   val configEmptyArray = MethodConfiguration("config_namespace", "configSampleSet", Some("SampleSet"),
-    Map.empty, Map(intArrayName -> AttributeString("this.nonexistent")), Map.empty, dummyMethod)
+    None, Map(intArrayName -> AttributeString("this.nonexistent")), Map.empty, dummyMethod)
 
   val configRawJsonDoubleArray = MethodConfiguration("config_namespace", "configSampleSet", Some("SampleSet"),
-      Map.empty, Map(doubleIntArrayName -> AttributeString("this.rawJsonDoubleArray")), Map.empty, dummyMethod)
+    None, Map(doubleIntArrayName -> AttributeString("this.rawJsonDoubleArray")), Map.empty, dummyMethod)
 
   val configRawJsonTripleArray = MethodConfiguration("config_namespace", "configSample", Some("Sample"),
-    Map.empty, Map(tripleIntArrayName -> AttributeString("this.samples.rawJsonDoubleArray")), Map.empty, dummyMethod)
+    None, Map(tripleIntArrayName -> AttributeString("this.samples.rawJsonDoubleArray")), Map.empty, dummyMethod)
 
   class ConfigData extends TestData {
     override def save() = {
@@ -367,12 +367,12 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
     "create a Method Config from a template" in withConfigData {
       val expectedLittleInputs = Map(intArgName -> AttributeString(""), intOptName -> AttributeString(""))
-      val expectedLittleTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), Map(), expectedLittleInputs, Map(), dummyMethod)
+      val expectedLittleTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), None, expectedLittleInputs, Map(), dummyMethod)
 
       assertResult(expectedLittleTemplate) { MethodConfigResolver.toMethodConfiguration(littleWdl, dummyMethod).get }
 
       val expectedArrayInputs = Map(intArrayName -> AttributeString(""))
-      val expectedArrayTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), Map(), expectedArrayInputs, Map(), dummyMethod)
+      val expectedArrayTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), None, expectedArrayInputs, Map(), dummyMethod)
 
       assertResult(expectedArrayTemplate) { MethodConfigResolver.toMethodConfiguration(arrayWdl, dummyMethod).get }
 

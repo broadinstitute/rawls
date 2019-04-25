@@ -18,7 +18,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "config2",
       Some("sample"),
 
-      Map("input.expression" -> AttributeString("this..wont.parse")),
+      Some(Map("input.expression" -> AttributeString("this..wont.parse"))),
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
       AgoraMethod("ns-config", "meth2", 2)
@@ -78,7 +78,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
 
     val changed = testData.agoraMethodConfig.copy(rootEntityType = Some("goober"),
-      prerequisites = Map.empty,
+      prerequisites = None,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
       methodRepoMethod = testData.agoraMethod.copy(methodVersion = 2)
@@ -107,7 +107,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
 
     val changed = testData.agoraMethodConfig.copy(rootEntityType = Some("goober"),
-      prerequisites = Map.empty,
+      prerequisites = None,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
       methodRepoMethod = testData.agoraMethod.copy(methodVersion = 2)
@@ -137,7 +137,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "oldName",
       Some("sample"),
-      Map("input.expression" -> AttributeString("this..wont.parse")),
+      None,
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
       AgoraMethod("ns-config", "meth2", 2)
@@ -168,7 +168,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "oldName",
       Some("sample"),
-      Map("input.expression" -> AttributeString("this..wont.parse")),
+      None,
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
       AgoraMethod("ns-config", "meth2", 2)
@@ -178,7 +178,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "newName",
       Some("sample"),
-      Map("input.expression" -> AttributeString("this..wont.parse")),
+      None,
       Map("output.expression" -> AttributeString("already.there")),
       Map("prereq.expression" -> AttributeString("already.there")),
       AgoraMethod("ns-config", "meth2", 2),

@@ -166,7 +166,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       sample3.toReference
     ))))
 
-    val methodConfig = MethodConfiguration("dsde", "testConfig", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(workspaceName.namespace, "method-a", 1))
+    val methodConfig = MethodConfiguration("dsde", "testConfig", Some("Sample"), None, Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(workspaceName.namespace, "method-a", 1))
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, workspaceName)
     val submissionTemplate = createTestSubmission(workspace, methodConfig, sampleSet, WorkbenchEmail(userOwner.userEmail.value),
       Seq(sample1, sample2, sample3), Map(sample1 -> testData.inputResolutions, sample2 -> testData.inputResolutions, sample3 -> testData.inputResolutions),
@@ -1344,9 +1344,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   private def testCreateSubmission(dataSource: SlickDataSource, userEmail: RawlsUserEmail, exectedStatus: StatusCode) = {
     withApiServicesSecure(dataSource, userEmail.value) { services =>
       val wsName = testData.wsName
-      val agoraMethodConf = MethodConfiguration("no_input", "dsde", Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+      val agoraMethodConf = MethodConfiguration("no_input", "dsde", Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
       val dockstoreMethodConf =
-        MethodConfiguration("no_input_dockstore", "dsde", Some("Sample"), Map.empty, Map.empty, Map.empty, DockstoreMethod("dockstore-no-input-path", "dockstore-no-input-version"))
+        MethodConfiguration("no_input_dockstore", "dsde", Some("Sample"), None, Map.empty, Map.empty, DockstoreMethod("dockstore-no-input-path", "dockstore-no-input-version"))
 
       List(agoraMethodConf, dockstoreMethodConf).foreach(createSubmission(wsName, _, testData.sample1, None, services, exectedStatus))
     }

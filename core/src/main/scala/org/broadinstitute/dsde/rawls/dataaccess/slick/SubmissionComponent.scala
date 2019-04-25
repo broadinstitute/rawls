@@ -125,7 +125,7 @@ trait SubmissionComponent {
         recs <- query.result
       } yield {
         recs.map { case (submissionRec, methodConfigRec, entityRec) =>
-          val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
+          val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty)
           val statusCounts = states.getOrElse(submissionRec.id, Seq.empty).map(x => Map(x.workflowStatus -> x.count)).foldLeft(Map.empty[String, Int])(_|+|_)
           val maybeWorkflowIds = states.getOrElse(submissionRec.id, Seq.empty).flatMap(_.workflowId).sorted
           val workflowIds = if (maybeWorkflowIds.nonEmpty) Some(maybeWorkflowIds) else None
