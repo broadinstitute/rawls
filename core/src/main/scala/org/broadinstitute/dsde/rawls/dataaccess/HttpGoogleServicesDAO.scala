@@ -786,7 +786,7 @@ class HttpGoogleServicesDAO(
       "projectOwnersGroup" -> ownerGroupEmail.value.toJson,
       "projectViewersGroup" -> computeUserGroupEmail.value.toJson,
       "requesterPaysRole" -> requesterPaysRole.toJson,
-      "highSecurityNetwork" -> false.toJson,
+      "highSecurityNetwork" -> true.toJson, //turned on for all new projects
       "fcProjectOwners" -> projectTemplate.policies("roles/owner").toJson,
       "fcProjectEditors" -> projectTemplate.policies("roles/editor").toJson,
       "labels" -> templateLabels
