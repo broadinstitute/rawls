@@ -56,7 +56,12 @@ object RawlsExpansion {
               // with the string "redacted".
               // Note the extractions are returned in the same order as they occur in the path, so we only need
               // to traverse the path once.
-              uri.path.foldLeft[(Uri.Path, List[Any])]((Uri.Path.Empty, extractions.productIterator.toList)) { case ((resultPath, remainingExtractions), currentSegment) =>
+              // Also note extractions that match a bunch of parts of the path at once are a list so we need to flatten it out
+              val flatExtractions = extractions.productIterator.toList.flatMap {
+                case t: TraversableOnce[_] => t
+                case other => List(other)
+              }
+              uri.path.foldLeft[(Uri.Path, List[Any])]((Uri.Path.Empty, flatExtractions)) { case ((resultPath, remainingExtractions), currentSegment) =>
                 remainingExtractions match {
                   case (h: String) :: tail if h == currentSegment =>
                     (resultPath / "redacted", tail)

@@ -127,6 +127,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
         MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
         MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
         workbenchMetricBaseName = workbenchMetricBaseName),
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
       execServiceBatchSize,
       gcsDAO,
@@ -1062,4 +1063,70 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+
+  it should "parse workflow metadata" in {
+    val jsonString = """{
+                       |  "calls": {
+                       |    "hello_and_goodbye.goodbye": [
+                       |      {
+                       |        "attempt": 1,
+                       |        "backendLogs": {
+                       |          "log": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-goodbye/goodbye.log"
+                       |        },
+                       |        "backendStatus": "Success",
+                       |        "end": "2019-04-24T13:57:48.998Z",
+                       |        "executionStatus": "Done",
+                       |        "jobId": "operations/EN2siP2kLRinu-Wt-4-bqRQgw8Sszq0dKg9wcm9kdWN0aW9uUXVldWU",
+                       |        "shardIndex": -1,
+                       |        "start": "2019-04-24T13:56:22.387Z",
+                       |        "stderr": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-goodbye/goodbye-stderr.log",
+                       |        "stdout": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-goodbye/goodbye-stdout.log"
+                       |      }
+                       |    ],
+                       |    "hello_and_goodbye.hello": [
+                       |      {
+                       |        "attempt": 1,
+                       |        "backendLogs": {
+                       |          "log": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-hello/hello.log"
+                       |        },
+                       |        "backendStatus": "Success",
+                       |        "end": "2019-04-24T13:58:21.978Z",
+                       |        "executionStatus": "Done",
+                       |        "jobId": "operations/EKCsiP2kLRiu0qj_qdLFq8wBIMPErM6tHSoPcHJvZHVjdGlvblF1ZXVl",
+                       |        "shardIndex": -1,
+                       |        "start": "2019-04-24T13:56:22.387Z",
+                       |        "stderr": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-hello/hello-stderr.log",
+                       |        "stdout": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/call-main_workflow/sub.main_workflow/1cf452d0-f18c-4945-aaf4-779402e7b2aa/call-hello_and_goodbye/sub.hello_and_goodbye/0d6768b7-73b3-41c4-b292-de743657c5db/call-hello/hello-stdout.log"
+                       |      }
+                       |    ]
+                       |  },
+                       |  "end": "2019-04-24T13:58:23.868Z",
+                       |  "id": "0d6768b7-73b3-41c4-b292-de743657c5db",
+                       |  "start": "2019-04-24T13:56:20.348Z",
+                       |  "status": "Succeeded",
+                       |  "workflowName": "sub.hello_and_goodbye",
+                       |  "workflowRoot": "gs://fc-2d8ada07-750f-4db8-88ab-307099d54a31/d25c4529-c247-41e0-99fb-1b8fade199d5/most_main_workflow/ccc3fdbe-3cf4-40cf-8a01-4ae77a5d3e5f/"
+                       |}""".stripMargin
+
+    import spray.json._
+    import spray.json.DefaultJsonProtocol._
+
+    case class Call(jobId: Option[String])
+    case class OpMetadata(calls: Map[String, Seq[Call]])
+
+    implicit val callFormat = jsonFormat1(Call)
+    implicit val opMetadataFormat = jsonFormat1(OpMetadata)
+
+    val json = jsonString.parseJson
+
+    val jobIds = json.convertTo[OpMetadata].calls.values.flatMap(_.flatMap(_.jobId))
+
+    val x = for {
+      calls <- json.convertTo[OpMetadata].calls.values
+      call <- calls
+      jobId <- call.jobId
+    } yield jobId
+
+    assert(x.toList.contains("operations/EN2siP2kLRinu-Wt-4-bqRQgw8Sszq0dKg9wcm9kdWN0aW9uUXVldWU"))
+  }
 }

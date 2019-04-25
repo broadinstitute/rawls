@@ -665,9 +665,8 @@ class HttpGoogleServicesDAO(
     } )
   }
 
-  override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = {
+  override def getGenomicsOperation(opId: String): Future[Option[JsObject]] = {
     implicit val service = GoogleInstrumentedService.Genomics
-    val opId = s"operations/$jobId"
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
     val operationRequest = genomicsApi.operations().get(opId)
 

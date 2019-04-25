@@ -56,6 +56,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  def withEmptyTestDataApiServices[T](testCode: TestApiService => T): T = {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
+
   val largeSampleTestData = new LargeSampleSetTestData()
 
   def withLargeSubmissionApiServices[T](testCode: TestApiService => T): T = {
@@ -661,5 +667,61 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         entityQuery.save(SlickWorkspaceContext(workspace), lotsOfSamples :+ sampleSet)
       )
     }
+  }
+
+  it should "return 200 when reading a Google Genomics operation with PAPIv1 job id" in withEmptyTestDataApiServices { services =>
+    withStatsD {
+      Get(s"/workflows/workflow_with_job_ids/genomics/operations/dummy-job-id") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK, responseAs[String]) {
+            status
+          }
+          // message returned by MockGoogleServicesDAO
+          assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
+            responseAs[JsObject]
+          }
+        }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = "workflows.redacted.genomics.redacted.redacted"
+      val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
+  }
+
+  it should "return 200 when reading a Google Genomics operation with PAPIv2 job id" in withEmptyTestDataApiServices { services =>
+    withStatsD {
+      Get(s"/workflows/workflow_with_job_ids/genomics/projects/dummy-project/operations/dummy-job-id") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          // message returned by MockGoogleServicesDAO
+          assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
+            responseAs[JsObject]
+          }
+        }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = "workflows.redacted.genomics.redacted.redacted.redacted.redacted"
+      val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a non-existent workflow" in withEmptyTestDataApiServices { services =>
+    Get(s"/workflows/bogus/genomics/projects/dummy-project/operations/dummy-job-id") ~> services.submissionRoutes ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a non-existent job" in withEmptyTestDataApiServices { services =>
+    Get(s"/workflows/workflow_with_job_ids/genomics/projects/dummy-project/operations/bogus") ~> services.submissionRoutes ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
   }
 }

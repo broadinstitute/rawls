@@ -37,7 +37,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudHasThisOne")
   val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
 
-  val mockJobId = "dummy-job-id"
+  val mockJobIds = Seq("operations/dummy-job-id", "projects/dummy-project/operations/dummy-job-id")
 
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
     val firecloudHasThisOne = RawlsBillingAccount(accessibleBillingAccountName, true, "testBillingAccount")
@@ -185,7 +185,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = Future.successful(())
 
   override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = Future {
-    if (jobId == mockJobId) {
+    if (mockJobIds.contains(jobId)) {
       Some("""{"foo":"bar"}""".parseJson.asJsObject)
     } else {
       None

@@ -604,6 +604,31 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
+        .withPath(submissionPath + "/workflows/v1/workflow_with_job_ids/metadata")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """
+            |{
+            |  "id": "papi_v1_job_id",
+            |  "status": "Unknown",
+            |  "submission": "2010-09-10T11:12:13.456Z",
+            |  "outputs": {"test": ["baz", "bar", "foo"]},
+            |  "calls": {
+            |    "foo": [
+            |      { "jobId": "operations/dummy-job-id" },
+            |      { "jobId": "projects/dummy-project/operations/dummy-job-id" }
+            |    ]
+            |  }
+            |}
+          """.stripMargin)
+        .withStatusCode(StatusCodes.Created.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
         .withPath(submissionPath + "/workflows/v1/8afafe21-2b70-4180-a565-748cb573e10c/outputs")
     ).respond(
         response()

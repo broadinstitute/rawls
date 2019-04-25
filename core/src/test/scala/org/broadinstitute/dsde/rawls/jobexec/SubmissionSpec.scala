@@ -217,6 +217,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
           MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
           MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
           workbenchMetricBaseName = workbenchMetricBaseName),
+        new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
         execServiceCluster,
         execServiceBatchSize,
         gcsDAO,
