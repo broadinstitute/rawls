@@ -22,6 +22,51 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
   val methodConfigName: String = SimpleMethodConfig.configName + "_" + UUID.randomUUID().toString
   val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
   val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
+  //[
+  //  {
+  //    "name": "participant1",
+  //    "entityType": "participant",
+  //    "operations": [ {
+  //        "op": "AddUpdateAttribute",
+  //        "attributeName": "participant1",
+  //        "addUpdateAttribute": "testparticipant"
+  //      }
+  //    ]
+  //  }
+  //]
+  val sampleSetOperations = Array(Map("op" -> "CreateAttributeEntityReferenceList", "attributeListName" -> "participantSet"))
+
+  //"Example payload for CreateAttributeEntityReferenceList": {
+  //  "op": "string",
+  //  "attributeListName": "string"
+  //},
+  val entitySet: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> Array()))
+  val entitySetMembershipOperation = Array(Map("op" -> "AddListMember", "attributeListName" -> "participantSetAttribute", "newMember" -> "participant1"))
+  val entitySetMembership: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> entitySetMembershipOperation))
+//  [
+//    {
+//      "name": "participantSet1",
+//      "entityType": "sample_set",
+//      "operations": [ {
+//          "op": "CreateAttributeEntityReferenceList",
+//          "attributeListName": "participantSetAttribute"
+//        }
+//      ]
+//    }
+//  ]
+
+//    [
+//      {
+//        "name": "participantSet1",
+//        "entityType": "sample_set",
+//        "operations": [ {
+//             "op": "AddListMember",
+//             "attributeListName": "participantSetAttribute",
+//             "newMember": "participant1"
+//          }
+//        ]
+//      }
+//    ]
   val inFlightSubmissionStatuses = List("Accepted", "Evaluating", "Submitting", "Submitted")
 
   "launching a workflow with input not defined should throw exception" in {
@@ -34,7 +79,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
         withMethod("MethodLaunchSpec_input_undefined", MethodData.InputRequiredMethod, 1) { methodName =>
           val method = MethodData.InputRequiredMethod.copy(methodName = methodName)
           Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName, method,
-            method.methodNamespace, methodConfigName, 1, Map.empty, Map.empty, method.rootEntityType)
+            method.methodNamespace, methodConfigName, 1, Map.empty, SimpleMethodConfig.outputs, method.rootEntityType)
           val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
           "participant1", "this", false))
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
@@ -119,54 +164,52 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
   "launch workflow with wrong root entity" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
+
     withCleanBillingProject(user) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_input_not_defined") { workspaceName =>
+
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 
         withMethod("MethodLaunchSpec_input_undefined", MethodData.InputRequiredMethod, 1) { methodName =>
           val method = MethodData.InputRequiredMethod.copy(methodName = methodName)
-          Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName, method,
-            method.methodNamespace, methodConfigName, 1, Map.empty, Map.empty, "sample")
+          Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName, method, method.methodNamespace,
+            methodConfigName, 1, SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, "sample")
+
           val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
             "participant1", "this", false))
           println("launchexception: " + exception.message)
-          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
+          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Error: Method configuration expects an entity of type participant, but you gave us an entity of type sample.") shouldBe true
         }
       }
     }
   }
 
 
+  "launch workflow on set with incorrect expression" in {
+    val user = UserPool.chooseProjectOwner
+    implicit val authToken: AuthToken = user.makeAuthToken()
 
-//  "launch workflow on set without expression" in {
-//    val user = UserPool.chooseProjectOwner
-//    implicit val authToken: AuthToken = user.makeAuthToken()
-//    withCleanBillingProject(user) { billingProject =>
-//      withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_on_set_without_expression") { workspaceName =>
-//        api.workspaces.waitForBucketReadAccess(billingProject, workspaceName)
-//        api.importMetaData(billingProject, workspaceName, "entities", testData.participantEntity)
-//        api.importMetaData(billingProject, workspaceName, "entities", testData.hundredAndOneSet.samples)
-//        api.importMetaData(billingProject, workspaceName, "entities", testData.hundredAndOneSet.sampleSetCreation)
-//        api.importMetaData(billingProject, workspaceName, "entities", testData.hundredAndOneSet.sampleSetMembership)
-//        api.methodConfigurations.copyMethodConfigFromMethodRepo(billingProject, workspaceName, SimpleMethodConfig.configNamespace,
-//          SimpleMethodConfig.configName, SimpleMethodConfig.snapshotId, SimpleMethodConfig.configNamespace, methodConfigName)
-//
-//        withWebDriver { implicit driver =>
-//          withSignIn(user) { _ =>
-//            val methodConfigDetailsPage = new WorkspaceMethodConfigDetailsPage(billingProject, workspaceName, SimpleMethodConfig.configNamespace, methodConfigName).open
-//            methodConfigDetailsPage.editMethodConfig(newRootEntityType = Some("sample"))
-//            val launchModal = methodConfigDetailsPage.openLaunchAnalysisModal()
-//            launchModal.filterRootEntityType("sample_set")
-//            launchModal.searchAndSelectEntity(testData.hundredAndOneSet.sampleSetId)
-//            launchModal.clickLaunchButton()
-//            launchModal.verifyErrorText(noExpressionErrorText) shouldBe true
-//            launchModal.xOut()
-//          }
-//        }
-//      }
-//    }
-//  }
-//
+    withCleanBillingProject(user) { billingProject =>
+      withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_on_set_without_expression") { workspaceName =>
+        
+        Rawls.entities.importMetaData(billingProject, workspaceName, entity)
+        Rawls.entities.importMetaData(billingProject, workspaceName, entitySet)
+        Rawls.entities.importMetaData(billingProject, workspaceName, entitySetMembership)
 
+        withMethod("MethodLaunchSpec_wf_on_set_without_expression", MethodData.SimpleMethod) { methodName =>
+          val method = MethodData.SimpleMethod.copy(methodName = methodName)
+
+          Rawls.methodConfigs.createMethodConfigInWorkspace(
+            billingProject, workspaceName, method, method.methodNamespace, method.methodName, 1,
+            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
+
+          val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
+            "participantSet1", "this", false))
+          println("launchexception2: " + exception.message)
+          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Error: Method configuration expects an entity of type participant, but you gave us an entity of type participant_set.") shouldBe true
+        }
+      }
+    }
+  }
 
 }
