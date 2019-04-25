@@ -178,7 +178,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
             "participant1", "this", false))
           println("launchexception: " + exception.message)
-          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Error: Method configuration expects an entity of type participant, but you gave us an entity of type sample.") shouldBe true
+          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample.)") shouldBe true
         }
       }
     }
@@ -191,7 +191,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 
     withCleanBillingProject(user) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_on_set_without_expression") { workspaceName =>
-        
+
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
         Rawls.entities.importMetaData(billingProject, workspaceName, entitySet)
         Rawls.entities.importMetaData(billingProject, workspaceName, entitySetMembership)
