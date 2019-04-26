@@ -23,7 +23,7 @@ import DefaultJsonProtocol._
 
 class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
   with CleanUp with RandomUtil with Retry
-  with BillingFixtures with WorkspaceFixtures {
+  with BillingFixtures with WorkspaceFixtures with MethodFixtures {
 
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
   val studentAToken: AuthToken = studentA.makeAuthToken()
@@ -240,6 +240,100 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             val exception = intercept[RestException](Rawls.workspaces.updateAcl(projectName, workspaceName, computeReader)(ownerAuthToken))
 
             exception.message.parseJson.asJsObject.fields("message").convertTo[String] should equal("may not grant readers compute access")
+          }(ownerAuthToken)
+        }
+      }
+    }
+
+    "should not allow readers" - {
+      def getMethodConfig(method: Method, projectName: String, destWorkspaceName: String): Map[String, Any] = Map(
+        "name" -> s"destination-${method.methodName}",
+        "namespace" -> s"destination-${method.methodNamespace}",
+        "workspaceName" -> Map(
+          "namespace" -> projectName,
+          "name" -> destWorkspaceName)
+      )
+
+      "to import method configs from another workspace" in {
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("reader-import-config-dest-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { destWorkspaceName =>
+            withWorkspace(projectName, prependUUID("method-config-source-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { sourceWorkspaceName =>
+              withMethod("reader-import-from-workspace", MethodData.SimpleMethod) { methodName =>
+                val method = MethodData.SimpleMethod.copy(methodName = methodName)
+
+                val destMethodConfig = getMethodConfig(method, projectName, destWorkspaceName)
+                val sourceMethodConfig = getMethodConfig(method, projectName, sourceWorkspaceName)
+
+                Rawls.methodConfigs.createMethodConfigInWorkspace(
+                  projectName, sourceWorkspaceName, method, method.methodNamespace, method.methodName, 1,
+                  Map.empty, Map.empty, method.rootEntityType)(ownerAuthToken)
+
+                eventually {
+                  val copyFromWorkspaceException = intercept[RestException] {
+                    Rawls.methodConfigs.copyMethodConfigFromWorkspace(sourceMethodConfig, destMethodConfig)(studentAToken)
+                  }
+                  assertExceptionStatusCode(copyFromWorkspaceException, 403)
+                }
+              }(ownerAuthToken)
+            }(ownerAuthToken)
+          }(ownerAuthToken)
+        }
+      }
+
+      "to import method configs from the method repo" in {
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("reader-import-config-dest-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { destWorkspaceName =>
+            withMethod("reader-import-from-method-repo", MethodData.SimpleMethod) { methodName =>
+              val method = MethodData.SimpleMethod.copy(methodName = methodName)
+
+              val methodRepoConfig = Map(
+                "methodRepoNamespace" -> SimpleMethodConfig.configNamespace,
+                "methodRepoName" -> SimpleMethodConfig.configName,
+                "methodRepoSnapshotId" -> SimpleMethodConfig.snapshotId,
+                "destination" -> getMethodConfig(method, projectName, destWorkspaceName)
+              )
+
+              // studentA needs permission to access the method config or importing from method repo will return 404 not 403
+              Orchestration.methodConfigurations.setMethodConfigPermission(
+                SimpleMethodConfig.configNamespace,
+                SimpleMethodConfig.configName,
+                SimpleMethodConfig.snapshotId,
+                studentA.email,
+                "OWNER"
+              )(ownerAuthToken)
+
+              eventually {
+                val copyFromMethodRepoException = intercept[RestException] {
+                  Rawls.methodConfigs.copyMethodConfigFromMethodRepo(methodRepoConfig)(studentAToken)
+                }
+                assertExceptionStatusCode(copyFromMethodRepoException, 403)
+              }
+            }(ownerAuthToken)
+          }(ownerAuthToken)
+        }
+      }
+
+      "to launch workflows" in {
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("reader-launch-workflow-fails"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
+            val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
+            val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
+            Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
+
+            withMethod("reader-cannot-launch-workflows", MethodData.SimpleMethod) { methodName =>
+              val method = MethodData.SimpleMethod.copy(methodName = methodName)
+
+              Rawls.methodConfigs.createMethodConfigInWorkspace(projectName, workspaceName,
+                method, method.methodNamespace, method.methodName, 1,
+                SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)(ownerAuthToken)
+
+              eventually {
+                val submissionException = intercept[RestException] {
+                  Rawls.submissions.launchWorkflow(projectName, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(studentAToken)
+                }
+                assertExceptionStatusCode(submissionException, 403)
+              }
+            }(ownerAuthToken)
           }(ownerAuthToken)
         }
       }
