@@ -19,9 +19,13 @@ import org.scalatest.concurrent.Eventually
 class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
   with BillingFixtures with WorkspaceFixtures with MethodFixtures {
 
-  val methodConfigName: String = SimpleMethodConfig.configName + "_" + UUID.randomUUID().toString
+  def createMethodConfigName: String = SimpleMethodConfig.configName + "_" + UUID.randomUUID().toString
   val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
   val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
+  val sampleSetOperations = Array(Map("op" -> "CreateAttributeEntityReferenceList", "attributeListName" -> "participantSet"))
+  val entitySet: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> Array()))
+  val entitySetMembershipOperation = Array(Map("op" -> "AddListMember", "attributeListName" -> "participantSetAttribute", "newMember" -> "participant1"))
+  val entitySetMembership: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> entitySetMembershipOperation))
   val inFlightSubmissionStatuses = List("Accepted", "Evaluating", "Submitting", "Submitted")
 
   "launching a workflow with input not defined should throw exception" in {
@@ -33,8 +37,11 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 
         withMethod("MethodLaunchSpec_input_undefined", MethodData.InputRequiredMethod, 1) { methodName =>
           val method = MethodData.InputRequiredMethod.copy(methodName = methodName)
+          val methodConfigName = createMethodConfigName
+
           Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName, method,
-            method.methodNamespace, methodConfigName, 1, Map.empty, Map.empty, method.rootEntityType)
+            method.methodNamespace, methodConfigName, 1, Map.empty, SimpleMethodConfig.outputs, method.rootEntityType)
+
           val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
           "participant1", "this", false))
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
@@ -116,6 +123,57 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
     }
   }
 
+  "launch workflow with wrong root entity" in {
+    val user = UserPool.chooseProjectOwner
+    implicit val authToken: AuthToken = user.makeAuthToken()
 
+    withCleanBillingProject(user) { billingProject =>
+      withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_input_not_defined") { workspaceName =>
+
+        Rawls.entities.importMetaData(billingProject, workspaceName, entity)
+
+        withMethod("MethodLaunchSpec_input_undefined", MethodData.InputRequiredMethod, 1) { methodName =>
+          val method = MethodData.InputRequiredMethod.copy(methodName = methodName)
+
+          val methodConfigName = createMethodConfigName
+          Rawls.methodConfigs.createMethodConfigInWorkspace(
+            billingProject, workspaceName, method, method.methodNamespace, methodConfigName, 1,
+            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, "sample")
+
+          val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
+            "participant1", "this", false))
+          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample.)") shouldBe true
+        }
+      }
+    }
+  }
+
+
+  "launch workflow on set with incorrect expression" in {
+    val user = UserPool.chooseProjectOwner
+    implicit val authToken: AuthToken = user.makeAuthToken()
+
+    withCleanBillingProject(user) { billingProject =>
+      withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_on_set_without_expression") { workspaceName =>
+
+        Rawls.entities.importMetaData(billingProject, workspaceName, entity)
+        Rawls.entities.importMetaData(billingProject, workspaceName, entitySet)
+        Rawls.entities.importMetaData(billingProject, workspaceName, entitySetMembership)
+
+        withMethod("MethodLaunchSpec_wf_on_set_without_expression", MethodData.SimpleMethod) { methodName =>
+          val method = MethodData.SimpleMethod.copy(methodName = methodName)
+
+          val methodConfigName = createMethodConfigName
+          Rawls.methodConfigs.createMethodConfigInWorkspace(
+            billingProject, workspaceName, method, method.methodNamespace, methodConfigName, 1,
+            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
+
+          val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant_set",
+            "participantSet1", "this", false))
+          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type") shouldBe true
+        }
+      }
+    }
+  }
 
 }
