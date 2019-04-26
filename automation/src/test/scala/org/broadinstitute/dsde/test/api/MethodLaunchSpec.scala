@@ -22,46 +22,10 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
   def createMethodConfigName: String = SimpleMethodConfig.configName + "_" + UUID.randomUUID().toString
   val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
   val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
-  //[
-  //  {
-  //    "name": "participant1",
-  //    "entityType": "participant",
-  //    "operations": [ {
-  //        "op": "AddUpdateAttribute",
-  //        "attributeName": "participant1",
-  //        "addUpdateAttribute": "testparticipant"
-  //      }
-  //    ]
-  //  }
-  //]
   val sampleSetOperations = Array(Map("op" -> "CreateAttributeEntityReferenceList", "attributeListName" -> "participantSet"))
   val entitySet: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> Array()))
   val entitySetMembershipOperation = Array(Map("op" -> "AddListMember", "attributeListName" -> "participantSetAttribute", "newMember" -> "participant1"))
   val entitySetMembership: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> entitySetMembershipOperation))
-//  [
-//    {
-//      "name": "participantSet1",
-//      "entityType": "sample_set",
-//      "operations": [ {
-//          "op": "CreateAttributeEntityReferenceList",
-//          "attributeListName": "participantSetAttribute"
-//        }
-//      ]
-//    }
-//  ]
-
-//    [
-//      {
-//        "name": "participantSet1",
-//        "entityType": "sample_set",
-//        "operations": [ {
-//             "op": "AddListMember",
-//             "attributeListName": "participantSetAttribute",
-//             "newMember": "participant1"
-//          }
-//        ]
-//      }
-//    ]
   val inFlightSubmissionStatuses = List("Accepted", "Evaluating", "Submitting", "Submitted")
 
   "launching a workflow with input not defined should throw exception" in {
@@ -178,7 +142,6 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 
           val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
             "participant1", "this", false))
-          println("launchexception: " + exception.message)
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample.)") shouldBe true
         }
       }
@@ -207,8 +170,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 
           val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant_set",
             "participantSet1", "this", false))
-          println("launchexception2: " + exception.message)
-          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Expected 1 root entity type, found 0 when searching for participant/participantSet1") shouldBe true
+          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type") shouldBe true
         }
       }
     }
