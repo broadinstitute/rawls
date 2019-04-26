@@ -246,20 +246,20 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
     }
 
     "should not allow readers" - {
-      "to import method configs to a workspace" in {
+      "to import method configs from another workspace" in {
         withCleanBillingProject(owner) { projectName =>
           withWorkspace(projectName, prependUUID("reader-import-config-dest-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { destWorkspaceName =>
             withWorkspace(projectName, prependUUID("method-config-source-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { sourceWorkspaceName =>
-              withMethod("reader-cannot-import-method", MethodData.SimpleMethod) { methodName =>
+              withMethod("reader-import-from-workspace", MethodData.SimpleMethod) { methodName =>
                 val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
-                // try to import a method config from another workspace
                 val sourceMethodConfig = Map(
                   "name" -> method.methodName,
                   "namespace" -> method.methodNamespace,
                   "workspaceName" -> Map(
                     "namespace" -> projectName,
-                    "name" -> sourceWorkspaceName))
+                    "name" -> sourceWorkspaceName)
+                )
 
                 val destMethodConfig = Map(
                   "name" -> s"destination-${method.methodName}",
@@ -278,31 +278,48 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
                   }
                   assertExceptionStatusCode(copyFromWorkspaceException, 403)
                 }
-
-                // try to import a method config from the method repo
-                val methodRepoConfig = Map(
-                  "methodRepoNamespace" -> SimpleMethodConfig.configNamespace,
-                  "methodRepoName" -> SimpleMethodConfig.configName,
-                  "methodRepoSnapshotId" -> SimpleMethodConfig.snapshotId,
-                  "destination" -> destMethodConfig
-                )
-
-                // studentA needs permission to access the method config or importing from method repo will return 404 not 403
-                Orchestration.methodConfigurations.setMethodConfigPermission(
-                  SimpleMethodConfig.configNamespace,
-                  SimpleMethodConfig.configName,
-                  SimpleMethodConfig.snapshotId,
-                  studentA.email,
-                  "OWNER"
-                )(ownerAuthToken)
-
-                eventually {
-                  val copyFromMethodRepoException = intercept[RestException] {
-                    Rawls.methodConfigs.copyMethodConfigFromMethodRepo(methodRepoConfig)(studentAToken)
-                  }
-                  assertExceptionStatusCode(copyFromMethodRepoException, 403)
-                }
               }(ownerAuthToken)
+            }(ownerAuthToken)
+          }(ownerAuthToken)
+        }
+      }
+
+      "to import method configs from the method repo" in {
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("reader-import-config-dest-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { destWorkspaceName =>
+            withMethod("reader-import-from-method-repo", MethodData.SimpleMethod) { methodName =>
+              val method = MethodData.SimpleMethod.copy(methodName = methodName)
+
+              val destMethodConfig = Map(
+                "name" -> s"destination-${method.methodName}",
+                "namespace" -> s"destination-${method.methodNamespace}",
+                "workspaceName" -> Map(
+                  "namespace" -> projectName,
+                  "name" -> destWorkspaceName)
+              )
+
+              val methodRepoConfig = Map(
+                "methodRepoNamespace" -> SimpleMethodConfig.configNamespace,
+                "methodRepoName" -> SimpleMethodConfig.configName,
+                "methodRepoSnapshotId" -> SimpleMethodConfig.snapshotId,
+                "destination" -> destMethodConfig
+              )
+
+              // studentA needs permission to access the method config or importing from method repo will return 404 not 403
+              Orchestration.methodConfigurations.setMethodConfigPermission(
+                SimpleMethodConfig.configNamespace,
+                SimpleMethodConfig.configName,
+                SimpleMethodConfig.snapshotId,
+                studentA.email,
+                "OWNER"
+              )(ownerAuthToken)
+
+              eventually {
+                val copyFromMethodRepoException = intercept[RestException] {
+                  Rawls.methodConfigs.copyMethodConfigFromMethodRepo(methodRepoConfig)(studentAToken)
+                }
+                assertExceptionStatusCode(copyFromMethodRepoException, 403)
+              }
             }(ownerAuthToken)
           }(ownerAuthToken)
         }
