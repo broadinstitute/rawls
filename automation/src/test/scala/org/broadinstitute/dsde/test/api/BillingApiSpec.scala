@@ -6,11 +6,13 @@ import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.model.{UserInfo, WorkbenchEmail, WorkbenchUserId}
-import org.broadinstitute.dsde.workbench.service.BillingProject.{BillingProjectRole}
+import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.util.Retry.retry
 import org.broadinstitute.dsde.workbench.service.{Google, Orchestration, Rawls, RestException}
+
 import scala.concurrent.duration.DurationLong
 import org.scalatest.concurrent.Eventually
+import org.scalatest.time.{Minutes, Seconds, Span}
 import org.scalatest.{FreeSpec, Matchers}
 
 import scala.util.Try
@@ -19,6 +21,7 @@ import scala.util.Try
 class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures with Matchers with Eventually
   with TestReporterFixture with LazyLogging {
 
+  implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
   /**
     * This test does
     *

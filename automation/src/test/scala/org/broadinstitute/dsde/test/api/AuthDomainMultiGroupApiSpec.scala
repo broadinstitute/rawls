@@ -7,18 +7,22 @@ import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Orchestration, Rawls, WorkspaceAccessLevel}
 import org.scalatest._
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.{Minutes, Seconds, Span}
 import spray.json.{JsValue, JsonParser}
 
 import scala.util.Try
 
 
-class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceFixtures with BillingFixtures with GroupFixtures {
+class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceFixtures with BillingFixtures with GroupFixtures with Eventually {
 
   /*
    * Unless otherwise declared, this auth token will be used for API calls.
    * We are using a curator to prevent collisions with users in tests (who are Students and AuthDomainUsers), not
    *  because we specifically need a curator.
    */
+
+  implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
 
   val defaultUser: Credentials = UserPool.chooseCurator
   val authTokenDefault: AuthToken = defaultUser.makeAuthToken()
@@ -38,13 +42,16 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
             withCleanBillingProject(user) { projectName =>
               withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
 
-                // user is in members emails in two authdomain groups
-                groupNameToMembersEmails(groupOne) should contain (user.email)
-                groupNameToMembersEmails(groupTwo) should contain (user.email)
+                eventually {
+                  // user is in members emails in two authdomain groups
+                  groupNameToMembersEmails(groupOne) should contain (user.email)
+                  groupNameToMembersEmails(groupTwo) should contain (user.email)
+                }
 
-                // user can access workspace and see two authdomain groups
-                AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
-
+                eventually {
+                  // user can access workspace and see two authdomain groups
+                  AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
+                }
               }(user.makeAuthToken())
             }
           }
@@ -139,8 +146,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                   val authDomain = Set(groupOne, groupTwo)
                   withWorkspace(projectName, "GroupsApiSpec_workspace", authDomain, List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
-                    // user can see workspace but user cannot access workspace
-                    AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    eventually {
+                      // user can see workspace but user cannot access workspace
+                      AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    }
                   }
                 }
               }
@@ -160,8 +169,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                 withCleanBillingProject(user, userEmails = List(defaultUser.email)) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
 
-                    // user can see workspace but user cannot access workspace
-                    AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    eventually {
+                      // user can see workspace but user cannot access workspace
+                      AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    }
                   }
                 }
               }
@@ -180,8 +191,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                 withCleanBillingProject(defaultUser) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
 
-                    // user cannot see workspace and user cannot access workspace
-                    AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    eventually {
+                      // user cannot see workspace and user cannot access workspace
+                      AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    }
                   }
                 }
               }
@@ -205,8 +218,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
 
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
-                    // user can see workspace but user cannot access workspace
-                    AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    eventually {
+                      // user can see workspace but user cannot access workspace
+                      AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    }
                   }
                 }
               }
@@ -224,9 +239,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                   withCleanBillingProject(defaultUser, List(user.email)) { projectName =>
                     withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne)) { workspaceName =>
 
-                      // user can see workspace but user cannot access workspace
-                      AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(defaultUser.makeAuthToken())
-
+                      eventually {
+                        // user can see workspace but user cannot access workspace
+                        AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(defaultUser.makeAuthToken())
+                      }
                     }(user.makeAuthToken())
                   }
                 }(user.makeAuthToken())
@@ -247,8 +263,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                 withCleanBillingProject(defaultUser) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
 
-                    // user cannot see workspace and user cannot access workspace
-                    AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    eventually {
+                      // user cannot see workspace and user cannot access workspace
+                      AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    }
                   }
                 }
               }
@@ -272,8 +290,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                 withCleanBillingProject(defaultUser) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
-                    // user can see workspace and user can access workspace
-                    AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
+                    eventually {
+                      // user can see workspace and user can access workspace
+                      AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
+                    }
                   }
                 }
               }
@@ -295,7 +315,9 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                       val level = getWorkspaceAccessLevel(projectName, workspaceName)(user.makeAuthToken())
                       level should (be("WRITER"))
 
-                      AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
+                      eventually {
+                        AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
+                      }
                     }
                   }
                 }
@@ -316,8 +338,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                   withCleanBillingProject(user) { projectName =>
                     withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
 
-                      // user can see workspace and user can access workspace
-                      AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
+                      eventually {
+                        // user can see workspace and user can access workspace
+                        AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
+                      }
                     }
                   }
                 }
@@ -338,8 +362,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                 withCleanBillingProject(defaultUser) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(groupNameToEmail(groupOne), WorkspaceAccessLevel.Reader))) { workspaceName =>
 
-                    // user can see workspace and user can access workspace
-                    AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
+                    eventually {
+                      // user can see workspace and user can access workspace
+                      AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
+                    }
                   }
                 }
               }
@@ -354,8 +380,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                 withCleanBillingProject(defaultUser) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(groupNameToEmail(groupOne), WorkspaceAccessLevel.Reader))) { workspaceName =>
 
-                    // user can see workspace but user cannot access workspace
-                    AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    eventually {
+                      // user can see workspace but user cannot access workspace
+                      AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    }
                   }
                 }
               }
@@ -374,8 +402,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                 withCleanBillingProject(defaultUser) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
 
-                    // user cannot see workspace and user cannot access workspace
-                    AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    eventually {
+                      // user cannot see workspace and user cannot access workspace
+                      AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
+                    }
                   }
                 }
               }
