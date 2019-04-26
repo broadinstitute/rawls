@@ -5,7 +5,7 @@ import cats.effect.IO
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudresourcemanager.model.Project
-import com.google.api.services.genomics.model.Operation
+import com.google.api.services.genomics.v2alpha1.model.Operation
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import com.google.pubsub.v1.ProjectTopicName
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
