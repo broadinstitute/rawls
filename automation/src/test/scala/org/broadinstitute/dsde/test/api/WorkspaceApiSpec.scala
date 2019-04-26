@@ -363,8 +363,10 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 
               val submissionId = Rawls.submissions.launchWorkflow(projectName, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(studentAToken)
               // make sure the submission has not errored out
-              val submissionStatus = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)(studentAToken)._1
-              List("Accepted", "Evaluating", "Submitting", "Submitted") should contain (submissionStatus)
+              eventually {
+                val submissionStatus = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)(studentAToken)._1
+                List("Accepted", "Evaluating", "Submitting", "Submitted") should contain (submissionStatus)
+              }
             }(ownerAuthToken)
           }(ownerAuthToken)
         }
@@ -374,7 +376,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
     "should not allow writers" - {
       "to launch workflows if they don't have can-compute permission" in {
         withCleanBillingProject(owner) { projectName =>
-        withWorkspace(projectName, prependUUID("writer-can-launch-workflow"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(false)))) { workspaceName =>
+        withWorkspace(projectName, prependUUID("writer-cannot-launch-workflow"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(false)))) { workspaceName =>
           Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
 
           withMethod("writer-method", MethodData.SimpleMethod) { methodName =>
