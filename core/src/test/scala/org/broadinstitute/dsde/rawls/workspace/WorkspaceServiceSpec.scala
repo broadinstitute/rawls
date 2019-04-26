@@ -1109,24 +1109,10 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
                        |}""".stripMargin
 
     import spray.json._
-    import spray.json.DefaultJsonProtocol._
-
-    case class Call(jobId: Option[String])
-    case class OpMetadata(calls: Map[String, Seq[Call]])
-
-    implicit val callFormat = jsonFormat1(Call)
-    implicit val opMetadataFormat = jsonFormat1(OpMetadata)
-
-    val json = jsonString.parseJson
-
-    val jobIds = json.convertTo[OpMetadata].calls.values.flatMap(_.flatMap(_.jobId))
-
-    val x = for {
-      calls <- json.convertTo[OpMetadata].calls.values
-      call <- calls
-      jobId <- call.jobId
-    } yield jobId
-
-    assert(x.toList.contains("operations/EN2siP2kLRinu-Wt-4-bqRQgw8Sszq0dKg9wcm9kdWN0aW9uUXVldWU"))
+    val metadataJson = jsonString.parseJson.asJsObject
+    WorkspaceService.extractOperationIdsFromCromwellMetadata(metadataJson) should contain theSameElementsAs Seq(
+      "operations/EN2siP2kLRinu-Wt-4-bqRQgw8Sszq0dKg9wcm9kdWN0aW9uUXVldWU",
+      "operations/EKCsiP2kLRiu0qj_qdLFq8wBIMPErM6tHSoPcHJvZHVjdGlvblF1ZXVl"
+    )
   }
 }

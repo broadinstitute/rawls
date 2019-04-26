@@ -51,6 +51,20 @@ object WorkspaceService {
   val SECURITY_LABEL_KEY = "security"
   val HIGH_SECURITY_LABEL = "high"
   val LOW_SECURITY_LABEL = "low"
+
+  private[workspace] def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
+    case class Call(jobId: Option[String])
+    case class OpMetadata(calls: Option[Map[String, Seq[Call]]])
+    implicit val callFormat = jsonFormat1(Call)
+    implicit val opMetadataFormat = jsonFormat1(OpMetadata)
+
+    for {
+      calls <- metadataJson.convertTo[OpMetadata].calls.toList // toList on the Option makes the compiler like the for comp
+      call <- calls.values.flatten
+      jobId <- call.jobId
+    } yield jobId
+  }
+
 }
 
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
@@ -1722,18 +1736,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getGenomicsOperationV2(workflowId: String, operationId: List[String]): Future[PerRequestMessage] = {
-    // stuff to parse the call level metadata from cromwell so we can gather all the operation ids
-    // for the workflow so we can check that the requested operation id actually exists in the workflow
-    case class Call(jobId: Option[String])
-    case class OpMetadata(calls: Option[Map[String, Seq[Call]]])
-    implicit val callFormat = jsonFormat1(Call)
-    implicit val opMetadataFormat = jsonFormat1(OpMetadata)
-
     // note that cromiam should only give back metadata if the user is authorized to see it
     cromiamDAO.callLevelMetadata(workflowId, MetadataParams(includeKeys = Set("jobId")), userInfo).flatMap { metadataJson =>
-      val operationIds = metadataJson.convertTo[OpMetadata].calls.getOrElse(Map.empty).values.flatMap(_.flatMap(_.jobId))
+      val operationIds: Iterable[String] = WorkspaceService.extractOperationIdsFromCromwellMetadata(metadataJson)
 
       val operationIdString = operationId.mkString("/")
+      // check that the requested operation id actually exists in the workflow
       if (operationIds.toList.contains(operationIdString)) {
         val genomicsServiceRef = genomicsServiceConstructor(userInfo)
         genomicsServiceRef.GetOperation(operationIdString)
