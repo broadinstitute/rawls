@@ -19,7 +19,7 @@ import org.scalatest.concurrent.Eventually
 class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
   with BillingFixtures with WorkspaceFixtures with MethodFixtures {
 
-  val methodConfigName: String = SimpleMethodConfig.configName + "_" + UUID.randomUUID().toString
+  def createMethodConfigName: String = SimpleMethodConfig.configName + "_" + UUID.randomUUID().toString
   val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
   val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
   //[
@@ -35,11 +35,6 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
   //  }
   //]
   val sampleSetOperations = Array(Map("op" -> "CreateAttributeEntityReferenceList", "attributeListName" -> "participantSet"))
-
-  //"Example payload for CreateAttributeEntityReferenceList": {
-  //  "op": "string",
-  //  "attributeListName": "string"
-  //},
   val entitySet: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> Array()))
   val entitySetMembershipOperation = Array(Map("op" -> "AddListMember", "attributeListName" -> "participantSetAttribute", "newMember" -> "participant1"))
   val entitySetMembership: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> entitySetMembershipOperation))
@@ -78,8 +73,11 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 
         withMethod("MethodLaunchSpec_input_undefined", MethodData.InputRequiredMethod, 1) { methodName =>
           val method = MethodData.InputRequiredMethod.copy(methodName = methodName)
+          val methodConfigName = createMethodConfigName
+
           Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName, method,
             method.methodNamespace, methodConfigName, 1, Map.empty, SimpleMethodConfig.outputs, method.rootEntityType)
+
           val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
           "participant1", "this", false))
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
@@ -172,8 +170,11 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 
         withMethod("MethodLaunchSpec_input_undefined", MethodData.InputRequiredMethod, 1) { methodName =>
           val method = MethodData.InputRequiredMethod.copy(methodName = methodName)
-          Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName, method, method.methodNamespace,
-            methodConfigName, 1, SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, "sample")
+
+          val methodConfigName = createMethodConfigName
+          Rawls.methodConfigs.createMethodConfigInWorkspace(
+            billingProject, workspaceName, method, method.methodNamespace, methodConfigName, 1,
+            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, "sample")
 
           val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
             "participant1", "this", false))
@@ -199,8 +200,9 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
         withMethod("MethodLaunchSpec_wf_on_set_without_expression", MethodData.SimpleMethod) { methodName =>
           val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
+          val methodConfigName = createMethodConfigName
           Rawls.methodConfigs.createMethodConfigInWorkspace(
-            billingProject, workspaceName, method, method.methodNamespace, method.methodName, 1,
+            billingProject, workspaceName, method, method.methodNamespace, methodConfigName, 1,
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
 
           val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
