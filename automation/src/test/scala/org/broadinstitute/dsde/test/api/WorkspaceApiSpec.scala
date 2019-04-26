@@ -346,7 +346,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           withWorkspace(projectName, prependUUID("writer-can-launch-workflow"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(true)))) { workspaceName =>
             Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
 
-            withMethod("writer-method", MethodData.SimpleMethod) { methodName =>
+            withMethod("writer-method-succeeds", MethodData.SimpleMethod) { methodName =>
               val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
               Rawls.methodConfigs.createMethodConfigInWorkspace(projectName, workspaceName,
@@ -379,7 +379,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           withWorkspace(projectName, prependUUID("writer-cannot-launch-workflow"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(false)))) { workspaceName =>
             Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
 
-            withMethod("writer-method", MethodData.SimpleMethod) { methodName =>
+            withMethod("writer-method-fails", MethodData.SimpleMethod) { methodName =>
               val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
               Rawls.methodConfigs.createMethodConfigInWorkspace(projectName, workspaceName,
@@ -394,12 +394,10 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
                 "OWNER"
               )(ownerAuthToken)
 
-              eventually {
-                val submissionException = intercept[RestException] {
-                  Rawls.submissions.launchWorkflow(projectName, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(studentAToken)
-                }
-                assertExceptionStatusCode(submissionException, 403)
+              val submissionException = intercept[RestException] {
+                Rawls.submissions.launchWorkflow(projectName, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(studentAToken)
               }
+              assertExceptionStatusCode(submissionException, 403)
             }(ownerAuthToken)
           }(ownerAuthToken)
         }
