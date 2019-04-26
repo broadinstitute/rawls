@@ -205,10 +205,10 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             billingProject, workspaceName, method, method.methodNamespace, methodConfigName, 1,
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
 
-          val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
+          val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant_set",
             "participantSet1", "this", false))
           println("launchexception2: " + exception.message)
-          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Error: Method configuration expects an entity of type participant, but you gave us an entity of type participant_set.") shouldBe true
+          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Expected 1 root entity type, found 0 when searching for participant/participantSet1") shouldBe true
         }
       }
     }
