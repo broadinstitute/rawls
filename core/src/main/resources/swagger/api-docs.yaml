@@ -3012,6 +3012,40 @@ paths:
               - openid
               - email
               - profile
+  '/api/workflows/{workflowId}/genomics/{operationId}':
+    get:
+      responses:
+        '200':
+          description: operations info
+        '404':
+          description: workflow or jobId not found or no access
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: retrieve operations info from Google Genomics API
+      tags:
+        - workflows
+      summary: retrieve operations info from Google Genomics API
+      operationId: genomics_operations_get
+      parameters:
+        - in: path
+          description: Workflow Id
+          name: workflowId
+          required: true
+          type: string
+        - in: path
+          description: operations job id; for PAPIv1 in the form of "operations/{id}", for PAPIv2 "projects/{project}/operations/{id}"
+          name: operationId
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/user/refreshToken':
     put:
       responses:

@@ -1725,13 +1725,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // stuff to parse the call level metadata from cromwell so we can gather all the operation ids
     // for the workflow so we can check that the requested operation id actually exists in the workflow
     case class Call(jobId: Option[String])
-    case class OpMetadata(calls: Map[String, Seq[Call]])
+    case class OpMetadata(calls: Option[Map[String, Seq[Call]]])
     implicit val callFormat = jsonFormat1(Call)
     implicit val opMetadataFormat = jsonFormat1(OpMetadata)
 
     // note that cromiam should only give back metadata if the user is authorized to see it
-    cromiamDAO.callLevelMetadata(workflowId, MetadataParams(includeKeys = Set("calls")), userInfo).flatMap { metadataJson =>
-      val operationIds = metadataJson.convertTo[OpMetadata].calls.values.flatMap(_.flatMap(_.jobId))
+    cromiamDAO.callLevelMetadata(workflowId, MetadataParams(includeKeys = Set("jobId")), userInfo).flatMap { metadataJson =>
+      val operationIds = metadataJson.convertTo[OpMetadata].calls.getOrElse(Map.empty).values.flatMap(_.flatMap(_.jobId))
 
       val operationIdString = operationId.mkString("/")
       if (operationIds.toList.contains(operationIdString)) {
