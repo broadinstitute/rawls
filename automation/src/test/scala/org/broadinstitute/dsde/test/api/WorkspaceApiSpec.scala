@@ -246,6 +246,14 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
     }
 
     "should not allow readers" - {
+      def getMethodConfig(method: Method, projectName: String, destWorkspaceName: String): Map[String, Any] = Map(
+        "name" -> s"destination-${method.methodName}",
+        "namespace" -> s"destination-${method.methodNamespace}",
+        "workspaceName" -> Map(
+          "namespace" -> projectName,
+          "name" -> destWorkspaceName)
+      )
+
       "to import method configs from another workspace" in {
         withCleanBillingProject(owner) { projectName =>
           withWorkspace(projectName, prependUUID("reader-import-config-dest-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { destWorkspaceName =>
@@ -253,21 +261,9 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
               withMethod("reader-import-from-workspace", MethodData.SimpleMethod) { methodName =>
                 val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
-                val sourceMethodConfig = Map(
-                  "name" -> method.methodName,
-                  "namespace" -> method.methodNamespace,
-                  "workspaceName" -> Map(
-                    "namespace" -> projectName,
-                    "name" -> sourceWorkspaceName)
-                )
+                val destMethodConfig = getMethodConfig(method, projectName, destWorkspaceName)
+                val sourceMethodConfig = getMethodConfig(method, projectName, sourceWorkspaceName)
 
-                val destMethodConfig = Map(
-                  "name" -> s"destination-${method.methodName}",
-                  "namespace" -> s"destination-${method.methodNamespace}",
-                  "workspaceName" -> Map(
-                    "namespace" -> projectName,
-                    "name" -> destWorkspaceName)
-                )
                 Rawls.methodConfigs.createMethodConfigInWorkspace(
                   projectName, sourceWorkspaceName, method, method.methodNamespace, method.methodName, 1,
                   Map.empty, Map.empty, method.rootEntityType)(ownerAuthToken)
@@ -290,19 +286,11 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             withMethod("reader-import-from-method-repo", MethodData.SimpleMethod) { methodName =>
               val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
-              val destMethodConfig = Map(
-                "name" -> s"destination-${method.methodName}",
-                "namespace" -> s"destination-${method.methodNamespace}",
-                "workspaceName" -> Map(
-                  "namespace" -> projectName,
-                  "name" -> destWorkspaceName)
-              )
-
               val methodRepoConfig = Map(
                 "methodRepoNamespace" -> SimpleMethodConfig.configNamespace,
                 "methodRepoName" -> SimpleMethodConfig.configName,
                 "methodRepoSnapshotId" -> SimpleMethodConfig.snapshotId,
-                "destination" -> destMethodConfig
+                "destination" -> getMethodConfig(method, projectName, destWorkspaceName)
               )
 
               // studentA needs permission to access the method config or importing from method repo will return 404 not 403
