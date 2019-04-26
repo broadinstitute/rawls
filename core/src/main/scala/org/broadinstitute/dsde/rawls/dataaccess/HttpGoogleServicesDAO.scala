@@ -667,15 +667,13 @@ class HttpGoogleServicesDAO(
 
   override def getGenomicsOperation(opId: String): Future[Option[JsObject]] = {
     implicit val service = GoogleInstrumentedService.Genomics
+    val genomicsServiceAccountCredential = getGenomicsServiceAccountCredential
+    genomicsServiceAccountCredential.refreshToken()
 
     if (opId.startsWith("operations")) {
-      if (!Option(getGenomicsServiceAccountCredential.getExpiresInSeconds).exists(_ > 5)) {
-        // refresh the token if it will expire soon
-        getGenomicsServiceAccountCredential.refreshToken()
-      }
-      new GenomicsV1DAO().getOperation(opId, OAuth2BearerToken(getGenomicsServiceAccountCredential.getAccessToken))
+      new GenomicsV1DAO().getOperation(opId, OAuth2BearerToken(genomicsServiceAccountCredential.getAccessToken))
     } else {
-      val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
+      val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, genomicsServiceAccountCredential).setApplicationName(appName).build()
       val operationRequest = genomicsApi.projects().operations().get(opId)
 
       retryWithRecoverWhen500orGoogleError(() => {
