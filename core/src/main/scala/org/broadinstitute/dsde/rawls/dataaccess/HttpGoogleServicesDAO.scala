@@ -671,6 +671,8 @@ class HttpGoogleServicesDAO(
     genomicsServiceAccountCredential.refreshToken()
 
     if (opId.startsWith("operations")) {
+      // PAPIv1 ids start with "operations". We have to use a direct http call instead of a client library because
+      // the client lib does not support PAPIv1 and PAPIv2 concurrently.
       new GenomicsV1DAO().getOperation(opId, OAuth2BearerToken(genomicsServiceAccountCredential.getAccessToken))
     } else {
       val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, genomicsServiceAccountCredential).setApplicationName(appName).build()
