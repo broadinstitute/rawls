@@ -692,7 +692,7 @@ class HttpGoogleServicesDAO(
 
   override def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[model.Operation]] = {
     implicit val service = GoogleInstrumentedService.Genomics
-    val opId = "operations"
+    val opId = s"projects/$serviceProject/operations"
     val filter = s"projectId = $serviceProject"
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
     val operationRequest = genomicsApi.projects().operations().list(opId).setFilter(filter)
