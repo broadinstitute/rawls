@@ -192,8 +192,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     }
   }
 
-  override def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]] = {
-    Future.successful(Seq(new Operation))
+  override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] = {
+    Future.successful(true)
   }
 
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] =

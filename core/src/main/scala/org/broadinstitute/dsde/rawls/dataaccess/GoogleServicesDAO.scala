@@ -129,7 +129,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
 
   /**
-    * Lists operations using the Google genomics service account.
+    * Checks that a query can be performed against the genomics api.
     *
     * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
     * is because this method is used for health monitoring, and we want health checks to use a
@@ -138,7 +138,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param executionContext the execution context to use for aysnc operations
     * @return sequence of Google operations
     */
-  def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]]
+  def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean]
 
   def toGoogleGroupName(groupName: RawlsGroupName): String
   def toBillingProjectGroupName(billingProjectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = s"PROJECT_${billingProjectName.value}-${role.toString}"

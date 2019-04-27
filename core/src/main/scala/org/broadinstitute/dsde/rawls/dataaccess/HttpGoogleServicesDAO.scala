@@ -690,15 +690,14 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[model.Operation]] = {
+  override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.Genomics
     val opId = s"projects/$serviceProject/operations"
-    val filter = s"projectId = $serviceProject"
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
-    val operationRequest = genomicsApi.projects().operations().list(opId).setFilter(filter)
+    val operationRequest = genomicsApi.projects().operations().list(opId).setPageSize(1)
     retryWhen500orGoogleError(() => {
-      val list = executeGoogleRequest(operationRequest)
-      list.getOperations.asScala
+      executeGoogleRequest(operationRequest)
+      true
     })
   }
 
