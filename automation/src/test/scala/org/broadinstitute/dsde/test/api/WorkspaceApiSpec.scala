@@ -32,6 +32,9 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
   val owner: Credentials = UserPool.chooseProjectOwner
   val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
+  val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
+  val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
+
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
 
   "Rawls" - {
@@ -316,8 +319,6 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
       "to launch workflows" in {
         withCleanBillingProject(owner) { projectName =>
           withWorkspace(projectName, prependUUID("reader-launch-workflow-fails"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
-            val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
-            val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
             Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
 
             withMethod("reader-cannot-launch-workflows", MethodData.SimpleMethod) { methodName =>
@@ -333,6 +334,70 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
                 }
                 assertExceptionStatusCode(submissionException, 403)
               }
+            }(ownerAuthToken)
+          }(ownerAuthToken)
+        }
+      }
+    }
+
+    "should allow writers" - {
+      "to launch workflows if they have can-compute permission" in {
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("writer-can-launch-workflow"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(true)))) { workspaceName =>
+            Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
+
+            withMethod("writer-method-succeeds", MethodData.SimpleMethod) { methodName =>
+              val method = MethodData.SimpleMethod.copy(methodName = methodName)
+
+              Rawls.methodConfigs.createMethodConfigInWorkspace(projectName, workspaceName,
+                method, method.methodNamespace, method.methodName, 1,
+                SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)(ownerAuthToken)
+
+              Orchestration.methods.setMethodPermissions(
+                method.methodNamespace,
+                method.methodName,
+                method.snapshotId,
+                studentA.email,
+                "OWNER"
+              )(ownerAuthToken)
+
+              val submissionId = Rawls.submissions.launchWorkflow(projectName, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(studentAToken)
+              // make sure the submission has not errored out
+              eventually {
+                val submissionStatus = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)(studentAToken)._1
+                List("Accepted", "Evaluating", "Submitting", "Submitted") should contain (submissionStatus)
+              }
+            }(ownerAuthToken)
+          }(ownerAuthToken)
+        }
+      }
+    }
+
+    "should not allow writers" - {
+      "to launch workflows if they don't have can-compute permission" in {
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("writer-cannot-launch-workflow"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(false)))) { workspaceName =>
+            Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
+
+            withMethod("writer-method-fails", MethodData.SimpleMethod) { methodName =>
+              val method = MethodData.SimpleMethod.copy(methodName = methodName)
+
+              Rawls.methodConfigs.createMethodConfigInWorkspace(projectName, workspaceName,
+                method, method.methodNamespace, method.methodName, 1,
+                SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)(ownerAuthToken)
+
+              Orchestration.methods.setMethodPermissions(
+                method.methodNamespace,
+                method.methodName,
+                method.snapshotId,
+                studentA.email,
+                "OWNER"
+              )(ownerAuthToken)
+
+              val submissionException = intercept[RestException] {
+                Rawls.submissions.launchWorkflow(projectName, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(studentAToken)
+              }
+              assertExceptionStatusCode(submissionException, 403)
             }(ownerAuthToken)
           }(ownerAuthToken)
         }
