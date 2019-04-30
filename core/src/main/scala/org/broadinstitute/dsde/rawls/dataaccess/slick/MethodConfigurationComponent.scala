@@ -263,7 +263,7 @@ trait MethodConfigurationComponent {
     }
 
     def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString]): MethodConfiguration = {
-      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, None, inputs, outputs, MethodRepoMethod.fromUri(methodConfigRec.methodUri), methodConfigRec.methodConfigVersion, methodConfigRec.deleted, methodConfigRec.deletedDate.map(ts => new DateTime(ts)))
+      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, Some(Map.empty[String, AttributeString]), inputs, outputs, MethodRepoMethod.fromUri(methodConfigRec.methodUri), methodConfigRec.methodConfigVersion, methodConfigRec.deleted, methodConfigRec.deletedDate.map(ts => new DateTime(ts)))
     }
 
     private def unmarshalMethodConfigToShort(methodConfigRec: MethodConfigurationRecord): MethodConfigurationShort = {

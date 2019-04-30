@@ -17,7 +17,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "config2",
       Some("sample"),
-      None, //
+      None, //nuked prereq expressions
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
       AgoraMethod("ns-config", "meth2", 2)
