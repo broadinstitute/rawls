@@ -26,8 +26,6 @@ import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.model.UsageExportLocation
 import com.google.api.services.compute.{Compute, ComputeScopes}
-import com.google.api.services.genomics.model.Operation
-import com.google.api.services.genomics.{Genomics, GenomicsScopes}
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.google.api.services.servicemanagement.ServiceManagement
@@ -57,6 +55,8 @@ import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes, model}
+
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
 import scala.io.Source
@@ -665,32 +665,39 @@ class HttpGoogleServicesDAO(
     } )
   }
 
-  override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = {
+  override def getGenomicsOperation(opId: String): Future[Option[JsObject]] = {
     implicit val service = GoogleInstrumentedService.Genomics
-    val opId = s"operations/$jobId"
-    val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
-    val operationRequest = genomicsApi.operations().get(opId)
+    val genomicsServiceAccountCredential = getGenomicsServiceAccountCredential
+    genomicsServiceAccountCredential.refreshToken()
 
-    retryWithRecoverWhen500orGoogleError(() => {
-      // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
-      // So, use Google's functionality to get the json string, then parse it back into a generic json object
-      Option(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
-    }) {
-      // Recover from Google 404 errors because it's an expected return status.
-      // Here we use `None` to represent a 404 from Google.
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
+    if (opId.startsWith("operations")) {
+      // PAPIv1 ids start with "operations". We have to use a direct http call instead of a client library because
+      // the client lib does not support PAPIv1 and PAPIv2 concurrently.
+      new GenomicsV1DAO().getOperation(opId, OAuth2BearerToken(genomicsServiceAccountCredential.getAccessToken))
+    } else {
+      val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, genomicsServiceAccountCredential).setApplicationName(appName).build()
+      val operationRequest = genomicsApi.projects().operations().get(opId)
+
+      retryWithRecoverWhen500orGoogleError(() => {
+        // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
+        // So, use Google's functionality to get the json string, then parse it back into a generic json object
+        Option(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
+      }) {
+        // Recover from Google 404 errors because it's an expected return status.
+        // Here we use `None` to represent a 404 from Google.
+        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
+      }
     }
   }
 
-  override def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]] = {
+  override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.Genomics
-    val opId = "operations"
-    val filter = s"projectId = $serviceProject"
+    val opId = s"projects/$serviceProject/operations"
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
-    val operationRequest = genomicsApi.operations().list(opId).setFilter(filter)
+    val operationRequest = genomicsApi.projects().operations().list(opId).setPageSize(1)
     retryWhen500orGoogleError(() => {
-      val list = executeGoogleRequest(operationRequest)
-      list.getOperations.asScala
+      executeGoogleRequest(operationRequest)
+      true
     })
   }
 
@@ -1064,3 +1071,14 @@ class HttpGoogleServicesDAO(
 }
 
 class GoogleStorageLogException(message: String) extends RawlsException(message)
+
+class GenomicsV1DAO(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends DsdeHttpDAO {
+  val http = Http(system)
+  val httpClientUtils = HttpClientUtilsStandard()
+
+  def getOperation(opId: String, accessToken: OAuth2BearerToken): Future[Option[JsObject]] = {
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+    import DefaultJsonProtocol._
+    executeRequestWithToken[Option[JsObject]](accessToken)(RequestBuilding.Get(s"https://genomics.googleapis.com/v1alpha2/$opId"))
+  }
+}

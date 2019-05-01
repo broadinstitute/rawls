@@ -171,6 +171,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       methodRepoDAO,
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
       execServiceBatchSize,
       gcsDAO,

@@ -239,7 +239,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     */
   private def checkGoogleGenomics: Future[SubsystemStatus] = {
     logger.debug("Checking Google Genomics...")
-    googleServicesDAO.listGenomicsOperations.map { _ =>
+    googleServicesDAO.checkGenomicsOperationsHealth.map { _ =>
       OkStatus
     }
   }

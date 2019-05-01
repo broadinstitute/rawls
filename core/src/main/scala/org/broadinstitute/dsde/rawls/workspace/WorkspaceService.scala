@@ -44,18 +44,32 @@ import cats.implicits._
  */
 
 object WorkspaceService {
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) = {
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService, config)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) = {
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, cromiamDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService, config)
   }
 
   val SECURITY_LABEL_KEY = "security"
   val HIGH_SECURITY_LABEL = "high"
   val LOW_SECURITY_LABEL = "low"
+
+  private[workspace] def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
+    case class Call(jobId: Option[String])
+    case class OpMetadata(calls: Option[Map[String, Seq[Call]]])
+    implicit val callFormat = jsonFormat1(Call)
+    implicit val opMetadataFormat = jsonFormat1(OpMetadata)
+
+    for {
+      calls <- metadataJson.convertTo[OpMetadata].calls.toList // toList on the Option makes the compiler like the for comp
+      call <- calls.values.flatten
+      jobId <- call.jobId
+    } yield jobId
+  }
+
 }
 
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(implicit protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(implicit protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
 
   import dataSource.dataAccess.driver.api._
@@ -109,6 +123,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) = getMethodInputsOutputs(methodRepoMethod)
   def GetAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) = getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
   def GetGenomicsOperation(workspaceName: WorkspaceName, jobId: String) = getGenomicsOperation(workspaceName, jobId)
+  def GetGenomicsOperationV2(workflowId: String, operationId: List[String]) = getGenomicsOperationV2(workflowId, operationId)
 
   def ListSubmissions(workspaceName: WorkspaceName) = listSubmissions(workspaceName)
   def CountSubmissions(workspaceName: WorkspaceName) = countSubmissions(workspaceName)
@@ -1716,7 +1731,23 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // Next call GenomicsService, which actually makes the Google Genomics API call.
     .flatMap { _ =>
       val genomicsServiceRef = genomicsServiceConstructor(userInfo)
-      genomicsServiceRef.GetOperation(jobId)
+      genomicsServiceRef.GetOperation("operations/" + jobId)
+    }
+  }
+
+  def getGenomicsOperationV2(workflowId: String, operationId: List[String]): Future[PerRequestMessage] = {
+    // note that cromiam should only give back metadata if the user is authorized to see it
+    cromiamDAO.callLevelMetadata(workflowId, MetadataParams(includeKeys = Set("jobId")), userInfo).flatMap { metadataJson =>
+      val operationIds: Iterable[String] = WorkspaceService.extractOperationIdsFromCromwellMetadata(metadataJson)
+
+      val operationIdString = operationId.mkString("/")
+      // check that the requested operation id actually exists in the workflow
+      if (operationIds.toList.contains(operationIdString)) {
+        val genomicsServiceRef = genomicsServiceConstructor(userInfo)
+        genomicsServiceRef.GetOperation(operationIdString)
+      } else {
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"operation id ${operationIdString} not found in workflow $workflowId")))
+      }
     }
   }
 

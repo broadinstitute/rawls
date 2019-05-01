@@ -8,7 +8,7 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudresourcemanager.model.Project
-import com.google.api.services.genomics.model.Operation
+import com.google.api.services.genomics.v2alpha1.model.Operation
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -37,7 +37,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudHasThisOne")
   val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
 
-  val mockJobId = "dummy-job-id"
+  val mockJobIds = Seq("operations/dummy-job-id", "projects/dummy-project/operations/dummy-job-id")
 
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
     val firecloudHasThisOne = RawlsBillingAccount(accessibleBillingAccountName, true, "testBillingAccount")
@@ -185,15 +185,15 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = Future.successful(())
 
   override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = Future {
-    if (jobId == mockJobId) {
+    if (mockJobIds.contains(jobId)) {
       Some("""{"foo":"bar"}""".parseJson.asJsObject)
     } else {
       None
     }
   }
 
-  override def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]] = {
-    Future.successful(Seq(new Operation))
+  override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] = {
+    Future.successful(true)
   }
 
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] =

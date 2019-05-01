@@ -22,7 +22,7 @@ import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.config._
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
-import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, _}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
@@ -225,6 +225,7 @@ object Boot extends IOApp with LazyLogging {
           }
           .toSet
 
+      val cromiamDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(executionServiceConfig.getString("cromiamUrl"), metricsPrefix)
       val shardedExecutionServiceCluster: ExecutionServiceCluster =
         new ShardedHttpExecutionServiceCluster(
           executionServiceServers,
@@ -352,6 +353,7 @@ object Boot extends IOApp with LazyLogging {
         WorkspaceService.constructor(
           slickDataSource,
           methodRepoDAO,
+          cromiamDAO,
           shardedExecutionServiceCluster,
           conf.getInt("executionservice.batchSize"),
           gcsDAO,
