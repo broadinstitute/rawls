@@ -43,20 +43,21 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   def testCreateMethodConfiguration(method: MethodRepoMethod, wdlName: String, services: TestApiService) = {
-    val newMethodConfig =
+    val inputMethodConfig =
       MethodConfiguration("dsde", s"testConfigNew-${method.repo.scheme}", Some("samples"), None, Map(s"$wdlName.cgrep.pattern" -> AttributeString("this.foo")), Map(s"$wdlName.cgrep.count" -> AttributeString("this.bar")), method)
+    val expectedMethodConfig = inputMethodConfig.copy(prerequisites = Some(Map())) //test that empty prereqs work too
     withStatsD {
-      Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+      Post(s"${testData.workspace.path}/methodconfigs", httpJson(inputMethodConfig)) ~>
         services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.Created) {
             status
           }
-          assertResult(newMethodConfig) {
-            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get
+          assertResult(expectedMethodConfig) {
+            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), inputMethodConfig.namespace, inputMethodConfig.name)).get
           }
           // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-          assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
+          assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(expectedMethodConfig.path(testData.wsName)))))) {
             header("Location")
           }
         }
@@ -642,7 +643,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.empty_out")
     val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Failed at line 1, column 1: 'workspace.' expected but 'a' found")
 
-    val mc = testData.goodAndBadMethodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
+    val mc = testData.goodAndBadMethodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs, prerequisites = Some(Map()))
 
     runAndWait(methodConfigurationQuery.create(SlickWorkspaceContext(testData.workspace), mc))
 
@@ -886,7 +887,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Post("/methodconfigs/template", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), None, Map("three_step.cgrep.pattern" -> AttributeString("")),
+        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), Map("three_step.cgrep.pattern" -> AttributeString("")),
           Map("three_step.ps.procs"->AttributeString(""),"three_step.cgrep.count"->AttributeString(""), "three_step.wc.count"->AttributeString("")),
           AgoraMethod("dsde","three_step",1))
         assertResult(methodConfiguration) { responseAs[MethodConfiguration] }
@@ -899,7 +900,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Post("/methodconfigs/template", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), None, Map("three_step_dockstore.cgrep.pattern" -> AttributeString("")),
+        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), Map("three_step_dockstore.cgrep.pattern" -> AttributeString("")),
           Map("three_step_dockstore.ps.procs"->AttributeString(""),"three_step_dockstore.cgrep.count"->AttributeString(""), "three_step_dockstore.wc.count"->AttributeString("")),
           method)
         assertResult(methodConfiguration) { responseAs[MethodConfiguration] }

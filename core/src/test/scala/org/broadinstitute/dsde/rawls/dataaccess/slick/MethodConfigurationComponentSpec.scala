@@ -23,9 +23,11 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       AgoraMethod("ns-config", "meth2", 2)
     )
 
+    val expectedMC = methodConfig2.copy(prerequisites = Some(Map()))
+
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfig2))
 
-    assertResult(Option(methodConfig2)) {
+    assertResult(Option(expectedMC)) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, methodConfig2.namespace, methodConfig2.name))
     }
   }
@@ -85,7 +87,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.upsert(workspaceContext, changed))
 
-    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
+    assertResult(Option(changed.copy(methodConfigVersion = 2, prerequisites = Some(Map())))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
@@ -114,7 +116,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.update(workspaceContext, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, changed))
 
-    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
+    assertResult(Option(changed.copy(methodConfigVersion = 2, prerequisites = Some(Map())))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
@@ -151,7 +153,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     runAndWait(methodConfigurationQuery.update(workspaceContext, methodConfigOldName.namespace, methodConfigOldName.name, changed))
 
     //there was no config at that location, so the version should be 1
-    assertResult(Option(changed.copy(methodConfigVersion = 1))) {
+    assertResult(Option(changed.copy(methodConfigVersion = 1, prerequisites = Some(Map())))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
@@ -198,7 +200,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     runAndWait(methodConfigurationQuery.update(workspaceContext, methodConfigToMove.namespace, methodConfigToMove.name, changed))
 
     //the version number should be incremented relative to the one that was already there
-    assertResult(Option(changed.copy(methodConfigVersion = 4))) {
+    assertResult(Option(changed.copy(methodConfigVersion = 4, prerequisites = Some(Map())))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 

@@ -367,12 +367,12 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
     "create a Method Config from a template" in withConfigData {
       val expectedLittleInputs = Map(intArgName -> AttributeString(""), intOptName -> AttributeString(""))
-      val expectedLittleTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), None, expectedLittleInputs, Map(), dummyMethod)
+      val expectedLittleTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), expectedLittleInputs, Map(), dummyMethod)
 
       assertResult(expectedLittleTemplate) { MethodConfigResolver.toMethodConfiguration(littleWdl, dummyMethod).get }
 
       val expectedArrayInputs = Map(intArrayName -> AttributeString(""))
-      val expectedArrayTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), None, expectedArrayInputs, Map(), dummyMethod)
+      val expectedArrayTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), expectedArrayInputs, Map(), dummyMethod)
 
       assertResult(expectedArrayTemplate) { MethodConfigResolver.toMethodConfiguration(arrayWdl, dummyMethod).get }
 
