@@ -150,7 +150,7 @@ object MethodConfigResolver {
     getMethodInputsOutputs(wdl) map { io =>
       val inputs = io.inputs map { _.name -> empty }
       val outputs = io.outputs map { _.name -> empty }
-      MethodConfiguration("namespace", "name", Some("rootEntityType"), Map(), inputs.toMap, outputs.toMap, methodRepoMethod)
+      MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map.empty[String, AttributeString]), inputs.toMap, outputs.toMap, methodRepoMethod)
     }
   }
 

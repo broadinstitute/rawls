@@ -342,7 +342,10 @@ case class MethodConfiguration(
                    namespace: String,
                    name: String,
                    rootEntityType: Option[String],
-                   prerequisites: Map[String, AttributeString],
+                   //we used to have prereqs but did nothing with them. so we removed them.
+                   //leaving it as an option means we can accept it being there or not; when we return this object,
+                   //we'll always put Some(Map.empty) here so that clients who might be expecting this key still get it.
+                   prerequisites: Option[Map[String, AttributeString]],
                    inputs: Map[String, AttributeString],
                    outputs: Map[String, AttributeString],
                    methodRepoMethod: MethodRepoMethod,

@@ -17,16 +17,17 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "config2",
       Some("sample"),
-
+      None, //nuked prereq expressions
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
-      Map("prereq.expression" -> AttributeString("prereq.expr")),
       AgoraMethod("ns-config", "meth2", 2)
     )
 
+    val expectedMC = methodConfig2.copy(prerequisites = Some(Map()))
+
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfig2))
 
-    assertResult(Option(methodConfig2)) {
+    assertResult(Option(expectedMC)) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, methodConfig2.namespace, methodConfig2.name))
     }
   }
@@ -78,7 +79,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
 
     val changed = testData.agoraMethodConfig.copy(rootEntityType = Some("goober"),
-      prerequisites = Map.empty,
+      prerequisites = None,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
       methodRepoMethod = testData.agoraMethod.copy(methodVersion = 2)
@@ -86,7 +87,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.upsert(workspaceContext, changed))
 
-    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
+    assertResult(Option(changed.copy(methodConfigVersion = 2, prerequisites = Some(Map())))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
@@ -107,7 +108,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
 
     val changed = testData.agoraMethodConfig.copy(rootEntityType = Some("goober"),
-      prerequisites = Map.empty,
+      prerequisites = None,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
       methodRepoMethod = testData.agoraMethod.copy(methodVersion = 2)
@@ -115,7 +116,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.update(workspaceContext, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, changed))
 
-    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
+    assertResult(Option(changed.copy(methodConfigVersion = 2, prerequisites = Some(Map())))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
@@ -137,7 +138,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "oldName",
       Some("sample"),
-      Map("input.expression" -> AttributeString("this..wont.parse")),
+      None,
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
       AgoraMethod("ns-config", "meth2", 2)
@@ -152,7 +153,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     runAndWait(methodConfigurationQuery.update(workspaceContext, methodConfigOldName.namespace, methodConfigOldName.name, changed))
 
     //there was no config at that location, so the version should be 1
-    assertResult(Option(changed.copy(methodConfigVersion = 1))) {
+    assertResult(Option(changed.copy(methodConfigVersion = 1, prerequisites = Some(Map())))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
@@ -168,7 +169,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "oldName",
       Some("sample"),
-      Map("input.expression" -> AttributeString("this..wont.parse")),
+      None,
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
       AgoraMethod("ns-config", "meth2", 2)
@@ -178,7 +179,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "newName",
       Some("sample"),
-      Map("input.expression" -> AttributeString("this..wont.parse")),
+      None,
       Map("output.expression" -> AttributeString("already.there")),
       Map("prereq.expression" -> AttributeString("already.there")),
       AgoraMethod("ns-config", "meth2", 2),
@@ -199,7 +200,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     runAndWait(methodConfigurationQuery.update(workspaceContext, methodConfigToMove.namespace, methodConfigToMove.name, changed))
 
     //the version number should be incremented relative to the one that was already there
-    assertResult(Option(changed.copy(methodConfigVersion = 4))) {
+    assertResult(Option(changed.copy(methodConfigVersion = 4, prerequisites = Some(Map())))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 

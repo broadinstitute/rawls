@@ -26,14 +26,14 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
     GatherInputsResult(methodInputs.toSet, Set(), Set(), Set())
   }
 
-  val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", Some("Sample"), prerequisites=Map.empty,
+  val allValid = MethodConfiguration("dsde", "methodConfigValidExprs", Some("Sample"), prerequisites=None,
     inputs = toExpressionMap(parseableInputExpressions),
     outputs = toExpressionMap(parseableOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
 
   val allValidNoRootMC = allValid.copy(inputs = toExpressionMap(parseableInputExpressionsWithNoRoot), outputs = toExpressionMap(parseableOutputExpressionsWithNoRoot), rootEntityType = None)
 
-  val allInvalid = MethodConfiguration("dsde", "methodConfigInvalidExprs", Some("Sample"), prerequisites=Map.empty,
+  val allInvalid = MethodConfiguration("dsde", "methodConfigInvalidExprs", Some("Sample"), prerequisites=None,
     inputs = toExpressionMap(unparseableInputExpressions),
     outputs = toExpressionMap(unparseableOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))
@@ -42,7 +42,7 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
 
   val emptyExpr = "this.empty" -> AttributeString("")
 
-  val oneEmpty = MethodConfiguration("dsde", "methodConfigEmptyExpr", Some("Sample"), prerequisites=Map.empty,
+  val oneEmpty = MethodConfiguration("dsde", "methodConfigEmptyExpr", Some("Sample"), prerequisites=None,
     inputs = toExpressionMap(parseableInputExpressions) + emptyExpr,
     outputs = toExpressionMap(parseableOutputExpressions),
     AgoraMethod("dsde", "three_step", 1))

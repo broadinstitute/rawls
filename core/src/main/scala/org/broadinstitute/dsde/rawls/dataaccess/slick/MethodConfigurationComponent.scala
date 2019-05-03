@@ -71,28 +71,14 @@ trait MethodConfigurationComponent {
     def configKeyIdx = index("IDX_MC_OUTPUT", (methodConfigId, key), unique = true)
   }
 
-  class MethodConfigurationPrereqTable(tag: Tag) extends Table[MethodConfigurationPrereqRecord](tag, "METHOD_CONFIG_PREREQ") {
-    def methodConfigId = column[Long]("METHOD_CONFIG_ID")
-    def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
-    def key = column[String]("KEY", O.Length(254))
-    def value = column[String]("VALUE")
-
-    def * = (methodConfigId, id, key, value) <> (MethodConfigurationPrereqRecord.tupled, MethodConfigurationPrereqRecord.unapply)
-
-    def methodConfig = foreignKey("FK_MC_PREREQ", methodConfigId, methodConfigurationQuery)(_.id)
-    def configKeyIdx = index("IDX_MC_PREREQ", (methodConfigId, key), unique = true)
-  }
-
   protected val methodConfigurationInputQuery = TableQuery[MethodConfigurationInputTable]
   protected val methodConfigurationOutputQuery = TableQuery[MethodConfigurationOutputTable]
-  protected val methodConfigurationPrereqQuery = TableQuery[MethodConfigurationPrereqTable]
 
   object methodConfigurationQuery extends TableQuery(new MethodConfigurationTable(_)) {
 
     private type MethodConfigurationQueryType = driver.api.Query[MethodConfigurationTable, MethodConfigurationRecord, Seq]
     private type MethodConfigurationInputQueryType = driver.api.Query[MethodConfigurationInputTable, MethodConfigurationInputRecord, Seq]
     private type MethodConfigurationOutputQueryType = driver.api.Query[MethodConfigurationOutputTable, MethodConfigurationOutputRecord, Seq]
-    private type MethodConfigurationPrereqQueryType = driver.api.Query[MethodConfigurationPrereqTable, MethodConfigurationPrereqRecord, Seq]
 
     /*
       the core methods
@@ -152,11 +138,9 @@ trait MethodConfigurationComponent {
 
 
     private def saveMaps(methodConfig: MethodConfiguration, configId: Long) = {
-      val prerequisites = methodConfig.prerequisites.map { case (key, value) => marshalConfigPrereq(configId, key, value) }
       val inputs = methodConfig.inputs.map { case (key, value) => marshalConfigInput(configId, key, value) }
       val outputs = methodConfig.outputs.map{ case (key, value) => marshalConfigOutput(configId, key, value) }
 
-      (methodConfigurationPrereqQuery ++= prerequisites) andThen
         (methodConfigurationInputQuery ++= inputs) andThen
         (methodConfigurationOutputQuery ++= outputs)
     }
@@ -193,7 +177,7 @@ trait MethodConfigurationComponent {
       val driver: JdbcProfile = MethodConfigurationComponent.this.driver
 
       def deleteAction(workspaceId: UUID): WriteAction[Seq[Int]] = {
-        val tables: Seq[String] = Seq("METHOD_CONFIG_INPUT", "METHOD_CONFIG_OUTPUT", "METHOD_CONFIG_PREREQ")
+        val tables: Seq[String] = Seq("METHOD_CONFIG_INPUT", "METHOD_CONFIG_OUTPUT")
 
         DBIO.sequence(tables map { table =>
           sqlu"""delete t from #$table as t
@@ -242,8 +226,7 @@ trait MethodConfigurationComponent {
       for {
         inputs <- loadInputs(methodConfigRec.id)
         outputs <- loadOutputs(methodConfigRec.id)
-        prereqs <- loadPrereqs(methodConfigRec.id)
-      } yield unmarshalMethodConfig(methodConfigRec, inputs, outputs, prereqs)
+      } yield unmarshalMethodConfig(methodConfigRec, inputs, outputs)
     }
 
     def loadMethodConfigurationByName(workspaceId: UUID, methodConfigNamespace: String, methodConfigName: String): ReadAction[Option[MethodConfiguration]] = {
@@ -271,10 +254,6 @@ trait MethodConfigurationComponent {
       (methodConfigurationOutputQuery filter (_.methodConfigId === methodConfigId)).result.map(unmarshalConfigOutputs)
     }
 
-    private def loadPrereqs(methodConfigId: Long) = {
-      (methodConfigurationPrereqQuery filter (_.methodConfigId === methodConfigId)).result.map(unmarshalConfigPrereqs)
-    }
-
     /*
       the marshal/unmarshal helper methods
      */
@@ -283,8 +262,8 @@ trait MethodConfigurationComponent {
       MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodUri, methodConfig.methodConfigVersion, methodConfig.deleted, methodConfig.deletedDate.map( d => new Timestamp(d.getMillis)))
     }
 
-    def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], prereqs: Map[String, AttributeString]): MethodConfiguration = {
-      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, prereqs, inputs, outputs, MethodRepoMethod.fromUri(methodConfigRec.methodUri), methodConfigRec.methodConfigVersion, methodConfigRec.deleted, methodConfigRec.deletedDate.map(ts => new DateTime(ts)))
+    def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString]): MethodConfiguration = {
+      MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, Some(Map.empty[String, AttributeString]), inputs, outputs, MethodRepoMethod.fromUri(methodConfigRec.methodUri), methodConfigRec.methodConfigVersion, methodConfigRec.deleted, methodConfigRec.deletedDate.map(ts => new DateTime(ts)))
     }
 
     private def unmarshalMethodConfigToShort(methodConfigRec: MethodConfigurationRecord): MethodConfigurationShort = {

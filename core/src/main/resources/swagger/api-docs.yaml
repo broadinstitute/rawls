@@ -4085,8 +4085,6 @@ definitions:
       rootEntityType:
         type: string
         description: The root entity type that the method will be running on. Optional if this method config doesn't run on an entity (i.e. uses only workspace attributes and literal inputs).
-      prerequisites:
-        type: object
       inputs:
         type: object
       outputs:
