@@ -908,6 +908,25 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "get bucket options" in withTestDataApiServices { services =>
+    Get(s"${testData.workspace.path}/bucketOptions") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assertResult(WorkspaceBucketOptions(Some(false))) {
+          responseAs[WorkspaceBucketOptions]
+        }
+      }
+  }
+
+  it should "return 200 when setting bucket options" in withTestDataApiServices { services =>
+    Patch(s"${testData.workspace.path}/bucketOptions", WorkspaceBucketOptions(Some(true))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
   // Begin tests where routes are restricted by ACLs
 
   // Get Workspace requires READ access.  Accept if OWNER, WRITE, READ; Reject if NO ACCESS
