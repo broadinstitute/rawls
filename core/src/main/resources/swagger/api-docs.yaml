@@ -4546,9 +4546,10 @@ definitions:
       requesterPays:
         type: boolean
         description: "Optional. Whether the bucket is requester pays"
-      storageClass:
-        type: string
-        description: "Optional. The storage class of the bucket"
+# BUCKET_STORAGECLASS
+#      storageClass:
+#        type: string
+#        description: "Optional. The storage class of the bucket"
 
   WorkspaceAccessLevel:
     description: 'The level of access a user or group has on a Workspace. NoAccess, Read, Write, Owner, ProjectOwner'
