@@ -94,6 +94,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def UnlockWorkspace(workspaceName: WorkspaceName) = unlockWorkspace(workspaceName)
   def CheckBucketReadAccess(workspaceName: WorkspaceName) = checkBucketReadAccess(workspaceName)
   def GetBucketUsage(workspaceName: WorkspaceName) = getBucketUsage(workspaceName)
+  def GetBucketOptions(workspaceName: WorkspaceName) = getBucketOptions(workspaceName)
   def GetAccessInstructions(workspaceName: WorkspaceName) = getAccessInstructions(workspaceName)
 
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
@@ -176,6 +177,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
+
+  def getBucketOptions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
+          DBIO.from(gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName)) map { details =>
+            RequestComplete(StatusCodes.OK, details)
+          }
+        }
+      }
+    }
+  }
 
   private def loadResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[ManagedGroupRef]] = {
     samDAO.getResourceAuthDomain(resourceTypeName, resourceId, userInfo).map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
