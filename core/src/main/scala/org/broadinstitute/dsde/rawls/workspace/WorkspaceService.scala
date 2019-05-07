@@ -28,6 +28,7 @@ import org.joda.time.DateTime
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCodes, Uri}
+import cats.effect.IO
 import com.google.api.services.storage.model.StorageObject
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
@@ -154,15 +155,22 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
           DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel =>
+            //run these futures in parallel. this is equivalent to running the for-comp with the futures already defined and running
+            val futuresInParallel = (
+              getUserCatalogPermissions(workspaceContext.workspaceId.toString),
+              //convoluted but accessLevel for both params because user could at most share with their own access level
+              getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel),
+              getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel),
+              getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)),
+              loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo),
+              gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName)
+            ).tupled
+
             for {
-              canCatalog <- DBIO.from(getUserCatalogPermissions(workspaceContext.workspaceId.toString))
-              canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel)) //convoluted but accessLevel for both params because user could at most share with their own access level
-              canCompute <- DBIO.from(getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel))
+              (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
-              owners <- DBIO.from(getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)))
-              authDomain <- DBIO.from(loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo))
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, canCatalog, WorkspaceDetails(workspaceContext.workspace, authDomain.toSet), stats, owners))
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, canCatalog, WorkspaceDetails(workspaceContext.workspace, authDomain.toSet), stats, bucketDetails, owners))
             }
           }
         }

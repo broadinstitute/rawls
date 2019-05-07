@@ -4519,6 +4519,8 @@ definitions:
         $ref: '#/definitions/Workspace'
       workspaceSubmissionStats:
         $ref: '#/definitions/WorkspaceSubmissionStats'
+      bucketOptions:
+        $ref: '#/definitions/WorkspaceBucketOptions'
       owners:
         type: array
         items:
@@ -4537,6 +4539,16 @@ definitions:
         type: array
         items:
           type: string
+
+  WorkspaceBucketOptions:
+    description: 'Extra information about a GCS bucket attached to a workspace'
+    properties:
+      requesterPays:
+        type: boolean
+        description: "Optional. Whether the bucket is requester pays"
+      storageClass:
+        type: string
+        description: "Optional. The storage class of the bucket"
 
   WorkspaceAccessLevel:
     description: 'The level of access a user or group has on a Workspace. NoAccess, Read, Write, Owner, ProjectOwner'

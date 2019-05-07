@@ -203,6 +203,10 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Success(()))
   }
 
+  override def getBucketDetails(bucket: String): Future[WorkspaceBucketOptions] = {
+    Future.successful(WorkspaceBucketOptions(Some(false), Some("STANDARD")))
+  }
+
   override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Boolean] = Future.successful {
     import cats.implicits._
     val existingPolicies = policies.getOrElse(projectName, Map.empty)

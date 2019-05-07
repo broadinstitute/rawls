@@ -112,6 +112,10 @@ case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
                                     lastFailureDate: Option[DateTime],
                                     runningSubmissionsCount: Int)
 
+case class WorkspaceBucketOptions(
+  requesterPays: Option[Boolean],
+  storageClass: Option[String])
+
 case class EntityName(
                    name: String)
 
@@ -413,6 +417,7 @@ case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
                              catalog: Boolean,
                              workspace: WorkspaceDetails,
                              workspaceSubmissionStats: WorkspaceSubmissionStats,
+                             bucketOptions: WorkspaceBucketOptions,
                              owners: Set[String])
 
 case class WorkspaceDetails(namespace: String,
@@ -642,11 +647,13 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 
+  implicit val WorkspaceBucketOptionsFormat = jsonFormat2(WorkspaceBucketOptions)
+
   implicit val WorkspaceDetailsFormat = jsonFormat11(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
-  implicit val WorkspaceResponseFormat = jsonFormat7(WorkspaceResponse)
+  implicit val WorkspaceResponseFormat = jsonFormat8(WorkspaceResponse)
 
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 
