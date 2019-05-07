@@ -932,21 +932,38 @@ class HttpGoogleServicesDAO(
 
   def projectUsageExportBucketName(projectName: RawlsBillingProjectName) = s"${projectName.value}-usage-export"
 
-  override def getBucketDetails(bucket: String): Future[WorkspaceBucketOptions] = {
+  override def getBucketDetails(bucketName: String): Future[WorkspaceBucketOptions] = {
     implicit val service = GoogleInstrumentedService.Storage
     val cloudStorage = getStorage(getBucketServiceAccountCredential)
     for {
       bucketDetails <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudStorage.buckets().get(bucket))
+        executeGoogleRequest(cloudStorage.buckets().get(bucketName))
       })
     } yield {
       WorkspaceBucketOptions(
         //getRequesterPays may also return Java null, and simply using map here returns Some(null) because lol
         //also without explicitly specifying Option[Boolean] scala forgets the type of getRequesterPays
         requesterPays = Option(bucketDetails.getBilling).flatMap(billing => Option[Boolean](billing.getRequesterPays)).orElse(Option(false)),
-        storageClass = Option(bucketDetails.getStorageClass))
+        // BUCKET_STORAGECLASS storageClass = Option(bucketDetails.getStorageClass)
+      )
     }
+  }
 
+  override def setBucketDetails(bucketName: String, details: WorkspaceBucketOptions): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.Storage
+    val cloudStorage = getStorage(getBucketServiceAccountCredential)
+
+    val bucket = new Bucket()
+    details.requesterPays.foreach(value => bucket.setBilling(new Bucket.Billing().setRequesterPays(value)))
+    //BUCKET_STORAGECLASS details.storageClass.foreach(bucket.setStorageClass)
+
+    for {
+      bucketDetails <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudStorage.buckets().patch(bucketName, bucket))
+      })
+    } yield {
+      // nothing
+    }
   }
 
   def getComputeManager(credential: Credential): Compute = {
