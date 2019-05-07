@@ -2592,9 +2592,7 @@ paths:
         '200':
           description: Successful Request
           schema:
-            type: array
-            items:
-              $ref: '#/definitions/WorkspaceBucketOptions'
+            $ref: '#/definitions/WorkspaceBucketOptions'
         '404':
           description: Workspace not found
           schema:
@@ -2640,7 +2638,7 @@ paths:
       description: Set bucket options on the workspace bucket
       tags:
         - workspaces
-      summary: Set bucket options on the workspace bucket
+      summary: Set bucket options on the workspace bucket. Fields are optional; fields that are not provided will not be modified.
       operationId: updateWorkspaceBucketOptions
       parameters:
         - in: path
