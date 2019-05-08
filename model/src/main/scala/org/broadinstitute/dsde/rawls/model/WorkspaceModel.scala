@@ -113,7 +113,7 @@ case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
                                     runningSubmissionsCount: Int)
 
 case class WorkspaceBucketOptions(
-  requesterPays: Option[Boolean],
+  requesterPays: Option[Boolean]
   //BUCKET_STORAGECLASS storageClass: Option[String]
   // if you want to add storageClass, go search for BUCKET_STORAGECLASS in this code and uncomment the lines!
   // i haven't tested it but i figured i'd get it done while i was in the area :)
