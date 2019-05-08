@@ -79,10 +79,9 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                 Orchestration.workspaces.clone(projectName, workspaceName, projectName, workspaceCloneName, authDomains)(user.makeAuthToken())
 
                 // two authdomain groups should be in cloned workspace
-                eventually {
-                  val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
-                  groups should contain theSameElementsAs List(groupOne, groupTwo)
-                }
+                val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
+                groups should contain theSameElementsAs List(groupOne, groupTwo)
+
                 Rawls.workspaces.delete(projectName, workspaceCloneName)(user.makeAuthToken())
               }
             }
@@ -116,10 +115,9 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                   // Note: this is not a passthrough to Rawls is because library needs to overwrite any publish and discoverableByGroups values
                   Orchestration.workspaces.clone(projectName, workspaceName, projectName, workspaceCloneName, newAuthDomain)(user.makeAuthToken())
                   // verify three authdomain groups are found in cloned workspace
-                  eventually {
-                    val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
-                    groups should contain theSameElementsAs List(groupOne, groupTwo, groupThree)
-                  }
+                  val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
+                  groups should contain theSameElementsAs List(groupOne, groupTwo, groupThree)
+
                   Rawls.workspaces.delete(projectName, workspaceCloneName)(user.makeAuthToken())
                 }
               }
