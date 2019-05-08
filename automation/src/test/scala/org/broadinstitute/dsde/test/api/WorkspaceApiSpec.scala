@@ -17,9 +17,10 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.scalatest.{FreeSpecLike, Matchers}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Minutes, Seconds, Span}
-
+import org.broadinstitute.dsde.workbench.dao.Google.googleStorageDAO
 import spray.json._
 import DefaultJsonProtocol._
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
   with CleanUp with RandomUtil with Retry
@@ -368,6 +369,21 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
                 List("Accepted", "Evaluating", "Submitting", "Submitted") should contain (submissionStatus)
               }
             }(ownerAuthToken)
+          }(ownerAuthToken)
+        }
+      }
+
+      "to set requester pays on workspace buckets" in {
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("writer-can-set-rqpays"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer))) { workspaceName =>
+            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(ownerAuthToken) should be false
+            val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(ownerAuthToken)
+
+            Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = true)(ownerAuthToken)
+            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) should be true
+
+            Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = false)(ownerAuthToken)
+            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) should be false
           }(ownerAuthToken)
         }
       }

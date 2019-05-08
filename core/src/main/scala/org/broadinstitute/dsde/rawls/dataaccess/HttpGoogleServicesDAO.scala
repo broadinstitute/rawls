@@ -942,8 +942,9 @@ class HttpGoogleServicesDAO(
     } yield {
       WorkspaceBucketOptions(
         //getRequesterPays may also return Java null, and simply using map here returns Some(null) because lol
-        //also without explicitly specifying Option[Boolean] scala forgets the type of getRequesterPays
-        requesterPays = Option(bucketDetails.getBilling).flatMap(billing => Option[Boolean](billing.getRequesterPays)).orElse(Option(false)),
+        //also without explicitly specifying Option[java.lang.Boolean] scala will both forget the type of getRequesterPays
+        //and then attempt to cast a Java null to a scala Boolean and get an NPE as a result.
+        requesterPays = Option(bucketDetails.getBilling).flatMap(billing => Option[java.lang.Boolean](billing.getRequesterPays)).map(_.booleanValue),
         // BUCKET_STORAGECLASS storageClass = Option(bucketDetails.getStorageClass)
       )
     }
