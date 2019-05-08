@@ -194,7 +194,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def updateBucketOptions(workspaceName: WorkspaceName, bucketOptions: WorkspaceBucketOptions): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccess(workspaceContext.workspace, SamWorkspaceActions.write) {
+        requireAccess(workspaceContext.workspace, SamWorkspaceActions.own) {
           DBIO.from(gcsDAO.setBucketDetails(workspaceContext.workspace.bucketName, bucketOptions)) map { _ =>
             RequestComplete(StatusCodes.OK)
           }

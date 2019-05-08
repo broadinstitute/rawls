@@ -233,6 +233,21 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           }
         }
       }
+
+      "to set requester pays on workspace buckets" in {
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("owner-can-set-rqpays"), aclEntries = List()) { workspaceName =>
+            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(ownerAuthToken) should be false
+            val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(ownerAuthToken)
+
+            Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = true)(ownerAuthToken)
+            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) should be true
+
+            Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = false)(ownerAuthToken)
+            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) should be false
+          }(ownerAuthToken)
+        }
+      }
     }
 
     "should not allow project owners" - {
@@ -339,6 +354,21 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           }(ownerAuthToken)
         }
       }
+
+      "to set requester pays on workspace buckets" in {
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("reader-cant-set-rqpays"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
+            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(studentAToken) should be false
+            val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(studentAToken)
+
+            val rqException = intercept[RestException] {
+              Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = true)(studentAToken)
+            }
+            assertExceptionStatusCode(rqException, 403)
+
+          }(ownerAuthToken)
+        }
+      }
     }
 
     "should allow writers" - {
@@ -372,21 +402,6 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           }(ownerAuthToken)
         }
       }
-
-      "to set requester pays on workspace buckets" in {
-        withCleanBillingProject(owner) { projectName =>
-          withWorkspace(projectName, prependUUID("writer-can-set-rqpays"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer))) { workspaceName =>
-            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(ownerAuthToken) should be false
-            val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(ownerAuthToken)
-
-            Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = true)(ownerAuthToken)
-            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) should be true
-
-            Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = false)(ownerAuthToken)
-            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) should be false
-          }(ownerAuthToken)
-        }
-      }
     }
 
     "should not allow writers" - {
@@ -415,6 +430,21 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
               }
               assertExceptionStatusCode(submissionException, 403)
             }(ownerAuthToken)
+          }(ownerAuthToken)
+        }
+      }
+
+      "to set requester pays on workspace buckets" in {
+        withCleanBillingProject(owner) { projectName =>
+          withWorkspace(projectName, prependUUID("writer-cant-set-rqpays"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer))) { workspaceName =>
+            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(studentAToken) should be false
+            val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(studentAToken)
+
+            val rqException = intercept[RestException] {
+              Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = true)(studentAToken)
+            }
+            assertExceptionStatusCode(rqException, 403)
+
           }(ownerAuthToken)
         }
       }
