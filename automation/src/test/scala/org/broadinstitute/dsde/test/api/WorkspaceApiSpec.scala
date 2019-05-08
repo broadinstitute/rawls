@@ -237,14 +237,14 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
       "to set requester pays on workspace buckets" in {
         withCleanBillingProject(owner) { projectName =>
           withWorkspace(projectName, prependUUID("owner-can-set-rqpays"), aclEntries = List()) { workspaceName =>
-            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(ownerAuthToken) should be false
+            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(ownerAuthToken) should be(false)
             val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(ownerAuthToken)
 
             Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = true)(ownerAuthToken)
-            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) should be true
+            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) shouldBe true
 
             Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = false)(ownerAuthToken)
-            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) should be false
+            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) shouldBe false
           }(ownerAuthToken)
         }
       }
@@ -358,7 +358,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
       "to set requester pays on workspace buckets" in {
         withCleanBillingProject(owner) { projectName =>
           withWorkspace(projectName, prependUUID("reader-cant-set-rqpays"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
-            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(studentAToken) should be false
+            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(studentAToken) should be(false)
             val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(studentAToken)
 
             val rqException = intercept[RestException] {
@@ -437,7 +437,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
       "to set requester pays on workspace buckets" in {
         withCleanBillingProject(owner) { projectName =>
           withWorkspace(projectName, prependUUID("writer-cant-set-rqpays"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer))) { workspaceName =>
-            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(studentAToken) should be false
+            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(studentAToken) should be(false)
             val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(studentAToken)
 
             val rqException = intercept[RestException] {
