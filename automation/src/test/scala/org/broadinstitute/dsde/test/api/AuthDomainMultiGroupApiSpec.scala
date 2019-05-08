@@ -7,12 +7,17 @@ import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, GroupFixtures
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Orchestration, Rawls, WorkspaceAccessLevel}
 import org.scalatest._
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.{Seconds, Span}
 import spray.json.{JsValue, JsonParser}
 
 import scala.util.Try
 
 
-class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceFixtures with BillingFixtures with GroupFixtures {
+class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceFixtures with BillingFixtures
+  with GroupFixtures with Eventually {
+
+  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(150, Seconds)), interval = scaled(Span(10, Seconds)))
 
   /*
    * Unless otherwise declared, this auth token will be used for API calls.
@@ -74,9 +79,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                 Orchestration.workspaces.clone(projectName, workspaceName, projectName, workspaceCloneName, authDomains)(user.makeAuthToken())
 
                 // two authdomain groups should be in cloned workspace
-                val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
-                groups should contain theSameElementsAs List(groupOne, groupTwo)
-
+                eventually {
+                  val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
+                  groups should contain theSameElementsAs List(groupOne, groupTwo)
+                }
                 Rawls.workspaces.delete(projectName, workspaceCloneName)(user.makeAuthToken())
               }
             }
@@ -110,11 +116,11 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
                   // Note: this is not a passthrough to Rawls is because library needs to overwrite any publish and discoverableByGroups values
                   Orchestration.workspaces.clone(projectName, workspaceName, projectName, workspaceCloneName, newAuthDomain)(user.makeAuthToken())
                   // verify three authdomain groups are found in cloned workspace
-                  val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
-                  groups should contain theSameElementsAs List(groupOne, groupTwo, groupThree)
-
+                  eventually {
+                    val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
+                    groups should contain theSameElementsAs List(groupOne, groupTwo, groupThree)
+                  }
                   Rawls.workspaces.delete(projectName, workspaceCloneName)(user.makeAuthToken())
-
                 }
               }
             }
@@ -291,10 +297,10 @@ class AuthDomainMultiGroupApiSpec extends FreeSpec with Matchers with WorkspaceF
 
                   withCleanBillingProject(defaultUser) { projectName =>
                     withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(user.email, WorkspaceAccessLevel.Writer))) { workspaceName =>
-
-                      val level = getWorkspaceAccessLevel(projectName, workspaceName)(user.makeAuthToken())
-                      level should (be("WRITER"))
-
+                      eventually {
+                        val level = getWorkspaceAccessLevel(projectName, workspaceName)(user.makeAuthToken())
+                        level should (be("WRITER"))
+                      }
                       AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
                     }
                   }
