@@ -134,7 +134,8 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
     // waiting for creationStatus becomes Error or Ready but not Creating
     val statusOption: Option[String] = retry(30.seconds, 20.minutes)({
       val creationStatusOption: Option[String] = for {
-        status <- Rawls.billing.getBillingProjectStatus(billingProjectName)(token).get("creationStatus")
+        statusMap <- Try(Rawls.billing.getBillingProjectStatus(billingProjectName)(token)).toOption
+        status <- statusMap.get("creationStatus")
       } yield status
       creationStatusOption.filterNot(_ equals "Creating")
     })
