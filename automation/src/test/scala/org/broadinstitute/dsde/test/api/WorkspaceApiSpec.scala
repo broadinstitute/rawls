@@ -241,10 +241,15 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(ownerAuthToken)
 
             Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = true)(ownerAuthToken)
-            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) shouldBe true
+            eventually {
+              googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) shouldBe true
+            }
 
             Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = false)(ownerAuthToken)
-            googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) shouldBe false
+
+            eventually {
+              googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)) shouldBe false
+            }
           }(ownerAuthToken)
         }
       }
