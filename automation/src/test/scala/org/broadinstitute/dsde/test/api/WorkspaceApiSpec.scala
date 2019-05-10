@@ -15,14 +15,14 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.scalatest.{FreeSpecLike, Matchers}
-import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.time.{Minutes, Seconds, Span}
 import org.broadinstitute.dsde.workbench.dao.Google.googleStorageDAO
 import spray.json._
 import DefaultJsonProtocol._
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
-class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
+class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures
   with CleanUp with RandomUtil with Retry
   with BillingFixtures with WorkspaceFixtures with MethodFixtures {
 
