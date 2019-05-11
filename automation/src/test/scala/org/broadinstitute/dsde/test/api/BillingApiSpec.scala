@@ -131,14 +131,30 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
 
     Rawls.billing.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
 
+
+    logger.info("BEFORE retry")
     // waiting for creationStatus becomes Error or Ready but not Creating
     val statusOption: Option[String] = retry(30.seconds, 20.minutes)({
       val creationStatusOption: Option[String] = for {
-        statusMap <- Try(Rawls.billing.getBillingProjectStatus(billingProjectName)(token)).toOption
-        status <- statusMap.get("creationStatus")
+        statusMap: Map[String, String] <- Try(Rawls.billing.getBillingProjectStatus(billingProjectName)(token)).toOption
+        _ = logger.info("PRINT statusMap: " + statusMap)
+        status: String <- statusMap.get("creationStatus")
+        _  = logger.info(s"PRINT status: ${status}")
       } yield status
-      creationStatusOption.filterNot(_ equals "Creating")
+      logger.info(s"PRINT creationStatusOption: ${creationStatusOption}")
+      logger.info(s"PRINT creationStatusOption.isDefined: ${creationStatusOption.isDefined}")
+      if (creationStatusOption.isDefined) {
+        val filteredStatus = creationStatusOption.filterNot(_ equals "Creating")
+        logger.info(s"PRINT filteredStatus: ${filteredStatus}")
+        filteredStatus
+      } else {
+        println("NONE")
+        None
+      }
+
     })
+    logger.info("AFTER retry")
+
 
     statusOption match {
       case None | Some("Error") if trials > 1 =>
