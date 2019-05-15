@@ -15,14 +15,13 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.scalatest.{FreeSpecLike, Matchers}
-import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Minutes, Seconds, Span}
-import org.broadinstitute.dsde.workbench.dao.Google.googleStorageDAO
+
 import spray.json._
 import DefaultJsonProtocol._
-import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
-class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures
+class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
   with CleanUp with RandomUtil with Retry
   with BillingFixtures with WorkspaceFixtures with MethodFixtures {
 
@@ -233,26 +232,6 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           }
         }
       }
-
-      "to set requester pays on workspace buckets" in {
-        withCleanBillingProject(owner) { projectName =>
-          withWorkspace(projectName, prependUUID("owner-can-set-rqpays"), aclEntries = List()) { workspaceName =>
-            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(ownerAuthToken) should be(false)
-            val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(ownerAuthToken)
-
-            Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = true)(ownerAuthToken)
-            eventually {
-              googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)).futureValue shouldBe true
-            }
-
-            Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = false)(ownerAuthToken)
-
-            eventually {
-              googleStorageDAO.getRequesterPays(GcsBucketName(bucketName)).futureValue shouldBe false
-            }
-          }(ownerAuthToken)
-        }
-      }
     }
 
     "should not allow project owners" - {
@@ -359,21 +338,6 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           }(ownerAuthToken)
         }
       }
-
-      "to set requester pays on workspace buckets" in {
-        withCleanBillingProject(owner) { projectName =>
-          withWorkspace(projectName, prependUUID("reader-cant-set-rqpays"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
-            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(studentAToken) should be(false)
-            val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(studentAToken)
-
-            val rqException = intercept[RestException] {
-              Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = true)(studentAToken)
-            }
-            assertExceptionStatusCode(rqException, 403)
-
-          }(ownerAuthToken)
-        }
-      }
     }
 
     "should allow writers" - {
@@ -435,21 +399,6 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
               }
               assertExceptionStatusCode(submissionException, 403)
             }(ownerAuthToken)
-          }(ownerAuthToken)
-        }
-      }
-
-      "to set requester pays on workspace buckets" in {
-        withCleanBillingProject(owner) { projectName =>
-          withWorkspace(projectName, prependUUID("writer-cant-set-rqpays"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer))) { workspaceName =>
-            Rawls.workspaces.getBucketRequesterPays(projectName, workspaceName)(studentAToken) should be(false)
-            val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)(studentAToken)
-
-            val rqException = intercept[RestException] {
-              Rawls.workspaces.setBucketRequesterPays(projectName, workspaceName, rqPays = true)(studentAToken)
-            }
-            assertExceptionStatusCode(rqException, 403)
-
           }(ownerAuthToken)
         }
       }

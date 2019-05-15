@@ -950,6 +950,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  /* held for CA-223
   override def setBucketDetails(bucketName: String, details: WorkspaceBucketOptions): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.Storage
     val cloudStorage = getStorage(getBucketServiceAccountCredential)
@@ -966,6 +967,7 @@ class HttpGoogleServicesDAO(
       // nothing
     }
   }
+  */
 
   def getComputeManager(credential: Credential): Compute = {
     new Compute.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()

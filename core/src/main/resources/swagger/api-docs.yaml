@@ -2623,45 +2623,46 @@ paths:
             - openid
             - email
             - profile
-    patch:
-      responses:
-        '200':
-          description: Successful Request
-        '404':
-          description: Workspace, not found
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
-          description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: Set bucket options on the workspace bucket
-      tags:
-        - workspaces
-      summary: Set bucket options on the workspace bucket. Fields are optional; fields that are not provided will not be modified.
-      operationId: updateWorkspaceBucketOptions
-      parameters:
-        - in: path
-          description: Workspace Namespace
-          name: workspaceNamespace
-          required: true
-          type: string
-        - in: path
-          description: Workspace Name
-          name: workspaceName
-          required: true
-          type: string
-        - in: body
-          description: Bucket options to set
-          name: bucketOptions
-          required: true
-          schema:
-            $ref: '#/definitions/WorkspaceBucketOptions'
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
+# held for CA-223
+#    patch:
+#      responses:
+#        '200':
+#          description: Successful Request
+#        '404':
+#          description: Workspace, not found
+#          schema:
+#            $ref: '#/definitions/ErrorReport'
+#        '500':
+#          description: Rawls Internal Error
+#          schema:
+#            $ref: '#/definitions/ErrorReport'
+#      description: Set bucket options on the workspace bucket
+#      tags:
+#        - workspaces
+#      summary: Set bucket options on the workspace bucket. Fields are optional; fields that are not provided will not be modified.
+#      operationId: updateWorkspaceBucketOptions
+#      parameters:
+#        - in: path
+#          description: Workspace Namespace
+#          name: workspaceNamespace
+#          required: true
+#          type: string
+#        - in: path
+#          description: Workspace Name
+#          name: workspaceName
+#          required: true
+#          type: string
+#        - in: body
+#          description: Bucket options to set
+#          name: bucketOptions
+#          required: true
+#          schema:
+#            $ref: '#/definitions/WorkspaceBucketOptions'
+#      security:
+#        - authorization:
+#            - openid
+#            - email
+#            - profile
 
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/catalog':
     get:

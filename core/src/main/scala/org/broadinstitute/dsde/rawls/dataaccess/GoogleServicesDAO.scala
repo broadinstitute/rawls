@@ -149,7 +149,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getServiceAccountUserInfo(): Future[UserInfo]
 
   def getBucketDetails(bucket: String): Future[WorkspaceBucketOptions]
-  def setBucketDetails(bucket: String, details: WorkspaceBucketOptions): Future[Unit]
+  //def setBucketDetails(bucket: String, details: WorkspaceBucketOptions): Future[Unit] //held for CA-223
 
   /**
    * The project creation process has 3 steps of which this function is the first:

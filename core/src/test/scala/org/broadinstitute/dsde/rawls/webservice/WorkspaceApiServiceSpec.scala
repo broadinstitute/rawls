@@ -919,6 +919,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  /* held for CA-223
   it should "return 200 when setting bucket options" in withTestDataApiServices { services =>
     Patch(s"${testData.workspace.path}/bucketOptions", WorkspaceBucketOptions(Some(true))) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -926,6 +927,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) { status }
       }
   }
+  */
 
   // Begin tests where routes are restricted by ACLs
 
