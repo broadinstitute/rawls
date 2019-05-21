@@ -43,7 +43,7 @@ class AuthDomainGroupApiSpec extends FreeSpec with Matchers with WorkspaceFixtur
         }
       }
 
-      "can be cloned and retain the auth domain" taggedAs Tags.SmokeTest in {
+      "can be cloned and retain the auth domain" in {
         val user = UserPool.chooseAuthDomainUser
         implicit val authToken: AuthToken = authTokenDefault
 
