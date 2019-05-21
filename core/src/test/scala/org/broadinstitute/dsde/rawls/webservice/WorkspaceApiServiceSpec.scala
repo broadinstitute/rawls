@@ -353,7 +353,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), WorkspaceBucketOptions(Some(false)), Set.empty)
+          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), WorkspaceBucketOptions(false), Set.empty)
         ){
           val response = responseAs[WorkspaceResponse]
           WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners)
@@ -913,21 +913,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertResult(WorkspaceBucketOptions(Some(false))) {
+        assertResult(WorkspaceBucketOptions(false)) {
           responseAs[WorkspaceBucketOptions]
         }
       }
   }
-
-  /* held for CA-223
-  it should "return 200 when setting bucket options" in withTestDataApiServices { services =>
-    Patch(s"${testData.workspace.path}/bucketOptions", WorkspaceBucketOptions(Some(true))) ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-      }
-  }
-  */
 
   // Begin tests where routes are restricted by ACLs
 

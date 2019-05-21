@@ -112,12 +112,7 @@ case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
                                     lastFailureDate: Option[DateTime],
                                     runningSubmissionsCount: Int)
 
-case class WorkspaceBucketOptions(
-  requesterPays: Option[Boolean]
-  //BUCKET_STORAGECLASS storageClass: Option[String]
-  // if you want to add storageClass, go search for BUCKET_STORAGECLASS in this code and uncomment the lines!
-  // i haven't tested it but i figured i'd get it done while i was in the area :)
-  )
+case class WorkspaceBucketOptions(requesterPays: Boolean)
 
 case class EntityName(
                    name: String)
@@ -650,7 +645,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 
-  implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions) //BUCKET_STORAGECLASS
+  implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
 
   implicit val WorkspaceDetailsFormat = jsonFormat11(WorkspaceDetails.apply)
 

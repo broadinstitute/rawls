@@ -191,19 +191,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  /* held for CA-223
-  def updateBucketOptions(workspaceName: WorkspaceName, bucketOptions: WorkspaceBucketOptions): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccess(workspaceContext.workspace, SamWorkspaceActions.own) {
-          DBIO.from(gcsDAO.setBucketDetails(workspaceContext.workspace.bucketName, bucketOptions)) map { _ =>
-            RequestComplete(StatusCodes.OK)
-          }
-        }
-      }
-    }
-  } */
-
   private def loadResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[ManagedGroupRef]] = {
     samDAO.getResourceAuthDomain(resourceTypeName, resourceId, userInfo).map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
   }

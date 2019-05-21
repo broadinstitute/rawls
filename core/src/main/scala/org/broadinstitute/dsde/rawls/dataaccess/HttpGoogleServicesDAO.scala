@@ -940,34 +940,16 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(cloudStorage.buckets().get(bucketName))
       })
     } yield {
+      val requesterPays = for {
+        billing <- Option(bucketDetails.getBilling)
+        rp <- Option(billing.getRequesterPays)
+      } yield rp.booleanValue()
+
       WorkspaceBucketOptions(
-        //getRequesterPays may also return Java null, and simply using map here returns Some(null) because lol
-        //also without explicitly specifying Option[java.lang.Boolean] scala will both forget the type of getRequesterPays
-        //and then attempt to cast a Java null to a scala Boolean and get an NPE as a result.
-        requesterPays = Option(bucketDetails.getBilling).flatMap(billing => Option[java.lang.Boolean](billing.getRequesterPays)).map(_.booleanValue),
-        // BUCKET_STORAGECLASS storageClass = Option(bucketDetails.getStorageClass)
+        requesterPays = requesterPays.getOrElse(false)
       )
     }
   }
-
-  /* held for CA-223
-  override def setBucketDetails(bucketName: String, details: WorkspaceBucketOptions): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Storage
-    val cloudStorage = getStorage(getBucketServiceAccountCredential)
-
-    val bucket = new Bucket()
-    details.requesterPays.foreach(value => bucket.setBilling(new Bucket.Billing().setRequesterPays(value)))
-    //BUCKET_STORAGECLASS details.storageClass.foreach(bucket.setStorageClass)
-
-    for {
-      bucketDetails <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudStorage.buckets().patch(bucketName, bucket))
-      })
-    } yield {
-      // nothing
-    }
-  }
-  */
 
   def getComputeManager(credential: Credential): Compute = {
     new Compute.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()

@@ -204,10 +204,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   }
 
   override def getBucketDetails(bucket: String): Future[WorkspaceBucketOptions] = {
-    Future.successful(WorkspaceBucketOptions(Some(false) /* BUCKET_STORAGECLASS Some("STANDARD") */ ))
+    Future.successful(WorkspaceBucketOptions(false))
   }
-
-  //override def setBucketDetails(bucketName: String, bucketDetails: WorkspaceBucketOptions): Future[Unit] = Future.successful(()) held for CA-223
 
   override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Boolean] = Future.successful {
     import cats.implicits._
