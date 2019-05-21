@@ -932,12 +932,12 @@ class HttpGoogleServicesDAO(
 
   def projectUsageExportBucketName(projectName: RawlsBillingProjectName) = s"${projectName.value}-usage-export"
 
-  override def getBucketDetails(bucketName: String): Future[WorkspaceBucketOptions] = {
+  override def getBucketDetails(bucketName: String, project: RawlsBillingProjectName): Future[WorkspaceBucketOptions] = {
     implicit val service = GoogleInstrumentedService.Storage
     val cloudStorage = getStorage(getBucketServiceAccountCredential)
     for {
       bucketDetails <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudStorage.buckets().get(bucketName))
+        executeGoogleRequest(cloudStorage.buckets().get(bucketName).setUserProject(project.value))
       })
     } yield {
       val requesterPays = for {

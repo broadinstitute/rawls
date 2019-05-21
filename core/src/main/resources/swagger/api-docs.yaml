@@ -4580,6 +4580,8 @@ definitions:
 
   WorkspaceBucketOptions:
     description: 'Extra information about a GCS bucket attached to a workspace'
+    required:
+      - requesterPays
     properties:
       requesterPays:
         type: boolean

@@ -148,7 +148,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getServiceAccountRawlsUser(): Future[RawlsUser]
   def getServiceAccountUserInfo(): Future[UserInfo]
 
-  def getBucketDetails(bucket: String): Future[WorkspaceBucketOptions]
+  def getBucketDetails(bucket: String, project: RawlsBillingProjectName): Future[WorkspaceBucketOptions]
 
   /**
    * The project creation process has 3 steps of which this function is the first:

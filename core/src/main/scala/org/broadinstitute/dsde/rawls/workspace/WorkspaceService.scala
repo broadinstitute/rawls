@@ -165,7 +165,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel),
               getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)),
               loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo),
-              gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName)
+              gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace))
             ).tupled
 
             for {
@@ -183,7 +183,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
-          DBIO.from(gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName)) map { details =>
+          DBIO.from(gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace))) map { details =>
             RequestComplete(StatusCodes.OK, details)
           }
         }

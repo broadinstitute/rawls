@@ -203,7 +203,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Success(()))
   }
 
-  override def getBucketDetails(bucket: String): Future[WorkspaceBucketOptions] = {
+  override def getBucketDetails(bucket: String, project: RawlsBillingProjectName): Future[WorkspaceBucketOptions] = {
     Future.successful(WorkspaceBucketOptions(false))
   }
 
