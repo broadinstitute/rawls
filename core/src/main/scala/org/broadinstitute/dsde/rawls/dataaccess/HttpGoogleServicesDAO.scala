@@ -932,6 +932,25 @@ class HttpGoogleServicesDAO(
 
   def projectUsageExportBucketName(projectName: RawlsBillingProjectName) = s"${projectName.value}-usage-export"
 
+  override def getBucketDetails(bucketName: String, project: RawlsBillingProjectName): Future[WorkspaceBucketOptions] = {
+    implicit val service = GoogleInstrumentedService.Storage
+    val cloudStorage = getStorage(getBucketServiceAccountCredential)
+    for {
+      bucketDetails <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudStorage.buckets().get(bucketName).setUserProject(project.value))
+      })
+    } yield {
+      val requesterPays = for {
+        billing <- Option(bucketDetails.getBilling)
+        rp <- Option(billing.getRequesterPays)
+      } yield rp.booleanValue()
+
+      WorkspaceBucketOptions(
+        requesterPays = requesterPays.getOrElse(false)
+      )
+    }
+  }
+
   def getComputeManager(credential: Credential): Compute = {
     new Compute.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }

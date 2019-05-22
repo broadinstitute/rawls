@@ -93,6 +93,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def UnlockWorkspace(workspaceName: WorkspaceName) = unlockWorkspace(workspaceName)
   def CheckBucketReadAccess(workspaceName: WorkspaceName) = checkBucketReadAccess(workspaceName)
   def GetBucketUsage(workspaceName: WorkspaceName) = getBucketUsage(workspaceName)
+  def GetBucketOptions(workspaceName: WorkspaceName) = getBucketOptions(workspaceName)
+  //def UpdateBucketOptions(workspaceName: WorkspaceName, bucketOptions: WorkspaceBucketOptions) = updateBucketOptions(workspaceName, bucketOptions)
   def GetAccessInstructions(workspaceName: WorkspaceName) = getAccessInstructions(workspaceName)
 
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
@@ -154,20 +156,39 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
           DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel =>
+            //run these futures in parallel. this is equivalent to running the for-comp with the futures already defined and running
+            val futuresInParallel = (
+              getUserCatalogPermissions(workspaceContext.workspaceId.toString),
+              //convoluted but accessLevel for both params because user could at most share with their own access level
+              getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel),
+              getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel),
+              getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)),
+              loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo),
+              gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace))
+            ).tupled
+
             for {
-              canCatalog <- DBIO.from(getUserCatalogPermissions(workspaceContext.workspaceId.toString))
-              canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel)) //convoluted but accessLevel for both params because user could at most share with their own access level
-              canCompute <- DBIO.from(getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel))
+              (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
-              owners <- DBIO.from(getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)))
-              authDomain <- DBIO.from(loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo))
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, canCatalog, WorkspaceDetails(workspaceContext.workspace, authDomain.toSet), stats, owners))
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, canCatalog, WorkspaceDetails(workspaceContext.workspace, authDomain.toSet), stats, bucketDetails, owners))
             }
           }
         }
       }
     }
+
+  def getBucketOptions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
+          DBIO.from(gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace))) map { details =>
+            RequestComplete(StatusCodes.OK, details)
+          }
+        }
+      }
+    }
+  }
 
   private def loadResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[ManagedGroupRef]] = {
     samDAO.getResourceAuthDomain(resourceTypeName, resourceId, userInfo).map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)

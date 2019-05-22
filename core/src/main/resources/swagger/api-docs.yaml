@@ -2586,6 +2586,44 @@ paths:
             - email
             - profile
 
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/bucketOptions':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkspaceBucketOptions'
+        '404':
+          description: Workspace not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Returns metadata about the workspace bucket.
+      tags:
+        - workspaces
+      summary: Get metadata about the workspace bucket
+      operationId: getWorkspaceBucketOptions
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/catalog':
     get:
       responses:
@@ -4519,6 +4557,8 @@ definitions:
         $ref: '#/definitions/Workspace'
       workspaceSubmissionStats:
         $ref: '#/definitions/WorkspaceSubmissionStats'
+      bucketOptions:
+        $ref: '#/definitions/WorkspaceBucketOptions'
       owners:
         type: array
         items:
@@ -4537,6 +4577,15 @@ definitions:
         type: array
         items:
           type: string
+
+  WorkspaceBucketOptions:
+    description: 'Extra information about a GCS bucket attached to a workspace'
+    required:
+      - requesterPays
+    properties:
+      requesterPays:
+        type: boolean
+        description: "Whether the bucket is requester pays"
 
   WorkspaceAccessLevel:
     description: 'The level of access a user or group has on a Workspace. NoAccess, Read, Write, Owner, ProjectOwner'

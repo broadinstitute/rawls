@@ -353,10 +353,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Set.empty)
+          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), WorkspaceBucketOptions(false), Set.empty)
         ){
           val response = responseAs[WorkspaceResponse]
-          WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
+          WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners)
         }
       }
   }
@@ -905,6 +905,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "get bucket options" in withTestDataApiServices { services =>
+    Get(s"${testData.workspace.path}/bucketOptions") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assertResult(WorkspaceBucketOptions(false)) {
+          responseAs[WorkspaceBucketOptions]
+        }
       }
   }
 
