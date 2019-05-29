@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -189,7 +191,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     when(services.samDAO.syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))).thenReturn(Future.successful(Map(WorkbenchEmail("owner-policy@google.group") -> Seq())))
     when(services.samDAO.syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.canComputeUser))).thenReturn(Future.successful(Map(WorkbenchEmail("can-compute-policy@google.group") -> Seq())))
 
-    Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None)) ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -218,7 +220,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     }) { services =>
       val projectName = RawlsBillingProjectName("test_good2")
 
-      Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
+      Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None)) ~>
         sealRoute(services.billingRoutes) ~>
         check {
           assertResult(StatusCodes.InternalServerError) {
@@ -230,7 +232,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with inaccessible to firecloud billing account" in withTestDataApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName)) ~>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName, None)) ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -240,7 +242,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 403 when creating a project with inaccessible to user billing account" in withTestDataApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), RawlsBillingAccountName("this does not exist"))) ~>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), RawlsBillingAccountName("this does not exist"), None)) ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -283,4 +285,21 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
         }
       }
   }
+
+  it should "return 202 when adding a billing project to a service perimeter with all the right permissions" in withTestDataApiServices { services =>
+    val projectName = testData.billingProject.projectName
+    val servicePerimeterName = ServicePerimeterName("accessPolicies/123/servicePerimeters/service_perimeter")
+    val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
+
+    when(services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, encodedServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(true))
+
+    Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
+      sealRoute(services.servicePerimeterRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted) {
+          status
+        }
+      }
+  }
+
 }
