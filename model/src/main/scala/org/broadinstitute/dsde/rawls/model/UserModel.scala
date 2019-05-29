@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
+import org.broadinstitute.dsde.workbench.model.ValueObject
 import spray.json.{JsObject, _}
 
 sealed trait UserAuthRef
@@ -96,3 +97,7 @@ class UserModelJsonSupport extends JsonSupport {
 }
 
 object UserModelJsonSupport extends UserModelJsonSupport
+
+case class ServicePerimeterName(value: String) extends ValueObject
+
+case class GoogleProjectNumber(value: String) extends ValueObject

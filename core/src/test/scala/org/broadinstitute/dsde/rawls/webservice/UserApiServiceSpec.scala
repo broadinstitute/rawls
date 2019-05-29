@@ -111,7 +111,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       val billingUser = testData.userOwner
       val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
-      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
 
       import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 
@@ -136,7 +136,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
       }
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
@@ -145,12 +145,13 @@ class UserApiServiceSpec extends ApiServiceSpec {
         override val gcsDAO = new MockGoogleServicesDAO("foo")
         override val samDAO = new MockSamDAO(dataSource)
         override val requesterPaysRole: String = "requesterPaysRole"
+        override val executionContext: ExecutionContext = services.executionContext
       }
 
-      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
+      assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).count(_.done)
       }
 
       Get("/user/billing") ~>
@@ -168,9 +169,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+
   it should "handle operation errors creating a billing project" in {
-    testWithPollingError { rawlsBillingProjectOperation =>
-      Future.successful(rawlsBillingProjectOperation.copy(done = true, errorMessage = Option("this failed")))
+    testWithPollingError { _ =>
+      Future.successful(OperationStatus(done = true, errorMessage = Option("this failed")))
     }
   }
 
@@ -180,7 +182,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  private def testWithPollingError(failureMode: RawlsBillingProjectOperationRecord => Future[RawlsBillingProjectOperationRecord]) = withEmptyTestDatabase { dataSource: SlickDataSource =>
+  private def testWithPollingError(failureMode: OperationId => Future[OperationStatus]) = withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // first add the project and user to the DB
@@ -188,7 +190,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       val billingUser = testData.userOwner
       val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
-      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
 
       import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 
@@ -213,27 +215,28 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
       }
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
         override val projectTemplate: ProjectTemplate = ProjectTemplate(Seq(), Seq())
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
-          override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = failureMode(rawlsBillingProjectOperation)
+          override def pollOperation(operationId: OperationId): Future[OperationStatus] = failureMode(operationId)
         }
         override val samDAO = new MockSamDAO(dataSource)
         override val requesterPaysRole: String = "requesterPaysRole"
+        override val executionContext: ExecutionContext = services.executionContext
       }
 
-      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
+      assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).count(_.done)
       }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
       }
 
       Get("/user/billing") ~>
@@ -258,7 +261,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       val billingUser = testData.userOwner
       val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
 
-      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
 
       import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 
@@ -283,34 +286,35 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
       }
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
         override val projectTemplate: ProjectTemplate = ProjectTemplate(Seq(), Seq())
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
-          override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
-            if (rawlsBillingProjectOperation.operationName == DEPLOYMENT_MANAGER_CREATE_PROJECT) {
-              Future.successful(rawlsBillingProjectOperation.copy(done = true, errorMessage = Option("this failed")))
+          override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
+            if (operationId.apiType == GoogleApiTypes.DeploymentManagerApi) {
+              Future.successful(OperationStatus(done = true, errorMessage = Option("this failed")))
             } else {
-              super.pollOperation(rawlsBillingProjectOperation)
+              super.pollOperation(operationId)
             }
           }
         }
         override val samDAO = new MockSamDAO(dataSource)
         override val requesterPaysRole: String = "requesterPaysRole"
+        override val executionContext: ExecutionContext = services.executionContext
 
       }
 
-      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
+      assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).count(_.done)
       }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
       }
 
       Get("/user/billing") ~>
@@ -330,7 +334,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when adding a user to a billing project that the caller owns" in withTestDataApiServices { services =>
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
-    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 
@@ -358,7 +362,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when removing a user from a billing project that the caller owns" in withTestDataApiServices { services =>
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
-    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 

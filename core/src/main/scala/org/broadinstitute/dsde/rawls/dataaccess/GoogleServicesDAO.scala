@@ -9,7 +9,9 @@ import com.google.api.services.genomics.v2alpha1.model.Operation
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import com.google.pubsub.v1.ProjectTopicName
 import com.typesafe.config.Config
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
+import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
@@ -17,15 +19,15 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
 import org.joda.time.DateTime
 import spray.json.JsObject
-import scala.collection.JavaConverters._
 
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val errorReportSource = ErrorReportSource("google")
 
-  val DEPLOYMENT_MANAGER_CREATE_PROJECT = "dm_create_project"
+  val accessContextManagerDAO: AccessContextManagerDAO
 
   val billingEmail: String
   val billingGroupEmail: String
@@ -186,7 +188,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
                       bucketName: String,
                       readers: Set[WorkbenchEmail]): Future[String]
 
-  def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord]
+  def pollOperation(operationId: OperationId): Future[OperationStatus]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean]
@@ -201,6 +203,72 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   }
 }
 
+object GoogleApiTypes {
+  val allGoogleApiTypes = List(DeploymentManagerApi, AccessContextManagerApi)
+
+  sealed trait GoogleApiType extends RawlsEnumeration[GoogleApiType] {
+    override def toString = GoogleApiTypes.toString(this)
+    override def withName(name: String) = GoogleApiTypes.withName(name)
+  }
+
+  def withName(name: String): GoogleApiType = {
+    name match {
+      case "DeploymentManager" => DeploymentManagerApi
+      case "AccessContextManager" => AccessContextManagerApi
+      case _ => throw new RawlsException(s"Invalid GoogleApiType [${name}]. Possible values: ${allGoogleApiTypes.mkString(", ")}")
+    }
+  }
+
+  def withNameOpt(name: Option[String]): Option[GoogleApiType] = {
+    name.flatMap(n => Try(withName(n)).toOption)
+  }
+
+  def toString(googleApiType: GoogleApiType): String = {
+    googleApiType match {
+      case DeploymentManagerApi => "DeploymentManager"
+      case AccessContextManagerApi => "AccessContextManager"
+      case _ => throw new RawlsException(s"Invalid GoogleApiType [${googleApiType}]. Possible values: ${allGoogleApiTypes.mkString(", ")}")
+    }
+  }
+
+  case object DeploymentManagerApi extends GoogleApiType
+  case object AccessContextManagerApi extends GoogleApiType
+}
+
+object GoogleOperationNames {
+  val allGoogleOperationNames = List(DeploymentManagerCreateProject, AddProjectToPerimeter)
+
+  sealed trait GoogleOperationName extends RawlsEnumeration[GoogleOperationName] {
+    override def toString = GoogleOperationNames.toString(this)
+    override def withName(name: String) = GoogleOperationNames.withName(name)
+  }
+
+  def withName(name: String): GoogleOperationName = {
+    name match {
+      case "dm_create_project" => DeploymentManagerCreateProject
+      case "add_project_to_perimeter" => AddProjectToPerimeter
+      case _ => throw new RawlsException(s"Invalid GoogleOperationName [${name}]. Possible values: ${allGoogleOperationNames.mkString(", ")}")
+    }
+  }
+
+  def withNameOpt(name: Option[String]): Option[GoogleOperationName] = {
+    name.flatMap(n => Try(withName(n)).toOption)
+  }
+
+  def toString(googleApiType: GoogleOperationName): String = {
+    googleApiType match {
+      case DeploymentManagerCreateProject => "dm_create_project"
+      case AddProjectToPerimeter => "add_project_to_perimeter"
+      case _ => throw new RawlsException(s"Invalid GoogleOperationName [${googleApiType}]. Possible values: ${allGoogleOperationNames.mkString(", ")}")
+    }
+  }
+
+  case object DeploymentManagerCreateProject extends GoogleOperationName
+  case object AddProjectToPerimeter extends GoogleOperationName
+}
+
+case class OperationId(apiType: GoogleApiTypes.GoogleApiType, operationId: String)
+case class OperationStatus(done: Boolean, errorMessage: Option[String])
 case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
 case class ProjectTemplate(owners: Seq[String], editors: Seq[String])
 final case class HammCromwellMetadata(bucketName: GcsBucketName, topicName: ProjectTopicName)

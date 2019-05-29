@@ -89,6 +89,8 @@ object Dependencies {
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.2-4c7acd5"
   val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
 
+  val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
+
   val metricsDependencies = Seq(
     metricsScala,
     metricsStatsd,
@@ -99,6 +101,9 @@ object Dependencies {
   )
 
   val googleDependencies = metricsDependencies ++ Seq(
+
+    accessContextManager,
+
     akkaHttpSprayJson,
     akkaHttp,
     akkaStream,
@@ -135,6 +140,7 @@ object Dependencies {
 
   val modelDependencies = Seq(
     // I am not certain why I need jackson-core here but IntelliJ is confused without it and tests don't run
+    workbenchModel,
     jacksonCore,
     akkaHttpSprayJson,
     akkaHttp,

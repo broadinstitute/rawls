@@ -46,7 +46,7 @@ import fs2.Stream
 import io.grpc.Status.Code
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
-import org.broadinstitute.dsde.rawls.google.GoogleUtilities
+import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities, HttpGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -63,6 +63,7 @@ import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes, mode
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
+import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
@@ -122,15 +123,13 @@ class HttpGoogleServicesDAO(
   override val workbenchMetricBaseName: String,
   proxyNamePrefix: String,
   deploymentMgrProject: String,
-  cleanupDeploymentAfterCreating: Boolean)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+  cleanupDeploymentAfterCreating: Boolean,
+  override val accessContextManagerDAO: AccessContextManagerDAO)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
-  val API_SERVICE_MANAGEMENT = "ServiceManagement"
-  val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
-  val API_DEPLOYMENT_MANAGER = "DeploymentManager"
 
   // modify these if we need more granular access in the future
   val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
@@ -854,30 +853,34 @@ class HttpGoogleServicesDAO(
       }
     }) map { googleOperation =>
       val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
-      RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, googleOperation.getName, false, errorStr, API_DEPLOYMENT_MANAGER)
+      RawlsBillingProjectOperationRecord(projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, googleOperation.getName, false, errorStr, GoogleApiTypes.DeploymentManagerApi)
     }
   }
 
-  override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
-    implicit val service = GoogleInstrumentedService.Billing
+  override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
     val credential = getBillingServiceAccountCredential
     val dmCredential = getDeploymentManagerAccountCredential
 
-    rawlsBillingProjectOperation.api match {
-      case API_DEPLOYMENT_MANAGER =>
+    // this code is a colossal DRY violation but because the operations collection is different
+    // for cloudResManager and servicesManager and they return different but identical Status objects
+    // there is not much else to be done... too bad scala does not have duck typing.
+    operationId.apiType match {
+      case GoogleApiTypes.DeploymentManagerApi =>
         val deploymentManager = getDeploymentManager(dmCredential)
+        implicit val service = GoogleInstrumentedService.DeploymentManager
 
         retryWhen500orGoogleError(() => {
-          executeGoogleRequest(deploymentManager.operations().get(deploymentMgrProject, rawlsBillingProjectOperation.operationId))
+          executeGoogleRequest(deploymentManager.operations().get(deploymentMgrProject, operationId.operationId))
         }).map { op =>
           val errorStr = Option(op.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
-          rawlsBillingProjectOperation.copy(done = op.getStatus == "DONE", errorMessage = errorStr)
+          OperationStatus(op.getStatus == "DONE", errorStr)
         }
 
-      case _ =>
-        Future.successful(rawlsBillingProjectOperation.copy(done=true, errorMessage=Some("Unhandled operation API")))
+      case GoogleApiTypes.AccessContextManagerApi =>
+        accessContextManagerDAO.pollOperation(operationId.operationId).map { op =>
+          OperationStatus(toScalaBool(op.getDone), Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
+        }
     }
-
   }
 
   /**

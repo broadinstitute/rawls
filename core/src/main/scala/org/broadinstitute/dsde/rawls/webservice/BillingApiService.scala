@@ -54,11 +54,7 @@ trait BillingApiService extends UserInfoDirectives {
     path("billing") {
       post {
         entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
-          complete { userServiceConstructor(userInfo).CreateBillingProjectFull(
-            createProjectRequest.projectName,
-            createProjectRequest.billingAccount,
-            createProjectRequest.highSecurityNetwork.getOrElse(false),
-            createProjectRequest.enableFlowLogs.getOrElse(false)) }
+          complete { userServiceConstructor(userInfo).CreateBillingProjectFull(createProjectRequest) }
         }
       }
     }
