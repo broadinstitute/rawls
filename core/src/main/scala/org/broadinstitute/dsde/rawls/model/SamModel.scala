@@ -15,6 +15,7 @@ object SamResourceTypeNames {
   val managedGroup = SamResourceTypeName("managed-group")
   val workspace = SamResourceTypeName("workspace")
   val workflowCollection = SamResourceTypeName("workflow-collection")
+  val servicePerimeter = SamResourceTypeName("service-perimeter")
 }
 
 /*
@@ -71,6 +72,10 @@ object SamBillingProjectActions {
   val readPolicies = SamResourceAction("read_policies")
   val alterGoogleRole = SamResourceAction("alter_google_role")
   def sharePolicy(policy: String) = SamResourceAction(s"share_policy::$policy")
+}
+
+object SamServicePerimeterActions {
+  val addProject = SamResourceAction("add_project")
 }
 
 /*

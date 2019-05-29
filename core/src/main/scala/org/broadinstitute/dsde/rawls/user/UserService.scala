@@ -74,7 +74,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamBillingProjectActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
   def ListBillingAccounts = listBillingAccounts()
 
-  def CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) = startBillingProjectCreation(projectName, billingAccount)
+  def CreateBillingProjectFull(createProjectRequest: CreateRawlsBillingProjectFullRequest) = startBillingProjectCreation(createProjectRequest)
   def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamBillingProjectActions.readPolicies) { getBillingProjectMembers(projectName) }
 
   def AdminDeleteRefreshToken(userRef: RawlsUserRef) = asFCAdmin { deleteRefreshToken(userRef) }
@@ -311,51 +311,72 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   }
 
-  def startBillingProjectCreation(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName): Future[PerRequestMessage] = {
+  def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
+    for {
+      _ <- checkServicePerimeterAccess(createProjectRequest.servicePerimeter)
+      billingAccount <- checkBillingAccountAccess(createProjectRequest.billingAccount)
+      result <- internalStartBillingProjectCreation(createProjectRequest, billingAccount)
+    } yield result
+  }
+
+  private def checkBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[RawlsBillingAccount] = {
     def createForbiddenErrorMessage(who: String, billingAccountName: RawlsBillingAccountName) = {
       s"""${who} must have the permission "Billing Account User" on ${billingAccountName.value} to create a project with it."""
     }
+
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
       billingAccountNames.find(_.accountName == billingAccountName) match {
-        case Some(billingAccount) if billingAccount.firecloudHasAccess =>
-          for {
-            _ <- dataSource.inTransaction { dataAccess =>
-              dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
-                case None =>
-                  for {
-                    _ <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo))
-                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), userInfo))
-                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
-                    project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
-                  } yield project
-
-                case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))
-              }
-            }
-
-            //NOTE: we're syncing this to Sam ahead of the resource actually existing. is this fine? (ps these are sam calls)
-            ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, projectName)
-            computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, projectName)
-
-            updatedTemplate = projectTemplate.copy(
-              policies = projectTemplate.policies ++
-                getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole))
-
-            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount, dmTemplatePath, requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, updatedTemplate).recoverWith {
-              case t: Throwable =>
-                // failed to create project in google land, rollback inserts above
-                dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) } map(_ => throw t)
-            }
-
-            _ <- dataSource.inTransaction { dataAccess =>
-              dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(createProjectOperation))
-            }
-          } yield {
-            RequestComplete(StatusCodes.Created)
-          }
-        case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, createForbiddenErrorMessage("You", billingAccountName))))
-        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
+        case Some(billingAccount) if billingAccount.firecloudHasAccess => Future.successful(billingAccount)
+        case None => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, createForbiddenErrorMessage("You", billingAccountName))))
+        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
       }
+    }
+  }
+
+  private def checkServicePerimeterAccess(servicePerimeterOption: Option[ServicePerimeterName]): Future[Unit] = {
+    servicePerimeterOption.map { servicePerimeter =>
+      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, servicePerimeter.value, SamServicePerimeterActions.addProject, userInfo).flatMap {
+        case true => Future.successful(())
+        case false => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"You do not have the action ${SamServicePerimeterActions.addProject.value} for $servicePerimeter")))
+      }
+    }.getOrElse(Future.successful(()))
+  }
+
+  private def internalStartBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest, billingAccount: RawlsBillingAccount): Future[PerRequestMessage] = {
+    for {
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.load(createProjectRequest.projectName) flatMap {
+          case None =>
+            for {
+              _ <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, userInfo))
+              _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), userInfo))
+              _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
+              project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(createProjectRequest.projectName, "gs://" + gcsDAO.getCromwellAuthBucketName(createProjectRequest.projectName), CreationStatuses.Creating, Option(createProjectRequest.billingAccount), None, None, createProjectRequest.servicePerimeter))
+            } yield project
+
+          case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))
+        }
+      }
+
+      //NOTE: we're syncing this to Sam ahead of the resource actually existing. is this fine? (ps these are sam calls)
+      ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, createProjectRequest.projectName)
+      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, createProjectRequest.projectName)
+
+      updatedTemplate = projectTemplate.copy(
+        policies = projectTemplate.policies ++
+          getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole))
+
+      createProjectOperation <- gcsDAO.createProject(createProjectRequest.projectName, billingAccount, dmTemplatePath, requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, updatedTemplate).recoverWith {
+        case t: Throwable =>
+          // failed to create project in google land, rollback inserts above
+          dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(createProjectRequest.projectName) } map (_ => throw t)
+      }
+
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(createProjectOperation))
+      }
+    } yield {
+      RequestComplete(StatusCodes.Created)
     }
   }
 

@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
+import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat}
 import spray.json._
 
 case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole, creationStatus: CreationStatuses.CreationStatus, message: Option[String] = None)
@@ -42,7 +43,7 @@ object ManagedGroup {
 case class ManagedGroup(membersGroup: RawlsGroup, adminsGroup: RawlsGroup) extends Managed
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String], cromwellBackend: Option[CromwellBackend] = None)
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String], cromwellBackend: Option[CromwellBackend] = None, servicePerimeter: Option[ServicePerimeterName] = None)
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
@@ -89,7 +90,9 @@ object CreationStatuses {
   val terminal: Set[CreationStatus] = Set(Ready, Error)
 }
 
-case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName)
+case class ServicePerimeterName(value: String) extends ValueObject
+
+case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, servicePerimeter: Option[ServicePerimeterName])
 
 case class SyncReportItem(operation: String, email: String, errorReport: Option[ErrorReport])
 case class SyncReport(groupEmail: RawlsGroupEmail, items: Seq[SyncReportItem])
@@ -122,11 +125,13 @@ class UserAuthJsonSupport extends JsonSupport {
     }
   }
 
+  implicit val servicePerimeterNameFormat = ValueObjectFormat(ServicePerimeterName)
+
   implicit val RawlsGroupFormat = jsonFormat4[RawlsGroupName, RawlsGroupEmail, Set[RawlsUserRef], Set[RawlsGroupRef], RawlsGroup](RawlsGroup.apply)
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat6(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat = jsonFormat7(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 
@@ -143,7 +148,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val SyncReportFormat = jsonFormat2(SyncReport)
 
-  implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat2(CreateRawlsBillingProjectFullRequest)
+  implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat3(CreateRawlsBillingProjectFullRequest)
 
   implicit val BillingAccountScopesFormat = jsonFormat1(BillingAccountScopes)
 
