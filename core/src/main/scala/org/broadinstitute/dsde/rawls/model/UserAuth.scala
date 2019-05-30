@@ -90,8 +90,6 @@ object CreationStatuses {
   val terminal: Set[CreationStatus] = Set(Ready, Error)
 }
 
-case class ServicePerimeterName(value: String) extends ValueObject
-
 case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, servicePerimeter: Option[ServicePerimeterName])
 
 case class SyncReportItem(operation: String, email: String, errorReport: Option[ErrorReport])

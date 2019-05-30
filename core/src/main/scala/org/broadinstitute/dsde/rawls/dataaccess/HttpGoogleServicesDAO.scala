@@ -61,6 +61,7 @@ import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
@@ -972,6 +973,7 @@ class HttpGoogleServicesDAO(
   def getCloudResourceManager(credential: Credential): CloudResourceManager = {
     new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
+
 
   def getDeploymentManager(credential: Credential): DeploymentManagerV2Beta = {
     new DeploymentManagerV2Beta.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
