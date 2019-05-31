@@ -123,20 +123,7 @@ object Boot extends IOApp with LazyLogging {
     )
 
     //Sanity check deployment manager template path.
-    val dmConfig = gcsConfig.getConfig("deploymentManager")
-    val dmTemplatePath = dmConfig.getString("templatePath")
-    val badPathBecauseGithub = dmTemplatePath.contains("github.com")
-    if(badPathBecauseGithub) {
-      logger.error("dmConfig.templatePath refers to GitHub; make sure you hit the Raw button to get the non-HTML version at the https://raw.githubusercontent.com/ domain")
-    }
-    val badPathBecauseBranchName = dmTemplatePath.contains("githubusercontent.com") &&
-      (dmTemplatePath.contains("/blob/master") || dmTemplatePath.contains("/blob/develop"))
-    if(badPathBecauseBranchName) {
-      logger.error("dmConfig.templatePath refers to a branch of a GitHub repo. This makes it impossible to know which template was used to create a project. Please use a specific commit instead.")
-    }
-    if(badPathBecauseGithub || badPathBecauseBranchName) {
-      sys.exit(1)
-    }
+    val dmConfig = DeploymentManagerConfig(gcsConfig.getConfig("deploymentManager"))
 
     initAppDependencies[IO](conf).use { appDependencies =>
       val gcsDAO = new HttpGoogleServicesDAO(
@@ -146,7 +133,8 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("subEmail"),
         gcsConfig.getString("pathToPem"),
         gcsConfig.getString("appsDomain"),
-        dmConfig.getLong("orgID"),gcsConfig.getString("groupsPrefix"),
+        dmConfig.orgID,
+        gcsConfig.getString("groupsPrefix"),
         gcsConfig.getString("appName"),
         gcsConfig.getInt("deletedBucketCheckSeconds"),
         serviceProject,
@@ -155,14 +143,15 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("billingPemEmail"),
         gcsConfig.getString("pathToBillingPem"),
         gcsConfig.getString("billingEmail"),
-        gcsConfig.getString("billingGroupEmail"),gcsConfig.getInt("bucketLogsMaxAge"),
+        gcsConfig.getString("billingGroupEmail"),
+        gcsConfig.getInt("bucketLogsMaxAge"),
         hammCromwellMetadata = hammCromwellMetadata,
         googleStorageService = appDependencies.googleStorageService,
         googleServiceHttp = appDependencies.googleServiceHttp,
         topicAdmin = appDependencies.topicAdmin,
         workbenchMetricBaseName = metricsPrefix,
         proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
-        deploymentMgrProject = dmConfig.getString("projectID")
+        deploymentMgrProject = dmConfig.projectID
       )
 
       val pubSubDAO = new HttpGooglePubSubDAO(

@@ -22,7 +22,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
+import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import spray.json._
@@ -200,8 +200,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         samDAO,
         Seq("bigquery.jobUser"),
         "requesterPaysRole",
-        testConf.getConfig("gcs.deploymentManager"),
-        ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"), "requesterPaysRole")
+        DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
+        ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
       )_
 
       val genomicsServiceConstructor = GenomicsService.constructor(

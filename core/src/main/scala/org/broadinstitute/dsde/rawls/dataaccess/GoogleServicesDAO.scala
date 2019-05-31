@@ -206,7 +206,7 @@ case class ProjectTemplate(policies: Map[String, Seq[String]])
 final case class HammCromwellMetadata(bucketName: GcsBucketName, topicName: ProjectTopicName)
 
 case object ProjectTemplate {
-  def from(projectTemplateConfig: Config, requesterPaysRole: String): ProjectTemplate = {
+  def from(projectTemplateConfig: Config): ProjectTemplate = {
     val projectOwners = projectTemplateConfig.getStringList("owners")
     val projectEditors = projectTemplateConfig.getStringList("editors")
     ProjectTemplate(Map("roles/owner" -> projectOwners.asScala, "roles/editor" -> projectEditors.asScala))

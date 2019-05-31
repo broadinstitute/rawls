@@ -734,14 +734,14 @@ class HttpGoogleServicesDAO(
     })
   }
 
-  def getDMConfigString(projectName: RawlsBillingProjectName, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
+  def getDMConfigYamlString(projectName: RawlsBillingProjectName, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
     import DeploymentManagerJsonSupport._
     import cats.syntax.either._
     import io.circe.yaml._
     import io.circe.yaml.syntax._
 
-    val cc = ConfigContents(Seq(Resources(projectName.value, dmTemplatePath, properties)))
-    val jsonVersion = io.circe.jawn.parse(cc.toJson.toString).valueOr(throw _)
+    val configContents = ConfigContents(Seq(Resources(projectName.value, dmTemplatePath, properties)))
+    val jsonVersion = io.circe.jawn.parse(configContents.toJson.toString).valueOr(throw _)
     jsonVersion.asYaml.spaces2
   }
 
@@ -798,13 +798,13 @@ class HttpGoogleServicesDAO(
       "labels" -> templateLabels
     )
 
-    //config is a list of one resource: type=composite-type, name=whocares, properties=pokein
-    val confy = new ConfigFile().setContent(getDMConfigString(projectName, dmTemplatePath, properties))
-    val dconf = new TargetConfiguration().setConfig(confy)
+    //a list of one resource: type=composite-type, name=whocares, properties=pokein
+    val yamlConfig = new ConfigFile().setContent(getDMConfigYamlString(projectName, dmTemplatePath, properties))
+    val deploymentConfig = new TargetConfiguration().setConfig(yamlConfig)
 
     retryWhen500orGoogleError(() => {
       executeGoogleRequest {
-        deploymentManager.deployments().insert(deploymentMgrProject, new Deployment().setName(projectToDM(projectName)).setTarget(dconf))
+        deploymentManager.deployments().insert(deploymentMgrProject, new Deployment().setName(projectToDM(projectName)).setTarget(deploymentConfig))
       }
     }) map { googleOperation =>
       val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
@@ -821,24 +821,6 @@ class HttpGoogleServicesDAO(
     // for cloudResManager and servicesManager and they return different but identical Status objects
     // there is not much else to be done... too bad scala does not have duck typing.
     rawlsBillingProjectOperation.api match {
-      case API_CLOUD_RESOURCE_MANAGER =>
-        val cloudResManager = getCloudResourceManager(credential)
-
-        retryWhen500orGoogleError(() => {
-          executeGoogleRequest(cloudResManager.operations().get(rawlsBillingProjectOperation.operationId))
-        }).map { op =>
-          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
-        }
-
-      case API_SERVICE_MANAGEMENT =>
-        val servicesManager = getServicesManager(credential)
-
-        retryWhen500orGoogleError(() => {
-          executeGoogleRequest(servicesManager.operations().get(rawlsBillingProjectOperation.operationId))
-        }).map { op =>
-          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
-        }
-
       case API_DEPLOYMENT_MANAGER =>
         val deploymentManager = getDeploymentManager(dmCredential)
 
@@ -848,6 +830,9 @@ class HttpGoogleServicesDAO(
           val errorStr = Option(op.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
           rawlsBillingProjectOperation.copy(done = op.getStatus == "DONE", errorMessage = errorStr)
         }
+
+      case _ =>
+        Future.successful(rawlsBillingProjectOperation.copy(done=true, errorMessage=Some("Unhandled operation API")))
     }
 
   }

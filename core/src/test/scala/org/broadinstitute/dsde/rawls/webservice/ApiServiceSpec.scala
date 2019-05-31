@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, SubmissionMonitorConfig}
+import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
@@ -32,7 +32,7 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.{MethodRepoConfig, SwaggerConfig}
+import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import scala.concurrent.duration._
@@ -140,8 +140,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       samDAO,
       Seq("bigquery.jobUser"),
       "requesterPaysRole",
-      testConf.getConfig("gcs.deploymentManager"),
-      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"), "requesterPaysRole")
+      DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
+      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
     )_
 
 
