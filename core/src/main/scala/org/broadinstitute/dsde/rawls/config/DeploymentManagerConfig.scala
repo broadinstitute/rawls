@@ -11,6 +11,7 @@ case object DeploymentManagerConfig {
   def apply[T <: DeploymentManagerConfig](conf: Config): DeploymentManagerConfig = {
     val dmConfig = new DeploymentManagerConfig(conf.getString("templatePath"), conf.getString("projectId"), conf.getLong("orgID"))
 
+    //sanity check against a couple of obvious ways to get this wrong in config
     val badPathBecauseGithub = dmConfig.templatePath.contains("github.com")
     if(badPathBecauseGithub) {
       throw new RuntimeException("dmConfig.templatePath refers to GitHub; make sure you hit the Raw button to get the non-HTML version at the https://raw.githubusercontent.com/ domain")
