@@ -9,7 +9,7 @@ case class DeploymentManagerConfig(
 )
 case object DeploymentManagerConfig {
   def apply[T <: DeploymentManagerConfig](conf: Config): DeploymentManagerConfig = {
-    val dmConfig = new DeploymentManagerConfig(conf.getString("templatePath"), conf.getString("projectId"), conf.getLong("orgID"))
+    val dmConfig = new DeploymentManagerConfig(conf.getString("templatePath"), conf.getString("projectID"), conf.getLong("orgID"))
 
     //sanity check against a couple of obvious ways to get this wrong in config
     val badPathBecauseGithub = dmConfig.templatePath.contains("github.com")
