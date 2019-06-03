@@ -9,4 +9,12 @@
         </addColumn>
     </changeSet>
 
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="googleprojectnumber_on_billingproject">
+        <addColumn tableName="BILLING_PROJECT">
+            <column name="GOOGLE_PROJECT_NUMBER" type="VARCHAR(255)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
 </databaseChangeLog>

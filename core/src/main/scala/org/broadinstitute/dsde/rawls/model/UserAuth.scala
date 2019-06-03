@@ -43,7 +43,7 @@ object ManagedGroup {
 case class ManagedGroup(membersGroup: RawlsGroup, adminsGroup: RawlsGroup) extends Managed
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String], cromwellBackend: Option[CromwellBackend] = None, servicePerimeter: Option[ServicePerimeterName] = None)
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String], cromwellBackend: Option[CromwellBackend] = None, servicePerimeter: Option[ServicePerimeterName] = None, googleProjectNumber: Option[GoogleProjectNumber] = None)
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
@@ -79,14 +79,16 @@ object CreationStatuses {
     case "creating" => Creating
     case "ready" => Ready
     case "error" => Error
+    case "addingtoperimeter" => AddingToPerimeter
     case _ => throw new RawlsException(s"invalid CreationStatus [${name}]")
   }
 
   case object Creating extends CreationStatus
   case object Ready extends CreationStatus
   case object Error extends CreationStatus
+  case object AddingToPerimeter extends CreationStatus
 
-  val all: Set[CreationStatus] = Set(Creating, Ready, Error)
+  val all: Set[CreationStatus] = Set(Creating, Ready, Error, AddingToPerimeter)
   val terminal: Set[CreationStatus] = Set(Ready, Error)
 }
 
@@ -125,11 +127,13 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val servicePerimeterNameFormat = ValueObjectFormat(ServicePerimeterName)
 
+  implicit val googleProjectNumberFormat = ValueObjectFormat(GoogleProjectNumber)
+
   implicit val RawlsGroupFormat = jsonFormat4[RawlsGroupName, RawlsGroupEmail, Set[RawlsUserRef], Set[RawlsGroupRef], RawlsGroup](RawlsGroup.apply)
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat7(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat = jsonFormat8(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 

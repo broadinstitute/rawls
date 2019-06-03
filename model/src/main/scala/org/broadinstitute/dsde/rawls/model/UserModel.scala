@@ -100,3 +100,4 @@ object UserModelJsonSupport extends UserModelJsonSupport
 
 case class ServicePerimeterName(value: String) extends ValueObject
 
+case class GoogleProjectNumber(value: String) extends ValueObject

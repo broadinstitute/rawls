@@ -98,9 +98,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
           case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, true, None, _)) =>
             // create project operation finished successfully
-            gcsDAO.cleanupDMProject(project.projectName) map { _ =>
-              project.copy(status = CreationStatuses.Ready)
-            }
+            completeProjectSetup(project)
 
           case fail@Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, true, Some(error), _)) =>
             // create project operation finished with an error
@@ -134,6 +132,19 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
       }
     } yield {
       maybeUpdatedProjects.count(project => CreationStatuses.terminal.contains(project.status))
+    }
+  }
+
+  private def completeProjectSetup(project: RawlsBillingProject)(implicit executor: ExecutionContext): Future[RawlsBillingProject] = {
+    for {
+      _ <- gcsDAO.cleanupDMProject(project.projectName)
+      googleProject <- gcsDAO.getGoogleProject(project.projectName)
+    } yield {
+      val status = project.servicePerimeter match {
+        case Some(_) => CreationStatuses.AddingToPerimeter
+        case None => CreationStatuses.Ready
+      }
+      project.copy(status = status, googleProjectNumber = Option(GoogleProjectNumber(googleProject.getProjectNumber.toString)))
     }
   }
 }
