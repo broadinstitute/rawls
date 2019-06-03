@@ -29,17 +29,12 @@ class HttpGoogleAccessContextManagerDAOSpec extends FlatSpec with Matchers with 
 
   "HttpGoogleAccessContextManagerDAOSpec" should "add a billing project to a service perimeter" in {
 
-    val organizationId = ""
-    val accessPolicies = gacmDAO.listAccessPolicies(organizationId).futureValue
+    val organizationId = "organizations/400176686919"
 
-    println("ACCESSPOLICIES " + accessPolicies)
-    val accessPolicy = accessPolicies.head
+    val servicePerimeterName = ServicePerimeterName("accessPolicies/228353087260/servicePerimeters/terra_dev_aou_test_service_perimeter")
+    val billingProjectNumber = "624692839739"
 
-
-    val servicePerimeterName = ServicePerimeterName("")
-    val billingProjectNumber = ""
-
-    val additionResponse = gacmDAO.addProjectToServicePerimeter(accessPolicy, servicePerimeterName, billingProjectNumber).futureValue
+    val additionResponse = gacmDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, Seq(billingProjectNumber)).futureValue
 
     println("OPERATION ID " + additionResponse)
 
