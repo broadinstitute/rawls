@@ -56,56 +56,54 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
   def checkCreatingProjects()(implicit executionContext: ExecutionContext): Future[CheckDone] = {
     for {
-      (creatingProjects, creatingProjectOperations, projectsAddingToPerimeter, addProjectToPerimeterOperations) <- datasource.inTransaction { dataAccess =>
+      (projectsBeingCreated, createProjectOperations, projectsBeingAddedToPerimeter, addProjectToPerimeterOperations) <- datasource.inTransaction { dataAccess =>
         for {
-          creatingProjects <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Creating)
-          projectsAddingToPerimeter <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.AddingToPerimeter)
-          createProjectOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(creatingProjects.map(_.projectName), gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)
-          addProjectToPerimeterOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsAddingToPerimeter.map(_.projectName), gcsDAO.ADD_PROJECT_TO_PERIMETER)
+          projectsBeingCreated <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Creating)
+          projectsBeingAddedToPerimeter <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.AddingToPerimeter)
+          createProjectOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsBeingCreated.map(_.projectName), gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)
+          addProjectToPerimeterOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsBeingAddedToPerimeter.map(_.projectName), gcsDAO.ADD_PROJECT_TO_PERIMETER)
         } yield {
-          (creatingProjects, createProjectOperations, projectsAddingToPerimeter, addProjectToPerimeterOperations)
+          (projectsBeingCreated, createProjectOperations, projectsBeingAddedToPerimeter, addProjectToPerimeterOperations)
         }
       }
-      _ <- handleCompletedOperations(creatingProjects, creatingProjectOperations, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, onSuccessfulProjectCreate, onFailedProjectCreate)
-      _ <- handleCompletedOperations(projectsAddingToPerimeter, addProjectToPerimeterOperations, gcsDAO.ADD_PROJECT_TO_PERIMETER, onSuccessfulAddProjectToPerimeter, onFailedAddProjectToPerimeter)
-      _ <- ??? // Find all projects in "projectsAddingToPerimeter" that don't have an operation in addProjectToPerimeterOperations and issue a single call to google to overwrite the perimeter, and record the operations in the database.
+      _ <- synchronizeProjectAndOperationRecords(projectsBeingCreated, createProjectOperations, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, onSuccessfulProjectCreate, onFailedProjectCreate)
+      _ <- synchronizeProjectAndOperationRecords(projectsBeingAddedToPerimeter, addProjectToPerimeterOperations, gcsDAO.ADD_PROJECT_TO_PERIMETER, onSuccessfulAddProjectToPerimeter, onFailedAddProjectToPerimeter)
+      _ <- ??? //TODO: Find all projects in "projectsAddingToPerimeter" that don't have an operation in addProjectToPerimeterOperations and issue a single call to google to overwrite the perimeter, and record the operations in the database.
     } yield {
-      CheckDone(creatingProjects.size + projectsAddingToPerimeter.size)
+      CheckDone(projectsBeingCreated.size + projectsBeingAddedToPerimeter.size)
     }
   }
 
-  def handleCompletedOperations(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord], operationType: String, onOperationSuccess: RawlsBillingProject => Future[RawlsBillingProject], onOperationFailure: (RawlsBillingProject, String) => Future[RawlsBillingProject])(implicit executionContext: ExecutionContext): Future[Int] = {
+  // This method checks the status of operations running in Google, and then ensures that the state of the RawlsBillingProjectRecord matches the state of the RawlsBillingProjectOperationRecord
+  // TODO: Rename this method? synchronizeProjectAndOperationRecords
+  def synchronizeProjectAndOperationRecords(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord], operationType: String, onOperationSuccess: RawlsBillingProject => Future[RawlsBillingProject], onOperationFailure: (RawlsBillingProject, String) => Future[RawlsBillingProject])(implicit executionContext: ExecutionContext): Future[Int] = {
 
     for {
-      updatedOperations <- Future.traverse(operations) {
-        case operation@RawlsBillingProjectOperationRecord(_, _, _, true, _, _) => Future.successful(operation)
-        case operation@RawlsBillingProjectOperationRecord(_, _, _, false, _, _) => gcsDAO.pollOperation(operation).recover {
-          // if we don't mark this as done we might continue retrying forever and pollOperation already does some retrying
-          case t: Throwable => operation.copy(done = true, errorMessage = Option(s"error getting ${operation.operationName} operation status: ${t.getMessage}"))
-        }
-      }
+      updatedOperations <- checkOperationsInGoogle(operations)
 
-      // save the updates
+      // save only the operation records that have changed
       _ <- datasource.inTransaction { dataAccess =>
         val changedOperations = updatedOperations.toSet -- operations.toSet
         dataAccess.rawlsBillingProjectQuery.updateOperations(changedOperations.toSeq)
       }
 
+      // TODO: What if we have multiple Operation records for the same project?
       operationsByProject = updatedOperations.map(rec => RawlsBillingProjectName(rec.projectName) -> rec).toMap
 
+      // Update project record based on the result of its Google operation
       maybeUpdatedProjects <- Future.traverse(projects) { project =>
-        // figure out if the project creation is done yet and set the project status accordingly
+        // figure out if the project operation is done yet and set the project status accordingly
         val nextStepFuture = operationsByProject.get(project.projectName) match {
           case None =>
             // there are no operations, there is a small window when this can happen but it should resolve itself so let it pass
             Future.successful(project)
 
           case Some(RawlsBillingProjectOperationRecord(_, `operationType`, _, true, None, _)) =>
-            // create project operation finished successfully
+            // project operation finished successfully
             onOperationSuccess(project)
 
           case Some(RawlsBillingProjectOperationRecord(_, `operationType`, _, true, Some(error), _)) =>
-            // create project operation finished with an error
+            // project operation finished with an error
             onOperationFailure(project, error)
 
           case _ =>
@@ -120,13 +118,23 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
         }
       }
 
+      // Save only the project records that were changed
       _ <- datasource.inTransaction { dataAccess =>
-        // save project updates
         val updatedProjects = maybeUpdatedProjects.toSet -- projects.toSet
         dataAccess.rawlsBillingProjectQuery.updateBillingProjects(updatedProjects)
       }
     } yield {
       maybeUpdatedProjects.count(project => CreationStatuses.terminal.contains(project.status))
+    }
+  }
+
+  private def checkOperationsInGoogle(operations: Seq[RawlsBillingProjectOperationRecord])(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingProjectOperationRecord]] = {
+    Future.traverse(operations) {
+      case operation@RawlsBillingProjectOperationRecord(_, _, _, true, _, _) => Future.successful(operation)
+      case operation@RawlsBillingProjectOperationRecord(_, _, _, false, _, _) => gcsDAO.pollOperation(operation).recover {
+        // if we don't mark this as done we might continue retrying forever and pollOperation already does some retrying
+        case t: Throwable => operation.copy(done = true, errorMessage = Option(s"error getting ${operation.operationName} operation status: ${t.getMessage}"))
+      }
     }
   }
 
