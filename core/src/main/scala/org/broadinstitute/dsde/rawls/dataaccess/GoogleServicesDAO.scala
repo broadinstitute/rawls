@@ -27,6 +27,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   val CREATE_PROJECT_OPERATION = "create_project"
   val DEPLOYMENT_MANAGER_CREATE_PROJECT = "dm_create_project"
+  val ADD_PROJECT_TO_PERIMETER = "add_project_to_perimeter"
 
   val billingEmail: String
 

@@ -105,8 +105,8 @@ trait RawlsBillingProjectComponent {
       DBIO.sequence(operations.map(rec => rawlsBillingProjectOperationQuery.filter(x => x.projectName === rec.projectName && x.operationName === rec.operationName).update(rec)))
     }
 
-    def loadOperationsForProjects(projectNames: Seq[RawlsBillingProjectName]): ReadAction[Seq[RawlsBillingProjectOperationRecord]] = {
-      rawlsBillingProjectOperationQuery.filter(_.projectName.inSetBind(projectNames.map(_.value))).result
+    def loadOperationsForProjects(projectNames: Seq[RawlsBillingProjectName], operationType: String): ReadAction[Seq[RawlsBillingProjectOperationRecord]] = {
+      rawlsBillingProjectOperationQuery.filter(x => x.projectName.inSetBind(projectNames.map(_.value)) && x.operationName === operationType).result
     }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {

@@ -37,6 +37,7 @@ class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gc
   override def receive = {
     case CheckNow => checkCreatingProjects pipeTo self
 
+    // This monitor is always on and polling, and we want that default poll rate to be low, maybe once per minute.  However, if projects are being created, we want to poll more frequently, say ~once per 5 seconds.
     case CheckDone(creatingCount) if creatingCount > 0 => context.system.scheduler.scheduleOnce(5 seconds, self, CheckNow)
     case CheckDone(creatingCount) => context.system.scheduler.scheduleOnce(1 minute, self, CheckNow)
 
@@ -55,22 +56,25 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
   def checkCreatingProjects()(implicit executionContext: ExecutionContext): Future[CheckDone] = {
     for {
-      (creatingProjects, operations) <- datasource.inTransaction { dataAccess =>
+      (creatingProjects, creatingProjectOperations, projectsAddingToPerimeter, addProjectToPerimeterOperations) <- datasource.inTransaction { dataAccess =>
         for {
-          projects <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Creating)
-          operations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projects.map(_.projectName))
+          creatingProjects <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Creating)
+          projectsAddingToPerimeter <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.AddingToPerimeter)
+          createProjectOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(creatingProjects.map(_.projectName), gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)
+          addProjectToPerimeterOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsAddingToPerimeter.map(_.projectName), gcsDAO.ADD_PROJECT_TO_PERIMETER)
         } yield {
-          (projects, operations)
+          (creatingProjects, createProjectOperations, projectsAddingToPerimeter, addProjectToPerimeterOperations)
         }
       }
-      updatedProjectCount <- setupProjects(creatingProjects, operations)
+      _ <- handleCompletedOperations(creatingProjects, creatingProjectOperations, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, onSuccessfulProjectCreate, onFailedProjectCreate)
+      _ <- handleCompletedOperations(projectsAddingToPerimeter, addProjectToPerimeterOperations, gcsDAO.ADD_PROJECT_TO_PERIMETER, onSuccessfulAddProjectToPerimeter, onFailedAddProjectToPerimeter)
+      _ <- ??? // Find all projects in "projectsAddingToPerimeter" that don't have an operation in addProjectToPerimeterOperations and issue a single call to google to overwrite the perimeter, and record the operations in the database.
     } yield {
-      CheckDone(creatingProjects.size - updatedProjectCount)
+      CheckDone(creatingProjects.size + projectsAddingToPerimeter.size)
     }
   }
 
-  def setupProjects(projects: Seq[RawlsBillingProject],
-                    operations: Seq[RawlsBillingProjectOperationRecord])(implicit executionContext: ExecutionContext): Future[Int] = {
+  def handleCompletedOperations(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord], operationType: String, onOperationSuccess: RawlsBillingProject => Future[RawlsBillingProject], onOperationFailure: (RawlsBillingProject, String) => Future[RawlsBillingProject])(implicit executionContext: ExecutionContext): Future[Int] = {
 
     for {
       updatedOperations <- Future.traverse(operations) {
@@ -87,31 +91,22 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
         dataAccess.rawlsBillingProjectQuery.updateOperations(changedOperations.toSeq)
       }
 
-      operationsByProject = updatedOperations.groupBy(rec => RawlsBillingProjectName(rec.projectName))
+      operationsByProject = updatedOperations.map(rec => RawlsBillingProjectName(rec.projectName) -> rec).toMap
 
       maybeUpdatedProjects <- Future.traverse(projects) { project =>
         // figure out if the project creation is done yet and set the project status accordingly
-        val nextStepFuture = operationsByProject(project.projectName) match {
-          case Seq() =>
+        val nextStepFuture = operationsByProject.get(project.projectName) match {
+          case None =>
             // there are no operations, there is a small window when this can happen but it should resolve itself so let it pass
             Future.successful(project)
 
-          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, true, None, _)) =>
+          case Some(RawlsBillingProjectOperationRecord(_, `operationType`, _, true, None, _)) =>
             // create project operation finished successfully
-            completeProjectSetup(project)
+            onOperationSuccess(project)
 
-          case fail@Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, true, Some(error), _)) =>
+          case Some(RawlsBillingProjectOperationRecord(_, `operationType`, _, true, Some(error), _)) =>
             // create project operation finished with an error
-            logger.debug(s"project ${project.projectName.value} creation finished with errors: $error")
-            gcsDAO.cleanupDMProject(project.projectName) map { _ =>
-              project.copy(status = CreationStatuses.Error, message = Option(s"project ${project.projectName.value} creation finished with errors: $error"))
-            }
-
-          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, _, _, _)) =>
-            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(s"failure processing new project ${project.projectName.value}: old-style project creation no longer supported")))
-
-          case bp :: bp2 :: bps =>
-            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(s"failure processing new project ${project.projectName.value}: multiple BillingProjectOperationRecords (probably an old project)")))
+            onOperationFailure(project, error)
 
           case _ =>
             // still running
@@ -135,7 +130,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     }
   }
 
-  private def completeProjectSetup(project: RawlsBillingProject)(implicit executor: ExecutionContext): Future[RawlsBillingProject] = {
+  private def onSuccessfulProjectCreate(project: RawlsBillingProject)(implicit executionContext: ExecutionContext): Future[RawlsBillingProject] = {
     for {
       _ <- gcsDAO.cleanupDMProject(project.projectName)
       googleProject <- gcsDAO.getGoogleProject(project.projectName)
@@ -146,5 +141,20 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
       }
       project.copy(status = status, googleProjectNumber = Option(GoogleProjectNumber(googleProject.getProjectNumber.toString)))
     }
+  }
+
+  private def onFailedProjectCreate(project: RawlsBillingProject, error: String)(implicit executionContext: ExecutionContext): Future[RawlsBillingProject] = {
+    logger.debug(s"project ${project.projectName.value} creation finished with errors: $error")
+    gcsDAO.cleanupDMProject(project.projectName) map { _ =>
+      project.copy(status = CreationStatuses.Error, message = Option(s"project ${project.projectName.value} creation finished with errors: $error"))
+    }
+  }
+
+  private def onSuccessfulAddProjectToPerimeter(project: RawlsBillingProject)(implicit executionContext: ExecutionContext): Future[RawlsBillingProject] = {
+    ???
+  }
+
+  private def onFailedAddProjectToPerimeter(project: RawlsBillingProject, error: String)(implicit executionContext: ExecutionContext): Future[RawlsBillingProject] = {
+    ???
   }
 }

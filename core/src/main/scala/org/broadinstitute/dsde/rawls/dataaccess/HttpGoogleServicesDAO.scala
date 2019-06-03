@@ -48,7 +48,7 @@ import fs2.Stream
 import io.grpc.Status.Code
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
-import org.broadinstitute.dsde.rawls.google.GoogleUtilities
+import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities, HttpGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -118,7 +118,8 @@ class HttpGoogleServicesDAO(
   topicAdmin: GoogleTopicAdmin[IO],
   override val workbenchMetricBaseName: String,
   proxyNamePrefix: String,
-  deploymentMgrProject: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+  deploymentMgrProject: String,
+  accessContextManagerDAO: AccessContextManagerDAO)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
@@ -127,6 +128,7 @@ class HttpGoogleServicesDAO(
   val API_SERVICE_MANAGEMENT = "ServiceManagement"
   val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
   val API_DEPLOYMENT_MANAGER = "DeploymentManager"
+  val API_ACCESS_CONTEXT_MANAGER = "AccessContextManager"
 
   // modify these if we need more granular access in the future
   val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
@@ -842,6 +844,11 @@ class HttpGoogleServicesDAO(
         }).map { op =>
           val errorStr = Option(op.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
           rawlsBillingProjectOperation.copy(done = op.getStatus == "DONE", errorMessage = errorStr)
+        }
+
+      case API_ACCESS_CONTEXT_MANAGER =>
+        accessContextManagerDAO.pollOperation(rawlsBillingProjectOperation.operationId).map { op =>
+          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
         }
     }
 

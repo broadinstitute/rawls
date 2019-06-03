@@ -5,18 +5,18 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.google.api.services.accesscontextmanager.v1beta.model.{ServicePerimeter, ServicePerimeterConfig}
+import com.google.api.services.accesscontextmanager.v1beta.model.{Operation, ServicePerimeter, ServicePerimeterConfig}
 import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.ServicePerimeterName
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 
 import scala.collection.JavaConverters._
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 class HttpGoogleAccessContextManagerDAO(clientEmail: String, pemFile: String, appName: String, serviceProject: String, override val workbenchMetricBaseName: String)
                                        (implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)
-  extends FutureSupport with GoogleUtilities {
+  extends FutureSupport with GoogleUtilities with AccessContextManagerDAO {
 
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
@@ -39,7 +39,7 @@ class HttpGoogleAccessContextManagerDAO(clientEmail: String, pemFile: String, ap
     new AccessContextManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
 
-  def overwriteProjectsInServicePerimeter(servicePerimeterName: ServicePerimeterName, billingProjectNumbers: Seq[String]) = {
+  def overwriteProjectsInServicePerimeter(servicePerimeterName: ServicePerimeterName, billingProjectNumbers: Seq[String]): Future[Operation] = {
     implicit val service = GoogleInstrumentedService.AccessContextManager
 
     retryWhen500orGoogleError(() =>
@@ -52,6 +52,17 @@ class HttpGoogleAccessContextManagerDAO(clientEmail: String, pemFile: String, ap
 
       val patchRequest = accessContextManager.accessPolicies().servicePerimeters().patch(servicePerimeterName.value, servicePerimeter).setUpdateMask("status.resources")
       executeGoogleRequest(patchRequest)
+    })
+  }
+
+  override def pollOperation(operationId: String): Future[Operation] = {
+    implicit val service = GoogleInstrumentedService.AccessContextManager
+
+    val creds = getAccessContextManagerCredential
+    val accessContextManager = getAccessContextManager(creds)
+
+    retryWhen500orGoogleError(() => {
+      executeGoogleRequest(accessContextManager.operations().get(operationId))
     })
   }
 }
