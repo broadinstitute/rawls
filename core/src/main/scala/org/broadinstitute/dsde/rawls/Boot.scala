@@ -144,6 +144,7 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("pathToBillingPem"),
         gcsConfig.getString("billingEmail"),
         gcsConfig.getString("billingGroupEmail"),
+        gcsConfig.getStringList("billingGroupEmailAliases").asScala.toList,
         gcsConfig.getInt("bucketLogsMaxAge"),
         hammCromwellMetadata = hammCromwellMetadata,
         googleStorageService = appDependencies.googleStorageService,

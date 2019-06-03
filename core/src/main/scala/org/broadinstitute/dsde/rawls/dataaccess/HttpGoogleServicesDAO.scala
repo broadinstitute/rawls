@@ -108,6 +108,7 @@ class HttpGoogleServicesDAO(
   billingPemFile: String,
   val billingEmail: String,
   val billingGroupEmail: String,
+  val billingGroupEmailAliases: List[String],
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
   hammCromwellMetadata: HammCromwellMetadata,
@@ -579,7 +580,14 @@ class HttpGoogleServicesDAO(
       }
     }) map { iamPolicy =>
       val billingUsersOpt = iamPolicy.getBindings.asScala.find(_.getRole == "roles/billing.user")
-      billingUsersOpt.exists(_.getMembers.asScala.contains(s"group:$billingGroupEmail"))
+      val billingAdminsOpt = iamPolicy.getBindings.asScala.find(_.getRole == "roles/billing.admin")
+
+      //see if any of the billing group email aliases (@terra.bio and @firecloud.org) have either billing admin or user permissions
+      billingGroupEmailAliases.foldLeft(false){ (acc, email) =>
+        acc ||
+          billingUsersOpt.exists(_.getMembers.asScala.contains(s"group:$email")) ||
+          billingAdminsOpt.exists(_.getMembers.asScala.contains(s"group:$email"))
+      }
     }
   }
 
