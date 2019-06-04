@@ -31,7 +31,7 @@ object CreatingBillingProjectMonitor {
   case class CheckDone(creatingCount: Int) extends CreatingBillingProjectMonitorMessage
 }
 
-class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, val projectTemplate: ProjectTemplate, val requesterPaysRole: String)(implicit executionContext: ExecutionContext) extends Actor with CreatingBillingProjectMonitor with LazyLogging {
+class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, val projectTemplate: ProjectTemplate, val requesterPaysRole: String)(implicit val executionContext: ExecutionContext) extends Actor with CreatingBillingProjectMonitor with LazyLogging {
   self ! CheckNow
 
   override def receive = {
@@ -48,13 +48,14 @@ class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gc
 }
 
 trait CreatingBillingProjectMonitor extends LazyLogging {
+  implicit val executionContext: ExecutionContext
   val datasource: SlickDataSource
   val gcsDAO: GoogleServicesDAO
   val projectTemplate: ProjectTemplate
   val samDAO: SamDAO
   val requesterPaysRole: String
 
-  def checkCreatingProjects()(implicit executionContext: ExecutionContext): Future[CheckDone] = {
+  def checkCreatingProjects(): Future[CheckDone] = {
     for {
       (projectsBeingCreated, createProjectOperations, projectsBeingAddedToPerimeter, addProjectToPerimeterOperations) <- datasource.inTransaction { dataAccess =>
         for {
@@ -66,8 +67,10 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
           (projectsBeingCreated, createProjectOperations, projectsBeingAddedToPerimeter, addProjectToPerimeterOperations)
         }
       }
-      _ <- synchronizeProjectAndOperationRecords(projectsBeingCreated, createProjectOperations, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, onSuccessfulProjectCreate, onFailedProjectCreate)
-      _ <- synchronizeProjectAndOperationRecords(projectsBeingAddedToPerimeter, addProjectToPerimeterOperations, gcsDAO.ADD_PROJECT_TO_PERIMETER, onSuccessfulAddProjectToPerimeter, onFailedAddProjectToPerimeter)
+      latestCreateProjectOperations <- updateOperationRecordsFromGoogle(createProjectOperations)
+      _ <- updateProjectsFromOperations(projectsBeingCreated, latestCreateProjectOperations, onSuccessfulProjectCreate, onFailedProjectCreate)
+      latestAddProjectToPerimeterOperations <- updateOperationRecordsFromGoogle(addProjectToPerimeterOperations)
+      _ <- updateProjectsFromOperations(projectsBeingAddedToPerimeter, latestAddProjectToPerimeterOperations, onSuccessfulAddProjectToPerimeter, onFailedAddProjectToPerimeter)
       _ <- ??? //TODO: Find all projects in "projectsAddingToPerimeter" that don't have an operation in addProjectToPerimeterOperations and issue a single call to google to overwrite the perimeter, and record the operations in the database.
     } yield {
       CheckDone(projectsBeingCreated.size + projectsBeingAddedToPerimeter.size)
@@ -76,33 +79,20 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
   // This method checks the status of operations running in Google, and then ensures that the state of the RawlsBillingProjectRecord matches the state of the RawlsBillingProjectOperationRecord
   // TODO: Rename this method? synchronizeProjectAndOperationRecords
-  def synchronizeProjectAndOperationRecords(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord], operationType: String, onOperationSuccess: RawlsBillingProject => Future[RawlsBillingProject], onOperationFailure: (RawlsBillingProject, String) => Future[RawlsBillingProject])(implicit executionContext: ExecutionContext): Future[Int] = {
+  def updateProjectsFromOperations(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord], onOperationSuccess: RawlsBillingProject => Future[RawlsBillingProject], onOperationFailure: (RawlsBillingProject, String) => Future[RawlsBillingProject]): Future[Int] = {
 
+    // TODO: What if we have multiple Operation records for the same project? Per Doug, by design, this should be an error condition
+    val operationsByProject = operations.map(rec => RawlsBillingProjectName(rec.projectName) -> rec).toMap
     for {
-      updatedOperations <- checkOperationsInGoogle(operations)
-
-      // save only the operation records that have changed
-      _ <- datasource.inTransaction { dataAccess =>
-        val changedOperations = updatedOperations.toSet -- operations.toSet
-        dataAccess.rawlsBillingProjectQuery.updateOperations(changedOperations.toSeq)
-      }
-
-      // TODO: What if we have multiple Operation records for the same project?
-      operationsByProject = updatedOperations.map(rec => RawlsBillingProjectName(rec.projectName) -> rec).toMap
-
       // Update project record based on the result of its Google operation
       maybeUpdatedProjects <- Future.traverse(projects) { project =>
         // figure out if the project operation is done yet and set the project status accordingly
         val nextStepFuture = operationsByProject.get(project.projectName) match {
-          case None =>
-            // there are no operations, there is a small window when this can happen but it should resolve itself so let it pass
-            Future.successful(project)
-
-          case Some(RawlsBillingProjectOperationRecord(_, `operationType`, _, true, None, _)) =>
+          case Some(RawlsBillingProjectOperationRecord(_, _, _, true, None, _)) =>
             // project operation finished successfully
             onOperationSuccess(project)
 
-          case Some(RawlsBillingProjectOperationRecord(_, `operationType`, _, true, Some(error), _)) =>
+          case Some(RawlsBillingProjectOperationRecord(_, _, _, true, Some(error), _)) =>
             // project operation finished with an error
             onOperationFailure(project, error)
 
@@ -128,17 +118,45 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     }
   }
 
-  private def checkOperationsInGoogle(operations: Seq[RawlsBillingProjectOperationRecord])(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingProjectOperationRecord]] = {
-    Future.traverse(operations) {
-      case operation@RawlsBillingProjectOperationRecord(_, _, _, true, _, _) => Future.successful(operation)
-      case operation@RawlsBillingProjectOperationRecord(_, _, _, false, _, _) => gcsDAO.pollOperation(operation).recover {
-        // if we don't mark this as done we might continue retrying forever and pollOperation already does some retrying
-        case t: Throwable => operation.copy(done = true, errorMessage = Option(s"error getting ${operation.operationName} operation status: ${t.getMessage}"))
+  private def updateOperationRecordsFromGoogle(operations: Seq[RawlsBillingProjectOperationRecord]): Future[Seq[RawlsBillingProjectOperationRecord]] = {
+    for {
+      updatedOperations <- checkOperationsInGoogle(operations)
+
+      // save only the operation records that have changed
+      _ <- datasource.inTransaction { dataAccess =>
+        val changedOperations = updatedOperations.toSet -- operations.toSet
+        dataAccess.rawlsBillingProjectQuery.updateOperations(changedOperations.toSeq)
+      }
+    } yield updatedOperations
+  }
+
+  private def checkOperationsInGoogle(operations: Seq[RawlsBillingProjectOperationRecord]): Future[Seq[RawlsBillingProjectOperationRecord]] = {
+    // There's a possibility that multiple operation records exist for the same Google Operation, so we would like to de-dupe them
+    val operationsToPoll = operations.collect {
+      case operation if !operation.done => OperationId(operation.api, operation.operationId)
+    }.toSet
+
+    for {
+      // poll Google to get the latest status of the operations
+      pollingResults <- Future.traverse(operationsToPoll) {
+        case operationId => gcsDAO.pollOperation(operationId).recover {
+          // if we don't mark this as done we might continue retrying forever and pollOperation already does some retrying
+          case t: Throwable => OperationStatus(true, Option(s"error getting operation id ${operationId.operationId} from API ${operationId.apiType}. operation status: ${t.getMessage}"))
+        }.map(operationId -> _)
+      }
+      pollingResultsById = pollingResults.toMap
+    } yield {
+      // Update RawlsBillingProjectOperationRecords in memory with the latest polling results
+      operations.map { rawlsOperation =>
+        pollingResultsById.get(OperationId(rawlsOperation.api, rawlsOperation.operationId)) match {
+          case None => rawlsOperation
+          case Some(googleOperationStatus) => rawlsOperation.copy(done = googleOperationStatus.done, errorMessage = googleOperationStatus.errorMessage)
+        }
       }
     }
   }
 
-  private def onSuccessfulProjectCreate(project: RawlsBillingProject)(implicit executionContext: ExecutionContext): Future[RawlsBillingProject] = {
+  private def onSuccessfulProjectCreate(project: RawlsBillingProject): Future[RawlsBillingProject] = {
     for {
       _ <- gcsDAO.cleanupDMProject(project.projectName)
       googleProject <- gcsDAO.getGoogleProject(project.projectName)
@@ -151,18 +169,18 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     }
   }
 
-  private def onFailedProjectCreate(project: RawlsBillingProject, error: String)(implicit executionContext: ExecutionContext): Future[RawlsBillingProject] = {
+  private def onFailedProjectCreate(project: RawlsBillingProject, error: String): Future[RawlsBillingProject] = {
     logger.debug(s"project ${project.projectName.value} creation finished with errors: $error")
     gcsDAO.cleanupDMProject(project.projectName) map { _ =>
       project.copy(status = CreationStatuses.Error, message = Option(s"project ${project.projectName.value} creation finished with errors: $error"))
     }
   }
 
-  private def onSuccessfulAddProjectToPerimeter(project: RawlsBillingProject)(implicit executionContext: ExecutionContext): Future[RawlsBillingProject] = {
+  private def onSuccessfulAddProjectToPerimeter(project: RawlsBillingProject): Future[RawlsBillingProject] = {
     ???
   }
 
-  private def onFailedAddProjectToPerimeter(project: RawlsBillingProject, error: String)(implicit executionContext: ExecutionContext): Future[RawlsBillingProject] = {
+  private def onFailedAddProjectToPerimeter(project: RawlsBillingProject, error: String): Future[RawlsBillingProject] = {
     ???
   }
 }

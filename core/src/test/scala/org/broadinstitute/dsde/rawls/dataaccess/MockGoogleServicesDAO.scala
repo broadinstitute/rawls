@@ -217,8 +217,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
                                bucketName: String,
                                readers: Set[WorkbenchEmail]): Future[String] = Future(bucketName)
 
-  override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
-    Future.successful(rawlsBillingProjectOperation.copy(done = true))
+  override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
+    Future.successful(OperationStatus(true, None))
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(())

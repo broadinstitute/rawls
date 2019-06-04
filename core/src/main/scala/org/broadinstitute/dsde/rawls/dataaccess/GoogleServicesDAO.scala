@@ -185,7 +185,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
                       bucketName: String,
                       readers: Set[WorkbenchEmail]): Future[String]
 
-  def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord]
+  def pollOperation(operationId: OperationId): Future[OperationStatus]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean]
@@ -200,6 +200,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   }
 }
 
+case class OperationId(apiType: String, operationId: String)
+case class OperationStatus(done: Boolean, errorMessage: Option[String])
 case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
 case class ProjectTemplate(policies: Map[String, Seq[String]])
 final case class HammCromwellMetadata(bucketName: GcsBucketName, topicName: ProjectTopicName)

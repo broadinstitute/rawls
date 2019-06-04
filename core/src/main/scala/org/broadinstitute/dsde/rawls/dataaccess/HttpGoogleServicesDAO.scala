@@ -809,49 +809,50 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
-    implicit val service = GoogleInstrumentedService.Billing
+  override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
     val credential = getBillingServiceAccountCredential
     val dmCredential = getDeploymentManagerAccountCredential
 
     // this code is a colossal DRY violation but because the operations collection is different
     // for cloudResManager and servicesManager and they return different but identical Status objects
     // there is not much else to be done... too bad scala does not have duck typing.
-    rawlsBillingProjectOperation.api match {
+    operationId.apiType match {
       case API_CLOUD_RESOURCE_MANAGER =>
         val cloudResManager = getCloudResourceManager(credential)
 
         retryWhen500orGoogleError(() => {
-          executeGoogleRequest(cloudResManager.operations().get(rawlsBillingProjectOperation.operationId))
+          implicit val service = GoogleInstrumentedService.CloudResourceManager
+          executeGoogleRequest(cloudResManager.operations().get(operationId.operationId))
         }).map { op =>
-          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
+          OperationStatus(toScalaBool(op.getDone), Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
         }
 
       case API_SERVICE_MANAGEMENT =>
         val servicesManager = getServicesManager(credential)
 
         retryWhen500orGoogleError(() => {
-          executeGoogleRequest(servicesManager.operations().get(rawlsBillingProjectOperation.operationId))
+          implicit val service = GoogleInstrumentedService.Billing
+          executeGoogleRequest(servicesManager.operations().get(operationId.operationId))
         }).map { op =>
-          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
+          OperationStatus(toScalaBool(op.getDone), Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
         }
 
       case API_DEPLOYMENT_MANAGER =>
         val deploymentManager = getDeploymentManager(dmCredential)
 
         retryWhen500orGoogleError(() => {
-          executeGoogleRequest(deploymentManager.operations().get(deploymentMgrProject, rawlsBillingProjectOperation.operationId))
+          implicit val service = GoogleInstrumentedService.DeploymentManager
+          executeGoogleRequest(deploymentManager.operations().get(deploymentMgrProject, operationId.operationId))
         }).map { op =>
           val errorStr = Option(op.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
-          rawlsBillingProjectOperation.copy(done = op.getStatus == "DONE", errorMessage = errorStr)
+          OperationStatus(op.getStatus == "DONE", errorStr)
         }
 
       case API_ACCESS_CONTEXT_MANAGER =>
-        accessContextManagerDAO.pollOperation(rawlsBillingProjectOperation.operationId).map { op =>
-          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
+        accessContextManagerDAO.pollOperation(operationId.operationId).map { op =>
+          OperationStatus(toScalaBool(op.getDone), Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
         }
     }
-
   }
 
   /**
