@@ -10,6 +10,7 @@ import com.google.api.services.storage.model.{Bucket, BucketAccessControl, Stora
 import com.google.pubsub.v1.ProjectTopicName
 import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
+import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
@@ -17,8 +18,8 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
 import org.joda.time.DateTime
 import spray.json.JsObject
-import scala.collection.JavaConverters._
 
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -28,6 +29,12 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val CREATE_PROJECT_OPERATION = "create_project"
   val DEPLOYMENT_MANAGER_CREATE_PROJECT = "dm_create_project"
   val ADD_PROJECT_TO_PERIMETER = "add_project_to_perimeter"
+
+  val API_SERVICE_MANAGEMENT = "ServiceManagement"
+  val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
+  val API_DEPLOYMENT_MANAGER = "DeploymentManager"
+  val API_ACCESS_CONTEXT_MANAGER = "AccessContextManager"
+  val accessContextManagerDAO: AccessContextManagerDAO
 
   val billingEmail: String
 

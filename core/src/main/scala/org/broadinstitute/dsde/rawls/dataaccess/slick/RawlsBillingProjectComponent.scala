@@ -71,6 +71,14 @@ trait RawlsBillingProjectComponent {
       }
     }
 
+    def listProjectsWithServicePerimeter(servicePerimeter: ServicePerimeterName): ReadWriteAction[Seq[RawlsBillingProject]] = {
+      for {
+        projectRecords <- filter(_.servicePerimeter === servicePerimeter.value).result
+      } yield {
+        projectRecords.map(unmarshalBillingProject)
+      }
+    }
+
     def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
       uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).map(_.map(unmarshalBillingProject))
     }

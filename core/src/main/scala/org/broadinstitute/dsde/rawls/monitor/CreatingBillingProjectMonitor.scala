@@ -71,15 +71,54 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
       _ <- updateProjectsFromOperations(projectsBeingCreated, latestCreateProjectOperations, onSuccessfulProjectCreate, onFailedProjectCreate)
       latestAddProjectToPerimeterOperations <- updateOperationRecordsFromGoogle(addProjectToPerimeterOperations)
       _ <- updateProjectsFromOperations(projectsBeingAddedToPerimeter, latestAddProjectToPerimeterOperations, onSuccessfulAddProjectToPerimeter, onFailedAddProjectToPerimeter)
-      _ <- ??? //TODO: Find all projects in "projectsAddingToPerimeter" that don't have an operation in addProjectToPerimeterOperations and issue a single call to google to overwrite the perimeter, and record the operations in the database.
+      _ <- addProjectsToPerimeter(projectsBeingAddedToPerimeter, latestAddProjectToPerimeterOperations)
     } yield {
       CheckDone(projectsBeingCreated.size + projectsBeingAddedToPerimeter.size)
     }
   }
 
+  // issue addProjectToPerimeter call to google for all projects that don't have associated operations, and add OperationRecord for this call
+  private def addProjectsToPerimeter(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord]): Future[Unit] = {
+    val projectsWithoutOperations = projects.filterNot(project => operations.exists(_.projectName == project.projectName))
+    if (projectsWithoutOperations.nonEmpty) {
+      Future.traverse(projectsWithoutOperations.groupBy(_.servicePerimeter)) {
+        case (None, projectsMissingPerimeter) => datasource.inTransaction { dataAccess =>
+          val errorProjects = projectsMissingPerimeter.map { project =>
+            project.copy(status = CreationStatuses.Error, message = Some("Failed to add project to perimeter because no perimeter specified"))
+          }
+          dataAccess.rawlsBillingProjectQuery.updateBillingProjects(errorProjects)
+        }
+        case (Some(servicePerimeterName: ServicePerimeterName), newProjectsInPerimeter) =>
+          createAddProjectsToPerimeterOperation(servicePerimeterName, newProjectsInPerimeter)
+      }.map(_ => ())
+    } else {
+      Future.successful(())
+    }
+  }
+
+  private def createAddProjectsToPerimeterOperation(servicePerimeterName: ServicePerimeterName, newProjectsInPerimeter: Seq[RawlsBillingProject]): Future[Unit] = {
+    for {
+      // need to get all the projects in this perimeter from the db, call google and persist an operation for each project in newProjectsInPerimeter
+      allProjectsInPerimeter <- datasource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.listProjectsWithServicePerimeter(servicePerimeterName)
+      }
+      allProjectNumbers = allProjectsInPerimeter.map(_.googleProjectNumber).collect {
+        case Some(googleProjectNumber) => googleProjectNumber.value
+      }
+      operation <- gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, allProjectNumbers)
+      _ <- datasource.inTransaction { dataAccess => //for {//TODO: do this, this being handling projects that don't have a service perimeter specified. we were thinking of putting it in a for comp and setting these projects to an error state i believe
+        // }
+        val newOperations = newProjectsInPerimeter.collect {
+          case RawlsBillingProject(projectName, _, _, _, _, _, _, Some(_)) =>
+            RawlsBillingProjectOperationRecord(projectName.value, gcsDAO.ADD_PROJECT_TO_PERIMETER, operation.getName, false, None, gcsDAO.API_ACCESS_CONTEXT_MANAGER)
+        }
+        dataAccess.rawlsBillingProjectQuery.insertOperations(newOperations)
+      }
+    } yield ()
+  }
+
   // This method checks the status of operations running in Google, and then ensures that the state of the RawlsBillingProjectRecord matches the state of the RawlsBillingProjectOperationRecord
-  // TODO: Rename this method? synchronizeProjectAndOperationRecords
-  def updateProjectsFromOperations(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord], onOperationSuccess: RawlsBillingProject => Future[RawlsBillingProject], onOperationFailure: (RawlsBillingProject, String) => Future[RawlsBillingProject]): Future[Int] = {
+  private def updateProjectsFromOperations(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord], onOperationSuccess: RawlsBillingProject => Future[RawlsBillingProject], onOperationFailure: (RawlsBillingProject, String) => Future[RawlsBillingProject]): Future[Int] = {
 
     // TODO: What if we have multiple Operation records for the same project? Per Doug, by design, this should be an error condition
     val operationsByProject = operations.map(rec => RawlsBillingProjectName(rec.projectName) -> rec).toMap
