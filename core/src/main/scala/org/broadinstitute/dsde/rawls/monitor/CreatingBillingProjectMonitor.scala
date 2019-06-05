@@ -47,6 +47,13 @@ class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gc
   }
 }
 
+/**
+  * This monitor ensures that we create projects that are usable by Firecloud/Terra.  To do this, we have a
+  * "CreationStatus" on RawlsBillingProject instances that keeps track of what state the project is in and whether it is
+  * still being created/setup and whether it is done or in some kind of error state.  To keep track of all of this, this
+  * class's responsibility is to create and update RawlsBillingProjectOperationRecords in Rawls, trigger operations in
+  * Google, and keep RawlsBillingProject records up to date with what is actually created/ready/done in Google.
+  */
 trait CreatingBillingProjectMonitor extends LazyLogging {
   implicit val executionContext: ExecutionContext
   val datasource: SlickDataSource
@@ -85,7 +92,18 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     }
   }
 
-  // issue addProjectToPerimeter call to google for all projects that don't have associated operations, and add OperationRecord for this call
+  /**
+    * Takes a collection of project records that we know are have a status indicating they need to be added to a
+    * perimeter.  Also takes a collection of already existing operations for adding projects to a perimeter.  We then
+    * evaluate the list of projects that need to be added to a perimeter to the list of operations already in progress
+    * to add projects to a perimeter.  For each perimeter that needs one or more projects to be added to it, we will
+    * kick off one operation to add all of those projects at the same time.
+    * issue addProjectToPerimeter call to google for all projects that don't have associated operations, and add OperationRecord for this call
+    * @param projects: Collection of RawlsBillingProjects that need to be added to a perimeter
+    * @param operations: Collection of RawlsBillingProjectOperationRecord that are already running to add a project to
+    *                  the specified perimeter
+    * @return
+    */
   private def addProjectsToPerimeter(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord]): Future[Unit] = {
     val projectsWithoutOperations = projects.filterNot(project => operations.exists(_.projectName == project.projectName))
     if (projectsWithoutOperations.nonEmpty) {
@@ -104,18 +122,29 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     }
   }
 
+  /**
+    * Takes the name of a VPC-SC Service Perimeter that needs to be updated along with a collection of
+    * RawlsBillingProjects that need to be added to the perimeter.  Caution: the Google APIs for PATCHing a Service
+    * Perimeter will OVERWRITE the project list with the provided list.  Therefore, whenever we update the list of
+    * projects in a perimeter, we must specify the ENTIRE membership list.  We can get the intended membership list from
+    * the Rawls DB.
+    * @param servicePerimeterName
+    * @param newProjectsInPerimeter
+    * @return
+    */
   private def createAddProjectsToPerimeterOperation(servicePerimeterName: ServicePerimeterName, newProjectsInPerimeter: Seq[RawlsBillingProject]): Future[Unit] = {
     for {
-      // need to get all the projects in this perimeter from the db, call google and persist an operation for each project in newProjectsInPerimeter
+      // Query Rawls DB to get full list of projects intended to be inside the perimeter
       allProjectsInPerimeter <- datasource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.listProjectsWithServicePerimeter(servicePerimeterName)
       }
       allProjectNumbers = allProjectsInPerimeter.map(_.googleProjectNumber).collect {
         case Some(googleProjectNumber) => googleProjectNumber.value
       }
+      // Initiate operation to overwrite the list of projects in the Perimeter on Google
       operation <- gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, allProjectNumbers)
-      _ <- datasource.inTransaction { dataAccess => //for {//TODO: do this, this being handling projects that don't have a service perimeter specified. we were thinking of putting it in a for comp and setting these projects to an error state i believe
-        // }
+      _ <- datasource.inTransaction { dataAccess =>
+        //TODO: handle projects that don't have a service perimeter specified. we were thinking of putting it in a for comp and setting these projects to an error state i believe
         val newOperations = newProjectsInPerimeter.collect {
           case RawlsBillingProject(projectName, _, _, _, _, _, _, Some(_)) =>
             RawlsBillingProjectOperationRecord(projectName.value, gcsDAO.ADD_PROJECT_TO_PERIMETER, operation.getName, false, None, gcsDAO.API_ACCESS_CONTEXT_MANAGER)
@@ -251,10 +280,12 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
   }
 
   private def onSuccessfulAddProjectToPerimeter(project: RawlsBillingProject): Future[RawlsBillingProject] = {
+    // TODO: implement me
     ???
   }
 
   private def onFailedAddProjectToPerimeter(project: RawlsBillingProject, error: String): Future[RawlsBillingProject] = {
+    // TODO: implement me
     ???
   }
 }
