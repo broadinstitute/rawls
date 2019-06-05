@@ -347,11 +347,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, projectName)
             computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, projectName)
 
-            updatedTemplate = projectTemplate.copy(
-              policies = projectTemplate.policies ++
-                getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole))
-
-            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount, dmConfig.templatePath, requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, updatedTemplate).recoverWith {
+            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount, dmConfig.templatePath, requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate).recoverWith {
               case t: Throwable =>
                 // failed to create project in google land, rollback inserts above
                 dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) } map(_ => throw t)

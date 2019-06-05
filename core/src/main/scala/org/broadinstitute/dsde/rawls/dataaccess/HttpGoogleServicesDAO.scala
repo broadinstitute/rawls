@@ -762,7 +762,7 @@ class HttpGoogleServicesDAO(
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
 
-    executeGoogleRqWithRetry(
+    executeGoogleRequestWithRetry(
       deploymentManager.deployments().delete(deploymentMgrProject, projectToDM(projectName)).setDeletePolicy("ABANDON")).void
   }
 
@@ -801,8 +801,8 @@ class HttpGoogleServicesDAO(
       "projectViewersGroup" -> computeUserGroupEmail.value.toJson,
       "requesterPaysRole" -> requesterPaysRole.toJson,
       "highSecurityNetwork" -> false.toJson,
-      "fcProjectOwners" -> projectTemplate.policies("roles/owner").toJson,
-      "fcProjectEditors" -> projectTemplate.policies("roles/editor").toJson,
+      "fcProjectOwners" -> projectTemplate.owners.toJson,
+      "fcProjectEditors" -> projectTemplate.editors.toJson,
       "labels" -> templateLabels
     )
 

@@ -202,13 +202,13 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 }
 
 case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
-case class ProjectTemplate(policies: Map[String, Seq[String]])
+case class ProjectTemplate(owners: Seq[String], editors: Seq[String])
 final case class HammCromwellMetadata(bucketName: GcsBucketName, topicName: ProjectTopicName)
 
 case object ProjectTemplate {
   def from(projectTemplateConfig: Config): ProjectTemplate = {
     val projectOwners = projectTemplateConfig.getStringList("owners")
     val projectEditors = projectTemplateConfig.getStringList("editors")
-    ProjectTemplate(Map("roles/owner" -> projectOwners.asScala, "roles/editor" -> projectEditors.asScala))
+    ProjectTemplate(projectOwners.asScala, projectEditors.asScala)
   }
 }

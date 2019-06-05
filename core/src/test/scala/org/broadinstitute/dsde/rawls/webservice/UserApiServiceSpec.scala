@@ -141,7 +141,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
-        override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty)
+        override val projectTemplate: ProjectTemplate = ProjectTemplate(Seq(), Seq())
         override val gcsDAO = new MockGoogleServicesDAO("foo")
         override val samDAO = new MockSamDAO(dataSource)
         override val requesterPaysRole: String = "requesterPaysRole"
@@ -218,7 +218,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
-        override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty)
+        override val projectTemplate: ProjectTemplate = ProjectTemplate(Seq(), Seq())
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
           override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = failureMode(rawlsBillingProjectOperation)
         }
@@ -288,7 +288,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
-        override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty)
+        override val projectTemplate: ProjectTemplate = ProjectTemplate(Seq(), Seq())
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
           override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
             if (rawlsBillingProjectOperation.operationName == DEPLOYMENT_MANAGER_CREATE_PROJECT) {
