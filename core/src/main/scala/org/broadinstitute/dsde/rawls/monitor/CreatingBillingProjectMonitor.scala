@@ -117,7 +117,19 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     } yield ()
   }
 
-  // This method checks the status of operations running in Google, and then ensures that the state of the RawlsBillingProjectRecord matches the state of the RawlsBillingProjectOperationRecord
+  /**
+    * This method checks the status of operations running in Google, and then ensures that the state of the
+    * RawlsBillingProjectRecord matches the state of the RawlsBillingProjectOperationRecord.  It takes a collection of
+    * RawlsBillingProjectOperationRecords that have already been updated with the current state of the operations from
+    * Google.  This method will then update the corresponding RawlsBillingProjectRecords if the operation has finished,
+    * and based on whether the operation succeeded or failed.
+    * @param projects: collection of RawlsBillingProjects that we want to update
+    * @param operations: collection of RawlsBillingProjectOperationRecords that reflect the latest operation information
+    *                  from Google
+    * @param onOperationSuccess: The function we want to run when an operation finished successfully on Google
+    * @param onOperationFailure: The function we want to run when an operation finished with an error on Google
+    * @return: an Int representing the number of RawlsBillingProjectRecords that were updated by running this method
+    */
   private def updateProjectsFromOperations(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord], onOperationSuccess: RawlsBillingProject => Future[RawlsBillingProject], onOperationFailure: (RawlsBillingProject, String) => Future[RawlsBillingProject]): Future[Int] = {
 
     // TODO: What if we have multiple Operation records for the same project? Per Doug, by design, this should be an error condition
@@ -157,6 +169,13 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     }
   }
 
+  /**
+    * Takes a collection of RawlsBillingProjectOperationRecords, checks on the status of all of the corresponding
+    * operations in Google, updates and persists any updates to the the RawlsBillingProjectOperationRecords, and returns
+    * the same collection of RawlsBillingProjectOperationRecords updated with latest status from Google.
+    * @param operations
+    * @return
+    */
   private def updateOperationRecordsFromGoogle(operations: Seq[RawlsBillingProjectOperationRecord]): Future[Seq[RawlsBillingProjectOperationRecord]] = {
     for {
       updatedOperations <- checkOperationsInGoogle(operations)
@@ -169,8 +188,16 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     } yield updatedOperations
   }
 
+  /**
+    * Takes a collection of RawlsBillingProjectOperationRecords and checks with Google to see if the corresponding
+    * operations in google have completed.  Returns a collection of RawlsBillingProjectOperationRecords updated to with
+    * the latest operation information from Google.  This method does NOT persist those changes in the Rawls DB.
+    * @param operations
+    * @return
+    */
   private def checkOperationsInGoogle(operations: Seq[RawlsBillingProjectOperationRecord]): Future[Seq[RawlsBillingProjectOperationRecord]] = {
-    // There's a possibility that multiple operation records exist for the same Google Operation, so we would like to de-dupe them
+    // Collect the operationIds that we need to check.  There's a possibility that multiple operation records exist for
+    // the same Google Operation, so we de-dupe to reduce volume of requests to Google.
     val operationsToPoll = operations.collect {
       case operation if !operation.done => OperationId(operation.api, operation.operationId)
     }.toSet
