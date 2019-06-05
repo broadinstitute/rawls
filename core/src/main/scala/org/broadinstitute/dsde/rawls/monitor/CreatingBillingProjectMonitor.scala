@@ -55,6 +55,14 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
   val samDAO: SamDAO
   val requesterPaysRole: String
 
+  /**
+    * When creating projects, we call a set of "operations" that handle all the steps we need to run in order to: create
+    * the project, enable APIs, add it to a VPC-SC Security Perimeter, etc., and get it into a valid state so that it can be
+    * used by Firecloud/Terra.  We use Deployment Manager to handle the bulk of the steps needed to create and set up
+    * projects.  If a project needs to be added to a VPC-SC perimeter, this task is handled as a follow-up operation
+    * that we can only run AFTER a project is created.
+    * @return
+    */
   def checkCreatingProjects(): Future[CheckDone] = {
     for {
       (projectsBeingCreated, createProjectOperations, projectsBeingAddedToPerimeter, addProjectToPerimeterOperations) <- datasource.inTransaction { dataAccess =>
