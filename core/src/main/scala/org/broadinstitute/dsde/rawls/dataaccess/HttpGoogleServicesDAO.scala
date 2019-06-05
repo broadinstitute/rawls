@@ -762,8 +762,11 @@ class HttpGoogleServicesDAO(
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
 
+    /*
     executeGoogleRequestWithRetry(
       deploymentManager.deployments().delete(deploymentMgrProject, projectToDM(projectName)).setDeletePolicy("ABANDON")).void
+     */
+    Future.successful(())
   }
 
   def projectToDM(projectName: RawlsBillingProjectName) = s"dm-${projectName.value}"
