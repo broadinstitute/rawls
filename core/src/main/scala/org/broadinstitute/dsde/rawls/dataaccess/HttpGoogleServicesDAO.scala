@@ -825,9 +825,6 @@ class HttpGoogleServicesDAO(
     val credential = getBillingServiceAccountCredential
     val dmCredential = getDeploymentManagerAccountCredential
 
-    // this code is a colossal DRY violation but because the operations collection is different
-    // for cloudResManager and servicesManager and they return different but identical Status objects
-    // there is not much else to be done... too bad scala does not have duck typing.
     rawlsBillingProjectOperation.api match {
       case API_DEPLOYMENT_MANAGER =>
         val deploymentManager = getDeploymentManager(dmCredential)
