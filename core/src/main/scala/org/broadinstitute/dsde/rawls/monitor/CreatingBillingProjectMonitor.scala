@@ -109,13 +109,13 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
               project.copy(status = CreationStatuses.Error, message = Option(s"project ${project.projectName.value} creation finished with errors: $error"))
             }
 
-          case RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, false, _, _) :: bps =>
+          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, false, _, _)) =>
             // still running
             Future.successful(project)
 
-          case _ =>
+          case x =>
             // something surprised us.
-            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(s"failure processing new project ${project.projectName.value}: unexpected project operation record")))
+            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(s"failure processing new project ${project.projectName.value}: unexpected project operation record $x")))
         }
 
         nextStepFuture.recover {
