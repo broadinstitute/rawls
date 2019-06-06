@@ -17,6 +17,8 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -335,7 +337,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def checkServicePerimeterAccess(servicePerimeterOption: Option[ServicePerimeterName]): Future[Unit] = {
     servicePerimeterOption.map { servicePerimeter =>
-      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, servicePerimeter.value, SamServicePerimeterActions.addProject, userInfo).flatMap {
+      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeter.value, UTF_8.name), SamServicePerimeterActions.addProject, userInfo).flatMap {
         case true => Future.successful(())
         case false => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"You do not have the action ${SamServicePerimeterActions.addProject.value} for $servicePerimeter")))
       }

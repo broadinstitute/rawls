@@ -24,7 +24,7 @@ import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
@@ -117,6 +117,9 @@ object Boot extends IOApp with LazyLogging {
 
     val hammCromwellMetadataConfig = gcsConfig.getConfig("hamm-cromwell-metadata")
     val serviceProject = gcsConfig.getString("serviceProject")
+    val appName = gcsConfig.getString("appName")
+    val pathToPem = gcsConfig.getString("pathToPem")
+
     val hammCromwellMetadata = HammCromwellMetadata(
       GcsBucketName(hammCromwellMetadataConfig.getString("bucket-name")),
       ProjectTopicName.of(serviceProject, hammCromwellMetadataConfig.getString("topic-name "))
@@ -137,6 +140,14 @@ object Boot extends IOApp with LazyLogging {
     if(badPathBecauseGithub || badPathBecauseBranchName) {
       sys.exit(1)
     }
+
+    val accessContextManagerDAO = new HttpGoogleAccessContextManagerDAO(
+      clientEmail,
+      pathToPem,
+      appName,
+      serviceProject,
+      workbenchMetricBaseName = metricsPrefix
+    )
 
     initAppDependencies[IO](conf).use { appDependencies =>
       val gcsDAO = new HttpGoogleServicesDAO(
@@ -162,19 +173,21 @@ object Boot extends IOApp with LazyLogging {
         topicAdmin = appDependencies.topicAdmin,
         workbenchMetricBaseName = metricsPrefix,
         proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
-        deploymentMgrProject = dmConfig.getString("projectID")
+        deploymentMgrProject = dmConfig.getString("projectID"),
+        accessContextManagerDAO = accessContextManagerDAO
       )
+
 
       val pubSubDAO = new HttpGooglePubSubDAO(
         clientEmail,
-        gcsConfig.getString("pathToPem"),
-        gcsConfig.getString("appName"),
-        gcsConfig.getString("serviceProject"),
+        pathToPem,
+        appName,
+        serviceProject,
         workbenchMetricBaseName = metricsPrefix
       )
 
       val bigQueryDAO = new HttpGoogleBigQueryDAO(
-        gcsConfig.getString("appName"),
+        appName,
         Json(gcsConfig.getString("bigQueryJson")),
         metricsPrefix
       )

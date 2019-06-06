@@ -815,9 +815,9 @@ class HttpGoogleServicesDAO(
     operationId.apiType match {
       case API_CLOUD_RESOURCE_MANAGER =>
         val cloudResManager = getCloudResourceManager(credential)
+        implicit val service = GoogleInstrumentedService.CloudResourceManager
 
         retryWhen500orGoogleError(() => {
-          implicit val service = GoogleInstrumentedService.CloudResourceManager
           executeGoogleRequest(cloudResManager.operations().get(operationId.operationId))
         }).map { op =>
           OperationStatus(toScalaBool(op.getDone), Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
@@ -826,8 +826,8 @@ class HttpGoogleServicesDAO(
       case API_SERVICE_MANAGEMENT =>
         val servicesManager = getServicesManager(credential)
 
+        implicit val service = GoogleInstrumentedService.Billing
         retryWhen500orGoogleError(() => {
-          implicit val service = GoogleInstrumentedService.Billing
           executeGoogleRequest(servicesManager.operations().get(operationId.operationId))
         }).map { op =>
           OperationStatus(toScalaBool(op.getDone), Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
@@ -835,9 +835,9 @@ class HttpGoogleServicesDAO(
 
       case API_DEPLOYMENT_MANAGER =>
         val deploymentManager = getDeploymentManager(dmCredential)
+        implicit val service = GoogleInstrumentedService.DeploymentManager
 
         retryWhen500orGoogleError(() => {
-          implicit val service = GoogleInstrumentedService.DeploymentManager
           executeGoogleRequest(deploymentManager.operations().get(deploymentMgrProject, operationId.operationId))
         }).map { op =>
           val errorStr = Option(op.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))

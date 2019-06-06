@@ -3,20 +3,14 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.Status.Failure
 import akka.actor.{Actor, Props}
 import akka.pattern._
-import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor._
-import org.broadinstitute.dsde.rawls.user.UserService
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Success
 
 /**
  * Created by dvoet on 8/22/16.
@@ -94,7 +88,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
 
   /**
     * Takes a collection of project records that we know have a status indicating they need to be added to a
-    * perimeter.  Also takes a collection of already existing operations for adding projects to a perimeter.  We then
+    * perimeter - operations might already exist to add some of these projects to the perimeter.
+    * The operations parameter contains all preexisting operations.  We then
     * compare the list of projects that need to be added to a perimeter to the list of operations already in progress
     * to add projects to a perimeter.  For each perimeter that needs one or more projects to be added to it, we will
     * kick off one operation to add all of those projects at the same time.
@@ -142,13 +137,17 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
       }
       // Initiate operation to overwrite the list of projects in the Perimeter on Google
       operation <- gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, allProjectNumbers)
+
       _ <- datasource.inTransaction { dataAccess =>
-        //TODO: handle projects that don't have a service perimeter specified. we were thinking of putting it in a for comp and setting these projects to an error state i believe
-        val newOperations = newProjectsInPerimeter.collect {
-          case RawlsBillingProject(projectName, _, _, _, _, _, _, Some(_)) =>
-            RawlsBillingProjectOperationRecord(projectName.value, gcsDAO.ADD_PROJECT_TO_PERIMETER, operation.getName, false, None, gcsDAO.API_ACCESS_CONTEXT_MANAGER)
-        }
-        dataAccess.rawlsBillingProjectQuery.insertOperations(newOperations)
+        val (projectsWithServicePerimeter, projectsWithoutServicePerimeter) = newProjectsInPerimeter.partition(_.servicePerimeter.isDefined)
+        for {
+          _ <- dataAccess.rawlsBillingProjectQuery.insertOperations(projectsWithServicePerimeter.map { project =>
+            RawlsBillingProjectOperationRecord(project.projectName.value, gcsDAO.ADD_PROJECT_TO_PERIMETER, operation.getName, false, None, gcsDAO.API_ACCESS_CONTEXT_MANAGER)
+          })
+          _ <- dataAccess.rawlsBillingProjectQuery.updateBillingProjects(projectsWithoutServicePerimeter.map { project =>
+            project.copy(status = CreationStatuses.Error, message = Some("Project was in Adding to Perimeter state but no perimeter was specified"))
+          })
+        } yield ()
       }
     } yield ()
   }
@@ -167,21 +166,22 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     * @return: an Int representing the number of RawlsBillingProjectRecords that were updated by running this method
     */
   private def updateProjectsFromOperations(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord], onOperationSuccess: RawlsBillingProject => Future[RawlsBillingProject], onOperationFailure: (RawlsBillingProject, String) => Future[RawlsBillingProject]): Future[Int] = {
-
-    // TODO: What if we have multiple Operation records for the same project? Per Doug, by design, this should be an error condition
-    val operationsByProject = operations.map(rec => RawlsBillingProjectName(rec.projectName) -> rec).toMap
+    val operationsByProject = operations.groupBy(rec => RawlsBillingProjectName(rec.projectName))
     for {
       // Update project record based on the result of its Google operation
       maybeUpdatedProjects <- Future.traverse(projects) { project =>
         // figure out if the project operation is done yet and set the project status accordingly
         val nextStepFuture = operationsByProject.get(project.projectName) match {
-          case Some(RawlsBillingProjectOperationRecord(_, _, _, true, None, _)) =>
+          case Some(Seq(RawlsBillingProjectOperationRecord(_, _, _, true, None, _))) =>
             // project operation finished successfully
             onOperationSuccess(project)
 
-          case Some(RawlsBillingProjectOperationRecord(_, _, _, true, Some(error), _)) =>
+          case Some(Seq(RawlsBillingProjectOperationRecord(_, _, _, true, Some(error), _))) =>
             // project operation finished with an error
             onOperationFailure(project, error)
+
+          case Some(tooManyOperations) if tooManyOperations.size > 1 =>
+            onOperationFailure(project, s"Only expected one Operation, found $tooManyOperations")
 
           case _ =>
             // still running
@@ -279,12 +279,11 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
   }
 
   private def onSuccessfulAddProjectToPerimeter(project: RawlsBillingProject): Future[RawlsBillingProject] = {
-    // TODO: implement me
-    ???
+    Future.successful(project.copy(status = CreationStatuses.Ready))
   }
 
   private def onFailedAddProjectToPerimeter(project: RawlsBillingProject, error: String): Future[RawlsBillingProject] = {
-    // TODO: implement me
-    ???
+    logger.debug(s"project $project failed to add to perimeter with error message: $error")
+    Future.successful(project.copy(status = CreationStatuses.Error, message = Option(s"Failed to add project to perimeter. Error message: $error")))
   }
 }
