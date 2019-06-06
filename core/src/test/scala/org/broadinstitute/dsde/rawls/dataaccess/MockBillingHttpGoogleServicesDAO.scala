@@ -8,6 +8,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.cloudbilling.model.BillingAccount
 import com.google.pubsub.v1.ProjectTopicName
+import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
@@ -59,7 +60,8 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     topicAdmin = null,
     workbenchMetricBaseName = "test",
     proxyNamePrefix = "",
-    deploymentMgrProject = "deployment-manager-project")(system, materializer, executionContext, cs, timer) {
+    deploymentMgrProject = "deployment-manager-project",
+    accessContextManagerDAO = new MockGoogleAccessContextManagerDAO)(system, materializer, executionContext, cs, timer) {
 
   private var token: String = null
   private var tokenDate: DateTime = null
