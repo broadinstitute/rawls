@@ -26,12 +26,9 @@ import scala.util.Try
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val errorReportSource = ErrorReportSource("google")
 
-  val CREATE_PROJECT_OPERATION = "create_project"
   val DEPLOYMENT_MANAGER_CREATE_PROJECT = "dm_create_project"
   val ADD_PROJECT_TO_PERIMETER = "add_project_to_perimeter"
 
-  val API_SERVICE_MANAGEMENT = "ServiceManagement"
-  val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
   val API_DEPLOYMENT_MANAGER = "DeploymentManager"
   val API_ACCESS_CONTEXT_MANAGER = "AccessContextManager"
   val accessContextManagerDAO: AccessContextManagerDAO

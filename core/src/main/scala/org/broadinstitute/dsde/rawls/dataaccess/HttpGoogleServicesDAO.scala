@@ -813,26 +813,6 @@ class HttpGoogleServicesDAO(
     // for cloudResManager and servicesManager and they return different but identical Status objects
     // there is not much else to be done... too bad scala does not have duck typing.
     operationId.apiType match {
-      case API_CLOUD_RESOURCE_MANAGER =>
-        val cloudResManager = getCloudResourceManager(credential)
-        implicit val service = GoogleInstrumentedService.CloudResourceManager
-
-        retryWhen500orGoogleError(() => {
-          executeGoogleRequest(cloudResManager.operations().get(operationId.operationId))
-        }).map { op =>
-          OperationStatus(toScalaBool(op.getDone), Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
-        }
-
-      case API_SERVICE_MANAGEMENT =>
-        val servicesManager = getServicesManager(credential)
-
-        implicit val service = GoogleInstrumentedService.Billing
-        retryWhen500orGoogleError(() => {
-          executeGoogleRequest(servicesManager.operations().get(operationId.operationId))
-        }).map { op =>
-          OperationStatus(toScalaBool(op.getDone), Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
-        }
-
       case API_DEPLOYMENT_MANAGER =>
         val deploymentManager = getDeploymentManager(dmCredential)
         implicit val service = GoogleInstrumentedService.DeploymentManager
