@@ -152,7 +152,8 @@ object Boot extends IOApp with LazyLogging {
         topicAdmin = appDependencies.topicAdmin,
         workbenchMetricBaseName = metricsPrefix,
         proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
-        deploymentMgrProject = dmConfig.projectID
+        deploymentMgrProject = dmConfig.projectID,
+        cleanupDeploymentAfterCreating = dmConfig.cleanupDeploymentAfterCreating
       )
 
       val pubSubDAO = new HttpGooglePubSubDAO(

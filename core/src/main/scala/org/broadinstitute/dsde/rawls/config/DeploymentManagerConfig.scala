@@ -1,15 +1,21 @@
 package org.broadinstitute.dsde.rawls.config
 
 import com.typesafe.config.Config
+import org.broadinstitute.dsde.rawls.util.ScalaConfig.EnhancedScalaConfig
 
 case class DeploymentManagerConfig(
   templatePath: String,
   projectID: String,
-  orgID: Long
+  orgID: Long,
+  cleanupDeploymentAfterCreating: Boolean = true
 )
 case object DeploymentManagerConfig {
   def apply[T <: DeploymentManagerConfig](conf: Config): DeploymentManagerConfig = {
-    val dmConfig = new DeploymentManagerConfig(conf.getString("templatePath"), conf.getString("projectID"), conf.getLong("orgID"))
+    val dmConfig = new DeploymentManagerConfig(
+                      conf.getString("templatePath"),
+                      conf.getString("projectID"),
+                      conf.getLong("orgID"),
+                      conf.getBooleanOption("cleanupDeploymentAfterCreating").getOrElse(true))
 
     //sanity check against a couple of obvious ways to get this wrong in config
     val badPathBecauseGithub = dmConfig.templatePath.contains("github.com")

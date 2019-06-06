@@ -117,7 +117,8 @@ class HttpGoogleServicesDAO(
   topicAdmin: GoogleTopicAdmin[IO],
   override val workbenchMetricBaseName: String,
   proxyNamePrefix: String,
-  deploymentMgrProject: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+  deploymentMgrProject: String,
+  cleanupDeploymentAfterCreating: Boolean)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
@@ -762,11 +763,12 @@ class HttpGoogleServicesDAO(
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
 
-    /*
-    executeGoogleRequestWithRetry(
-      deploymentManager.deployments().delete(deploymentMgrProject, projectToDM(projectName)).setDeletePolicy("ABANDON")).void
-     */
-    Future.successful(())
+    if( cleanupDeploymentAfterCreating ) {
+      executeGoogleRequestWithRetry(
+        deploymentManager.deployments().delete(deploymentMgrProject, projectToDM(projectName)).setDeletePolicy("ABANDON")).void
+    } else {
+      Future.successful(())
+    }
   }
 
   def projectToDM(projectName: RawlsBillingProjectName) = s"dm-${projectName.value}"
