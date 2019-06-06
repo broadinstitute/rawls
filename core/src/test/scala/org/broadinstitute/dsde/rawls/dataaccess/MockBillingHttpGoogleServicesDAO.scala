@@ -61,7 +61,8 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     topicAdmin = null,
     workbenchMetricBaseName = "test",
     proxyNamePrefix = "",
-    deploymentMgrProject = "deployment-manager-project")(system, materializer, executionContext, cs, timer) {
+    deploymentMgrProject = "deployment-manager-project",
+    cleanupDeploymentAfterCreating = true)(system, materializer, executionContext, cs, timer) {
 
   private var token: String = null
   private var tokenDate: DateTime = null
