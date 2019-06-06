@@ -93,12 +93,11 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
   }
 
   /**
-    * Takes a collection of project records that we know are have a status indicating they need to be added to a
+    * Takes a collection of project records that we know have a status indicating they need to be added to a
     * perimeter.  Also takes a collection of already existing operations for adding projects to a perimeter.  We then
-    * evaluate the list of projects that need to be added to a perimeter to the list of operations already in progress
+    * compare the list of projects that need to be added to a perimeter to the list of operations already in progress
     * to add projects to a perimeter.  For each perimeter that needs one or more projects to be added to it, we will
     * kick off one operation to add all of those projects at the same time.
-    * issue addProjectToPerimeter call to google for all projects that don't have associated operations, and add OperationRecord for this call
     * @param projects: Collection of RawlsBillingProjects that need to be added to a perimeter
     * @param operations: Collection of RawlsBillingProjectOperationRecord that are already running to add a project to
     *                  the specified perimeter
@@ -155,11 +154,11 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
   }
 
   /**
-    * This method checks the status of operations running in Google, and then ensures that the state of the
-    * RawlsBillingProjectRecord matches the state of the RawlsBillingProjectOperationRecord.  It takes a collection of
-    * RawlsBillingProjectOperationRecords that have already been updated with the current state of the operations from
-    * Google.  This method will then update the corresponding RawlsBillingProjectRecords if the operation has finished,
-    * and based on whether the operation succeeded or failed.
+    * This method ensures that the state of the RawlsBillingProjectRecord matches the state of the
+    * RawlsBillingProjectOperationRecord.  It takes a collection of RawlsBillingProjectOperationRecords that have
+    * already been updated with the current state of the operations from Google.  This method will then update the
+    * corresponding RawlsBillingProjectRecords if the Google operation has finished, and based on whether the operation
+    * succeeded or failed.
     * @param projects: collection of RawlsBillingProjects that we want to update
     * @param operations: collection of RawlsBillingProjectOperationRecords that reflect the latest operation information
     *                  from Google
@@ -209,7 +208,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
   /**
     * Takes a collection of RawlsBillingProjectOperationRecords, checks on the status of all of the corresponding
     * operations in Google, updates and persists any updates to the the RawlsBillingProjectOperationRecords, and returns
-    * the same collection of RawlsBillingProjectOperationRecords updated with latest status from Google.
+    * the a copy of the RawlsBillingProjectOperationRecords updated with latest status from Google.
     * @param operations
     * @return
     */
