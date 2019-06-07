@@ -27,12 +27,14 @@ trait RawlsBillingProjectComponent {
     def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount, message, cromwellBackend, servicePerimeter, googleProjectNumber) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
 
-  implicit val googleApiTypeColumnType = MappedColumnType.base[GoogleApiType, String](
+  // these 2 implicits are lazy because there is a timing problem initializing MappedColumnType, if they are not lazy
+  // we get null pointer exceptions
+  implicit lazy val googleApiTypeColumnType = MappedColumnType.base[GoogleApiType, String](
     { apiType => apiType.toString },
     { stringValue => GoogleApiTypes.withName(stringValue) }
   )
 
-  implicit val googleOperationNameColumnType = MappedColumnType.base[GoogleOperationName, String](
+  implicit lazy val googleOperationNameColumnType = MappedColumnType.base[GoogleOperationName, String](
     { operationName => operationName.toString },
     { stringValue => GoogleOperationNames.withName(stringValue)}
   )
