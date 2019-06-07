@@ -4,11 +4,13 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import org.scalatest.mockito.MockitoSugar
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext}
 
 class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually {
 
@@ -20,29 +22,46 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
   val defaultCromwellBucketUrl = "bucket-url"
   val defaultBillingProjectName = RawlsBillingProjectName("test-bp")
 
-  def getCreatingBillingProjectMonitor(datasource: SlickDataSource = defaultDataSource,
-                                       gcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test"),
-                                       projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty),
-                                       samDAO: SamDAO = new MockSamDAO(defaultDataSource)(defaultExecutionContext),
-                                       requesterPaysRole: String = "requesterPaysRole")(implicit executionContext: ExecutionContext = defaultExecutionContext): CreatingBillingProjectMonitor = {
-    new CreatingBillingProjectMonitor {
-      override implicit val executionContext: ExecutionContext = executionContext
-      override val datasource: SlickDataSource = datasource
-      override val gcsDAO: GoogleServicesDAO = gcsDAO
-      override val projectTemplate: ProjectTemplate = projectTemplate
-      override val samDAO: SamDAO = samDAO
-      override val requesterPaysRole: String = requesterPaysRole
-    }
-  }
+  // I'd like this to be somewhere out here so we can use it in all the tests, but this doesn't work
+//  def getCreatingBillingProjectMonitor(datasource: SlickDataSource = defaultDataSource,
+//                                       gcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test"),
+//                                       projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty),
+//                                       samDAO: SamDAO = new MockSamDAO(defaultDataSource)(defaultExecutionContext),
+//                                       requesterPaysRole: String = "requesterPaysRole")(implicit executionContext: ExecutionContext = defaultExecutionContext): CreatingBillingProjectMonitor = {
+//    new CreatingBillingProjectMonitor {
+//      override implicit val executionContext: ExecutionContext = executionContext
+//      override val datasource: SlickDataSource = datasource
+//      override val gcsDAO: GoogleServicesDAO = gcsDAO
+//      override val projectTemplate: ProjectTemplate = projectTemplate
+//      override val samDAO: SamDAO = samDAO
+//      override val requesterPaysRole: String = requesterPaysRole
+//    }
+//  }
 
   "CreatingBillingProjectMonitor" should "set project status to 'AddingToPerimeter' when it's been successfully created and it has a service perimeter" in {
-    // billing project finished create step, has service perimeter -- should go to adding perimeter
-    withEmptyTestDatabase { dataSource =>
-      val creatingBillingProjectMonitor = getCreatingBillingProjectMonitor(dataSource)
-
-
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
       val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.Creating, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
       val creatingOperation = RawlsBillingProjectOperationRecord(billingProject.projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, "opid", true, None, GoogleApiTypes.DeploymentManagerApi)
+
+      runAndWait(rawlsBillingProjectQuery.create(billingProject))
+      runAndWait(rawlsBillingProjectQuery.insertOperations(Seq(creatingOperation)))
+
+      val creatingBillingProjectMonitor = new CreatingBillingProjectMonitor {
+        override implicit val executionContext: ExecutionContext = defaultExecutionContext
+        override val datasource: SlickDataSource = dataSource
+        override val gcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
+        override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty)
+        override val samDAO: SamDAO = new MockSamDAO(dataSource)
+        override val requesterPaysRole: String = "requesterPaysRole"
+      }
+
+      assertResult(CheckDone(1)) {
+        Await.result(creatingBillingProjectMonitor.checkCreatingProjects(), Duration.Inf)
+      }
+
+      assertResult(Seq(CreationStatuses.AddingToPerimeter)) {
+        runAndWait(rawlsBillingProjectQuery.getBillingProjects(Set(billingProject.projectName))).map(_.status)
+      }
     }
   }
 
