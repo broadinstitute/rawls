@@ -293,7 +293,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty)
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
           override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
-            if (operationId.apiType == API_DEPLOYMENT_MANAGER) {
+            if (operationId.apiType == GoogleApiTypes.DeploymentManagerApi) {
               Future.successful(OperationStatus(done = true, errorMessage = Option("this failed")))
             } else {
               super.pollOperation(operationId)

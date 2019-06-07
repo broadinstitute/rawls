@@ -801,7 +801,7 @@ class HttpGoogleServicesDAO(
       }
     }) map { googleOperation =>
       val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
-      RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, googleOperation.getName, false, errorStr, API_DEPLOYMENT_MANAGER)
+      RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, googleOperation.getName, false, errorStr, GoogleApiTypes.DeploymentManagerApi.toString)
     }
   }
 
@@ -813,7 +813,7 @@ class HttpGoogleServicesDAO(
     // for cloudResManager and servicesManager and they return different but identical Status objects
     // there is not much else to be done... too bad scala does not have duck typing.
     operationId.apiType match {
-      case API_DEPLOYMENT_MANAGER =>
+      case GoogleApiTypes.DeploymentManagerApi =>
         val deploymentManager = getDeploymentManager(dmCredential)
         implicit val service = GoogleInstrumentedService.DeploymentManager
 
@@ -824,7 +824,7 @@ class HttpGoogleServicesDAO(
           OperationStatus(op.getStatus == "DONE", errorStr)
         }
 
-      case API_ACCESS_CONTEXT_MANAGER =>
+      case GoogleApiTypes.AccessContextManagerApi =>
         accessContextManagerDAO.pollOperation(operationId.operationId).map { op =>
           OperationStatus(toScalaBool(op.getDone), Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
         }

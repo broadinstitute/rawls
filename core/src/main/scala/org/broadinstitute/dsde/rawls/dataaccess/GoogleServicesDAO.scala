@@ -9,6 +9,7 @@ import com.google.api.services.genomics.model.Operation
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import com.google.pubsub.v1.ProjectTopicName
 import com.typesafe.config.Config
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -29,8 +30,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val DEPLOYMENT_MANAGER_CREATE_PROJECT = "dm_create_project"
   val ADD_PROJECT_TO_PERIMETER = "add_project_to_perimeter"
 
-  val API_DEPLOYMENT_MANAGER = "DeploymentManager"
-  val API_ACCESS_CONTEXT_MANAGER = "AccessContextManager"
   val accessContextManagerDAO: AccessContextManagerDAO
 
   val billingEmail: String
@@ -204,7 +203,39 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   }
 }
 
-case class OperationId(apiType: String, operationId: String)
+object GoogleApiTypes {
+  val allGoogleApiTypes = List(DeploymentManagerApi, AccessContextManagerApi)
+
+  sealed trait GoogleApiType extends RawlsEnumeration[GoogleApiType] {
+    override def toString = GoogleApiTypes.toString(this)
+    override def withName(name: String) = GoogleApiTypes.withName(name)
+  }
+
+  def withName(name: String): GoogleApiType = {
+    name match {
+      case "DeploymentManager" => DeploymentManagerApi
+      case "AccessContextManager" => AccessContextManagerApi
+      case _ => throw new RawlsException(s"Invalid GoogleApiType [${name}]. Possible values: ${allGoogleApiTypes.mkString(", ")}")
+    }
+  }
+
+  def withNameOpt(name: Option[String]): Option[GoogleApiType] = {
+    name.flatMap(n => Try(withName(n)).toOption)
+  }
+
+  def toString(googleApiType: GoogleApiType): String = {
+    googleApiType match {
+      case DeploymentManagerApi => "DeploymentManager"
+      case AccessContextManagerApi => "AccessContextManager"
+      case _ => throw new RawlsException(s"Invalid GoogleApiType [${googleApiType}]. Possible values: ${allGoogleApiTypes.mkString(", ")}")
+    }
+  }
+
+  case object DeploymentManagerApi extends GoogleApiType
+  case object AccessContextManagerApi extends GoogleApiType
+}
+
+case class OperationId(apiType: GoogleApiTypes.GoogleApiType, operationId: String)
 case class OperationStatus(done: Boolean, errorMessage: Option[String])
 case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
 case class ProjectTemplate(policies: Map[String, Seq[String]])
