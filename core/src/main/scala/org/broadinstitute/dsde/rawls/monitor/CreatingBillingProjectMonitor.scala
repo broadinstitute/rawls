@@ -142,7 +142,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
         val (projectsWithServicePerimeter, projectsWithoutServicePerimeter) = newProjectsInPerimeter.partition(_.servicePerimeter.isDefined)
         for {
           _ <- dataAccess.rawlsBillingProjectQuery.insertOperations(projectsWithServicePerimeter.map { project =>
-            RawlsBillingProjectOperationRecord(project.projectName.value, gcsDAO.ADD_PROJECT_TO_PERIMETER, operation.getName, false, None, GoogleApiTypes.AccessContextManagerApi.toString)
+            RawlsBillingProjectOperationRecord(project.projectName.value, gcsDAO.ADD_PROJECT_TO_PERIMETER, operation.getName, false, None, GoogleApiTypes.AccessContextManagerApi)
           })
           _ <- dataAccess.rawlsBillingProjectQuery.updateBillingProjects(projectsWithoutServicePerimeter.map { project =>
             project.copy(status = CreationStatuses.Error, message = Some("Project was in Adding to Perimeter state but no perimeter was specified"))
@@ -235,7 +235,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     // Collect the operationIds that we need to check.  There's a possibility that multiple operation records exist for
     // the same Google Operation, so we de-dupe to reduce volume of requests to Google.
     val operationsToPoll = operations.collect {
-      case operation if !operation.done => OperationId(GoogleApiTypes.withName(operation.api), operation.operationId)
+      case operation if !operation.done => OperationId(operation.api, operation.operationId)
     }.toSet
 
     for {
@@ -250,7 +250,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     } yield {
       // Update RawlsBillingProjectOperationRecords in memory with the latest polling results
       operations.map { rawlsOperation =>
-        pollingResultsById.get(OperationId(GoogleApiTypes.withName(rawlsOperation.api), rawlsOperation.operationId)) match {
+        pollingResultsById.get(OperationId(rawlsOperation.api, rawlsOperation.operationId)) match {
           case None => rawlsOperation
           case Some(googleOperationStatus) => rawlsOperation.copy(done = googleOperationStatus.done, errorMessage = googleOperationStatus.errorMessage)
         }
