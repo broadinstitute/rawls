@@ -148,7 +148,7 @@ class HttpGoogleServicesDAO(
   //we only have to do this once, because there's only one DM project
   val getDeploymentManagerSAEmail: Future[String] = {
     getGoogleProject(RawlsBillingProjectName(deploymentMgrProject))
-      .map( p => s"${p.getProjectId}@cloudservices.gserviceaccount.com")
+      .map( p => s"${p.getProjectNumber}@cloudservices.gserviceaccount.com")
   }
 
   initBuckets()
