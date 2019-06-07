@@ -4,6 +4,7 @@ import akka.actor.Status.Failure
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
@@ -123,33 +124,47 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     * projects in a perimeter, we must specify the ENTIRE membership list.  We can get the intended membership list from
     * the Rawls DB.
     * @param servicePerimeterName
-    * @param newProjectsInPerimeter
+    * @param newProjectsInPerimeter all of these projects must be in servicePerimeterName
+    * @throws IllegalArgumentException if there are any members of newProjectsInPerimeter not in servicePerimeterName
     * @return
     */
   private def createAddProjectsToPerimeterOperation(servicePerimeterName: ServicePerimeterName, newProjectsInPerimeter: Seq[RawlsBillingProject]): Future[Unit] = {
-    for {
-      // Query Rawls DB to get full list of projects intended to be inside the perimeter
-      allProjectsInPerimeter <- datasource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.listProjectsWithServicePerimeter(servicePerimeterName)
-      }
-      allProjectNumbers = allProjectsInPerimeter.map(_.googleProjectNumber).collect {
-        case Some(googleProjectNumber) => googleProjectNumber.value
-      }
-      // Initiate operation to overwrite the list of projects in the Perimeter on Google
-      operation <- gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, allProjectNumbers)
+    if (newProjectsInPerimeter.exists(_.servicePerimeter != Some(servicePerimeterName))) {
+      Future.failed(new IllegalArgumentException(s"all members of newProjectsInPerimeter must be in servicePerimeter $servicePerimeterName"))
+    } else {
+      for {
+        // Query Rawls DB to get full list of projects intended to be inside the perimeter
+        allProjectsInPerimeter <- datasource.inTransaction { dataAccess =>
+          dataAccess.rawlsBillingProjectQuery.listProjectsWithServicePerimeter(servicePerimeterName)
+        }
+        allProjectNumbers = allProjectsInPerimeter.flatMap { project =>
+          project.googleProjectNumber match {
+            case Some(googleProjectNumber) => Option(googleProjectNumber.value)
+            case None if !newProjectsInPerimeter.map(_.projectName).contains(project.projectName) =>
+              // this case for a preexisting project that should already be in the perimeter but somehow does not
+              // have a project id at this time. If this code is allowed to continue this project will be removed
+              // from the perimeter which could allow data exfiltration which is BAD. So throw an exception which
+              // will halt all perimeter operations for this perimeter and hope someone will notice and fix by
+              // looking up the project number in google and adding it back to the database
+              throw new RawlsException(s"project ${project.projectName} has a perimeter but does not have a project number in the database, please lookup the project in google console and add it to the database. Projects cannot be added to perimeter ${servicePerimeterName.value} until this is fixed")
+          }
+        }
+        // Initiate operation to overwrite the list of projects in the Perimeter on Google
+        operation <- gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, allProjectNumbers)
 
-      _ <- datasource.inTransaction { dataAccess =>
-        val (projectsWithServicePerimeter, projectsWithoutServicePerimeter) = newProjectsInPerimeter.partition(_.servicePerimeter.isDefined)
+        _ <- datasource.inTransaction { dataAccess =>
+        val (projectsWithProjectNumber, projectsWithoutGoogleProjectNumber) = newProjectsInPerimeter.partition(_.googleProjectNumber.isDefined)
         for {
-          _ <- dataAccess.rawlsBillingProjectQuery.insertOperations(projectsWithServicePerimeter.map { project =>
+          _ <- dataAccess.rawlsBillingProjectQuery.insertOperations(projectsWithProjectNumber.map { project =>
             RawlsBillingProjectOperationRecord(project.projectName.value, GoogleOperationNames.AddProjectToPerimeter, operation.getName, false, None, GoogleApiTypes.AccessContextManagerApi)
           })
-          _ <- dataAccess.rawlsBillingProjectQuery.updateBillingProjects(projectsWithoutServicePerimeter.map { project =>
-            project.copy(status = CreationStatuses.Error, message = Some("Project was in Adding to Perimeter state but no perimeter was specified"))
+          _ <- dataAccess.rawlsBillingProjectQuery.updateBillingProjects(projectsWithoutGoogleProjectNumber.map { project =>
+            project.copy(status = CreationStatuses.Error, message = Some("Project was in Adding to Perimeter state but google project number did not exist"))
           })
         } yield ()
-      }
-    } yield ()
+        }
+      } yield ()
+    }
   }
 
   /**

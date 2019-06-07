@@ -169,6 +169,15 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  // billing project finished create step, has service perimeter -- should go to adding perimeter
+  // billing project in adding to perimeter, no operations -- should call google dao and add operation
+  // billing project in adding to perimeter, with still running operation -- should call google dao to poll but no state change
+  // billing project in adding to perimeter, with complete operation -- should call google dao to poll and change state (op done, project ready)
+
+  // billing project in adding to perimeter, with more than 1 operation -- project should error
+  // billing project in adding to perimeter, no operations, no perimeter specified -- project should error
+  // billing project in adding to perimeter, no operations but there is an existing project in perimeter with no project number -- exception
+
   it should "handle operation errors creating a billing project" in {
     testWithPollingError { _ =>
       Future.successful(OperationStatus(done = true, errorMessage = Option("this failed")))
