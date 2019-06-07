@@ -1,10 +1,13 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleApiTypes, GoogleOperationNames}
+import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
+import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
 import org.broadinstitute.dsde.rawls.model._
 
 case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String])
-case class RawlsBillingProjectOperationRecord(projectName: String, operationName: String, operationId: String, done: Boolean, errorMessage: Option[String], api: String)
+case class RawlsBillingProjectOperationRecord(projectName: String, operationName: GoogleOperationName, operationId: String, done: Boolean, errorMessage: Option[String], api: GoogleApiType)
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
@@ -24,13 +27,23 @@ trait RawlsBillingProjectComponent {
     def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount, message, cromwellBackend, servicePerimeter, googleProjectNumber) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
 
+  implicit val googleApiTypeColumnType = MappedColumnType.base[GoogleApiType, String](
+    { apiType => apiType.toString },
+    { stringValue => GoogleApiTypes.withName(stringValue) }
+  )
+
+  implicit val googleOperationNameColumnType = MappedColumnType.base[GoogleOperationName, String](
+    { operationName => operationName.toString },
+    { stringValue => GoogleOperationNames.withName(stringValue)}
+  )
+
   class RawlsBillingProjectOperationTable(tag: Tag) extends Table[RawlsBillingProjectOperationRecord](tag, "BILLING_PROJECT_OPERATION") {
     def projectName = column[String]("PROJECT_NAME", O.Length(254))
-    def operationName = column[String]("OPERATION_NAME", O.Length(254))
+    def operationName = column[GoogleOperationName]("OPERATION_NAME", O.Length(254))
     def operationId = column[String]("OPERATION_ID", O.Length(254))
     def done = column[Boolean]("DONE")
     def errorMessage = column[Option[String]]("ERROR_MESSAGE")
-    def api = column[String]("API")
+    def api = column[GoogleApiType]("API")
 
     def pk = primaryKey("PK_BILLING_PROJECT_OPERATION", (projectName, operationName))
 
@@ -113,8 +126,8 @@ trait RawlsBillingProjectComponent {
       DBIO.sequence(operations.map(rec => rawlsBillingProjectOperationQuery.filter(x => x.projectName === rec.projectName && x.operationName === rec.operationName).update(rec)))
     }
 
-    def loadOperationsForProjects(projectNames: Seq[RawlsBillingProjectName], operationType: String): ReadAction[Seq[RawlsBillingProjectOperationRecord]] = {
-      rawlsBillingProjectOperationQuery.filter(x => x.projectName.inSetBind(projectNames.map(_.value)) && x.operationName === operationType).result
+    def loadOperationsForProjects(projectNames: Seq[RawlsBillingProjectName], operationName: GoogleOperationName): ReadAction[Seq[RawlsBillingProjectOperationRecord]] = {
+      rawlsBillingProjectOperationQuery.filter(x => x.projectName.inSetBind(projectNames.map(_.value)) && x.operationName === operationName).result
     }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {

@@ -27,9 +27,6 @@ import scala.util.Try
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val errorReportSource = ErrorReportSource("google")
 
-  val DEPLOYMENT_MANAGER_CREATE_PROJECT = "dm_create_project"
-  val ADD_PROJECT_TO_PERIMETER = "add_project_to_perimeter"
-
   val accessContextManagerDAO: AccessContextManagerDAO
 
   val billingEmail: String
@@ -233,6 +230,38 @@ object GoogleApiTypes {
 
   case object DeploymentManagerApi extends GoogleApiType
   case object AccessContextManagerApi extends GoogleApiType
+}
+
+object GoogleOperationNames {
+  val allGoogleOperationNames = List(DeploymentManagerCreateProject, AddProjectToPerimeter)
+
+  sealed trait GoogleOperationName extends RawlsEnumeration[GoogleOperationName] {
+    override def toString = GoogleOperationNames.toString(this)
+    override def withName(name: String) = GoogleOperationNames.withName(name)
+  }
+
+  def withName(name: String): GoogleOperationName = {
+    name match {
+      case "dm_create_project" => DeploymentManagerCreateProject
+      case "add_project_to_perimeter" => AddProjectToPerimeter
+      case _ => throw new RawlsException(s"Invalid GoogleOperationName [${name}]. Possible values: ${allGoogleOperationNames.mkString(", ")}")
+    }
+  }
+
+  def withNameOpt(name: Option[String]): Option[GoogleOperationName] = {
+    name.flatMap(n => Try(withName(n)).toOption)
+  }
+
+  def toString(googleApiType: GoogleOperationName): String = {
+    googleApiType match {
+      case DeploymentManagerCreateProject => "dm_create_project"
+      case AddProjectToPerimeter => "add_project_to_perimeter"
+      case _ => throw new RawlsException(s"Invalid GoogleOperationName [${googleApiType}]. Possible values: ${allGoogleOperationNames.mkString(", ")}")
+    }
+  }
+
+  case object DeploymentManagerCreateProject extends GoogleOperationName
+  case object AddProjectToPerimeter extends GoogleOperationName
 }
 
 case class OperationId(apiType: GoogleApiTypes.GoogleApiType, operationId: String)
