@@ -199,7 +199,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   }
 
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] =
-    Future.successful(RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, "opid", false, None, GoogleApiTypes.DeploymentManagerApi))
+    Future.successful(RawlsBillingProjectOperationRecord(projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, "opid", false, None, GoogleApiTypes.DeploymentManagerApi))
 
   override def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(())
 

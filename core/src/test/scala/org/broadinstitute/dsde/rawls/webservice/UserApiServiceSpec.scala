@@ -136,7 +136,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), services.gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)).size
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
       }
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
@@ -151,7 +151,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), services.gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)).count(_.done)
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).count(_.done)
       }
 
       Get("/user/billing") ~>
@@ -214,7 +214,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), services.gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)).size
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
       }
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
@@ -231,11 +231,11 @@ class UserApiServiceSpec extends ApiServiceSpec {
       assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), services.gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)).count(_.done)
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).count(_.done)
       }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), services.gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)).size
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
       }
 
       Get("/user/billing") ~>
@@ -285,7 +285,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), services.gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)).size
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
       }
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
@@ -309,11 +309,11 @@ class UserApiServiceSpec extends ApiServiceSpec {
       assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), services.gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)).count(_.done)
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).count(_.done)
       }
 
       assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), services.gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)).size
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
       }
 
       Get("/user/billing") ~>

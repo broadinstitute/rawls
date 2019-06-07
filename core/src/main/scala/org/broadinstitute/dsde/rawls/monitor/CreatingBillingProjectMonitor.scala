@@ -70,8 +70,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
         for {
           projectsBeingCreated <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Creating)
           projectsBeingAddedToPerimeter <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.AddingToPerimeter)
-          createProjectOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsBeingCreated.map(_.projectName), gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT)
-          addProjectToPerimeterOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsBeingAddedToPerimeter.map(_.projectName), gcsDAO.ADD_PROJECT_TO_PERIMETER)
+          createProjectOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsBeingCreated.map(_.projectName), GoogleOperationNames.DeploymentManagerCreateProject)
+          addProjectToPerimeterOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsBeingAddedToPerimeter.map(_.projectName), GoogleOperationNames.AddProjectToPerimeter)
         } yield {
           (projectsBeingCreated, createProjectOperations, projectsBeingAddedToPerimeter, addProjectToPerimeterOperations)
         }
@@ -142,7 +142,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
         val (projectsWithServicePerimeter, projectsWithoutServicePerimeter) = newProjectsInPerimeter.partition(_.servicePerimeter.isDefined)
         for {
           _ <- dataAccess.rawlsBillingProjectQuery.insertOperations(projectsWithServicePerimeter.map { project =>
-            RawlsBillingProjectOperationRecord(project.projectName.value, gcsDAO.ADD_PROJECT_TO_PERIMETER, operation.getName, false, None, GoogleApiTypes.AccessContextManagerApi)
+            RawlsBillingProjectOperationRecord(project.projectName.value, GoogleOperationNames.AddProjectToPerimeter, operation.getName, false, None, GoogleApiTypes.AccessContextManagerApi)
           })
           _ <- dataAccess.rawlsBillingProjectQuery.updateBillingProjects(projectsWithoutServicePerimeter.map { project =>
             project.copy(status = CreationStatuses.Error, message = Some("Project was in Adding to Perimeter state but no perimeter was specified"))

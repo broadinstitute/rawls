@@ -801,7 +801,7 @@ class HttpGoogleServicesDAO(
       }
     }) map { googleOperation =>
       val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
-      RawlsBillingProjectOperationRecord(projectName.value, DEPLOYMENT_MANAGER_CREATE_PROJECT, googleOperation.getName, false, errorStr, GoogleApiTypes.DeploymentManagerApi)
+      RawlsBillingProjectOperationRecord(projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, googleOperation.getName, false, errorStr, GoogleApiTypes.DeploymentManagerApi)
     }
   }
 
