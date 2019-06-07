@@ -60,6 +60,10 @@ import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes, model}
+import com.google.api.services.iam.v1.Iam
+import com.google.api.services.iam.v1.model.TestIamPermissionsRequest
+import com.google.api.services.iamcredentials.v1.IAMCredentials
+import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
@@ -592,6 +596,33 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  protected def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
+    implicit val service = GoogleInstrumentedService.IamCredentials
+
+    //First, get an access token to act as the Google APIs Service Agent that Deployment Manager runs as.
+    val tokenRequestBody = new GenerateAccessTokenRequest().setScope(List(ComputeScopes.CLOUD_PLATFORM).asJava)
+    val accessTokenRequest = getIAMCredentials(getDeploymentManagerAccountCredential).projects().serviceAccounts().generateAccessToken("deploymentmanager@googleetc", tokenRequestBody)
+
+    for {
+      tokenResponse <- retryWhen500orGoogleError(() => {
+                        blocking {
+                          executeGoogleRequest (accessTokenRequest)
+                        }})
+
+      //Now we've got an access token, test IAM permissions to see if the SA has permission to create projects.
+      dmSACredential = buildCredentialFromAccessToken(tokenResponse.getAccessToken)
+      testPermissionsBody = new TestIamPermissionsRequest().setPermissions(List("resourcemanager.projects.create").asJava)
+      testPermissionsRequest = getIAM(dmSACredential).projects().serviceAccounts().testIamPermissions(billingAccountId, testPermissionsBody)
+
+      permissionResponse <- retryWhen500orGoogleError(() => {
+                              blocking {
+                                executeGoogleRequest(testPermissionsRequest)
+                              }})
+    } yield {
+      permissionResponse.getPermissions.asScala.contains("resourcemanager.projects.create")
+    }
+  }
+
   protected def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[Seq[BillingAccount]] = {
     implicit val service = GoogleInstrumentedService.Billing
     val fetcher = getCloudBillingManager(credential).billingAccounts().list()
@@ -993,6 +1024,14 @@ class HttpGoogleServicesDAO(
     new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
 
+  def getIAM(credential: Credential): Iam = {
+    new Iam.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+  }
+
+  def getIAMCredentials(credential: Credential): IAMCredentials = {
+    new IAMCredentials.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+  }
+
   def getDeploymentManager(credential: Credential): DeploymentManagerV2Beta = {
     new DeploymentManagerV2Beta.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
@@ -1080,6 +1119,15 @@ class HttpGoogleServicesDAO(
       .setJsonFactory(jsonFactory)
       .setClientSecrets(tokenClientSecrets)
       .build().setFromTokenResponse(new TokenResponse().setRefreshToken(refreshToken))
+  }
+
+  private def buildCredentialFromAccessToken(accessToken: String): GoogleCredential = {
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setServiceAccountId("deployment-manager-serviceaccount")
+      .setServiceAccountScopes(List(ComputeScopes.CLOUD_PLATFORM).asJava) // grant bucket-creation powers
+      .build().setAccessToken(accessToken)
   }
 
   def getAccessTokenUsingJson(saKey: String) : Future[String] = {
