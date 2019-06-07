@@ -145,6 +145,12 @@ class HttpGoogleServicesDAO(
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
+  //we only have to do this once, because there's only one DM project
+  val getDeploymentManagerSAEmail: Future[String] = {
+    getGoogleProject(RawlsBillingProjectName(deploymentMgrProject))
+      .map( p => s"${p.getProjectId}@cloudservices.gserviceaccount.com")
+  }
+
   initBuckets()
 
   protected def initBuckets(): Unit = {
@@ -576,34 +582,15 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  protected def billingAccountContainsFCBillingGroup(credential: Credential, billingAccountId: String): Future[Boolean] = {
-    implicit val service = GoogleInstrumentedService.Billing
-    val fetcher = getCloudBillingManager(credential).billingAccounts().getIamPolicy(billingAccountId)
-    retryWhen500orGoogleError(() => {
-      blocking {
-        executeGoogleRequest(fetcher)
-      }
-    }) map { iamPolicy =>
-      val billingUsersOpt = iamPolicy.getBindings.asScala.find(_.getRole == "roles/billing.user")
-      val billingAdminsOpt = iamPolicy.getBindings.asScala.find(_.getRole == "roles/billing.admin")
-
-      //see if any of the billing group email aliases (@terra.bio and @firecloud.org) have either billing admin or user permissions
-      billingGroupEmailAliases.foldLeft(false){ (acc, email) =>
-        acc ||
-          billingUsersOpt.exists(_.getMembers.asScala.contains(s"group:$email")) ||
-          billingAdminsOpt.exists(_.getMembers.asScala.contains(s"group:$email"))
-      }
-    }
-  }
-
   protected def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.IamCredentials
 
     //First, get an access token to act as the Google APIs Service Agent that Deployment Manager runs as.
     val tokenRequestBody = new GenerateAccessTokenRequest().setScope(List(ComputeScopes.CLOUD_PLATFORM).asJava)
-    val accessTokenRequest = getIAMCredentials(getDeploymentManagerAccountCredential).projects().serviceAccounts().generateAccessToken("deploymentmanager@googleetc", tokenRequestBody)
 
     for {
+      dmSAEmail <- getDeploymentManagerSAEmail
+      accessTokenRequest = getIAMCredentials(getDeploymentManagerAccountCredential).projects().serviceAccounts().generateAccessToken(dmSAEmail, tokenRequestBody)
       tokenResponse <- retryWhen500orGoogleError(() => {
                         blocking {
                           executeGoogleRequest (accessTokenRequest)
@@ -648,7 +635,7 @@ class HttpGoogleServicesDAO(
     listBillingAccounts(cred) flatMap { accountList =>
       Future.sequence(accountList map { acct =>
         val acctName = acct.getName
-        billingAccountContainsFCBillingGroup(cred, acctName) map { firecloudHasAccount =>
+        testDMBillingAccountAccess(acctName) map { firecloudHasAccount =>
           RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount, acct.getDisplayName)
         }
       })

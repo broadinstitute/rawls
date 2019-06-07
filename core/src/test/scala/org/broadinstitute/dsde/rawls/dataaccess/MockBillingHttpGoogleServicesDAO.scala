@@ -98,7 +98,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
   }
 
-  protected override def billingAccountContainsFCBillingGroup(credential: Credential, billingAccountId: String): Future[Boolean] = {
+  protected override def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
     billingAccountId match {
       case "billingAccounts/firecloudHasThisOne" => Future.successful(true)
       case "billingAccounts/firecloudDoesntHaveThisOne" => Future.successful(false)
