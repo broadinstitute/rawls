@@ -590,7 +590,8 @@ class HttpGoogleServicesDAO(
 
     for {
       dmSAEmail <- getDeploymentManagerSAEmail
-      accessTokenRequest = getIAMCredentials(getDeploymentManagerAccountCredential).projects().serviceAccounts().generateAccessToken(dmSAEmail, tokenRequestBody)
+      saResourceName = s"projects/$deploymentMgrProject/serviceAccounts/$dmSAEmail"
+      accessTokenRequest = getIAMCredentials(getDeploymentManagerAccountCredential).projects().serviceAccounts().generateAccessToken(saResourceName, tokenRequestBody)
       tokenResponse <- retryWhen500orGoogleError(() => {
                         blocking {
                           executeGoogleRequest (accessTokenRequest)
