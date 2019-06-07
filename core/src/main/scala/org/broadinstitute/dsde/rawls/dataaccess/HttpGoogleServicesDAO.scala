@@ -752,7 +752,7 @@ class HttpGoogleServicesDAO(
 
   override def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
-    val credential = getBillingServiceAccountCredential
+    val credential = getDeploymentManagerAccountCredential
 
     val cloudResManager = getCloudResourceManager(credential)
 
