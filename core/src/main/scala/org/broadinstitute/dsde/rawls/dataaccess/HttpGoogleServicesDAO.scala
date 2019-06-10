@@ -146,7 +146,7 @@ class HttpGoogleServicesDAO(
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
   //we only have to do this once, because there's only one DM project
-  val getDeploymentManagerSAEmail: Future[String] = {
+  lazy val getDeploymentManagerSAEmail: Future[String] = {
     getGoogleProject(RawlsBillingProjectName(deploymentMgrProject))
       .map( p => s"${p.getProjectNumber}@cloudservices.gserviceaccount.com")
   }
