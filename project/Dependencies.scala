@@ -78,7 +78,7 @@ object Dependencies {
     exclude("com.typesafe.akka", "akka-actor_2.12")
     exclude("com.typesafe.akka", "akka-http_2.12"))
 
-  val workbenchModelV  = "0.13-74e6ee0-SNAP"
+  val workbenchModelV  = "0.13-d4e0782"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogleV = "0.18-4c7acd5"
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
