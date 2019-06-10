@@ -608,7 +608,6 @@ class HttpGoogleServicesDAO(
                                 executeGoogleRequest(testPermissionsRequest)
                               }})
     } yield {
-      logger.warn(permissionResponse.toString)
       Option(permissionResponse.getPermissions).exists(_.asScala.contains(BILLING_ACCOUNT_PERMISSION))
     }
   }
@@ -1115,9 +1114,6 @@ class HttpGoogleServicesDAO(
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      //.setServiceAccountId(clientEmail)
-      //.setServiceAccountUser(credentialEmail)
-      //.setServiceAccountScopes(List(ComputeScopes.CLOUD_PLATFORM).asJava) // grant bucket-creation powers
       .build().setAccessToken(accessToken)
   }
 
