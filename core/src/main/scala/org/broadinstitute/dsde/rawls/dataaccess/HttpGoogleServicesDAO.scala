@@ -50,12 +50,13 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2._
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes, model}
+import com.google.cloud.storage.BucketInfo
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
@@ -161,46 +162,55 @@ class HttpGoogleServicesDAO(
 
   override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String]): Future[GoogleWorkspaceInfo] = {
 
-    def insertBucket: Map[WorkspaceAccessLevel, WorkbenchEmail] => Future[String] = { policyGroupsByAccessLevel =>
+    def insertBucket(): Future[String] = {
       implicit val service = GoogleInstrumentedService.Storage
-      retryWhen500orGoogleError {
-        () => {
-          // bucket ACLs should be:
-          //   project owner - bucket writer
-          //   workspace owner - bucket writer
-          //   workspace writer - bucket writer
-          //   workspace reader - bucket reader
-          //   bucket service account - bucket owner
-          val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(ProjectOwner -> "WRITER", Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
-          val bucketAcls =
-            policyGroupsByAccessLevel.map { case (access, policyEmail) => newBucketAccessControl(makeGroupEntityString(policyEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
-              newBucketAccessControl("user-" + clientEmail, "OWNER")
 
-          // default object ACLs should be:
-          //   project owner - object reader
-          //   workspace owner - object reader
-          //   workspace writer - object reader
-          //   workspace reader - object reader
-          //   bucket service account - object owner
-          val defaultObjectAcls =
-          policyGroupsByAccessLevel.map { case (_, policyEmail) => newObjectAccessControl(makeGroupEntityString(policyEmail.value), "READER") }.toSeq :+
-              newObjectAccessControl("user-" + clientEmail, "OWNER")
+      val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
+      val bucket = new Bucket().setName(bucketName).setLogging(logging).setLabels(labels.asJava)
 
-          val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
+      val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
 
-          val bucket = new Bucket().
-            setName(bucketName).
-            setAcl(bucketAcls.asJava).
-            setDefaultObjectAcl(defaultObjectAcls.asJava).
-            setLogging(logging).
-            setLabels(labels.asJava)
-          val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
-          executeGoogleRequest(inserter)
-
-          bucketName
-        }
+      retryWhen500orGoogleError { () =>
+        executeGoogleRequest(inserter)
+        bucketName
       }
     }
+
+    def updateBucketIam: Map[WorkspaceAccessLevel, WorkbenchEmail] => Stream[IO, Unit] = { policyGroupsByAccessLevel =>
+      //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
+      //do not have seperate permissions that deviate from the bucket-level permissions.
+      //
+      // project owner - roles/storage.objectAdmin
+      // workspace owner - roles/storage.objectAdmin
+      // workspace writer - roles/storage.objectAdmin
+      // workspace reader - roles/storage.objectViewer
+      // bucket service account - roles/storage.admin
+      //
+      //it is noteworthy that the objectAdmin role contains getIamPolicy and setIamPolicy, but these
+      //permissions do not apply to buckets that have bucket only policy enabled, which is the case here.
+      //if bucket only policy were NOT enabled, we would not want to grant the objectAdmin role users.
+
+      val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> StorageRole.ObjectAdmin, Owner -> StorageRole.ObjectAdmin, Write -> StorageRole.ObjectAdmin, Read -> StorageRole.ObjectViewer)
+      val bucketRoles =
+        policyGroupsByAccessLevel.map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) } +
+          (Identity.serviceAccount("user-" + clientEmail) -> StorageRole.StorageAdmin)
+
+      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).map{ case (role,identities) => role -> NonEmptyList.fromListUnsafe(identities.toList)}
+
+      for {
+        _ <- googleStorageService.setBucketOnlyPolicy(GcsBucketName(bucketName), true)
+        _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities)
+      } yield ()
+    }
+
+//    def setBucketIam(): Map[WorkspaceAccessLevel, WorkbenchEmail] => Future[Unit] = { policyGroupsByAccessLevel =>
+//
+//      val iamConfiguration: BucketInfo = Bucket.IamConfiguration.newBuilder().setIsBucketPolicyOnlyEnabled(true).build()
+//
+//      val bindings = new com.google.api.services.storage.model.Policy.Bindings().setRole(bucketRole).setMembers(emails.map(_.value).asJava)
+//
+//      getStorage(getBucketServiceAccountCredential).buckets().update(BucketInfo.)
+//    }
 
     def insertInitialStorageLog: (String) => Future[Unit] = { (bucketName) =>
       implicit val service = GoogleInstrumentedService.Storage
@@ -222,7 +232,8 @@ class HttpGoogleServicesDAO(
     // setupWorkspace main logic
 
     val bucketInsertion = for {
-      bucketName <- insertBucket(policyGroupsByAccessLevel)
+      bucketName <- insertBucket()
+      _ <- updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture()
       _ <- insertInitialStorageLog(bucketName)
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
 
@@ -467,7 +478,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): IO[Unit] = {
+  override def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): Stream[IO, Unit] = {
     val gzipped = (body through fs2.compress.gzip[fs2.Pure](2048)).compile.toList.toArray //after fs2 1.0.4, we can `to[Array]` directly
     googleStorageService.storeObject(hammCromwellMetadata.bucketName, objectName, gzipped, "text/plain")
   }
