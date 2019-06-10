@@ -187,8 +187,8 @@ class HttpGoogleServicesDAO(
       // bucket service account - roles/storage.admin
       //
       //it is noteworthy that the objectAdmin role contains getIamPolicy and setIamPolicy, but these
-      //permissions do not apply to buckets that have bucket only policy enabled, which is the case here.
-      //if bucket only policy were NOT enabled, we would not want to grant the objectAdmin role users.
+      //permissions do not apply to buckets that have bucket policy only enabled, which is the case here.
+      //if bucket policy only were NOT enabled, we would not want to grant the objectAdmin role to users.
 
       val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> StorageRole.ObjectAdmin, Owner -> StorageRole.ObjectAdmin, Write -> StorageRole.ObjectAdmin, Read -> StorageRole.ObjectViewer)
       val bucketRoles =
@@ -198,7 +198,7 @@ class HttpGoogleServicesDAO(
       val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).map{ case (role,identities) => role -> NonEmptyList.fromListUnsafe(identities.toList)}
 
       for {
-        _ <- googleStorageService.setBucketOnlyPolicy(GcsBucketName(bucketName), true)
+        _ <- googleStorageService.setBucketPolicyOnly(GcsBucketName(bucketName), true)
         _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities)
       } yield ()
     }
