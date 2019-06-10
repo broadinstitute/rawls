@@ -196,6 +196,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
             onOperationFailure(project, error)
 
           case Some(tooManyOperations) if tooManyOperations.size > 1 =>
+            // this should be impossible due to database constraints (duplicate primary keys)
             onOperationFailure(project, s"Only expected one Operation, found $tooManyOperations")
 
           case _ =>
