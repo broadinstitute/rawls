@@ -4,15 +4,15 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfterEach, FlatSpecLike, Matchers}
 import org.scalatest.mockito.MockitoSugar
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 
-class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually {
-
-  val defaultDataSource: SlickDataSource = slickDataSource
+class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterEach with Eventually {
   val defaultExecutionContext: ExecutionContext = executionContext
 
   val defaultServicePerimeterName: ServicePerimeterName = ServicePerimeterName("accessPolicies/policyName/servicePerimeters/servicePerimeterName")
@@ -20,29 +20,35 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
   val defaultCromwellBucketUrl = "bucket-url"
   val defaultBillingProjectName = RawlsBillingProjectName("test-bp")
 
-  def getCreatingBillingProjectMonitor(datasource: SlickDataSource = defaultDataSource,
-                                       gcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test"),
-                                       projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty),
-                                       samDAO: SamDAO = new MockSamDAO(defaultDataSource)(defaultExecutionContext),
-                                       requesterPaysRole: String = "requesterPaysRole")(implicit executionContext: ExecutionContext = defaultExecutionContext): CreatingBillingProjectMonitor = {
+  def getCreatingBillingProjectMonitor(dataSource: SlickDataSource, mockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test"))(implicit executionContext: ExecutionContext): CreatingBillingProjectMonitor = {
     new CreatingBillingProjectMonitor {
-      override implicit val executionContext: ExecutionContext = executionContext
-      override val datasource: SlickDataSource = datasource
-      override val gcsDAO: GoogleServicesDAO = gcsDAO
-      override val projectTemplate: ProjectTemplate = projectTemplate
-      override val samDAO: SamDAO = samDAO
-      override val requesterPaysRole: String = requesterPaysRole
+      override implicit val executionContext: ExecutionContext = defaultExecutionContext
+      override val datasource: SlickDataSource = dataSource
+      override val gcsDAO: GoogleServicesDAO = mockGcsDAO
+      override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty)
+      override val samDAO: SamDAO = new MockSamDAO(dataSource)
+      override val requesterPaysRole: String = "requesterPaysRole"
     }
   }
 
   "CreatingBillingProjectMonitor" should "set project status to 'AddingToPerimeter' when it's been successfully created and it has a service perimeter" in {
-    // billing project finished create step, has service perimeter -- should go to adding perimeter
-    withEmptyTestDatabase { dataSource =>
-      val creatingBillingProjectMonitor = getCreatingBillingProjectMonitor(dataSource)
-
-
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
       val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.Creating, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
       val creatingOperation = RawlsBillingProjectOperationRecord(billingProject.projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, "opid", true, None, GoogleApiTypes.DeploymentManagerApi)
+
+      runAndWait(rawlsBillingProjectQuery.create(billingProject))
+      runAndWait(rawlsBillingProjectQuery.insertOperations(Seq(creatingOperation)))
+
+      val creatingBillingProjectMonitor = getCreatingBillingProjectMonitor(dataSource)
+
+      assertResult(CheckDone(1)) {
+        Await.result(creatingBillingProjectMonitor.checkCreatingProjects(), Duration.Inf)
+      }
+
+      // the only thing that should change is the status
+      assertResult(Some(billingProject.copy(status = CreationStatuses.AddingToPerimeter))) {
+        runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName))
+      }
     }
   }
 
@@ -52,6 +58,29 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
 
   it should "do nothing if a polled operation is still running" in {
     // billing project in adding to perimeter, with still running operation -- should call google dao to poll but no state change
+
+    // this fails currently because there is a duplicate entry in the db... do we need a beforeEach that cleans out the db each time? I thought withEmptyTestDatabase did that
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val addingProjectToPerimeterOperation = RawlsBillingProjectOperationRecord(billingProject.projectName.value, GoogleOperationNames.AddProjectToPerimeter, "opid", false, None, GoogleApiTypes.AccessContextManagerApi)
+
+      runAndWait(rawlsBillingProjectQuery.create(billingProject))
+      runAndWait(rawlsBillingProjectQuery.insertOperations(Seq(addingProjectToPerimeterOperation)))
+
+      val dao = new MockGoogleServicesDAO("no-change-operation") {
+        override def pollOperation(operationId: OperationId): Future[OperationStatus] = Future.successful(OperationStatus(false, None))
+      }
+
+      val creatingBillingProjectMonitor = getCreatingBillingProjectMonitor(dataSource, dao)
+
+      assertResult(CheckDone(1)) {
+        Await.result(creatingBillingProjectMonitor.checkCreatingProjects(), Duration.Inf)
+      }
+
+      assertResult(Seq(CreationStatuses.AddingToPerimeter)) {
+        runAndWait(rawlsBillingProjectQuery.getBillingProjects(Set(billingProject.projectName))).map(_.status)
+      }
+    }
   }
 
   it should "set project status to 'Ready' and operation to done if polled operation is finished" in {
