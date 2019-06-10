@@ -100,7 +100,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     * @return
     */
   private def addProjectsToPerimeter(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord]): Future[Unit] = {
-    val projectsWithoutOperations = projects.filterNot(project => operations.exists(_.projectName == project.projectName))
+    val projectsWithoutOperations = projects.filterNot(project => operations.exists(_.projectName == project.projectName.value))
     if (projectsWithoutOperations.nonEmpty) {
       Future.traverse(projectsWithoutOperations.groupBy(_.servicePerimeter)) {
         case (None, projectsMissingPerimeter) => datasource.inTransaction { dataAccess =>

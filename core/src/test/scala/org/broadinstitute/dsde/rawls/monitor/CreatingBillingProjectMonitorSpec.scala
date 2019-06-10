@@ -10,7 +10,7 @@ import org.scalatest.{BeforeAndAfterEach, FlatSpecLike, Matchers}
 import org.scalatest.mockito.MockitoSugar
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterEach with Eventually {
   val defaultExecutionContext: ExecutionContext = executionContext
@@ -20,11 +20,11 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
   val defaultCromwellBucketUrl = "bucket-url"
   val defaultBillingProjectName = RawlsBillingProjectName("test-bp")
 
-  def getCreatingBillingProjectMonitor(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext): CreatingBillingProjectMonitor = {
+  def getCreatingBillingProjectMonitor(dataSource: SlickDataSource, mockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test"))(implicit executionContext: ExecutionContext): CreatingBillingProjectMonitor = {
     new CreatingBillingProjectMonitor {
       override implicit val executionContext: ExecutionContext = defaultExecutionContext
       override val datasource: SlickDataSource = dataSource
-      override val gcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
+      override val gcsDAO: GoogleServicesDAO = mockGcsDAO
       override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty)
       override val samDAO: SamDAO = new MockSamDAO(dataSource)
       override val requesterPaysRole: String = "requesterPaysRole"
@@ -45,8 +45,9 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
         Await.result(creatingBillingProjectMonitor.checkCreatingProjects(), Duration.Inf)
       }
 
-      assertResult(Seq(CreationStatuses.AddingToPerimeter)) {
-        runAndWait(rawlsBillingProjectQuery.getBillingProjects(Set(billingProject.projectName))).map(_.status)
+      // the only thing that should change is the status
+      assertResult(Some(billingProject.copy(status = CreationStatuses.AddingToPerimeter))) {
+        runAndWait(rawlsBillingProjectQuery.load(billingProject.projectName))
       }
     }
   }
@@ -66,7 +67,11 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(rawlsBillingProjectQuery.insertOperations(Seq(addingProjectToPerimeterOperation)))
 
-      val creatingBillingProjectMonitor = getCreatingBillingProjectMonitor(dataSource)
+      val dao = new MockGoogleServicesDAO("no-change-operation") {
+        override def pollOperation(operationId: OperationId): Future[OperationStatus] = Future.successful(OperationStatus(false, None))
+      }
+
+      val creatingBillingProjectMonitor = getCreatingBillingProjectMonitor(dataSource, dao)
 
       assertResult(CheckDone(1)) {
         Await.result(creatingBillingProjectMonitor.checkCreatingProjects(), Duration.Inf)
