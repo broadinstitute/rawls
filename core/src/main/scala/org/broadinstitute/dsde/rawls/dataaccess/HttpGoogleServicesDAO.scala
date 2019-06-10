@@ -23,7 +23,7 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo}
+import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo, TestIamPermissionsRequest}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.model.UsageExportLocation
@@ -61,7 +61,6 @@ import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes, model}
 import com.google.api.services.iam.v1.Iam
-import com.google.api.services.iam.v1.model.TestIamPermissionsRequest
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
 
@@ -111,8 +110,9 @@ class HttpGoogleServicesDAO(
   billingPemEmail: String,
   billingPemFile: String,
   val billingEmail: String,
-  val billingGroupEmail: String,
-  val billingGroupEmailAliases: List[String],
+  billingGroupEmail: String,
+  billingGroupEmailAliases: List[String],
+  billingProbeEmail: String,
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
   hammCromwellMetadata: HammCromwellMetadata,
@@ -587,27 +587,29 @@ class HttpGoogleServicesDAO(
 
     //First, get an access token to act as the Google APIs Service Agent that Deployment Manager runs as.
     val tokenRequestBody = new GenerateAccessTokenRequest().setScope(List(ComputeScopes.CLOUD_PLATFORM).asJava)
+    val saResourceName = s"projects/-/serviceAccounts/$billingProbeEmail" //the dash is required; a project name will not work. https://bit.ly/2EXrXnj
+    val accessTokenRequest = getIAMCredentials(getDeploymentManagerAccountCredential).projects().serviceAccounts().generateAccessToken(saResourceName, tokenRequestBody)
+
+    val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
 
     for {
-      dmSAEmail <- getDeploymentManagerSAEmail
-      saResourceName = s"projects/-/serviceAccounts/$dmSAEmail" //the dash is required; a project name will not work. https://bit.ly/2EXrXnj
-      accessTokenRequest = getIAMCredentials(getDeploymentManagerAccountCredential).projects().serviceAccounts().generateAccessToken(saResourceName, tokenRequestBody)
       tokenResponse <- retryWhen500orGoogleError(() => {
                         blocking {
                           executeGoogleRequest (accessTokenRequest)
                         }})
 
       //Now we've got an access token, test IAM permissions to see if the SA has permission to create projects.
-      dmSACredential = buildCredentialFromAccessToken(tokenResponse.getAccessToken)
-      testPermissionsBody = new TestIamPermissionsRequest().setPermissions(List("resourcemanager.projects.create").asJava)
-      testPermissionsRequest = getIAM(dmSACredential).projects().serviceAccounts().testIamPermissions(billingAccountId, testPermissionsBody)
+      probeSACredential = buildCredentialFromAccessToken(tokenResponse.getAccessToken, billingProbeEmail)
+      testPermissionsBody = new TestIamPermissionsRequest().setPermissions(List(BILLING_ACCOUNT_PERMISSION).asJava)
+      testPermissionsRequest = getCloudBillingManager(probeSACredential).billingAccounts().testIamPermissions(billingAccountId, testPermissionsBody)
 
       permissionResponse <- retryWhen500orGoogleError(() => {
                               blocking {
                                 executeGoogleRequest(testPermissionsRequest)
                               }})
     } yield {
-      permissionResponse.getPermissions.asScala.contains("resourcemanager.projects.create")
+      logger.warn(permissionResponse.toString)
+      Option(permissionResponse.getPermissions).exists(_.asScala.contains(BILLING_ACCOUNT_PERMISSION))
     }
   }
 
@@ -1109,12 +1111,13 @@ class HttpGoogleServicesDAO(
       .build().setFromTokenResponse(new TokenResponse().setRefreshToken(refreshToken))
   }
 
-  private def buildCredentialFromAccessToken(accessToken: String): GoogleCredential = {
+  private def buildCredentialFromAccessToken(accessToken: String, credentialEmail: String): GoogleCredential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      .setServiceAccountId("deployment-manager-serviceaccount")
-      .setServiceAccountScopes(List(ComputeScopes.CLOUD_PLATFORM).asJava) // grant bucket-creation powers
+      //.setServiceAccountId(clientEmail)
+      //.setServiceAccountUser(credentialEmail)
+      //.setServiceAccountScopes(List(ComputeScopes.CLOUD_PLATFORM).asJava) // grant bucket-creation powers
       .build().setAccessToken(accessToken)
   }
 
