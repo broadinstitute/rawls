@@ -178,7 +178,7 @@ class HttpGoogleServicesDAO(
 
     def updateBucketIam: Map[WorkspaceAccessLevel, WorkbenchEmail] => Stream[IO, Unit] = { policyGroupsByAccessLevel =>
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
-      //do not have seperate permissions that deviate from the bucket-level permissions.
+      //do not have separate permissions that deviate from the bucket-level permissions.
       //
       // project owner - roles/storage.objectAdmin
       // workspace owner - roles/storage.objectAdmin
@@ -202,15 +202,6 @@ class HttpGoogleServicesDAO(
         _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities)
       } yield ()
     }
-
-//    def setBucketIam(): Map[WorkspaceAccessLevel, WorkbenchEmail] => Future[Unit] = { policyGroupsByAccessLevel =>
-//
-//      val iamConfiguration: BucketInfo = Bucket.IamConfiguration.newBuilder().setIsBucketPolicyOnlyEnabled(true).build()
-//
-//      val bindings = new com.google.api.services.storage.model.Policy.Bindings().setRole(bucketRole).setMembers(emails.map(_.value).asJava)
-//
-//      getStorage(getBucketServiceAccountCredential).buckets().update(BucketInfo.)
-//    }
 
     def insertInitialStorageLog: (String) => Future[Unit] = { (bucketName) =>
       implicit val service = GoogleInstrumentedService.Storage
