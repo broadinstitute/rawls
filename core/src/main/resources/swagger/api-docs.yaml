@@ -4802,6 +4802,9 @@ definitions:
       highSecurityNetwork:
         type: boolean
         description: Optional, false if not specified. If true, spin up all compute in a VPC network.
+      enableFlowLogs:
+        type: boolean
+        description: Optional, false if not specified. If true, enable flow logs within the high security network. Requires highSecurityNetwork = true.
   RawlsBillingProjectMembership:
     description: an element of a list of projects and related role for a user
     required:

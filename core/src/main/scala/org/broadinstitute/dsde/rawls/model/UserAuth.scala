@@ -89,7 +89,11 @@ object CreationStatuses {
   val terminal: Set[CreationStatus] = Set(Ready, Error)
 }
 
-case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, highSecurityNetwork: Option[Boolean] = Option(false))
+case class CreateRawlsBillingProjectFullRequest(
+  projectName: RawlsBillingProjectName,
+  billingAccount: RawlsBillingAccountName,
+  highSecurityNetwork: Option[Boolean] = Option(false),
+  enableFlowLogs: Option[Boolean] = Option(false))
 
 case class SyncReportItem(operation: String, email: String, errorReport: Option[ErrorReport])
 case class SyncReport(groupEmail: RawlsGroupEmail, items: Seq[SyncReportItem])
@@ -143,7 +147,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val SyncReportFormat = jsonFormat2(SyncReport)
 
-  implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat3(CreateRawlsBillingProjectFullRequest)
+  implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat4(CreateRawlsBillingProjectFullRequest)
 
   implicit val BillingAccountScopesFormat = jsonFormat1(BillingAccountScopes)
 

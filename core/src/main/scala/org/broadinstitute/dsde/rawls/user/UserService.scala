@@ -77,7 +77,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamBillingProjectActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
   def ListBillingAccounts = listBillingAccounts()
 
-  def CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, highSecurityNetwork: Boolean) = startBillingProjectCreation(projectName, billingAccount, highSecurityNetwork)
+  def CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, highSecurityNetwork: Boolean, enableFlowLogs: Boolean) = startBillingProjectCreation(projectName, billingAccount, highSecurityNetwork, enableFlowLogs)
   def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamBillingProjectActions.readPolicies) { getBillingProjectMembers(projectName) }
 
   def AdminDeleteRefreshToken(userRef: RawlsUserRef) = asFCAdmin { deleteRefreshToken(userRef) }
@@ -321,12 +321,16 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   }
 
-  def startBillingProjectCreation(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName, highSecurityNetwork: Boolean): Future[PerRequestMessage] = {
+  def startBillingProjectCreation(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName, highSecurityNetwork: Boolean, enableFlowLogs: Boolean): Future[PerRequestMessage] = {
     def createForbiddenErrorMessage(who: String, billingAccountName: RawlsBillingAccountName) = {
       s"""${who} must have the permission "Billing Account User" on ${billingAccountName.value} to create a project with it."""
     }
+
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
       billingAccountNames.find(_.accountName == billingAccountName) match {
+        case _ if enableFlowLogs && !highSecurityNetwork =>
+          //flow logs require HSN, so error if someone asks for the former without the latter
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "enableFlowLogs requires highSecurityNetwork = true"))
         case Some(billingAccount) if billingAccount.firecloudHasAccess =>
           for {
             _ <- dataSource.inTransaction { dataAccess =>
@@ -347,7 +351,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, projectName)
             computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, projectName)
 
-            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount, dmConfig.templatePath, highSecurityNetwork, requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate).recoverWith {
+            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount, dmConfig.templatePath, highSecurityNetwork, enableFlowLogs, requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate).recoverWith {
               case t: Throwable =>
                 // failed to create project in google land, rollback inserts above
                 dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) } map(_ => throw t)
