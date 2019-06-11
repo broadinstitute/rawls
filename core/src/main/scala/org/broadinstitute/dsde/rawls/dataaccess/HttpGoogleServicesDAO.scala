@@ -172,8 +172,7 @@ class HttpGoogleServicesDAO(
 
       retryWhen500orGoogleError { () =>
         executeGoogleRequest(inserter)
-        bucketName
-      }
+      }.map(_.getName)
     }
 
     def updateBucketIam: Map[WorkspaceAccessLevel, WorkbenchEmail] => Stream[IO, Unit] = { policyGroupsByAccessLevel =>
