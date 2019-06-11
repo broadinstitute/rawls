@@ -249,6 +249,16 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       }
   }
 
+  it should "return 400 when creating a project with enableFlowLogs but not highSecurityNetwork" in withTestDataApiServices { services =>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), enableFlowLogs = Some(true))) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
   it should "return 200 when listing billing project members as owner" in withTestDataApiServices { services =>
     val project = billingProjectFromName("test_good")
 
