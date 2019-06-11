@@ -180,15 +180,16 @@ class HttpGoogleServicesDAO(
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
       //
+      //it is noteworthy that the objectAdmin role granted below contains getIamPolicy and setIamPolicy, but
+      //these permissions do not apply to buckets that have bucket policy only enabled, which is the case here.
+      //if bucket policy only were NOT enabled, we would not want to grant the objectAdmin role to users.
+      //See https://cloud.google.com/storage/docs/access-control/iam-permissions for more information
+      //
       // project owner - roles/storage.objectAdmin
       // workspace owner - roles/storage.objectAdmin
       // workspace writer - roles/storage.objectAdmin
       // workspace reader - roles/storage.objectViewer
       // bucket service account - roles/storage.admin
-      //
-      //it is noteworthy that the objectAdmin role contains getIamPolicy and setIamPolicy, but these
-      //permissions do not apply to buckets that have bucket policy only enabled, which is the case here.
-      //if bucket policy only were NOT enabled, we would not want to grant the objectAdmin role to users.
 
       val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> StorageRole.ObjectAdmin, Owner -> StorageRole.ObjectAdmin, Write -> StorageRole.ObjectAdmin, Read -> StorageRole.ObjectViewer)
       val bucketRoles =
