@@ -585,6 +585,18 @@ class HttpGoogleServicesDAO(
   protected def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.IamCredentials
 
+    /* Because we can't assume the identity of the Google SA that actually does the work in DM (it's in their project and we can't access it),
+       we've added billingprobe@terra-deployments-{env} to the Google Group we ask our users to add to their billing accounts.
+       In order to test that users have set up their billing accounts correctly, Rawls creates a token as the billingprobe@ SA and then
+       calls testIamPermissions as it to see if it has the scopes required to associate projects with billing accounts.
+       If it does, the group was correctly added, and the Google DM SA will be fine.
+       (This function would incorrectly return true if users were to add billingprobe@ to their project and not the group or DM SA, but we
+       don't publicise the existence of that account and it's not the thing we ask them to do, so the probability is near-zero.)
+
+       In order for all of this to work, Rawls needs iam.serviceAccountTokenCreator on either the terra-deployments-{env} project
+       or the billingprobe@ SA itself. We could also generate keys for the billingprobe@ SA and put them in Vault, but doing that and then
+       intermittently refreshing them is a chore.
+     */
     //First, get an access token to act as the Google APIs Service Agent that Deployment Manager runs as.
     val tokenRequestBody = new GenerateAccessTokenRequest().setScope(List(ComputeScopes.CLOUD_PLATFORM).asJava)
     val saResourceName = s"projects/-/serviceAccounts/$billingProbeEmail" //the dash is required; a project name will not work. https://bit.ly/2EXrXnj
