@@ -193,7 +193,7 @@ class HttpGoogleServicesDAO(
       val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> StorageRole.ObjectAdmin, Owner -> StorageRole.ObjectAdmin, Write -> StorageRole.ObjectAdmin, Read -> StorageRole.ObjectViewer)
       val bucketRoles =
         policyGroupsByAccessLevel.map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) } +
-          (Identity.serviceAccount("user-" + clientEmail) -> StorageRole.StorageAdmin)
+          (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
 
       val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).map{ case (role,identities) => role -> NonEmptyList.fromListUnsafe(identities.toList)}
 
