@@ -7,6 +7,7 @@ case class DeploymentManagerConfig(
   templatePath: String,
   projectID: String,
   orgID: Long,
+  billingProbeEmail: String,
   cleanupDeploymentAfterCreating: Boolean = true
 )
 case object DeploymentManagerConfig {
@@ -15,6 +16,7 @@ case object DeploymentManagerConfig {
                       conf.getString("templatePath"),
                       conf.getString("projectID"),
                       conf.getLong("orgID"),
+                      conf.getString("billingProbeEmail"),
                       conf.getBooleanOption("cleanupDeploymentAfterCreating").getOrElse(true))
 
     //sanity check against a couple of obvious ways to get this wrong in config
