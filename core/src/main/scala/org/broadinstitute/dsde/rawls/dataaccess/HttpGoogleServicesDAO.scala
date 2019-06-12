@@ -175,7 +175,7 @@ class HttpGoogleServicesDAO(
       }.map(_.getName)
     }
 
-    def updateBucketIam: Map[WorkspaceAccessLevel, WorkbenchEmail] => Stream[IO, Unit] = { policyGroupsByAccessLevel =>
+    def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
       //
@@ -203,7 +203,7 @@ class HttpGoogleServicesDAO(
       } yield ()
     }
 
-    def insertInitialStorageLog: (String) => Future[Unit] = { (bucketName) =>
+    def insertInitialStorageLog(bucketName: String): Future[Unit] = {
       implicit val service = GoogleInstrumentedService.Storage
       retryWhen500orGoogleError {
         () => {
@@ -222,13 +222,11 @@ class HttpGoogleServicesDAO(
 
     // setupWorkspace main logic
 
-    val bucketInsertion = for {
+    for {
       bucketName <- insertBucket()
       _ <- updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture()
       _ <- insertInitialStorageLog(bucketName)
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
-
-    bucketInsertion
   }
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
