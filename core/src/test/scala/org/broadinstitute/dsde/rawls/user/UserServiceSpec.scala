@@ -7,6 +7,7 @@ import akka.http.scaladsl.model.StatusCodes
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
@@ -46,7 +47,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       samDAO,
       Seq.empty,
       "",
-      testConf.getConfig("gcs.deploymentManager"),
+      DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       null
     )
   }

@@ -32,7 +32,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
       override implicit val executionContext: ExecutionContext = defaultExecutionContext
       override val datasource: SlickDataSource = dataSource
       override val gcsDAO: GoogleServicesDAO = mockGcsDAO
-      override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty)
+      override val projectTemplate: ProjectTemplate = ProjectTemplate(Seq.empty, Seq.empty)
       override val samDAO: SamDAO = new MockSamDAO(dataSource)
       override val requesterPaysRole: String = "requesterPaysRole"
     }
