@@ -363,19 +363,12 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val samPolicies = verifySamPolicies(workspaceId)
             val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
 
-            // check bucket acls
+            // check bucket acls. bucket policy only is enabled for workspace buckets so we do not need to look at object acls
             val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
             val expectedBucketRolesWithEmails = samPolicies.collect {
               case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
             }
             actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
-
-            // check object acls
-            val actualObjectRolesWithEmails = getObjectRolesWithEmails(bucketName)
-            val expectedObjectRolesWithEmails = samPolicies.collect {
-              case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
-            }
-            actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
           }
         }
       }
