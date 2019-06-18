@@ -143,7 +143,7 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
       register cleanUp Sam.user.deleteResource(servicePerimeterResourceType, URLEncoder.encode(encodedServicePerimeterId, UTF_8.name))
 
       // try to create a project with a perimeter. retry up to 3 times for project to reach 'Ready' status
-//      createNewBillingProject(owner, servicePerimeterOpt = Option(fullyQualifiedServicePerimeterId))
+      createNewBillingProject(owner, servicePerimeterOpt = Option(fullyQualifiedServicePerimeterId))
     }
   }
 
