@@ -99,7 +99,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def requireServicePerimeterAction(servicePerimeterName: ServicePerimeterName, action: SamResourceAction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeterName.value, UTF_8.name), action, userInfo).flatMap {
+    // this is being double encoded to get past the apache proxy
+    // see https://httpd.apache.org/docs/2.4/mod/core.html#allowencodedslashes for more details
+    val doubleEncodedPerimeterName = URLEncoder.encode(URLEncoder.encode(servicePerimeterName.value, UTF_8.name), UTF_8.name)
+    samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, doubleEncodedPerimeterName, action, userInfo).flatMap {
       case true => op
       case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Service Perimeter does not exist or you do not have access")))
     }
@@ -356,7 +359,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def checkServicePerimeterAccess(servicePerimeterOption: Option[ServicePerimeterName]): Future[Unit] = {
     servicePerimeterOption.map { servicePerimeter =>
-      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeter.value, UTF_8.name), SamServicePerimeterActions.addProject, userInfo).flatMap {
+      // this is being double encoded to get past the apache proxy
+      // see https://httpd.apache.org/docs/2.4/mod/core.html#allowencodedslashes for more details
+      val doubleEncodedPerimeterName = URLEncoder.encode(URLEncoder.encode(servicePerimeter.value, UTF_8.name), UTF_8.name)
+      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, doubleEncodedPerimeterName, SamServicePerimeterActions.addProject, userInfo).flatMap {
         case true => Future.successful(())
         case false => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"You do not have the action ${SamServicePerimeterActions.addProject.value} for $servicePerimeter")))
       }
