@@ -290,8 +290,9 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     val projectName = testData.billingProject.projectName
     val servicePerimeterName = ServicePerimeterName("accessPolicies/123/servicePerimeters/service_perimeter")
     val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
+    val doubleEncodedServicePerimeterName = URLEncoder.encode(URLEncoder.encode(servicePerimeterName.value, UTF_8.name), UTF_8.name)
 
-    when(services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, encodedServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(true))
+    when(services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, doubleEncodedServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(true))
 
     Put(s"/servicePerimeters/${encodedServicePerimeterName}/projects/${projectName.value}") ~>
       sealRoute(services.servicePerimeterRoutes) ~>

@@ -23,6 +23,7 @@ import scala.concurrent.duration._
 class UserServiceSpec extends FlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalaFutures {
   val defaultServicePerimeterName: ServicePerimeterName = ServicePerimeterName("accessPolicies/policyName/servicePerimeters/servicePerimeterName")
   val urlEncodedDefaultServicePerimeterName: String = URLEncoder.encode(defaultServicePerimeterName.value, UTF_8.name)
+  val urlDoubleEncodedDefaultServicePerimeterName: String = URLEncoder.encode(urlEncodedDefaultServicePerimeterName, UTF_8.name)
   val defaultGoogleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("42")
   val defaultCromwellBucketUrl: String = "bucket-url"
   val defaultBillingProjectName: RawlsBillingProjectName = RawlsBillingProjectName("test-bp")
@@ -34,7 +35,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second)
 
   override def beforeAll(): Unit = {
-    when(defaultMockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter, urlEncodedDefaultServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(true))
+    when(defaultMockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter, urlDoubleEncodedDefaultServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(true))
     when(defaultMockSamDAO.userHasAction(SamResourceTypeNames.billingProject, defaultBillingProjectName.value, SamBillingProjectActions.addToServicePerimeter, userInfo)).thenReturn(Future.successful(true))
   }
 
@@ -118,7 +119,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       runAndWait(rawlsBillingProjectQuery.create(project))
 
       val mockSamDAO = mock[SamDAO]
-      when(mockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter, urlEncodedDefaultServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(true))
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter, urlDoubleEncodedDefaultServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(true))
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.addToServicePerimeter, userInfo)).thenReturn(Future.successful(false))
 
       val userService = getUserService(dataSource, mockSamDAO)
@@ -136,7 +137,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       runAndWait(rawlsBillingProjectQuery.create(project))
 
       val mockSamDAO = mock[SamDAO]
-      when(mockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter, urlEncodedDefaultServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(false))
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter, urlDoubleEncodedDefaultServicePerimeterName, SamServicePerimeterActions.addProject, userInfo)).thenReturn(Future.successful(false))
       when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.addToServicePerimeter, userInfo)).thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO)
