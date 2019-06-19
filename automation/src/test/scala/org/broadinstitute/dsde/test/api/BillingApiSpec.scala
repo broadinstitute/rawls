@@ -140,7 +140,7 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
 
       // this is being double encoded to get past the apache proxy
       // see https://httpd.apache.org/docs/2.4/mod/core.html#allowencodedslashes for more details
-      register cleanUp Sam.user.deleteResource(servicePerimeterResourceType, URLEncoder.encode(encodedServicePerimeterId, UTF_8.name))
+      register cleanUp Sam.user.deleteResource(servicePerimeterResourceType, encodedServicePerimeterId)
 
       // try to create a project with a perimeter. retry up to 3 times for project to reach 'Ready' status
       createNewBillingProject(owner, servicePerimeterOpt = Option(fullyQualifiedServicePerimeterId))
