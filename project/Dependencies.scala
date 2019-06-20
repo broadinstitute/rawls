@@ -78,12 +78,12 @@ object Dependencies {
     exclude("com.typesafe.akka", "akka-actor_2.12")
     exclude("com.typesafe.akka", "akka-http_2.12"))
 
-  val workbenchModelV  = "0.13-d4e0782"
+  val workbenchModelV  = "0.13-0614f92-SNAP"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogleV = "0.18-4c7acd5"
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
   val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests" excludeAll(excludeWorkbenchModel)
-  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.4-88966fd"
+  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.5-0614f92-SNAP"
   val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
 
   val metricsDependencies = Seq(

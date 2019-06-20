@@ -139,7 +139,7 @@ class HttpGoogleServicesDAO(
 
     val result = for{
       traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-      _ <- googleStorageService.createBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Some(traceId))
+      _ <- googleStorageService.createBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Map.empty, Some(traceId))
       _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
       _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
       projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
@@ -162,17 +162,30 @@ class HttpGoogleServicesDAO(
 
   override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String]): Future[GoogleWorkspaceInfo] = {
 
-    def insertBucket(): Future[String] = {
+    def setBucketLogging(bucketName: String): Future[String] = {
       implicit val service = GoogleInstrumentedService.Storage
 
       val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
-      val bucket = new Bucket().setName(bucketName).setLogging(logging).setLabels(labels.asJava)
+      val bucket = new Bucket().setName(bucketName).setLogging(logging)
 
-      val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
+      val updater = getStorage(getBucketServiceAccountCredential).buckets.update(project.projectName.value, bucket)
 
       retryWhen500orGoogleError { () =>
-        executeGoogleRequest(inserter)
+        executeGoogleRequest(updater)
       }.map(_.getName)
+    }
+
+
+    def insertBucket(bucketName: String): Stream[IO, Unit] = {
+      implicit val service = GoogleInstrumentedService.Storage
+
+      //ACL = None because bucket IAM will be set separately in updateBucketIam
+      googleStorageService.createBucket(
+        googleProject = GoogleProject(project.projectName.value),
+        bucketName = GcsBucketName(bucketName),
+        acl = None,
+        labels = labels
+      )
     }
 
     def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
@@ -197,6 +210,8 @@ class HttpGoogleServicesDAO(
 
       val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).map{ case (role,identities) => role -> NonEmptyList.fromListUnsafe(identities.toList)}
 
+      //The calls to setBucketPolicyOnly and setIamPolicy are coupled because in this case, we only want to use these specific
+      //storage roles _if_ bucket policy only is enabled. See above comment for a more in-depth explanation.
       for {
         _ <- googleStorageService.setBucketPolicyOnly(GcsBucketName(bucketName), true)
         _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities)
@@ -223,8 +238,9 @@ class HttpGoogleServicesDAO(
     // setupWorkspace main logic
 
     for {
-      bucketName <- insertBucket()
+      _ <- insertBucket(bucketName).compile.drain.unsafeToFuture()
       _ <- updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture()
+      _ <- setBucketLogging(bucketName)
       _ <- insertInitialStorageLog(bucketName)
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
   }
