@@ -125,7 +125,7 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
     }
 
     "can create a new billing project with a service perimeter" in {
-      val owner: Credentials = UserPool.chooseAdmins(2).filter(_.email == "dumbledore.admin@test.firecloud.org").head
+      val owner: Credentials = UserPool.chooseAdmin
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
       val googleAccessPolicy = ServiceTestConfig.Projects.googleAccessPolicy
       val servicePerimeterName = "automation_test_perimeter"
