@@ -200,6 +200,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     // https://cloud.google.com/compute/docs/labeling-resources#restrictions
     prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(63)
   }
+
+  def addProjectToFolder(projectName: RawlsBillingProjectName, folderName: String): Future[Unit]
 }
 
 object GoogleApiTypes {

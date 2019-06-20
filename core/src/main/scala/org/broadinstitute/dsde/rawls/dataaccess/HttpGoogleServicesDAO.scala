@@ -54,7 +54,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2._
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{GoogleProject, GoogleResourceTypes}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
@@ -1177,6 +1177,15 @@ class HttpGoogleServicesDAO(
     retryWhen500orGoogleError(() => { executeGoogleFetch(getter) { is => f(is) } })
   }
 
+  override def addProjectToFolder(projectName: RawlsBillingProjectName, folderName: String): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.CloudResourceManager
+    val cloudResourceManager = getCloudResourceManager(getBillingServiceAccountCredential)
+    val existingProject = executeGoogleRequest(cloudResourceManager.projects().get(projectName.value))
+    val folderResourceId = new ResourceId().setType(GoogleResourceTypes.Folder.value).setId(folderName)
+    // TODO: is `executeGoogleRequest` the right thing to call?  why not `retryWhen500orGoogleError?
+    executeGoogleRequest(cloudResourceManager.projects().update(projectName.value, existingProject.setParent(folderResourceId)))
+    Future.successful(())
+  }
 }
 
 class GoogleStorageLogException(message: String) extends RawlsException(message)

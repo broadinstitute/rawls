@@ -310,7 +310,22 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     }
   }
 
+  /**
+    * Method called after a project has been successfully added to a Service Perimeter.  For reasons related to soring
+    * and reporting Flow Log data, each project added to a perimeter will also be added Folder with the same name as the
+    * Service Perimeter.
+    * @param project
+    * @return
+    */
   private def onSuccessfulAddProjectToPerimeter(project: RawlsBillingProject): Future[RawlsBillingProject] = {
+    // AAAGGHH Scala get out of my way!
+    val folderName = project.servicePerimeter match {
+      case Some(servicePerimeterName) => servicePerimeterName.toString()
+      case None => throw new RawlsException(s"Project ${project.projectName} should was added to a Service Perimeter but the service perimeter field is no longer set on this instance: ${project}")
+    }
+
+    // TODO: Based on the outcome of `addProjectToFolder`, return the right Successful or Failed Future
+    gcsDAO.addProjectToFolder(project.projectName, folderName)
     Future.successful(project.copy(status = CreationStatuses.Ready))
   }
 
