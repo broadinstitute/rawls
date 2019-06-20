@@ -54,7 +54,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2._
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{GoogleProject, GoogleResourceTypes}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
@@ -64,6 +64,7 @@ import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
 import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
+import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
@@ -816,7 +817,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] = {
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -841,7 +842,7 @@ class HttpGoogleServicesDAO(
       "fcProjectOwners" -> projectTemplate.owners.toJson,
       "fcProjectEditors" -> projectTemplate.editors.toJson,
       "labels" -> templateLabels
-    )
+    ) ++ parentFolderId.map("parentFolder" -> folderNumberOnly(_).toJson).toMap
 
     //a list of one resource: type=composite-type, name=whocares, properties=pokein
     val yamlConfig = new ConfigFile().setContent(getDMConfigYamlString(projectName, dmTemplatePath, properties))
@@ -857,8 +858,16 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  /**
+    * Google is not consistent when dealing with folder ids. Some apis do not want the folder id to start with
+    * "folders/" but other apis return that or expect that. This function strips the prefix if it exists.
+    *
+    * @param folderId
+    * @return
+    */
+  private def folderNumberOnly(folderId: String) = folderId.stripPrefix("folders/")
+
   override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
-    val credential = getBillingServiceAccountCredential
     val dmCredential = getDeploymentManagerAccountCredential
 
     // this code is a colossal DRY violation but because the operations collection is different
@@ -1178,6 +1187,26 @@ class HttpGoogleServicesDAO(
     retryWhen500orGoogleError(() => { executeGoogleFetch(getter) { is => f(is) } })
   }
 
+  override def addProjectToFolder(projectName: RawlsBillingProjectName, folderId: String): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.CloudResourceManager
+    val cloudResourceManager = getCloudResourceManager(getBillingServiceAccountCredential)
+
+    retryWhen500orGoogleError( () => {
+      val existingProject = executeGoogleRequest(cloudResourceManager.projects().get(projectName.value))
+
+      val folderResourceId = new ResourceId().setType(GoogleResourceTypes.Folder.value).setId(folderNumberOnly(folderId))
+      executeGoogleRequest(cloudResourceManager.projects().update(projectName.value, existingProject.setParent(folderResourceId)))
+    })
+  }
+
+  override def getFolderId(folderName: String): Future[Option[String]] = {
+    val credential = getBillingServiceAccountCredential
+    credential.refreshToken()
+
+    retryExponentially(when500orGoogleError)( () => {
+      new CloudResourceManagerV2DAO().getFolderId(folderName, OAuth2BearerToken(credential.getAccessToken))
+    })
+  }
 }
 
 class GoogleStorageLogException(message: String) extends RawlsException(message)
@@ -1191,4 +1220,41 @@ class GenomicsV1DAO(implicit val system: ActorSystem, val materializer: Material
     import DefaultJsonProtocol._
     executeRequestWithToken[Option[JsObject]](accessToken)(RequestBuilding.Get(s"https://genomics.googleapis.com/v1alpha2/$opId"))
   }
+}
+
+/**
+  * The cloud resource manager api is maddening. V2 is not a newer, better version of V1 but a completely different api.
+  * V1 manages projects and organizations, V2 manages folders. But because they appear to be different versions of the
+  * same thing and use the same class names we can't have both client libraries. So this v2 dao calls the folder
+  * apis we need via direct http call.
+  * @param system
+  * @param materializer
+  * @param executionContext
+  */
+class CloudResourceManagerV2DAO(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends DsdeHttpDAO {
+  val http = Http(system)
+  val httpClientUtils = HttpClientUtilsStandard()
+
+  def getFolderId(folderName: String, accessToken: OAuth2BearerToken): Future[Option[String]] = {
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+    import DefaultJsonProtocol._
+
+    implicit val FolderFormat = jsonFormat1(Folder)
+    implicit val FolderSearchResponseFormat = jsonFormat1(FolderSearchResponse)
+
+    executeRequestWithToken[FolderSearchResponse](accessToken)(RequestBuilding.Post(s"https://cloudresourcemanager.googleapis.com/v2/folders:search", Map("query" -> s"displayName=$folderName"))).map { response =>
+      response.folders.flatMap { folders =>
+        if (folders.size > 1) {
+          throw new RawlsException(s"google folder search returned more than one folder with display name $folderName: $folders")
+        } else {
+          folders.headOption.map(_.name)
+        }
+      }
+    }
+  }
+}
+
+object CloudResourceManagerV2Model {
+  case class Folder(name: String)
+  case class FolderSearchResponse(folders: Option[Seq[Folder]])
 }

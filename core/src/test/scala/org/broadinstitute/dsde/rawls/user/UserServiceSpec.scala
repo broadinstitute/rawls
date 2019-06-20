@@ -74,6 +74,9 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
 
       val mockGcsDAO = mock[GoogleServicesDAO]
       when(mockGcsDAO.getGoogleProject(project.projectName)).thenReturn(Future.successful(new Project().setProjectNumber(42L)))
+      val folderId = "folders/1234567"
+      when(mockGcsDAO.getFolderId(defaultServicePerimeterName.value.split("/").last)).thenReturn(Future.successful(Option(folderId)))
+      when(mockGcsDAO.addProjectToFolder(project.projectName, folderId)).thenReturn(Future.successful(()))
 
       val userService = getUserService(dataSource, gcsDAO = mockGcsDAO)
 

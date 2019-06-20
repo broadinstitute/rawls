@@ -139,7 +139,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
       for {
         // Query Rawls DB to get full list of projects intended to be inside the perimeter
         allProjectsInPerimeter <- datasource.inTransaction { dataAccess =>
-          dataAccess.rawlsBillingProjectQuery.listProjectsWithServicePerimeter(servicePerimeterName)
+          dataAccess.rawlsBillingProjectQuery.listProjectsWithServicePerimeterAndStatus(servicePerimeterName, CreationStatuses.Ready, CreationStatuses.AddingToPerimeter)
         }
         allProjectNumbers = allProjectsInPerimeter.flatMap { project =>
           project.googleProjectNumber match {

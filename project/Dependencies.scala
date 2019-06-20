@@ -81,12 +81,13 @@ object Dependencies {
     exclude("com.typesafe.akka", "akka-actor_2.12")
     exclude("com.typesafe.akka", "akka-http_2.12"))
 
-  val workbenchModelV  = "0.13-4c7acd5"
+  val workbenchModelV  = "0.13-d4e0782"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogleV = "0.18-4c7acd5"
-  val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
-  val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests" excludeAll(excludeWorkbenchModel)
-  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.2-4c7acd5"
+  val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
+  val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
+  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.2-4c7acd5" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
+  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.5-d4b4838" excludeAll(excludeWorkbenchModel)
   val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
@@ -179,6 +180,7 @@ object Dependencies {
     workbenchGoogle,
     workbenchGoogle2,
     workbenchGoogleMocks,
+    workbenchUtil,
     ficus,
     scalaCache
   )
