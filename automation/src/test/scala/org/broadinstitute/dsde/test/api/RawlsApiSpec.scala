@@ -333,21 +333,13 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           val samPolicies = verifySamPolicies(workspaceId)
           val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
 
-          // check bucket acls
+          // check bucket acls. bucket policy only is enabled for workspace buckets so we do not need to look at object acls
           val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
           val expectedBucketRolesWithEmails = samPolicies.collect {
             case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("WRITER", emails.head)
             case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
           }
           actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
-
-          // check object acls
-          val actualObjectRolesWithEmails = getObjectRolesWithEmails(bucketName)
-          val expectedObjectRolesWithEmails = samPolicies.collect {
-            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("READER", emails.head)
-            case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
-          }
-          actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
         }
       }
     }
@@ -491,16 +483,6 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     // service account should have owner access
     assert(bucketAcls.exists(acl => Option(acl.getRole()).contains("OWNER") && Option(acl.getEmail()).exists(_.endsWith(serviceAccountEmailDomain))))
     bucketAcls.collect {
-      case acl if (acl.getRole() != null && !acl.getRole().equals("OWNER")) => (acl.getRole(), acl.getEmail())
-    }
-  }
-
-  // Retrieves roles with policy emails for object acls and checks that service account is set up correctly
-  private def getObjectRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, String)] = {
-    val objectAcls = googleStorageDAO.getDefaultObjectAccessControls(bucketName).futureValue.getItems.asScala.toList
-    // service account should have owner access
-    assert(objectAcls.exists(acl => acl.getRole().equals("OWNER") && acl.getEmail().endsWith(serviceAccountEmailDomain)))
-    objectAcls.collect {
       case acl if (acl.getRole() != null && !acl.getRole().equals("OWNER")) => (acl.getRole(), acl.getEmail())
     }
   }
