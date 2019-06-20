@@ -139,7 +139,7 @@ class HttpGoogleServicesDAO(
 
     val result = for{
       traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-      _ <- googleStorageService.createBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Map.empty, Some(traceId))
+      _ <- googleStorageService.insertBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Map.empty, Some(traceId))
       _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
       _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
       projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
@@ -175,20 +175,7 @@ class HttpGoogleServicesDAO(
       }.map(_.getName)
     }
 
-
-    def insertBucket(bucketName: String): Stream[IO, Unit] = {
-      implicit val service = GoogleInstrumentedService.Storage
-
-      //ACL = None because bucket IAM will be set separately in updateBucketIam
-      googleStorageService.insertBucket(
-        googleProject = GoogleProject(project.projectName.value),
-        bucketName = GcsBucketName(bucketName),
-        acl = None,
-        labels = labels
-      )
-    }
-
-    def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
+    def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], traceId: TraceId): Stream[IO, Unit] = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
       //
@@ -236,10 +223,11 @@ class HttpGoogleServicesDAO(
     }
 
     // setupWorkspace main logic
+    val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- insertBucket(bucketName).compile.drain.unsafeToFuture()
-      _ <- updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture()
+      _ <- googleStorageService.insertBucket(GoogleProject(project.projectName.value), GcsBucketName(bucketName), None, labels, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture()
       _ <- setBucketLogging(bucketName)
       _ <- insertInitialStorageLog(bucketName)
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
