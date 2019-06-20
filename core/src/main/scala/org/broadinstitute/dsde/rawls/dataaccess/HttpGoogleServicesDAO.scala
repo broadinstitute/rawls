@@ -180,7 +180,7 @@ class HttpGoogleServicesDAO(
       implicit val service = GoogleInstrumentedService.Storage
 
       //ACL = None because bucket IAM will be set separately in updateBucketIam
-      googleStorageService.createBucket(
+      googleStorageService.insertBucket(
         googleProject = GoogleProject(project.projectName.value),
         bucketName = GcsBucketName(bucketName),
         acl = None,
