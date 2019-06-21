@@ -3,12 +3,15 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.Status.Failure
 import akka.actor.{Actor, Props}
 import akka.pattern._
+import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
+import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.{CheckDone, CheckNow}
+import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor._
 import org.broadinstitute.dsde.rawls.user.UserService
 
 import scala.concurrent.duration._
@@ -64,20 +67,17 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     } yield {
       CheckDone(creatingProjects.size - updatedProjectCount)
     }
-
   }
 
   def setupProjects(projects: Seq[RawlsBillingProject],
                     operations: Seq[RawlsBillingProjectOperationRecord])(implicit executionContext: ExecutionContext): Future[Int] = {
 
     for {
-      updatedOperations <- Future.traverse(operations) { operation =>
-        operation match {
-          case RawlsBillingProjectOperationRecord(_, _, _, true, _, _) => Future.successful(operation)
-          case RawlsBillingProjectOperationRecord(_, _, _, false, _, _) => gcsDAO.pollOperation(operation).recover {
-            // if we don't mark this as done we might continue retrying forever and pollOperation already does some retrying
-            case t: Throwable => operation.copy(done = true, errorMessage = Option(s"error getting ${operation.operationName} operation status: ${t.getMessage}"))
-          }
+      updatedOperations <- Future.traverse(operations) {
+        case operation@RawlsBillingProjectOperationRecord(_, _, _, true, _, _) => Future.successful(operation)
+        case operation@RawlsBillingProjectOperationRecord(_, _, _, false, _, _) => gcsDAO.pollOperation(operation).recover {
+          // if we don't mark this as done we might continue retrying forever and pollOperation already does some retrying
+          case t: Throwable => operation.copy(done = true, errorMessage = Option(s"error getting ${operation.operationName} operation status: ${t.getMessage}"))
         }
       }
 
@@ -90,67 +90,32 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
       operationsByProject = updatedOperations.groupBy(rec => RawlsBillingProjectName(rec.projectName))
 
       maybeUpdatedProjects <- Future.traverse(projects) { project =>
-        // this match figures out the current state of the project and progresses it to the next step when appropriate
-        // see GoogleServicesDAO.createProject for more details
+        // figure out if the project creation is done yet and set the project status accordingly
         val nextStepFuture = operationsByProject(project.projectName) match {
           case Seq() =>
             // there are no operations, there is a small window when this can happen but it should resolve itself so let it pass
             Future.successful(project)
 
-          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, None, _)) =>
+          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, true, None, _)) =>
             // create project operation finished successfully
-            for {
-              ownerGroupEmail <- UserService.getGoogleProjectOwnerGroupEmail(samDAO, project)
-              computeUserGroupEmail <- UserService.getComputeUserGroupEmail(samDAO, project)
-
-              updatedTemplate = projectTemplate.copy(
-                policies = projectTemplate.policies ++
-                  UserService.getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole))
-
-              updatedProject <- gcsDAO.beginProjectSetup(project, updatedTemplate).flatMap {
-                case util.Failure(t) =>
-                  logger.info(s"Failure creating project $project", t)
-                  Future.successful(project.copy(status = CreationStatuses.Error, message = Option(t.getMessage)))
-                case Success(operationRecords) => datasource.inTransaction { dataAccess =>
-                  dataAccess.rawlsBillingProjectQuery.insertOperations(operationRecords).map(_ => project)
-                }
-              }
-            } yield {
-              updatedProject
+            gcsDAO.cleanupDMProject(project.projectName) map { _ =>
+              project.copy(status = CreationStatuses.Ready)
             }
 
-          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, Some(error), _)) =>
+          case fail@Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, true, Some(error), _)) =>
             // create project operation finished with an error
-            logger.debug(s"project ${project.projectName} creation finished with errors: $error")
-            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(error)))
-
-          case operations: Seq[RawlsBillingProjectOperationRecord] if operations.forall(rec => rec.done && rec.errorMessage.isEmpty) =>
-            // all operations completed successfully
-            for {
-              ownerGroupEmail <- UserService.getGoogleProjectOwnerGroupEmail(samDAO, project)
-              computeUserGroupEmail <- UserService.getComputeUserGroupEmail(samDAO, project)
-              updatedProject <- gcsDAO.completeProjectSetup(project, Set(ownerGroupEmail, computeUserGroupEmail)) map {
-                case util.Failure(t) =>
-                  logger.info(s"Failure completing project for $project", t)
-                  project.copy(message = Option(t.getMessage))
-                case Success(_) => project.copy(status = CreationStatuses.Ready)
-              }
-            } yield {
-              updatedProject
+            logger.debug(s"project ${project.projectName.value} creation finished with errors: $error")
+            gcsDAO.cleanupDMProject(project.projectName) map { _ =>
+              project.copy(status = CreationStatuses.Error, message = Option(s"project ${project.projectName.value} creation finished with errors: $error"))
             }
 
-          case operations: Seq[RawlsBillingProjectOperationRecord] if operations.forall(rec => rec.done) =>
-            // all operations completed but some failed
-            val messages = operations.collect {
-              case RawlsBillingProjectOperationRecord(_, operationName, _, true, Some(error), _) => s"Failure enabling api $operationName: ${error}"
-            }
-            val errorMessage = messages.mkString("[", "], [", "]")
-            logger.debug(s"errors enabling apis for project ${project.projectName}: $errorMessage")
-            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(errorMessage)))
-
-          case _ =>
+          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.DEPLOYMENT_MANAGER_CREATE_PROJECT, _, false, _, _)) =>
             // still running
             Future.successful(project)
+
+          case x =>
+            // something surprised us.
+            Future.successful(project.copy(status = CreationStatuses.Error, message = Option(s"failure processing new project ${project.projectName.value}: unexpected project operation record $x")))
         }
 
         nextStepFuture.recover {
@@ -159,7 +124,6 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
             project.copy(status = CreationStatuses.Error, message = Option(t.getMessage))
         }
       }
-
 
       _ <- datasource.inTransaction { dataAccess =>
         // save project updates

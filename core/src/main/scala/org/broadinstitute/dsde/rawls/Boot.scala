@@ -114,12 +114,16 @@ object Boot extends IOApp with LazyLogging {
     val jsonFactory = JacksonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
+
     val hammCromwellMetadataConfig = gcsConfig.getConfig("hamm-cromwell-metadata")
     val serviceProject = gcsConfig.getString("serviceProject")
     val hammCromwellMetadata = HammCromwellMetadata(
       GcsBucketName(hammCromwellMetadataConfig.getString("bucket-name")),
       ProjectTopicName.of(serviceProject, hammCromwellMetadataConfig.getString("topic-name "))
     )
+
+    //Sanity check deployment manager template path.
+    val dmConfig = DeploymentManagerConfig(gcsConfig.getConfig("deploymentManager"))
 
     initAppDependencies[IO](conf).use { appDependencies =>
       val gcsDAO = new HttpGoogleServicesDAO(
@@ -129,6 +133,7 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("subEmail"),
         gcsConfig.getString("pathToPem"),
         gcsConfig.getString("appsDomain"),
+        dmConfig.orgID,
         gcsConfig.getString("groupsPrefix"),
         gcsConfig.getString("appName"),
         gcsConfig.getInt("deletedBucketCheckSeconds"),
@@ -138,13 +143,18 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("billingPemEmail"),
         gcsConfig.getString("pathToBillingPem"),
         gcsConfig.getString("billingEmail"),
+        gcsConfig.getString("billingGroupEmail"),
+        gcsConfig.getStringList("billingGroupEmailAliases").asScala.toList,
+        dmConfig.billingProbeEmail,
         gcsConfig.getInt("bucketLogsMaxAge"),
         hammCromwellMetadata = hammCromwellMetadata,
         googleStorageService = appDependencies.googleStorageService,
         googleServiceHttp = appDependencies.googleServiceHttp,
         topicAdmin = appDependencies.topicAdmin,
         workbenchMetricBaseName = metricsPrefix,
-        proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", "")
+        proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
+        deploymentMgrProject = dmConfig.projectID,
+        cleanupDeploymentAfterCreating = dmConfig.cleanupDeploymentAfterCreating
       )
 
       val pubSubDAO = new HttpGooglePubSubDAO(
@@ -236,15 +246,10 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getStringList("projectTemplate.owners").asScala
       val projectEditors =
         gcsConfig.getStringList("projectTemplate.editors").asScala
-      val projectServices =
-        gcsConfig.getStringList("projectTemplate.services").asScala
       val projectOwnerGrantableRoles =
         gcsConfig.getStringList("projectTemplate.ownerGrantableRoles")
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
-      val projectTemplate = ProjectTemplate(
-        Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors),
-        projectServices
-      )
+      val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 
       val notificationDAO = new PubSubNotificationDAO(
         pubSubDAO,
@@ -259,7 +264,9 @@ object Boot extends IOApp with LazyLogging {
           notificationDAO,
           samDAO,
           projectOwnerGrantableRoles.asScala,
-          requesterPaysRole
+          requesterPaysRole,
+          dmConfig,
+          projectTemplate
         )
       val genomicsServiceConstructor: (UserInfo) => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)

@@ -31,6 +31,8 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   billingPemEmail: String,
   billingPemFile: String,
   billingEmail: String,
+  billingGroupEmail: String,
+  billingGroupEmailAliases: List[String],
   bucketLogsMaxAge: Int)
   (implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val cs: ContextShift[IO], override val timer: Timer[IO])
   extends HttpGoogleServicesDAO(
@@ -40,6 +42,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     subEmail,
     pemFile,
     appsDomain,
+    12345,
     groupsPrefix,
     appName,
     deletedBucketCheckSeconds,
@@ -49,12 +52,18 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     billingPemEmail,
     billingPemFile,
     billingEmail,
+    billingGroupEmail,
+    billingGroupEmailAliases,
+    billingProbeEmail = "billingprobe@deployment-manager-project.iam.gserviceaccount.com",
     bucketLogsMaxAge,
     hammCromwellMetadata = HammCromwellMetadata(GcsBucketName("fakeBucketName"), ProjectTopicName.of(serviceProject, "fakeTopic")),
     googleStorageService = null,
     googleServiceHttp = null,
     topicAdmin = null,
-    workbenchMetricBaseName = "test", proxyNamePrefix = "")(system, materializer, executionContext, cs, timer) {
+    workbenchMetricBaseName = "test",
+    proxyNamePrefix = "",
+    deploymentMgrProject = "deployment-manager-project",
+    cleanupDeploymentAfterCreating = true)(system, materializer, executionContext, cs, timer) {
 
   private var token: String = null
   private var tokenDate: DateTime = null
@@ -90,8 +99,8 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
   }
 
-  protected override def credentialOwnsBillingAccount(credential: Credential, billingAccountName: String): Future[Boolean] = {
-    billingAccountName match {
+  protected override def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
+    billingAccountId match {
       case "billingAccounts/firecloudHasThisOne" => Future.successful(true)
       case "billingAccounts/firecloudDoesntHaveThisOne" => Future.successful(false)
     }

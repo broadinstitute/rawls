@@ -5,7 +5,9 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.http.HttpResponseException
+import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
@@ -28,20 +30,20 @@ import cats.implicits._
 object UserService {
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String], requesterPaysRole: String)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, projectOwnerGrantableRoles, requesterPaysRole)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String], requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, projectOwnerGrantableRoles, requesterPaysRole, dmConfig, projectTemplate)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
-  def getGoogleProjectOwnerGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
+  def getGoogleProjectOwnerGroupEmail(samDAO: SamDAO, projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
-      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectPolicyNames.owner)
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.owner)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
   }
 
-  def getComputeUserGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
+  def getComputeUserGroupEmail(samDAO: SamDAO, projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
-      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectPolicyNames.canComputeUser)
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.canComputeUser)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
   }
 
@@ -56,7 +58,7 @@ object UserService {
   }
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String], requesterPaysRole: String)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String], requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging {
 
   import dataSource.dataAccess.driver.api._
 
@@ -236,8 +238,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- samDAO.createResource(SamResourceTypeNames.billingProject, billingProjectName.value, ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), ownerUserInfo)
-      ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, project)
-      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project)
+      ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, project.projectName)
+      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project.projectName)
 
       policiesToAdd = getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole)
 
@@ -341,7 +343,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
               }
             }
 
-            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount).recoverWith {
+            //NOTE: we're syncing this to Sam ahead of the resource actually existing. is this fine? (ps these are sam calls)
+            ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, projectName)
+            computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, projectName)
+
+            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount, dmConfig.templatePath, requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate).recoverWith {
               case t: Throwable =>
                 // failed to create project in google land, rollback inserts above
                 dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) } map(_ => throw t)

@@ -4,7 +4,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, TestData}
-import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
 import org.broadinstitute.dsde.rawls.model.Notifications.{ActivationNotification, NotificationFormat}
@@ -19,6 +19,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.unmarshalling.Unmarshal
+import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 
 import scala.concurrent.duration.Duration
@@ -47,6 +48,8 @@ class UserApiServiceSpec extends ApiServiceSpec {
       withApiServices(dataSource)(testCode)
     }
   }
+
+  val testConf = ConfigFactory.load()
 
   "UserApi" should "put token and get date" in withTestDataApiServices { services =>
     Put("/user/refreshToken", httpJson(UserRefreshToken("gobblegobble"))) ~>
@@ -138,37 +141,15 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
-        override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty, Seq("foo", "bar", "baz"))
+        override val projectTemplate: ProjectTemplate = ProjectTemplate(Seq(), Seq())
         override val gcsDAO = new MockGoogleServicesDAO("foo")
         override val samDAO = new MockSamDAO(dataSource)
         override val requesterPaysRole: String = "requesterPaysRole"
       }
 
-      assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
-
-      assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
-      }
-
-      assertResult(4) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
-      }
-
-      Get("/user/billing") ~>
-        sealRoute(services.userRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
-            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[List[RawlsBillingProjectMembership]]
-          }
-        }
-
       assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
-      assertResult(4) {
+      assertResult(1) {
         runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
       }
 
@@ -237,7 +218,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
-        override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty, Seq("foo", "bar", "baz"))
+        override val projectTemplate: ProjectTemplate = ProjectTemplate(Seq(), Seq())
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
           override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = failureMode(rawlsBillingProjectOperation)
         }
@@ -307,10 +288,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
-        override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty, Seq("foo", "bar", "baz"))
+        override val projectTemplate: ProjectTemplate = ProjectTemplate(Seq(), Seq())
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
           override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
-            if (rawlsBillingProjectOperation.operationName == projectTemplate.services(1)) {
+            if (rawlsBillingProjectOperation.operationName == DEPLOYMENT_MANAGER_CREATE_PROJECT) {
               Future.successful(rawlsBillingProjectOperation.copy(done = true, errorMessage = Option("this failed")))
             } else {
               super.pollOperation(rawlsBillingProjectOperation)
@@ -319,15 +300,16 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
         override val samDAO = new MockSamDAO(dataSource)
         override val requesterPaysRole: String = "requesterPaysRole"
+
       }
 
-      assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
+      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
       assertResult(1) {
         runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
       }
 
-      assertResult(4) {
+      assertResult(1) {
         runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
       }
 
@@ -337,25 +319,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
-            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[List[RawlsBillingProjectMembership]]
-          }
-        }
-
-      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
-
-      assertResult(4) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
-      }
-
-      Get("/user/billing") ~>
-        sealRoute(services.userRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Error, Option(s"[Failure enabling api ${billingProjectMonitor.projectTemplate.services(1)}: this failed]")))) {
+          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Error, Option(s"project ${project1.projectName.value} creation finished with errors: this failed")))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
             responseAs[List[RawlsBillingProjectMembership]]
           }
@@ -378,7 +342,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
+    check {
+      false
+      //was Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
+    }
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -403,7 +370,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
+    check {
+      false
+      //was Await.result(services.gcsDAO.beginProjectSetup(project1, null), Duration.Inf)
+    }
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
