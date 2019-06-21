@@ -310,13 +310,6 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     }
   }
 
-  /**
-    * Method called after a project has been successfully added to a Service Perimeter.  For reasons related to soring
-    * and reporting Flow Log data, each project added to a perimeter will also be added Folder with the same name as the
-    * Service Perimeter.
-    * @param project
-    * @return
-    */
   private def onSuccessfulAddProjectToPerimeter(project: RawlsBillingProject): Future[RawlsBillingProject] = {
     Future.successful(project.copy(status = CreationStatuses.Ready))
   }
