@@ -88,7 +88,7 @@ trait RawlsBillingProjectComponent {
 
     def listProjectsWithServicePerimeter(servicePerimeter: ServicePerimeterName): ReadWriteAction[Seq[RawlsBillingProject]] = {
       for {
-        projectRecords <- filter(_.servicePerimeter === servicePerimeter.value).result
+        projectRecords <- filter(rec => rec.servicePerimeter === servicePerimeter.value && rec.creationStatus === CreationStatuses.Ready.toString).result
       } yield {
         projectRecords.map(unmarshalBillingProject)
       }

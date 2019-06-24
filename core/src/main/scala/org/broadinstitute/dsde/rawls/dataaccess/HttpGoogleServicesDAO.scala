@@ -841,7 +841,7 @@ class HttpGoogleServicesDAO(
       "fcProjectOwners" -> projectTemplate.owners.toJson,
       "fcProjectEditors" -> projectTemplate.editors.toJson,
       "labels" -> templateLabels
-    ) ++ parentFolderId.map("parentFolder" -> _.stripPrefix("folders/").toJson).toMap
+    ) ++ parentFolderId.map("parentFolder" -> folderNumberOnly(_).toJson).toMap
 
     //a list of one resource: type=composite-type, name=whocares, properties=pokein
     val yamlConfig = new ConfigFile().setContent(getDMConfigYamlString(projectName, dmTemplatePath, properties))
@@ -856,6 +856,15 @@ class HttpGoogleServicesDAO(
       RawlsBillingProjectOperationRecord(projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, googleOperation.getName, false, errorStr, GoogleApiTypes.DeploymentManagerApi)
     }
   }
+
+  /**
+    * Google is not consistent when dealing with folder ids. Some apis do not want the folder id to start with
+    * "folders/" but other apis return that or expect that. This function strips the prefix if it exists.
+    *
+    * @param folderId
+    * @return
+    */
+  private def folderNumberOnly(folderId: String) = folderId.stripPrefix("folders/")
 
   override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
     val dmCredential = getDeploymentManagerAccountCredential
@@ -1184,9 +1193,7 @@ class HttpGoogleServicesDAO(
     retryWhen500orGoogleError( () => {
       val existingProject = executeGoogleRequest(cloudResourceManager.projects().get(projectName.value))
 
-      // google is not consistent when dealing with folder ids. This api does not want the folder id to start with
-      // "folders/" but other apis return that or expect that. Strip it here in case it is present.
-      val folderResourceId = new ResourceId().setType(GoogleResourceTypes.Folder.value).setId(folderId.stripPrefix("folders/"))
+      val folderResourceId = new ResourceId().setType(GoogleResourceTypes.Folder.value).setId(folderNumberOnly(folderId))
       executeGoogleRequest(cloudResourceManager.projects().update(projectName.value, existingProject.setParent(folderResourceId)))
     })
   }
