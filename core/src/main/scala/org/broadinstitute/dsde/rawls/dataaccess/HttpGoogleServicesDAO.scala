@@ -168,7 +168,7 @@ class HttpGoogleServicesDAO(
       val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
       val bucket = new Bucket().setName(bucketName).setLogging(logging)
 
-      val updater = getStorage(getBucketServiceAccountCredential).buckets.update(project.projectName.value, bucket)
+      val updater = getStorage(getBucketServiceAccountCredential).buckets.update(bucketName, bucket)
 
       retryWhen500orGoogleError { () =>
         executeGoogleRequest(updater)
