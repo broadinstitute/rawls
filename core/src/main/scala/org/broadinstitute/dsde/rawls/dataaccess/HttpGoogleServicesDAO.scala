@@ -1189,10 +1189,11 @@ class HttpGoogleServicesDAO(
   }
 
   override def getFolderId(folderName: String): Future[Option[String]] = {
-    getBillingServiceAccountCredential.refreshToken()
+    val credential = getBillingServiceAccountCredential
+    credential.refreshToken()
 
     retryExponentially(when500orGoogleError)( () => {
-      new CloudResourceManagerV2DAO().getFolderId(folderName, OAuth2BearerToken(getBillingServiceAccountCredential.getAccessToken))
+      new CloudResourceManagerV2DAO().getFolderId(folderName, OAuth2BearerToken(credential.getAccessToken))
     })
   }
 }
