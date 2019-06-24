@@ -841,7 +841,7 @@ class HttpGoogleServicesDAO(
       "fcProjectOwners" -> projectTemplate.owners.toJson,
       "fcProjectEditors" -> projectTemplate.editors.toJson,
       "labels" -> templateLabels
-    ) ++ parentFolderId.map("parentFolder" -> _.toJson).toMap
+    ) ++ parentFolderId.map("parentFolder" -> _.stripPrefix("folders/").toJson).toMap
 
     //a list of one resource: type=composite-type, name=whocares, properties=pokein
     val yamlConfig = new ConfigFile().setContent(getDMConfigYamlString(projectName, dmTemplatePath, properties))
