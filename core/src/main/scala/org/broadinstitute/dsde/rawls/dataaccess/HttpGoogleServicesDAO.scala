@@ -1181,9 +1181,13 @@ class HttpGoogleServicesDAO(
   override def addProjectToFolder(projectName: RawlsBillingProjectName, folderId: String): Future[Unit] = {
     implicit val service = GoogleInstrumentedService.CloudResourceManager
     val cloudResourceManager = getCloudResourceManager(getBillingServiceAccountCredential)
+
     retryWhen500orGoogleError( () => {
       val existingProject = executeGoogleRequest(cloudResourceManager.projects().get(projectName.value))
-      val folderResourceId = new ResourceId().setType(GoogleResourceTypes.Folder.value).setId(folderId)
+
+      // google is not consistent when dealing with folder ids. This api does not want the folder id to start with
+      // "folders/" but other apis return that or expect that. Strip it here in case it is present.
+      val folderResourceId = new ResourceId().setType(GoogleResourceTypes.Folder.value).setId(folderId.stripPrefix("folders/"))
       executeGoogleRequest(cloudResourceManager.projects().update(projectName.value, existingProject.setParent(folderResourceId)))
     })
   }
