@@ -1,49 +1,31 @@
 package org.broadinstitute.dsde.rawls.jobexec.wdlparsing
 
-import java.io.File
-import java.util.concurrent.{Callable, ExecutorService, Executors, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import cromwell.client.model.WorkflowDescription
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.CromwellSwaggerClient
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.ParsedWdlWorkflow
-import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingThreadPoolWDLParser.conf
-import org.broadinstitute.dsde.rawls.model.{MethodOutput, UserInfo}
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingThreadPoolWDLParser.{cacheMaxSize, cacheTTLFailure, cacheTTLSuccess, generateCacheKey, generateHash, logger, wdlParsingConf}
+import org.broadinstitute.dsde.rawls.model.UserInfo
 import scalacache.{Cache, Entry, get, put}
 import scalacache.caffeine.CaffeineCache
-import wdl.draft2.model.WdlNamespaceWithWorkflow
-import wdl.draft2.parser.WdlParser.SyntaxError
 
-import scala.collection.JavaConverters._
-import scala.concurrent._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.util.{Failure, Random, Success}
 import scala.util.hashing.MurmurHash3
-import scala.util.{Failure, Random, Success, Try}
-import org.broadinstitute.dsde.workbench.util.Retry
 
-
-
-object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
-  implicit val executionContext: ExecutionContext
+class WDLParser extends WDLParsing with LazyLogging {
 
   // TODO: conf should be injected, not read directly. At least this is an object so it happens once.
   private val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
   private val wdlParsingConf = conf.getConfig("wdl-parsing")
-
-//  private val executionServiceConf = conf.getConfig("executionservice")
-//  private val readServers = executionServiceConf.getObject("readServers").values()
-//  private def cromwellClient = new CromwellSwaggerClient(readServers(Random.nextInt(readServers.size())))
-//
-//  def validate(wdl: String, inputs: File): WorkflowDescription = {
-//    cromwellClient.validate()
-//  }
   private val cacheMaxSize = wdlParsingConf.getInt("cache-max-size")
   private val cacheTTLSuccess = Duration(wdlParsingConf.getInt("cache-ttl-success-seconds"), TimeUnit.SECONDS)
   private val cacheTTLFailure = Duration(wdlParsingConf.getInt("cache-ttl-failure-seconds"), TimeUnit.SECONDS)
-  private val threadPoolTimeout = wdlParsingConf.getInt("parser-thread-pool-timeout-seconds")
 
   // set up cache for WDL parsing
   /* from scalacache doc: "Note: If you’re using an in-memory cache (e.g. Guava or Caffeine) then it makes sense
@@ -53,17 +35,16 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
   import scalacache.modes.sync._
   private val underlyingCaffeineCache = Caffeine.newBuilder()
     .maximumSize(cacheMaxSize)
-    .build[String, Entry[Try[ParsedWdlWorkflow]]]
-  implicit val customisedCaffeineCache: Cache[Try[ParsedWdlWorkflow]] = CaffeineCache(underlyingCaffeineCache)
+    .build[String, Entry[Future[WorkflowDescription]]]
+  implicit val customisedCaffeineCache: Cache[Future[WorkflowDescription]] = CaffeineCache(underlyingCaffeineCache)
 
-  // set up thread pool
-  val executorService: ExecutorService = Executors.newCachedThreadPool()
-
-  def parse(wdl: String): Try[ParsedWdlWorkflow] = {
+  override def parse(wdl: String): Future[WorkflowDescription] = {
     val tick = System.currentTimeMillis()
     val key = generateCacheKey(wdl)
     val wdlhash = generateHash(wdl)
+
     logger.info(s"<parseWDL-cache> looking up $wdlhash ...")
+
     get(key) match {
       case Some(parseResult) =>
         val tock = System.currentTimeMillis() - tick
@@ -73,7 +54,7 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
     }
   }
 
-  private def parseAndCache(wdl: String, key: String, tick: Long, wdlhash: String): Try[WorkflowDescription] = {
+  private def parseAndCache(wdl: String, key: String, tick: Long, wdlhash: String): Future[WorkflowDescription] = {
     logger.info(s"<parseWDL-cache> entering sync block for $wdlhash ...")
     /* Generate the synchronization key. Because synchronization works via object reference equality,
        we need to intern any strings we use. And if we're interning the string, we want it to be small
@@ -89,7 +70,7 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
           val tock = System.currentTimeMillis() - tick
           logger.info(s"<parseWDL-cache> found cached result for $wdlhash in $tock ms.")
           parseResult
-        case None =>
+        case None => {
           val miss = System.currentTimeMillis() - tick
           logger.info(s"<parseWDL-cache> encountered cache miss for $wdlhash in $miss ms.")
 
@@ -101,42 +82,25 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
           val ttl = parseResult match {
             case Success(_) => Some(cacheTTLSuccess)
             case Failure(ex) => Some(cacheTTLFailure)
-//              ex.getCause match {
-//              case se:SyntaxError =>
-//                // syntax error is an expected, deterministic response to invalid wdl. cache this equivalent to a success.
-//                Some(cacheTTLSuccess)
-//              case _  =>
-//                // other errors may be transient, such as timeouts retrieving http imports, or timeouts
-//                // on the thread pool because parsing was slow
-//                Some(cacheTTLFailure)
-//            }
           }
+
           put(key)(parseResult, ttl = ttl)
           val tock = System.currentTimeMillis() - tick
           logger.info(s"<parseWDL-cache> cached result $wdlhash in $tock ms.")
           parseResult
+        }
       }
     }
   }
 
-  // an alternate terse/idiomatic implementation, but can't get good logging
-  /*
-  def parse(wdl: String): Try[ParsedWdlWorkflow] = {
-    sync.caching(generateCacheKey(wdl))(ttl = None) {
-      threadedParse(wdl)
-    }
-  }
-  */
 
-  /**
-    * parse the WDL in the global execution context.
-    * @param wdl
-    * @return
-    */
-  private def inContextParse(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
-    new CallableParser(userInfo, wdl).call()
-  }
+  private val executionServiceConf = conf.getConfig("executionservice")
+  private val readServers = executionServiceConf.getObject("readServers").values()
+  private def cromwellClient = new CromwellSwaggerClient(readServers(Random.nextInt(readServers.size())))
 
+  private def inContextParse(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): WorkflowDescription = {
+    cromwellClient.
+  }
 
   /**
     * generate a short string that identifies this WDL. Should not be used where uniqueness is a strict
@@ -147,6 +111,7 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
   private def generateHash(wdl: String) = {
     MurmurHash3.stringHash(wdl).toString
   }
+
 
   /**
     * this method exists as an abstraction, making it easy to change what we use as a cache key in case
@@ -160,28 +125,4 @@ object CachingThreadPoolWDLParser extends WDLParsing with LazyLogging {
     wdl
   }
 
-}
-
-
-class CallableParser(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext) extends Callable[Try[WorkflowDescription]] with Retry {
-
-  private val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
-
-  private val executionServiceConf = conf.getConfig("executionservice")
-  private val readServers = executionServiceConf.getObject("readServers").values()
-  private def cromwellClient = new CromwellSwaggerClient(readServers(Random.nextInt(readServers.size())))
-//
-//  def call1(): Try[ParsedWdlWorkflow] = {
-//    val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq(httpResolver(_))).recoverWith { case t: SyntaxError =>
-//      Failure(new RawlsException("Failed to parse WDL: " + t.getMessage()))
-//    }
-//    parsed map { p => ParsedWdlWorkflow(p.workflow.inputs, p.workflow.outputs.map(o => MethodOutput(o.locallyQualifiedName(p.workflow), o.womType.stableName))) }
-//  }
-
-  override def call(): Try[WorkflowDescription] = {
-    retryUntilSuccessOrTimeout()  //val parsed = cromwellClient.validate(userInfo, wdl)
-//      .recoverWith { case t: Exception =>
-//        Failure(new RawlsException("Failed to parse WDL: " + t.getMessage))
-//    }
-  }
 }
