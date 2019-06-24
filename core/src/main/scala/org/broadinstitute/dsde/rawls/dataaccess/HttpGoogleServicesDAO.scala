@@ -858,7 +858,6 @@ class HttpGoogleServicesDAO(
   }
 
   override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
-    val credential = getBillingServiceAccountCredential
     val dmCredential = getDeploymentManagerAccountCredential
 
     // this code is a colossal DRY violation but because the operations collection is different
