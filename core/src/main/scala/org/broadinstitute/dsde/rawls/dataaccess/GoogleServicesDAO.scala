@@ -28,6 +28,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val DEPLOYMENT_MANAGER_CREATE_PROJECT = "dm_create_project"
 
   val billingEmail: String
+  val billingGroupEmail: String
 
   // returns bucket and group information
   def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String]): Future[GoogleWorkspaceInfo]

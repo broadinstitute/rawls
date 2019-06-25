@@ -110,7 +110,7 @@ class HttpGoogleServicesDAO(
   billingPemEmail: String,
   billingPemFile: String,
   val billingEmail: String,
-  billingGroupEmail: String,
+  val billingGroupEmail: String,
   billingGroupEmailAliases: List[String],
   billingProbeEmail: String,
   bucketLogsMaxAge: Int,
