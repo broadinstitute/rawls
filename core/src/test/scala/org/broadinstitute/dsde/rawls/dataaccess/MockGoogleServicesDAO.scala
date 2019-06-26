@@ -28,6 +28,7 @@ import scala.util.{Success, Try}
 class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) {
 
   val billingEmail: String = "billing@test.firecloud.org"
+  val billingGroupEmail: String = "terra-billing@test.firecloud.org"
   private var token: String = null
   private var tokenDate: DateTime = null
 

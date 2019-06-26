@@ -360,7 +360,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             RequestComplete(StatusCodes.Created)
           }
         case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, createForbiddenErrorMessage("You", billingAccountName))))
-        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
+        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingGroupEmail, billingAccountName))))
       }
     }
   }
