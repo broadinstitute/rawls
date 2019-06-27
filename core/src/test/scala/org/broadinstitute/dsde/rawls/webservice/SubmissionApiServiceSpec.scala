@@ -62,65 +62,65 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  val largeSampleTestData = new LargeSampleSetTestData()
+ // val largeSampleTestData = new LargeSampleSetTestData()
+//
+//  def withLargeSubmissionApiServices[T](testCode: TestApiService => T): T = {
+//    withCustomTestDatabase(largeSampleTestData) { dataSource: SlickDataSource =>
+//      withApiServices(dataSource) { services =>
+//        try {
+//          // Simulate a large submission in the mock Cromwell server by making it return
+//          // numSamples workflows for submission requests.
+//          mockServer.reset
+//          mockServer.startServer(largeSampleTestData.numSamples)
+//          testCode(services)
+//        } finally {
+//          mockServer.reset
+//          mockServer.startServer()
+//        }
+//      }
+//    }
+//  }
 
-  def withLargeSubmissionApiServices[T](testCode: TestApiService => T): T = {
-    withCustomTestDatabase(largeSampleTestData) { dataSource: SlickDataSource =>
-      withApiServices(dataSource) { services =>
-        try {
-          // Simulate a large submission in the mock Cromwell server by making it return
-          // numSamples workflows for submission requests.
-          mockServer.reset
-          mockServer.startServer(largeSampleTestData.numSamples)
-          testCode(services)
-        } finally {
-          mockServer.reset
-          mockServer.startServer()
-        }
-      }
-    }
-  }
-
-  def withWorkflowSubmissionActor[T](services: TestApiService)(testCode: ActorRef => T): T = {
-    val actor = system.actorOf(WorkflowSubmissionActor.props(
-      slickDataSource,
-      services.methodRepoDAO,
-      services.gcsDAO,
-      services.samDAO,
-      services.dosResolver,
-      MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName), slickDataSource),
-      10,
-      services.gcsDAO.getPreparedMockGoogleCredential(),
-      50 milliseconds,
-      100 milliseconds,
-      100000,
-      100000,
-      None,
-      trackDetailedSubmissionMetrics = true,
-      "test",
-      "requesterPays",
-      false,
-      false,
-      CromwellBackend("PAPIv2"),
-      methodConfigResolver
-    ))
-
-    try {
-      testCode(actor)
-    } finally {
-      // stops actor and waits for it to shut down
-      val testProbe = TestProbe()
-      testProbe watch actor
-      actor ! PoisonPill
-      testProbe.expectTerminated(actor, 5 seconds)
-    }
-  }
-
-  "SubmissionApi" should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde","not there",Some("Pattern"),Some("pattern1"), None, false))) ~>
-      sealRoute(services.submissionRoutes) ~>
-      check { assertResult(StatusCodes.NotFound) {status} }
-  }
+//  def withWorkflowSubmissionActor[T](services: TestApiService)(testCode: ActorRef => T): T = {
+//    val actor = system.actorOf(WorkflowSubmissionActor.props(
+//      slickDataSource,
+//      services.methodRepoDAO,
+//      services.gcsDAO,
+//      services.samDAO,
+//      services.dosResolver,
+//      MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName), slickDataSource),
+//      10,
+//      services.gcsDAO.getPreparedMockGoogleCredential(),
+//      50 milliseconds,
+//      100 milliseconds,
+//      100000,
+//      100000,
+//      None,
+//      trackDetailedSubmissionMetrics = true,
+//      "test",
+//      "requesterPays",
+//      false,
+//      false,
+//      CromwellBackend("PAPIv2"),
+//      methodConfigResolver
+//    ))
+//
+//    try {
+//      testCode(actor)
+//    } finally {
+//      // stops actor and waits for it to shut down
+//      val testProbe = TestProbe()
+//      testProbe watch actor
+//      actor ! PoisonPill
+//      testProbe.expectTerminated(actor, 5 seconds)
+//    }
+//  }
+//
+//  "SubmissionApi" should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
+//    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde","not there",Some("Pattern"),Some("pattern1"), None, false))) ~>
+//      sealRoute(services.submissionRoutes) ~>
+//      check { assertResult(StatusCodes.NotFound) {status} }
+//  }
 
 //  it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
 //    val mcName = MethodConfigurationName("three_step","dsde", testData.wsName)
@@ -133,88 +133,88 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 //      check { assertResult(StatusCodes.NotFound) {status} }
 //  }
 
-  private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
-                                         submissionEntity: Entity, submissionExpression: Option[String],
-                                         services: TestApiService, workflowFailureMode: Option[String] = None): SubmissionStatusResponse = {
-
-    Get(s"${wsName.path}/methodconfigs/${methodConf.namespace}/${methodConf.name}") ~>
-      sealRoute(services.methodConfigRoutes) ~>
-      check {
-        if (status == StatusCodes.NotFound) {
-          Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
-            sealRoute(services.methodConfigRoutes) ~>
-            check {
-              assertResult(StatusCodes.Created) {
-                status
-              }
-            }
-        } else {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-        }
-      }
-
-    withStatsD {
-      val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, Some(submissionEntity.entityType), Some(submissionEntity.name), submissionExpression, false, workflowFailureMode)
-      Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
-        sealRoute(services.submissionRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created, responseAs[String]) {
-            status
-          }
-          val submission = responseAs[SubmissionReport]
-          Get(s"${wsName.path}/submissions/${submission.submissionId}") ~>
-            sealRoute(services.submissionRoutes) ~>
-            check {
-              assertResult(StatusCodes.OK) {
-                status
-              }
-              responseAs[SubmissionStatusResponse]
-            }
-        }
-    } { capturedMetrics =>
-      capturedMetrics should contain (expectedSubmissionStatusMetric(wsName, SubmissionStatuses.Submitted, 1))
-    }
-  }
-
-  private def abortSubmission(services: TestApiService, wsName: WorkspaceName, submissionId: String, validate: Boolean = true): Unit = {
-    import driver.api._
-    implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(30, Seconds)))
-
-    withStatsD {
-      // Abort the submission
-      Delete(s"${wsName.path}/submissions/${submissionId}") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.NoContent) {
-            status
-          }
-        }
-
-      // The submission should be aborting
-      assertResult(SubmissionStatuses.Aborting.toString) {
-        runAndWait(submissionQuery.findById(UUID.fromString(submissionId)).result.head).status
-      }
-    } { capturedMetrics =>
-      capturedMetrics should contain (expectedSubmissionStatusMetric(wsName, SubmissionStatuses.Aborting, 1))
-
-      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
-      val expected = expectedHttpRequestMetrics("delete", s"$wsPathForRequestMetrics.submissions.redacted", StatusCodes.NoContent.intValue, 1)
-      assertSubsetOf(expected, capturedMetrics)
-    }
-
-    // The workflow and submission should be aborted once the SubmissionMonitor runs
-    if (validate) {
-      eventually {
-        assertResult(Set(SubmissionStatuses.Aborted.toString)) {
-          runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(submissionId))).map(_.status).toSet
-        }
-        assertResult(SubmissionStatuses.Aborted.toString) {
-          runAndWait(submissionQuery.findById(UUID.fromString(submissionId)).result.head).status
-        }
-      }
-    }
-  }
+//  private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
+//                                         submissionEntity: Entity, submissionExpression: Option[String],
+//                                         services: TestApiService, workflowFailureMode: Option[String] = None): SubmissionStatusResponse = {
+//
+//    Get(s"${wsName.path}/methodconfigs/${methodConf.namespace}/${methodConf.name}") ~>
+//      sealRoute(services.methodConfigRoutes) ~>
+//      check {
+//        if (status == StatusCodes.NotFound) {
+//          Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
+//            sealRoute(services.methodConfigRoutes) ~>
+//            check {
+//              assertResult(StatusCodes.Created) {
+//                status
+//              }
+//            }
+//        } else {
+//          assertResult(StatusCodes.OK) {
+//            status
+//          }
+//        }
+//      }
+//
+//    withStatsD {
+//      val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, Some(submissionEntity.entityType), Some(submissionEntity.name), submissionExpression, false, workflowFailureMode)
+//      Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
+//        sealRoute(services.submissionRoutes) ~>
+//        check {
+//          assertResult(StatusCodes.Created, responseAs[String]) {
+//            status
+//          }
+//          val submission = responseAs[SubmissionReport]
+//          Get(s"${wsName.path}/submissions/${submission.submissionId}") ~>
+//            sealRoute(services.submissionRoutes) ~>
+//            check {
+//              assertResult(StatusCodes.OK) {
+//                status
+//              }
+//              responseAs[SubmissionStatusResponse]
+//            }
+//        }
+//    } { capturedMetrics =>
+//      capturedMetrics should contain (expectedSubmissionStatusMetric(wsName, SubmissionStatuses.Submitted, 1))
+//    }
+//  }
+//
+//  private def abortSubmission(services: TestApiService, wsName: WorkspaceName, submissionId: String, validate: Boolean = true): Unit = {
+//    import driver.api._
+//    implicit val patienceConfig = PatienceConfig(timeout = scaled(Span(30, Seconds)))
+//
+//    withStatsD {
+//      // Abort the submission
+//      Delete(s"${wsName.path}/submissions/${submissionId}") ~> services.sealedInstrumentedRoutes ~>
+//        check {
+//          assertResult(StatusCodes.NoContent) {
+//            status
+//          }
+//        }
+//
+//      // The submission should be aborting
+//      assertResult(SubmissionStatuses.Aborting.toString) {
+//        runAndWait(submissionQuery.findById(UUID.fromString(submissionId)).result.head).status
+//      }
+//    } { capturedMetrics =>
+//      capturedMetrics should contain (expectedSubmissionStatusMetric(wsName, SubmissionStatuses.Aborting, 1))
+//
+//      val wsPathForRequestMetrics = s"workspaces.redacted.redacted"
+//      val expected = expectedHttpRequestMetrics("delete", s"$wsPathForRequestMetrics.submissions.redacted", StatusCodes.NoContent.intValue, 1)
+//      assertSubsetOf(expected, capturedMetrics)
+//    }
+//
+//    // The workflow and submission should be aborted once the SubmissionMonitor runs
+//    if (validate) {
+//      eventually {
+//        assertResult(Set(SubmissionStatuses.Aborted.toString)) {
+//          runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(submissionId))).map(_.status).toSet
+//        }
+//        assertResult(SubmissionStatuses.Aborted.toString) {
+//          runAndWait(submissionQuery.findById(UUID.fromString(submissionId)).result.head).status
+//        }
+//      }
+//    }
+//  }
 
 //  it should "return 201 Created when creating and monitoring a submission with no expression" in withTestDataApiServices { services =>
 //    val wsName = testData.wsName
