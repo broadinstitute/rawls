@@ -8,19 +8,21 @@ import cromwell.client.api.WomtoolApi
 import cromwell.client.model.WorkflowDescription
 import org.broadinstitute.dsde.rawls.model.UserInfo
 
-class CromwellSwaggerClient(cromwellBasePath: String) {
+import scala.util.Random
 
-  private def cromwellWomtoolApi(accessToken: String): WomtoolApi = {
+class CromwellSwaggerClient(cromwellBasePaths: List[String]) {
+
+
+  private def getRandomCromwellWomtoolApi(accessToken: String): WomtoolApi = {
     val apiClient = new ApiClient()
     apiClient.setAccessToken(accessToken)
-    apiClient.setBasePath(cromwellBasePath)
+    apiClient.setBasePath(cromwellBasePaths(Random.nextInt(cromwellBasePaths.length)))
     new WomtoolApi(apiClient)
   }
 
-
   def validate(userInfo: UserInfo, wdl: String): WorkflowDescription = {
     //String version, String workflowSource, String workflowUrl, File workflowInputs, String workflowType, String workflowTypeVersion
-    cromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl, null, null, null, null)
+    getRandomCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl, null, null, null, null)
   }
 
 }

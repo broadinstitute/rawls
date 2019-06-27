@@ -135,6 +135,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
       execServiceBatchSize,
+      methodConfigResolver,
       gcsDAO,
       samDAO,
       notificationDAO,

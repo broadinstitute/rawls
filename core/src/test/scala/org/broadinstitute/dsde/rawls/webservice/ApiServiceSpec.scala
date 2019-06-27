@@ -179,6 +179,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
       execServiceBatchSize,
+      methodConfigResolver,
       gcsDAO,
       samDAO,
       notificationDAO,

@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.expressions
 
+import cromwell.client.model.{ToolInputParameter, ValueType}
+import cromwell.client.model.ValueType.TypeNameEnum
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
@@ -14,7 +16,14 @@ class ExpressionValidatorSpec extends FlatSpec with TestDriverComponent with Exp
     expressions.map { expr => expr.toString -> AttributeString(expr) }.toMap
 
   def toMethodInput(tuple: (String, AttributeString)): MethodInput = tuple match {
-    case (name, expr) => MethodInput(RequiredInputDefinition(name, WomStringType), expr.value)
+    case (name, expr) => {
+      val valueType = new ValueType()
+      valueType.setTypeName(TypeNameEnum.STRING)
+      val input = new ToolInputParameter()
+      input.setName(name)
+      input.setValueType(valueType)
+      MethodInput(input, expr.value)
+    }
   }
 
   def toMethodInputs(methodConfiguration: MethodConfiguration) : Seq[MethodInput] = {

@@ -17,6 +17,7 @@ import scala.util.{Failure, Success, Try}
 trait MethodWiths {
   val methodRepoDAO: MethodRepoDAO
   val dataSource: SlickDataSource
+  val methodConfigResolver: MethodConfigResolver
 
   import dataSource.dataAccess.driver.api._
 
@@ -46,7 +47,7 @@ trait MethodWiths {
     // TODO add Method to model instead of exposing AgoraEntity?
     withMethod(methodConfig.methodRepoMethod, userInfo) { method =>
       withWdl(method) { wdl =>
-        MethodConfigResolver.gatherInputs(methodConfig, wdl) match {
+        methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl) match {
           case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
           case Success(gatherInputsResult: GatherInputsResult) =>
             op(wdl, gatherInputsResult)

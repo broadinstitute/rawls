@@ -46,9 +46,11 @@ import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Random, Success}
 import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.WDLParser
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 object Boot extends IOApp with LazyLogging {
@@ -310,6 +312,12 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
       val defaultBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultBackend"))
 
+
+      val readServers = executionServiceConfig.getObject("readServers").values().asScala.toList
+      def cromwellSwaggerClient = new CromwellSwaggerClient(readServers.map(_.toString))
+      def wdlParser = new WDLParser(cromwellSwaggerClient)
+      val methodConfigResolver  = new MethodConfigResolver(wdlParser)
+
       if (conf.getBooleanOption("backRawls").getOrElse(false)) {
         logger.info("This instance has been marked as BACK. Booting monitors...")
         BootMonitors.bootMonitors(
@@ -330,7 +338,8 @@ object Boot extends IOApp with LazyLogging {
           requesterPaysRole,
           useWorkflowCollectionField,
           useWorkflowCollectionLabel,
-          defaultBackend
+          defaultBackend,
+          methodConfigResolver
         )
       } else
         logger.info(
@@ -376,6 +385,7 @@ object Boot extends IOApp with LazyLogging {
           cromiamDAO,
           shardedExecutionServiceCluster,
           conf.getInt("executionservice.batchSize"),
+          methodConfigResolver,
           gcsDAO,
           samDAO,
           notificationDAO,

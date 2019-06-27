@@ -22,6 +22,8 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers, Suite}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.WDLParser
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
@@ -66,6 +68,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   // now only serves to encapsulate a Java-ism
   def currentTime() = new DateTime()
   val testDate = currentTime()
+
+  val mockCromwellSwaggerClient = new MockCromwellSwaggerClient()
+  val wdlParser = new WDLParser(mockCromwellSwaggerClient)
+  val methodConfigResolver = new MethodConfigResolver(wdlParser)
 
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
     Await.result(DbResource.dataSource.inTransaction { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)

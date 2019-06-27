@@ -1,13 +1,15 @@
 package org.broadinstitute.dsde.rawls.jobexec.wdlparsing
 
 import cromwell.client.model.WorkflowDescription
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.ParsedWdlWorkflow
+import org.broadinstitute.dsde.rawls.model.UserInfo
 
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
+
 
 trait WDLParsing {
 
   //def parse(wdl: String): Try[ParsedWdlWorkflow]
-  def parse(wdl: String): WorkflowDescription
+  def parse(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription]
 
 }
