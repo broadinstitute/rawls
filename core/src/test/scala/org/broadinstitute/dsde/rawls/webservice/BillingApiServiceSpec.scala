@@ -212,7 +212,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
 
   it should "rollback billing project inserts when there is a google error" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource, new MockGoogleServicesDAO("test") {
-      override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] = {
+      override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord] = {
         Future.failed(new Exception("test exception"))
       }
     }) { services =>
@@ -244,6 +244,16 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 when creating a project with enableFlowLogs but not highSecurityNetwork" in withTestDataApiServices { services =>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), enableFlowLogs = Some(true))) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
           status
         }
       }
