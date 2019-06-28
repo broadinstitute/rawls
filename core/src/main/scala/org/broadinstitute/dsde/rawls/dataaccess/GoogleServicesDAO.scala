@@ -164,7 +164,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
    * - Polling is handled by CreatingBillingProjectMonitor. Once the deployment is completed, CBPM deletes the deployment, as
    * there is a per-project limit on number of deployments, and then marks the project as fully created.
    */
-  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate): Future[RawlsBillingProjectOperationRecord]
+  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord]
 
   /**
     *
@@ -201,6 +201,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     // https://cloud.google.com/compute/docs/labeling-resources#restrictions
     prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(63)
   }
+
+  def addProjectToFolder(projectName: RawlsBillingProjectName, folderId: String): Future[Unit]
+  def getFolderId(folderName: String): Future[Option[String]]
 }
 
 object GoogleApiTypes {

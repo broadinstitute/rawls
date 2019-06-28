@@ -4,6 +4,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleApiTypes, GoogleOperationNames}
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
+import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model._
 
 case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String])
@@ -86,9 +87,9 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    def listProjectsWithServicePerimeter(servicePerimeter: ServicePerimeterName): ReadWriteAction[Seq[RawlsBillingProject]] = {
+    def listProjectsWithServicePerimeterAndStatus(servicePerimeter: ServicePerimeterName, statuses: CreationStatus*): ReadWriteAction[Seq[RawlsBillingProject]] = {
       for {
-        projectRecords <- filter(_.servicePerimeter === servicePerimeter.value).result
+        projectRecords <- filter(rec => rec.servicePerimeter === servicePerimeter.value && rec.creationStatus.inSetBind(statuses.map(_.toString))).result
       } yield {
         projectRecords.map(unmarshalBillingProject)
       }

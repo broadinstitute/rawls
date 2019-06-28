@@ -393,7 +393,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, createProjectRequest.projectName)
       computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, createProjectRequest.projectName)
 
-      createProjectOperation <- gcsDAO.createProject(createProjectRequest.projectName, billingAccount, dmConfig.templatePath, createProjectRequest.highSecurityNetwork.getOrElse(false), createProjectRequest.enableFlowLogs.getOrElse(false), requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate).recoverWith {
+      // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
+      parentFolderId <- createProjectRequest.servicePerimeter.traverse(lookupFolderIdFromServicePerimeterName)
+
+      createProjectOperation <- gcsDAO.createProject(createProjectRequest.projectName, billingAccount, dmConfig.templatePath, createProjectRequest.highSecurityNetwork.getOrElse(false), createProjectRequest.enableFlowLogs.getOrElse(false), requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate, parentFolderId).recoverWith {
         case t: Throwable =>
           // failed to create project in google land, rollback inserts above
           dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(createProjectRequest.projectName) } map(_ => throw t)
@@ -404,6 +407,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       }
     } yield {
       RequestComplete(StatusCodes.Created)
+    }
+  }
+
+  private def lookupFolderIdFromServicePerimeterName(perimeterName: ServicePerimeterName): Future[String] = {
+    val folderName = perimeterName.value.split("/").last
+    gcsDAO.getFolderId(folderName).flatMap {
+      case None => Future.failed(new RawlsException(s"folder named $folderName corresponding to perimeter $perimeterName not found"))
+      case Some(folderId) => Future.successful(folderId)
     }
   }
 
@@ -442,6 +453,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case CreationStatuses.Ready => Future.successful(())
         case status => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"project ${billingProject.projectName.value} should be Ready but is $status")))
       }
+
+      // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
+      folderId <- lookupFolderIdFromServicePerimeterName(servicePerimeterName)
+      _ <- gcsDAO.addProjectToFolder(projectName, folderId)
 
       googleProjectNumber <- billingProject.googleProjectNumber match {
         case Some(existingGoogleProjectNumber) => Future.successful(existingGoogleProjectNumber)
