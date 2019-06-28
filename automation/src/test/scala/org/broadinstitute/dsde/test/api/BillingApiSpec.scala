@@ -1,5 +1,8 @@
 package org.broadinstitute.dsde.test.api
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
+
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
@@ -8,7 +11,8 @@ import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.model.{UserInfo, WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.util.Retry.retry
-import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException}
+import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, Sam, SamModel}
+import org.broadinstitute.dsde.workbench.service.SamModel._
 
 import scala.concurrent.duration.DurationLong
 import org.scalatest.concurrent.Eventually
@@ -119,17 +123,40 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
       Rawls.workspaces.delete(billingProjectName, workspaceName)
       deleteBillingProject(billingProjectName)
     }
+
+    "can create a new billing project with a service perimeter" in {
+      val owner: Credentials = UserPool.chooseProjectOwner
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
+      val googleAccessPolicy = ServiceTestConfig.Projects.googleAccessPolicy
+      val servicePerimeterName = "automation_test_perimeter"
+      val fullyQualifiedServicePerimeterId = s"accessPolicies/${googleAccessPolicy}/servicePerimeters/${servicePerimeterName}"
+      val encodedServicePerimeterId = URLEncoder.encode(fullyQualifiedServicePerimeterId, UTF_8.name)
+      val servicePerimeterResourceType = "service-perimeter"
+
+      val accessPolicyMembership = AccessPolicyMembership(Set(owner.email), Set.empty, Set("owner"))
+      val createResourceRequest = CreateResourceRequest(encodedServicePerimeterId, Map("owner" -> accessPolicyMembership), Set.empty)
+
+      Sam.user.createResource(servicePerimeterResourceType, createResourceRequest)
+
+      register cleanUp Sam.user.deleteResource(servicePerimeterResourceType, encodedServicePerimeterId)
+
+      // try to create a project with a perimeter. retry up to 3 times for project to reach 'Ready' status
+      val billingProjectName = createNewBillingProject(owner, servicePerimeterOpt = Option(fullyQualifiedServicePerimeterId))
+
+      // cleanup
+      deleteBillingProject(billingProjectName)
+    }
   }
 
 
-  private def createNewBillingProject(user: Credentials, trials: Int = 3)(implicit token: AuthToken): String = {
+  private def createNewBillingProject(user: Credentials, trials: Int = 3, servicePerimeterOpt: Option[String] = None)(implicit token: AuthToken): String = {
 
     val billingProjectName = "rawls-billingapispec-" + makeRandomId()
     register cleanUp Try(deleteBillingProject(billingProjectName)).recover {
       case _: RestException =>
     }
 
-    Rawls.billing.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
+    Rawls.billing.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId, servicePerimeterOpt)
 
     // waiting for creationStatus becomes Error or Ready but not Creating
     val statusOption: Option[String] = retry(30.seconds, 20.minutes)({
@@ -137,21 +164,22 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
         statusMap <- Try(Rawls.billing.getBillingProjectStatus(billingProjectName)(token)).toOption
         status <- statusMap.get("creationStatus")
       } yield status
-      creationStatusOption.filterNot(_ equals "Creating")
+      creationStatusOption.filterNot(creationStatus => (creationStatus equals "Creating") || (creationStatus equals "AddingToPerimeter"))
     })
 
     statusOption match {
       case None | Some("Error") if trials > 1 =>
         logger.warn(s"Error or timeout creating billing project $billingProjectName. Retrying ${trials - 1} more times")
-        createNewBillingProject(user, trials - 1)
+        createNewBillingProject(user, trials - 1, servicePerimeterOpt)
       case None =>
         fail(s"timed out waiting billing project $billingProjectName to be ready")
       case Some(status) =>
         withClue(s"Checking status in billing project $billingProjectName") {
           status shouldEqual "Ready"
         }
-        billingProjectName
     }
+
+    billingProjectName
   }
 
   private def deleteBillingProject(billingProjectName: String)(implicit token: AuthToken): Unit = {
