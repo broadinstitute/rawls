@@ -11,15 +11,14 @@ import org.broadinstitute.dsde.rawls.model.UserInfo
 
 import scala.util.Random
 
-class CromwellSwaggerClient(cromwellBasePaths: List[String]) extends LazyLogging {
+class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
 
 
   private def getRandomCromwellWomtoolApi(accessToken: String): WomtoolApi = {
-    logger.info("CROMWELL BASE PATH: " + Random.nextInt(cromwellBasePaths.length))
-    logger.info("CROMWELL BASE PATHS: " + cromwellBasePaths.toString)
+    logger.info("CROMWELL BASE PATH: " + cromwellBasePath)
     val apiClient = new ApiClient()
     apiClient.setAccessToken(accessToken)
-    apiClient.setBasePath(cromwellBasePaths(Random.nextInt(cromwellBasePaths.length)))
+    apiClient.setBasePath(cromwellBasePath)
     new WomtoolApi(apiClient)
   }
 
