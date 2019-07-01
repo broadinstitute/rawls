@@ -10,13 +10,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
-//import wom.callable.Callable.InputDefinition
-//import wom.callable.Callable.InputDefinition
-//import wom.types.{WomArrayType, WomOptionalType}
-//import wdl.draft2.model.FullyQualifiedName
 
 import scala.collection.JavaConverters._
-//import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingThreadPoolWDLParser
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}

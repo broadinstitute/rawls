@@ -9,7 +9,5 @@ import scala.util.Try
 
 trait WDLParsing {
 
-  //def parse(wdl: String): Try[ParsedWdlWorkflow]
   def parse(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription]
-
 }
