@@ -386,12 +386,13 @@ object Boot extends IOApp with LazyLogging {
       )
 
       for {
-        _ <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080))).recover {
+        binding <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080))).recover {
           case t: Throwable =>
             logger.error("FATAL - failure starting http server", t)
             throw t
         }
-        _ <- IO.never
+        _ <- IO.fromFuture(IO(binding.whenTerminated))
+        _ <- IO(system.terminate())
       } yield ()
     }
   }
