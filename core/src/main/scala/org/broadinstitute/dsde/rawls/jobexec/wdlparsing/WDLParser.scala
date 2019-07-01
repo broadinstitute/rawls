@@ -6,6 +6,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import cromwell.client.model.WorkflowDescription
+import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import org.broadinstitute.dsde.rawls.dataaccess.CromwellSwaggerClient
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import scalacache.{Cache, Entry, get, put}
@@ -16,14 +17,9 @@ import scala.concurrent.duration.Duration
 import scala.util.{Failure, Random, Success, Try}
 import scala.collection.JavaConverters._
 
-class WDLParser(cromwellSwaggerClient: CromwellSwaggerClient) extends WDLParsing with LazyLogging {
+class WDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient: CromwellSwaggerClient) extends WDLParsing with LazyLogging {
 
   // TODO: conf should be injected, not read directly. At least this is an object so it happens once.
-  private val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
-  private val wdlParsingConf = conf.getConfig("wdl-parsing")
-  private val cacheMaxSize = wdlParsingConf.getInt("cache-max-size")
-  private val cacheTTLSuccess = Duration(wdlParsingConf.getInt("cache-ttl-success-seconds"), TimeUnit.SECONDS)
-  private val cacheTTLFailure = Duration(wdlParsingConf.getInt("cache-ttl-failure-seconds"), TimeUnit.SECONDS)
 
   // set up cache for WDL parsing
   /* from scalacache doc: "Note: If you’re using an in-memory cache (e.g. Guava or Caffeine) then it makes sense
@@ -33,7 +29,7 @@ class WDLParser(cromwellSwaggerClient: CromwellSwaggerClient) extends WDLParsing
   import scalacache.modes.sync._
 
   private val underlyingCaffeineCache = Caffeine.newBuilder()
-    .maximumSize(cacheMaxSize)
+    .maximumSize(wdlParsingConfig.cacheMaxSize)
     .build[String, Entry[Try[WorkflowDescription]]]
   implicit val customisedCaffeineCache: Cache[Try[WorkflowDescription]] = CaffeineCache(underlyingCaffeineCache)
 
@@ -53,8 +49,8 @@ class WDLParser(cromwellSwaggerClient: CromwellSwaggerClient) extends WDLParsing
   private def parseAndCache(userInfo: UserInfo, wdl: String, key: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
     val parseResult = inContextParse(userInfo, wdl)
     val timeToLive = parseResult match {
-      case Success(_) => Some(cacheTTLSuccess)
-      case Failure(ex) => Some(cacheTTLFailure)
+      case Success(_) => Some(wdlParsingConfig.cacheTTLSuccessSeconds)
+      case Failure(ex) => Some(wdlParsingConfig.cacheTTLFailureSeconds)
     }
     put(key)(parseResult, ttl = timeToLive)
     parseResult

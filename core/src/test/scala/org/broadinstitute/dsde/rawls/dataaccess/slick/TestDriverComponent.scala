@@ -22,6 +22,8 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers, Suite}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import org.broadinstitute.dsde.rawls.config.WDLParserConfig
+import org.broadinstitute.dsde.rawls.dataaccess.slick.DbResource.conf
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.WDLParser
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -69,8 +71,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   def currentTime() = new DateTime()
   val testDate = currentTime()
 
+  val wdlParserConfig = WDLParserConfig(ConfigFactory.load().getConfig("wdl-parsing"))
   val mockCromwellSwaggerClient = new MockCromwellSwaggerClient()
-  val wdlParser = new WDLParser(mockCromwellSwaggerClient)
+  val wdlParser = new WDLParser(wdlParserConfig, mockCromwellSwaggerClient)
   val methodConfigResolver = new MethodConfigResolver(wdlParser)
 
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {

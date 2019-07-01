@@ -20,6 +20,7 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.config._
+import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, _}
@@ -312,10 +313,9 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
       val defaultBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultBackend"))
 
-
-      val readServers = executionServiceConfig.getObject("readServers").values().asScala.toList
-      def cromwellSwaggerClient = new CromwellSwaggerClient(readServers.map(_.toString))
-      def wdlParser = new WDLParser(cromwellSwaggerClient)
+      val wdlParsingConfig = WDLParserConfig(conf.getConfig("wdl-parsing"))
+      def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
+      def wdlParser = new WDLParser(wdlParsingConfig, cromwellSwaggerClient)
       val methodConfigResolver  = new MethodConfigResolver(wdlParser)
 
       if (conf.getBooleanOption("backRawls").getOrElse(false)) {
