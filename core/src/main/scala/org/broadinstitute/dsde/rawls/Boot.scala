@@ -433,8 +433,8 @@ object Boot extends IOApp with LazyLogging {
 
     for {
       blockingEc <- ExecutionContexts.fixedThreadPool[F](256) //scala.concurrent.blocking has default max extra thread number 256, so use this number to start with
-      implicit0(it: Linebacker[F])  = Linebacker.fromExecutionContext[F](blockingEc)
-      googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, Some(serviceProject))
+      lineBacker = Linebacker.fromExecutionContext[F](blockingEc)
+      googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, Some(serviceProject))(ContextShift[F], Timer[F], implicitly[Async[F]], Logger[F], lineBacker)
       httpClient <- BlazeClientBuilder(executionContext).resource
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)

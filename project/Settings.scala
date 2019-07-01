@@ -50,8 +50,7 @@ object Settings {
     organization  := "org.broadinstitute.dsde",
     scalaVersion  := "2.12.2",
     resolvers ++= commonResolvers,
-    scalacOptions ++= commonCompilerSettings,
-    addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0")
+    scalacOptions ++= commonCompilerSettings
   )
 
   //the full list of settings for the workbenchGoogle project (see build.sbt)
