@@ -141,11 +141,11 @@ class MethodConfigResolver(wdlParser: WDLParser) {
   ) toString
 
   def getMethodInputsOutputs(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[MethodInputsOutputs] = parseWDL(userInfo, wdl) map { workflowDescription =>
-    val inputs = workflowDescription.getInputs.asScala map { input =>
+    val inputs = workflowDescription.getInputs.asScala.toList map { input =>
       // TODO: getTypeName can return a type ("Int", "String") or "Optional" parse WorkflowDescription properly
       model.MethodInput(input.getName, input.getValueType.getTypeName.getValue, input.getOptional)
     }
-    val outputs = workflowDescription.getOutputs.asScala map { output =>
+    val outputs = workflowDescription.getOutputs.asScala.toList map { output =>
       model.MethodOutput(output.getName, output.getValueType.getTypeName.getValue)
     }
     MethodInputsOutputs(inputs, outputs)
