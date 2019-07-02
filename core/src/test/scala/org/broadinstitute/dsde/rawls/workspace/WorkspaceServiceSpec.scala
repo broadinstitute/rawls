@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, SubmissionMonitorConfig}
+import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -29,7 +29,8 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
@@ -87,6 +88,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
 
+    val testConf = ConfigFactory.load()
+
     val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
@@ -104,7 +107,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       notificationDAO,
       samDAO,
       Seq("bigquery.jobUser"),
-      "requesterPaysRole"
+      "requesterPaysRole",
+      DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
+      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
     )_
 
     val genomicsServiceConstructor = GenomicsService.constructor(

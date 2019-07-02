@@ -13,6 +13,7 @@ import com.google.api.services.storage.model.{Bucket, BucketAccessControl, Stora
 import fs2.Stream
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
+import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
@@ -26,9 +27,11 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Success, Try}
 
-class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) {
+class MockGoogleServicesDAO(groupsPrefix: String,
+                            override val accessContextManagerDAO: AccessContextManagerDAO = new MockGoogleAccessContextManagerDAO) extends GoogleServicesDAO(groupsPrefix) {
 
   val billingEmail: String = "billing@test.firecloud.org"
+  val billingGroupEmail: String = "terra-billing@test.firecloud.org"
   private var token: String = null
   private var tokenDate: DateTime = null
 
@@ -110,7 +113,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def getAccessTokenUsingJson(saKey: String): Future[String] = Future.successful("token")
   override def getUserInfoUsingJson(saKey: String): Future[UserInfo] = Future.successful(UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000")))
 
-  override def getGoogleProject(billingProjectName: RawlsBillingProjectName): Future[Project] = Future.successful(new Project())
+  override def getGoogleProject(billingProjectName: RawlsBillingProjectName): Future[Project] = Future.successful(new Project().setProjectNumber(42L))
 
   override def deleteBucket(bucketName: String) = Future.successful(true)
 
@@ -197,17 +200,14 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(true)
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] =
-    Future.successful(RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, "opid", false, None, "create"))
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] =
+    Future.successful(RawlsBillingProjectOperationRecord(projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, "opid", false, None, GoogleApiTypes.DeploymentManagerApi))
 
-  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[WorkbenchEmail]): Future[Try[Unit]] = {
-    Future.successful(Success(()))
-  }
+  override def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(())
 
   override def getBucketDetails(bucket: String, project: RawlsBillingProjectName): Future[WorkspaceBucketOptions] = {
     Future.successful(WorkspaceBucketOptions(false))
   }
-
   override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Boolean] = Future.successful {
     import cats.implicits._
     val existingPolicies = policies.getOrElse(projectName, Map.empty)
@@ -224,14 +224,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
                                bucketName: String,
                                readers: Set[WorkbenchEmail]): Future[String] = Future(bucketName)
 
-  override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = Future.successful {
-    Try(projectTemplate.services.map { service =>
-      RawlsBillingProjectOperationRecord(project.projectName.value, service, UUID.randomUUID().toString, false, None, "services")
-    })
-  }
-
-  override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
-    Future.successful(rawlsBillingProjectOperation.copy(done = true))
+  override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
+    Future.successful(OperationStatus(true, None))
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(())
@@ -239,4 +233,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = Future.successful(false)
 
   override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = Future.successful(())
+
+  override def addProjectToFolder(projectName: RawlsBillingProjectName, folderName: String): Future[Unit] = Future.successful(())
+
+  override def getFolderId(folderName: String): Future[Option[String]] = Future.successful(Option("folders/1234567"))
 }

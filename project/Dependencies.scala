@@ -34,6 +34,8 @@ object Dependencies {
   val googleGenomics: ModuleID =              excludeGuavaJDK5("com.google.apis"        % "google-api-services-genomics"              % ("v2alpha1-rev61-" + googleV))
   val googleStorage: ModuleID =               excludeGuavaJDK5("com.google.apis"        % "google-api-services-storage"               % ("v1-rev157-" + "1.25.0"))
   val googleCloudResourceManager: ModuleID =  excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudresourcemanager"  % ("v1-rev7-" + googleV))
+  val googleIam: ModuleID =                   excludeGuavaJDK5("com.google.apis"        % "google-api-services-iam"                   % ("v1-rev247-" + googleV))
+  val googleIamCredentials: ModuleID =        excludeGuavaJDK5("com.google.apis"        % "google-api-services-iamcredentials"        % ("v1-rev38-" + googleV))
 
   val googleCompute: ModuleID =           "com.google.apis"   % "google-api-services-compute"           % ("v1-rev72-" + olderGoogleV)
   val googleAdminDirectory: ModuleID =    "com.google.apis"   % "google-api-services-admin-directory"   % ("directory_v1-rev53-" + olderGoogleV)
@@ -41,6 +43,7 @@ object Dependencies {
   val googleOAuth2: ModuleID =            "com.google.apis"   % "google-api-services-oauth2"            % ("v1-rev112-" + olderGoogleV)
   val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev14-" + googleV)
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev17-" + googleV)
+  val googleDeploymentManager: ModuleID = "com.google.apis"   % "google-api-services-deploymentmanager" % ("v2beta-rev20181207-1.28.0")
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
   val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.17.1"
   val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
@@ -78,13 +81,16 @@ object Dependencies {
     exclude("com.typesafe.akka", "akka-actor_2.12")
     exclude("com.typesafe.akka", "akka-http_2.12"))
 
-  val workbenchModelV  = "0.13-0614f92-SNAP"
+  val workbenchModelV  = "0.13-d4e0782"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogleV = "0.18-4c7acd5"
-  val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
-  val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests" excludeAll(excludeWorkbenchModel)
-  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.5-ea3ee30"
+  val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
+  val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
+  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.5-40c9ae6" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
+  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.5-d4b4838" excludeAll(excludeWorkbenchModel)
   val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
+
+  val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
 
   val metricsDependencies = Seq(
     metricsScala,
@@ -96,6 +102,9 @@ object Dependencies {
   )
 
   val googleDependencies = metricsDependencies ++ Seq(
+
+    accessContextManager,
+
     akkaHttpSprayJson,
     akkaHttp,
     akkaStream,
@@ -107,6 +116,8 @@ object Dependencies {
     googleGenomics,
     googleStorage,
     googleCloudResourceManager,
+    googleIam,
+    googleIamCredentials,
     googleCompute,
     googleAdminDirectory,
     googlePlus,
@@ -114,6 +125,7 @@ object Dependencies {
     googleOAuth2too,
     googlePubSub,
     googleServicemanagement,
+    googleDeploymentManager,
     googleGuava
   )
 
@@ -129,6 +141,7 @@ object Dependencies {
 
   val modelDependencies = Seq(
     // I am not certain why I need jackson-core here but IntelliJ is confused without it and tests don't run
+    workbenchModel,
     jacksonCore,
     akkaHttpSprayJson,
     akkaHttp,
@@ -167,6 +180,7 @@ object Dependencies {
     workbenchGoogle,
     workbenchGoogle2,
     workbenchGoogleMocks,
+    workbenchUtil,
     ficus,
     scalaCache
   )
