@@ -79,14 +79,15 @@ class MethodConfigResolver(wdlParser: WDLParser) {
      */
     val (definedInputs, undefinedInputs) = wdlInputs.partition { input => methodConfig.inputs.contains(input.getName) && !isAttributeEmpty(input.getName) }
     val (emptyOptionals, missingRequired) = undefinedInputs.partition { input => input.getOptional }
-    val extraInputs = methodConfig.inputs.filterNot { case (name, expression) => wdlInputs.contains(name) }
+    val extraInputs = methodConfig.inputs.filterNot { case (name, expression) => wdlInputs.map(_.getName).contains(name) }
 
 
-    GatherInputsResult(
+    val gath = GatherInputsResult(
       definedInputs.map  { input => MethodInput(input, methodConfig.inputs(input.getName).value) }.toSet,
       emptyOptionals.map { input => MethodInput(input, methodConfig.inputs.getOrElse(input.getName, AttributeString("")).value ) }.toSet,
       missingRequired.map(_.getName).toSet,
       extraInputs.keys.toSet)
+    gath
   }
 
   def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Set[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
