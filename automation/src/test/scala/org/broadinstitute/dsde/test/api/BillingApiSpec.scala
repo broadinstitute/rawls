@@ -177,9 +177,9 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
         withClue(s"Checking status in billing project $billingProjectName") {
           status shouldEqual "Ready"
         }
+        billingProjectName
     }
 
-    billingProjectName
   }
 
   private def deleteBillingProject(billingProjectName: String)(implicit token: AuthToken): Unit = {
