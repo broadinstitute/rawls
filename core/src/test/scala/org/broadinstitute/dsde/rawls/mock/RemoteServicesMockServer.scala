@@ -254,6 +254,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     val dockstoreResponse =
       s"""{"type":"WDL","descriptor":"${threeStepWDL.replace("three_step", "three_step_dockstore").replace("\n","\\n")}","url":"bogus"}"""
 
+    println("DO WE GET ALL THE WAY DOWN???")
     mockServer.when(
       request()
         .withMethod("GET")
@@ -265,6 +266,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withBody(dockstoreResponse)
         .withStatusCode(StatusCodes.OK.intValue)
     )
+    println("AND THEN PAST?")
 
     // Saving invalid WDL as a Method Repo Method is allowed
 
@@ -303,6 +305,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withBody(noInputMethodDockstoreResponse)
         .withStatusCode(StatusCodes.OK.intValue)
     )
+
 
     val arrayWdl = """task aggregate_data {
                      |	Array[String] input_array

@@ -69,7 +69,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   "MethodConfigApi" should "return 201 on create method configuration in Agora" in withTestDataApiServices { services =>
-    testCreateMethodConfiguration(AgoraMethod("dsde", "three_step", 1), "three_step", services)
+    testCreateMethodConfiguration(AgoraMethod("dsde", "three_step", 1), "three_step_dockstore", services)
   }
 
   it should "return 201 on create method configuration in Dockstore" in withTestDataApiServices { services =>
