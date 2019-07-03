@@ -1340,15 +1340,15 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "prevent user without compute permission from creating submission" ignore withDefaultTestDatabase { dataSource: SlickDataSource =>
+  it should "prevent user without compute permission from creating submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     testCreateSubmission(dataSource, userWriterNoCompute, StatusCodes.Forbidden)
   }
 
-  it should "allow user with explicit compute permission to create submission" ignore withDefaultTestDatabase { dataSource: SlickDataSource =>
+  it should "allow user with explicit compute permission to create submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     testCreateSubmission(dataSource, testData.userWriter.userEmail, StatusCodes.Created)
   }
 
-  it should "403 creating submission without billing project compute permission" ignore withDefaultTestDatabase { dataSource: SlickDataSource =>
+  it should "403 creating submission without billing project compute permission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     testCreateSubmission(dataSource, userWriterNoComputeOnProject, StatusCodes.Forbidden)
   }
 

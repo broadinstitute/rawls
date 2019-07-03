@@ -1407,7 +1407,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         requireComputePermission(workspaceContext.workspace) {
           val submissionId: UUID = UUID.randomUUID()
           val submissionEntityOpt = if(header.entityType.isEmpty) { None } else { Some(AttributeEntityReference(entityType = submissionRequest.entityType.get, entityName = submissionRequest.entityName.get)) }
-          println("SUCCESSES " + successes.toString())
 
           val workflows = successes map { entityInputs =>
             val workflowEntityOpt = header.entityType.map(_ => AttributeEntityReference(entityType = header.entityType.get, entityName = entityInputs.entityName))

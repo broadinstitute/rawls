@@ -444,7 +444,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "return a successful Submission with unstarted workflows where method configuration inputs are missing on some entities" in withWorkspaceService { workspaceService =>
-    println("TEST START")
     val submissionRq = SubmissionRequest("dsde", "NotAllSamplesMethodConfig", Some("Individual"), Some("indiv1"), Some("this.sset.samples"), false)
     val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
     val (status, newSubmissionReport) = rqComplete.response

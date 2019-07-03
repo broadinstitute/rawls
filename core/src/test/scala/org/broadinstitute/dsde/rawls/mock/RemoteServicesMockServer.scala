@@ -238,21 +238,6 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
-    val noInputWdl =
-      """
-        |task t1 {
-        |  command {
-        |    echo "Hello"
-        |  }
-        |}
-        |
-        |workflow w1 {
-        |  call t1
-        |}
-      """.stripMargin
-
-    val noInputMethod = AgoraEntity(Some("dsde"), Some("no_input"), Some(1), None, None, None, None, Some(noInputWdl), None, Some(AgoraEntityType.Workflow))
-
     mockServer.when(
       request()
         .withMethod("GET")
@@ -263,9 +248,6 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withBody(noInputMethod.toJson.prettyPrint)
         .withStatusCode(StatusCodes.OK.intValue)
     )
-
-    val noInputMethodDockstoreResponse =
-      s"""{"type":"WDL","descriptor":"${noInputWdl.replace("t1", "t1_dockstore").replace("\"", "\\\"").replace("\n","\\n")}","url":"bogus"}"""
 
     mockServer.when(
       request()

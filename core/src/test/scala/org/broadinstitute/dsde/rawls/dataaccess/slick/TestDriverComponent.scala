@@ -914,7 +914,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       |}
     """.stripMargin
 
-  val patternInput = makeToolInputParameter("cgrep.pattern", true, makeValueType("String"), "String")
+  val patternInput = makeToolInputParameter("cgrep.pattern", false, makeValueType("String"), "String")
   val cgrepcountOutput = makeToolOutputParameter("cgrep.count", makeValueType("Int"), "Int")
   val wccountOutput = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
   val psprocsOutput = makeToolOutputParameter("ps.procs", makeValueType("File"), "File")
@@ -922,6 +922,31 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   mockCromwellSwaggerClient.workflowDescriptions += (threeStepWDL -> threeStepWDLWorkflowDescription)
 
   val threeStepMethod = AgoraEntity(Some("dsde"),Some("three_step"),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
+
+
+  val noInputWdl =
+    """
+      |task t1 {
+      |  command {
+      |    echo "Hello"
+      |  }
+      |}
+      |
+      |workflow w1 {
+      |  call t1
+      |}
+    """.stripMargin
+
+  val noInputWdlWorkflowDescription = makeWorkflowDescription("w1", List(), List())
+  mockCromwellSwaggerClient.workflowDescriptions += (noInputWdl -> noInputWdlWorkflowDescription)
+
+  val noInputMethodDockstoreResponse =
+    s"""{"type":"WDL","descriptor":"${noInputWdl.replace("t1", "t1_dockstore").replace("\"", "\\\"").replace("\n","\\n")}","url":"bogus"}"""
+  val noInputMethodDockstoreWorkflowDescription = makeWorkflowDescription("w1", List(), List())
+  mockCromwellSwaggerClient.workflowDescriptions += (noInputWdl.replace("t1", "t1_dockstore") -> noInputWdlWorkflowDescription)
+
+
+  val noInputMethod = AgoraEntity(Some("dsde"), Some("no_input"), Some(1), None, None, None, None, Some(noInputWdl), None, Some(AgoraEntityType.Workflow))
 
 }
 
