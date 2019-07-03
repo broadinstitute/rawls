@@ -13,16 +13,13 @@ import cromwell.client.model.{ToolInputParameter, WorkflowDescription}
 import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model.ValueType
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-
+import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
+import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient._
 
 class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDriverComponent {
 
   import driver.api._
-
-  val littleWdlName = "littlewdl"
-  val littleWdlIntRequiredInput = s"w1.t1.int_arg"
-  val littleWdlIntOptionalInput = s"w1.t1.int_opt"
 
   val littleWdl =
     """
@@ -40,8 +37,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       |}
     """.stripMargin
 
-  val arrayWDLName = "arraywdl"
-  val arrayWDLIntArrayRequiredInput = "w1.int_array"
 
   val arrayWdl =
     """
@@ -60,8 +55,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       |}
     """.stripMargin
 
-  val doubleArrayWDLName = "doubleArraywdl"
-  val doubleArrayWDLIntArrayRequiredInput = "w1.aint_array"
 
 
   val doubleArrayWdl =
@@ -81,8 +74,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       |}
     """.stripMargin
 
-  val optionalDoubleArrayWDLName = "optionalDoubleArraywdl"
-  val optionalDoubleArrayWDLInput = "w1.aint_array"
 
   val optionalDoubleArrayWdl =
     """
@@ -101,8 +92,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       |}
     """.stripMargin
 
-  val tripleArrayWDLName = "tripleArraywdl"
-  val tripleArrayWDLRequiredInput = "w1.aaint_array"
 
   val tripleArrayWdl =
     """
@@ -123,18 +112,38 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
   val badWdl = littleWdl.replace("workflow", "not-a-workflow")
 
-  val badWdlWorkflowDescription = new WorkflowDescription()
-  badWdlWorkflowDescription.setValid(false)
-  badWdlWorkflowDescription.setValidWorkflow(false)
-  badWdlWorkflowDescription.addErrorsItem("ERROR: Finished parsing without consuming all tokens.\\n\\nnot-a-workflow w1 {\\n^\\n    ")
-  mockCromwellSwaggerClient.workflowDescriptions += (badWdl -> badWdlWorkflowDescription)
-
-
   val intArgName = "w1.t1.int_arg"
   val intOptName = "w1.t1.int_opt"
   val intArrayName = "w1.int_array"
   val doubleIntArrayName = "w1.aint_array"
   val tripleIntArrayName = "w1.aaint_array"
+
+  val littleWdlWorkflowDescriptionRequiredInput = makeToolInputParameter(intArgName, false, makeValueType("Int"), "Int")
+  val littleWdlWorkflowDescriptionOptionalInput = makeToolInputParameter(intOptName, true, makeValueType("Int"), "Int?")
+  val littleWdlWorkflowDescription = makeWorkflowDescription("", List(littleWdlWorkflowDescriptionRequiredInput, littleWdlWorkflowDescriptionOptionalInput), List.empty)
+
+  val requiredArrayInput = makeToolInputParameter(intArrayName, false, makeArrayValueType(makeValueType("Int")), "Array[Int]")
+  val requiredArrayWorkflowDescription = makeWorkflowDescription("", List(requiredArrayInput), List.empty)
+
+  val requiredDoubleArrayInput =   makeToolInputParameter(doubleIntArrayName, false, makeArrayValueType(makeArrayValueType(makeValueType("Int"))), "Array[Array[Int]]")
+  val requiredDoubleArrayWorkflowDescription =  makeWorkflowDescription("", List(requiredDoubleArrayInput), List.empty)
+
+  val optionalDoubleArrayInput =   makeToolInputParameter(doubleIntArrayName, false, makeArrayValueType(makeArrayValueType(makeValueType("Int"))), "Array[Array[Int]]")
+  val optionalDoubleArrayWorkflowDescription =  makeWorkflowDescription("", List(optionalDoubleArrayInput), List.empty)
+
+
+  val requiredTripleArrayInput  = makeToolInputParameter(tripleIntArrayName, true, makeArrayValueType(makeArrayValueType(makeArrayValueType(makeValueType("Int")))), "Array[Array[Array[Int]]]")
+  val requiredTripleArrayWorkflowDescription =  makeWorkflowDescription("", List(requiredTripleArrayInput), List.empty)
+
+  val badWdlWorkflowDescription = makeBadWorkflowDescription("badwdl", List("ERROR: Finished parsing without consuming all tokens.\\n\\nnot-a-workflow w1 {\\n^\\n    "))
+
+  mockCromwellSwaggerClient.workflowDescriptions += (littleWdl -> littleWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (arrayWdl  -> requiredArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl -> requiredDoubleArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (optionalDoubleArrayWdl -> optionalDoubleArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (tripleArrayWdl -> requiredTripleArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (badWdl -> badWdlWorkflowDescription)
+
 
   val workspace = Workspace("workspaces", "test_workspace", UUID.randomUUID().toString(), "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
@@ -219,42 +228,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   }
 
 
-  val littleWdlWorkflowDescriptionRequiredInput = new ToolInputParameter()
-  littleWdlWorkflowDescriptionRequiredInput.setName(littleWdlIntRequiredInput)
-  littleWdlWorkflowDescriptionRequiredInput.setOptional(false)
-  littleWdlWorkflowDescriptionRequiredInput.setValueType(new ValueType().typeName(TypeNameEnum.INT))
-
-  val littleWdlWorkflowDescriptionOptionalInput = new ToolInputParameter()
-  littleWdlWorkflowDescriptionOptionalInput.setName(littleWdlIntOptionalInput)
-  littleWdlWorkflowDescriptionOptionalInput.setOptional(true)
-  littleWdlWorkflowDescriptionOptionalInput.setValueType(new ValueType().typeName(TypeNameEnum.INT))
-
-  val littleWdlWorkflowDescription = new WorkflowDescription()
-  littleWdlWorkflowDescription.addInputsItem(littleWdlWorkflowDescriptionRequiredInput)
-  littleWdlWorkflowDescription.addInputsItem(littleWdlWorkflowDescriptionOptionalInput)
-  littleWdlWorkflowDescription.setName(littleWdlName)
-  littleWdlWorkflowDescription.setValid(true)
-
-
-  val wdlWorkflowDescriptionIntArrayRequiredInput = new ToolInputParameter()
-  wdlWorkflowDescriptionIntArrayRequiredInput.setName(arrayWDLIntArrayRequiredInput)
-  wdlWorkflowDescriptionIntArrayRequiredInput.setOptional(false)
-  val intValueType = new ValueType()
-  intValueType.typeName(TypeNameEnum.INT)
-  val intArrayValueType = new ValueType()
-  intArrayValueType.typeName(TypeNameEnum.ARRAY)
-  intArrayValueType.arrayType(intValueType)
-  wdlWorkflowDescriptionIntArrayRequiredInput.setValueType(intArrayValueType)
-
-  val arrayWdlWorkflowDescription =  new WorkflowDescription()
-  arrayWdlWorkflowDescription.addInputsItem(wdlWorkflowDescriptionIntArrayRequiredInput)
-  arrayWdlWorkflowDescription.setName(arrayWDLName)
-  arrayWdlWorkflowDescription.setValid(true)
-
-
-  mockCromwellSwaggerClient.workflowDescriptions += (littleWdl -> littleWdlWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (arrayWdl  -> arrayWdlWorkflowDescription)
-
 
 
   //Test harness to call resolveInputsForEntities without having to go via the WorkspaceService
@@ -321,26 +294,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     "unpack AttributeValueRawJson into WDL-arrays" in withConfigData {
       val context = SlickWorkspaceContext(workspace)
 
-      val doubleArrayWdlWorkflowDescriptionRequiredInput = new ToolInputParameter()
-      doubleArrayWdlWorkflowDescriptionRequiredInput.setName(doubleArrayWDLIntArrayRequiredInput)
-      doubleArrayWdlWorkflowDescriptionRequiredInput.setOptional(false)
-      val intValueType = new ValueType()
-      intValueType.typeName(TypeNameEnum.INT)
-      val intArrayValueType = new ValueType()
-      intArrayValueType.typeName(TypeNameEnum.ARRAY)
-      intArrayValueType.arrayType(intValueType)
-      val intArrayArrayValueType = new ValueType()
-      intArrayArrayValueType.typeName(TypeNameEnum.ARRAY)
-      intArrayValueType.arrayType(intArrayValueType)
-
-      doubleArrayWdlWorkflowDescriptionRequiredInput.setValueType(intArrayArrayValueType)
-
-      val doubleArrayWdlWorkflowDescription =  new WorkflowDescription()
-      doubleArrayWdlWorkflowDescription.addInputsItem(doubleArrayWdlWorkflowDescriptionRequiredInput)
-      doubleArrayWdlWorkflowDescription.setName(doubleArrayWDLName)
-      doubleArrayWdlWorkflowDescription.setValid(true)
-
-      mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl -> doubleArrayWdlWorkflowDescription)
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configRawJsonDoubleArray, sampleSet2, doubleArrayWdl, this))
       val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
         svv.inputName -> svv.value.get
@@ -353,27 +306,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     "unpack AttributeValueRawJson into optional WDL-arrays" in withConfigData {
       val context = SlickWorkspaceContext(workspace)
 
-      val doubleArrayWdlWorkflowDescriptionOptional= new ToolInputParameter()
-      doubleArrayWdlWorkflowDescriptionOptional.setName(optionalDoubleArrayWDLInput)
-      doubleArrayWdlWorkflowDescriptionOptional.setOptional(true)
-      val intValueType = new ValueType()
-      intValueType.typeName(TypeNameEnum.INT)
-      val intArrayValueType = new ValueType()
-      intArrayValueType.typeName(TypeNameEnum.ARRAY)
-      intArrayValueType.arrayType(intValueType)
-      val intArrayArrayValueType = new ValueType()
-      intArrayArrayValueType.typeName(TypeNameEnum.ARRAY)
-      intArrayValueType.arrayType(intArrayValueType)
-
-      doubleArrayWdlWorkflowDescriptionOptional.setValueType(intArrayArrayValueType)
-
-      val doubleArrayWdlWorkflowDescription =  new WorkflowDescription()
-      doubleArrayWdlWorkflowDescription.addInputsItem(doubleArrayWdlWorkflowDescriptionOptional)
-      doubleArrayWdlWorkflowDescription.setName(optionalDoubleArrayWDLName)
-      doubleArrayWdlWorkflowDescription.setValid(true)
-
-      mockCromwellSwaggerClient.workflowDescriptions += (optionalDoubleArrayWdl -> doubleArrayWdlWorkflowDescription)
-
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configRawJsonDoubleArray, sampleSet2, optionalDoubleArrayWdl, this))
       val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
         svv.inputName -> svv.value.get
@@ -385,30 +317,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
     "unpack AttributeValueRawJson into lists-of WDL-arrays" in withConfigData {
       val context = SlickWorkspaceContext(workspace)
-
-      val doubleArrayWdlWorkflowDescriptionOptional= new ToolInputParameter()
-      doubleArrayWdlWorkflowDescriptionOptional.setName(tripleArrayWDLRequiredInput)
-      doubleArrayWdlWorkflowDescriptionOptional.setOptional(true)
-      val intValueType = new ValueType()
-      intValueType.typeName(TypeNameEnum.INT)
-      val intArrayValueType = new ValueType()
-      intArrayValueType.typeName(TypeNameEnum.ARRAY)
-      intArrayValueType.arrayType(intValueType)
-      val intArrayArrayValueType = new ValueType()
-      intArrayArrayValueType.typeName(TypeNameEnum.ARRAY)
-      intArrayValueType.arrayType(intArrayValueType)
-      val intTripleArrayValueType = new ValueType()
-      intTripleArrayValueType.typeName(TypeNameEnum.ARRAY)
-      intTripleArrayValueType.arrayType(intArrayArrayValueType)
-
-      doubleArrayWdlWorkflowDescriptionOptional.setValueType(intTripleArrayValueType)
-
-      val doubleArrayWdlWorkflowDescription =  new WorkflowDescription()
-      doubleArrayWdlWorkflowDescription.addInputsItem(doubleArrayWdlWorkflowDescriptionOptional)
-      doubleArrayWdlWorkflowDescription.setName(tripleArrayWDLName)
-      doubleArrayWdlWorkflowDescription.setValid(true)
-
-      mockCromwellSwaggerClient.workflowDescriptions += (tripleArrayWdl -> doubleArrayWdlWorkflowDescription)
 
       val resolvedInputs: Map[String, Seq[SubmissionValidationValue]] = runAndWait(testResolveInputs(context, configRawJsonTripleArray, sampleSet2, tripleArrayWdl, this))
       val methodProps = resolvedInputs(sampleSet2.name).map { svv: SubmissionValidationValue =>
@@ -445,7 +353,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
       val arrayWorkflow = methodConfigResolver.parseWDL(userInfo, arrayWdl).get
 
-      assertResult(arrayWdlWorkflowDescription) {
+      assertResult(requiredArrayWorkflowDescription) {
         arrayWorkflow
       }
     }
@@ -462,10 +370,10 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
     }
 
-    "get method config inputs and outputs" ignore withConfigData {
+    "get method config inputs and outputs" in withConfigData {
       val expectedLittleIO = MethodInputsOutputs(Seq(
         MethodInput(intArgName, "Int", false),
-        MethodInput(intOptName, "Int", true)), Seq())
+        MethodInput(intOptName, "Int?", true)), Seq())
 
       assertResult(expectedLittleIO) {
         methodConfigResolver.getMethodInputsOutputs(userInfo, littleWdl).get
@@ -474,9 +382,9 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       val expectedArrayIO = MethodInputsOutputs(Seq(
         MethodInput(intArrayName, "Array[Int]", false)), Seq())
 
-//      assertResult(expectedArrayIO) {
-//        methodConfigResolver.getMethodInputsOutputs(userInfo, arrayWdl).get
-//      }
+      assertResult(expectedArrayIO) {
+        methodConfigResolver.getMethodInputsOutputs(userInfo, arrayWdl).get
+      }
 
       val badIO = methodConfigResolver.getMethodInputsOutputs(userInfo, badWdl)
       assert(badIO.isFailure)
@@ -485,7 +393,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       }
     }
 
-    "create a Method Config from a template" ignore withConfigData {
+    "create a Method Config from a template" in withConfigData {
       val expectedLittleInputs = Map(intArgName -> AttributeString(""), intOptName -> AttributeString(""))
       val expectedLittleTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), expectedLittleInputs, Map(), dummyMethod)
 

@@ -4,6 +4,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient._
 import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, SamBillingProjectPolicyNames, SamResourceTypeNames, StatusCheckResponse}
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
@@ -32,6 +33,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
   val jsonHeader = new Header("Content-Type", "application/json")
   val mockServer = startClientAndServer(port)
+
 
   def startServer(numWorkflows: Int = 3) = {
     // copy method config endpoint
@@ -120,50 +122,6 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     )
 
     val methodPath = "/methods"
-    val threeStepWDL =
-    """
-      |task ps {
-      |  command {
-      |    ps
-      |  }
-      |  output {
-      |    File procs = stdout()
-      |  }
-      |}
-      |
-      |task cgrep {
-      |  File in_file
-      |  String pattern
-      |  command {
-      |    grep '${pattern}' ${in_file} | wc -l
-      |  }
-      |  output {
-      |    Int count = read_int(stdout())
-      |  }
-      |}
-      |
-      |task wc {
-      |  File in_file
-      |  command {
-      |    cat ${in_file} | wc -l
-      |  }
-      |  output {
-      |    Int count = read_int(stdout())
-      |  }
-      |}
-      |
-      |workflow three_step {
-      |  call ps
-      |  call cgrep {
-      |    input: in_file=ps.procs
-      |  }
-      |  call wc {
-      |    input: in_file=ps.procs
-      |  }
-      |}
-    """.stripMargin
-
-    val threeStepMethod = AgoraEntity(Some("dsde"),Some("three_step"),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
 
     val goodAndBadInputsWDL =
       """

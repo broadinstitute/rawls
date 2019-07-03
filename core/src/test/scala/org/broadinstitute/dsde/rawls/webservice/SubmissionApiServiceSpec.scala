@@ -122,9 +122,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
-  it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" ignore withTestDataApiServices { services =>
+  it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
     val mcName = MethodConfigurationName("three_step","dsde", testData.wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,Some("Pattern"), None, Map("three_step.cgrep.pattern"->AttributeString("this.input_expression")), Map.empty, AgoraMethod("dsde","three_step",1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,Some("Pattern"), None, Map("cgrep.pattern"->AttributeString("this.input_expression")), Map.empty, AgoraMethod("dsde","three_step",1))
     Post(s"${testData.wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
@@ -216,7 +216,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return 201 Created when creating and monitoring a submission with no expression" ignore withTestDataApiServices { services =>
+  it should "return 201 Created when creating and monitoring a submission with no expression" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val agoraMethodConf = MethodConfiguration("no_input", "dsde", Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
     val dockstoreMethodConf =
@@ -230,7 +230,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       }
     }
   }
-  it should "return 201 Created when creating and monitoring a submission with valid expression" ignore withTestDataApiServices { services =>
+  it should "return 201 Created when creating and monitoring a submission with valid expression" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
@@ -242,7 +242,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "update the last modified date on a workspace for submission entries" ignore withTestDataApiServices { services =>
+  it should "update the last modified date on a workspace for submission entries" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
@@ -257,7 +257,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   }
 
-  it should "return 201 Created when creating submission with a workflow_failure_mode" ignore withTestDataApiServices { services =>
+  it should "return 201 Created when creating submission with a workflow_failure_mode" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
@@ -269,7 +269,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return workflow_failure_mode in submission GET calls" ignore withTestDataApiServices { services =>
+  it should "return workflow_failure_mode in submission GET calls" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
@@ -315,7 +315,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "abort a submission" ignore withTestDataApiServices { services =>
+  it should "abort a submission" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
@@ -332,7 +332,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   val numSamples = 10000
 
-  it should "create and abort a large submission" ignore withLargeSubmissionApiServices { services =>
+  it should "create and abort a large submission" in withLargeSubmissionApiServices { services =>
     val wsName = largeSampleTestData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
@@ -352,7 +352,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   // mysql> show engine innodb status;
   //
   // and look for a section called "LAST DETECTED DEADLOCK".
-  it should "not deadlock when aborting a large submission" ignore withLargeSubmissionApiServices { services =>
+  it should "not deadlock when aborting a large submission" in withLargeSubmissionApiServices { services =>
     withWorkflowSubmissionActor(services) { _ =>
       val wsName = largeSampleTestData.wsName
       val mcName = MethodConfigurationName("no_input", "dsde", wsName)
@@ -372,7 +372,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return 400 Bad Request when passing an unknown workflow_failure_mode" ignore withTestDataApiServices { services =>
+  it should "return 400 Bad Request when passing an unknown workflow_failure_mode" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))

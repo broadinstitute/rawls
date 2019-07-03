@@ -68,16 +68,16 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  "MethodConfigApi" should "return 201 on create method configuration in Agora" ignore withTestDataApiServices { services =>
+  "MethodConfigApi" should "return 201 on create method configuration in Agora" in withTestDataApiServices { services =>
     testCreateMethodConfiguration(AgoraMethod("dsde", "three_step", 1), "three_step", services)
   }
 
-  it should "return 201 on create method configuration in Dockstore" ignore withTestDataApiServices { services =>
+  it should "return 201 on create method configuration in Dockstore" in withTestDataApiServices { services =>
     testCreateMethodConfiguration(DockstoreMethod("dockstore-method-path", "dockstore-method-version"), "three_step_dockstore", services)
   }
 
-  it should "update the workspace last modified date on create method configuration" ignore withTestDataApiServices { services =>
-    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), None, Map("three_step.cgrep.pattern" -> AttributeString("this.foo")), Map("three_step.cgrep.count" -> AttributeString("this.bar")),
+  it should "update the workspace last modified date on create method configuration" in withTestDataApiServices { services =>
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), None, Map("cgrep.pattern" -> AttributeString("this.foo")), Map("cgrep.count" -> AttributeString("this.bar")),
       AgoraMethod("dsde", "three_step", 1))
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -99,7 +99,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "validate attribute syntax in create method configuration" ignore withTestDataApiServices { services =>
+  it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
     //This tests that invalid MC expressions still return 201 and a ValidatedMethodConfiguration with validation results in it
     val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse"))
     val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
@@ -134,7 +134,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "validate attribute syntax in create method configuration without data model" ignore withTestDataApiServices { services =>
+  it should "validate attribute syntax in create method configuration without data model" in withTestDataApiServices { services =>
     //This tests that invalid MC expressions still return 201 and a ValidatedMethodConfiguration with validation results in it
     val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("workspace.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("blah"))
     val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("workspace.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("this.nomodel"), "empty_out" -> AttributeString(""))
@@ -200,7 +200,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow library attributes in input for create method configuration by non-curator" ignore withTestDataApiServices { services =>
+  it should "allow library attributes in input for create method configuration by non-curator" in withTestDataApiServices { services =>
     val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.library:foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("workspace.library:foo"))
     val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"),"goodAndBad.goodAndBadTask.bad_out" -> AttributeString("workspace.bar"))
 
@@ -252,7 +252,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   // DSDEEPB-1433
-  it should "successfully create two method configs with the same name but different namespaces" ignore withTestDataApiServices { services =>
+  it should "successfully create two method configs with the same name but different namespaces" in withTestDataApiServices { services =>
     val mc1 = MethodConfiguration("ws1", "testConfig", Some("samples"), None, Map(), Map(), AgoraMethod("dsde", "good_and_bad", 1))
     val mc2 = MethodConfiguration("ws2", "testConfig", Some("samples"), None, Map(), Map(), AgoraMethod("dsde", "good_and_bad", 1))
 
@@ -887,8 +887,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Post("/methodconfigs/template", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), Map("three_step.cgrep.pattern" -> AttributeString("")),
-          Map("three_step.ps.procs"->AttributeString(""),"three_step.cgrep.count"->AttributeString(""), "three_step.wc.count"->AttributeString("")),
+        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), Map("cgrep.pattern" -> AttributeString("")),
+          Map("ps.procs"->AttributeString(""),"cgrep.count"->AttributeString(""), "wc.count"->AttributeString("")),
           AgoraMethod("dsde","three_step",1))
         assertResult(methodConfiguration) { responseAs[MethodConfiguration] }
         assertResult(StatusCodes.OK) { status }
@@ -915,8 +915,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         sealRoute(services.methodConfigRoutes) ~>
         check {
           assertResult(StatusCodes.OK) { status }
-          val expectedIn = Seq(MethodInput("three_step.cgrep.pattern", "String", false))
-          val expectedOut = Seq(MethodOutput("three_step.ps.procs", "File"), MethodOutput("three_step.cgrep.count", "Int"), MethodOutput("three_step.wc.count", "Int"))
+          val expectedIn = Seq(MethodInput("cgrep.pattern", "String", false))
+          val expectedOut = Seq(MethodOutput("ps.procs", "File"), MethodOutput("cgrep.count", "Int"), MethodOutput("wc.count", "Int"))
           val result = responseAs[MethodInputsOutputs]
           assertSameElements(expectedIn, result.inputs)
           assertSameElements(expectedOut, result.outputs)
@@ -927,7 +927,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return 200 getting method inputs and outputs for a Dockstore method" ignore withTestDataApiServices { services =>
+  it should "return 200 getting method inputs and outputs for a Dockstore method" in withTestDataApiServices { services =>
     val method: MethodRepoMethod = DockstoreMethod("dockstore-method-path", "dockstore-method-version")
     Post("/methodconfigs/inputsOutputs", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>

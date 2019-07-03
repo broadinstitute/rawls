@@ -93,6 +93,8 @@ class MethodConfigResolver(wdlParser: WDLParser) {
   def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Set[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
+    println("INPUTS " + inputs.toString)
+    println("ENTITIES " + entities.toString)
     val entityNames = entities match {
       case Some(recs) => recs.map(_.name)
       case None => Seq("")
@@ -141,14 +143,16 @@ class MethodConfigResolver(wdlParser: WDLParser) {
   ) toString
 
   def getMethodInputsOutputs(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[MethodInputsOutputs] = parseWDL(userInfo, wdl) map { workflowDescription =>
-    val inputs = workflowDescription.getInputs.asScala.toList map { input =>
-      // TODO: getTypeName can return a type ("Int", "String") or "Optional" parse WorkflowDescription properly
-      model.MethodInput(input.getName, input.getValueType.getTypeName.getValue, input.getOptional)
-    }
+    if (workflowDescription.getValid) {
+      val inputs = workflowDescription.getInputs.asScala.toList map { input =>
+        // TODO: getTypeName can return a type ("Int", "String") or "Optional" parse WorkflowDescription properly
+        model.MethodInput(input.getName, input.getTypeDisplayName, input.getOptional)
+      }
     val outputs = workflowDescription.getOutputs.asScala.toList map { output =>
-      model.MethodOutput(output.getName, output.getValueType.getTypeName.getValue)
+      model.MethodOutput(output.getName, output.getTypeDisplayName)
     }
     MethodInputsOutputs(inputs, outputs)
+  } else throw new RawlsException(workflowDescription.getErrors.asScala.mkString("\n"))
   }
 
   def toMethodConfiguration(userInfo: UserInfo, wdl: String, methodRepoMethod: MethodRepoMethod)(implicit executionContext: ExecutionContext): Try[MethodConfiguration] = {
