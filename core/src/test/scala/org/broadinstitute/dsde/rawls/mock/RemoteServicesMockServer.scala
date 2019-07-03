@@ -122,6 +122,50 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     )
 
     val methodPath = "/methods"
+    val threeStepWDL =
+    """
+      |task ps {
+      |  command {
+      |    ps
+      |  }
+      |  output {
+      |    File procs = stdout()
+      |  }
+      |}
+      |
+      |task cgrep {
+      |  File in_file
+      |  String pattern
+      |  command {
+      |    grep '${pattern}' ${in_file} | wc -l
+      |  }
+      |  output {
+      |    Int count = read_int(stdout())
+      |  }
+      |}
+      |
+      |task wc {
+      |  File in_file
+      |  command {
+      |    cat ${in_file} | wc -l
+      |  }
+      |  output {
+      |    Int count = read_int(stdout())
+      |  }
+      |}
+      |
+      |workflow three_step {
+      |  call ps
+      |  call cgrep {
+      |    input: in_file=ps.procs
+      |  }
+      |  call wc {
+      |    input: in_file=ps.procs
+      |  }
+      |}
+    """.stripMargin
+
+    val threeStepMethod = AgoraEntity(Some("dsde"),Some("three_step"),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
 
     val goodAndBadInputsWDL =
       """
@@ -205,6 +249,10 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         response()
           .withStatusCode(StatusCodes.NotFound.intValue)
       )
+
+    // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
+    val dockstoreResponse =
+      s"""{"type":"WDL","descriptor":"${threeStepWDL.replace("three_step", "three_step_dockstore").replace("\n","\\n")}","url":"bogus"}"""
 
     mockServer.when(
       request()

@@ -121,7 +121,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def CopyMethodConfigurationToMethodRepo(query: MethodRepoConfigurationExport) = copyMethodConfigurationToMethodRepo(query)
   def ListAgoraMethodConfigurations(workspaceName: WorkspaceName) = listAgoraMethodConfigurations(workspaceName)
   def ListMethodConfigurations(workspaceName: WorkspaceName) = listMethodConfigurations(workspaceName)
-  def CreateMethodConfigurationTemplate(userInfo: UserInfo, methodRepoMethod: MethodRepoMethod ) = createMethodConfigurationTemplate(userInfo, methodRepoMethod)
+  def CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) = createMethodConfigurationTemplate(methodRepoMethod)
   def GetMethodInputsOutputs(userInfo: UserInfo, methodRepoMethod: MethodRepoMethod ) = getMethodInputsOutputs(userInfo, methodRepoMethod)
   def GetAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) = getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
   def GetGenomicsOperation(workspaceName: WorkspaceName, jobId: String) = getGenomicsOperation(workspaceName, jobId)
@@ -1340,7 +1340,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def createMethodConfigurationTemplate(userInfo: UserInfo, methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
+  def createMethodConfigurationTemplate(methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withMethod(methodRepoMethod, userInfo) { method =>
         withWdl(method) { wdl => methodConfigResolver.toMethodConfiguration(userInfo, wdl, methodRepoMethod) match {

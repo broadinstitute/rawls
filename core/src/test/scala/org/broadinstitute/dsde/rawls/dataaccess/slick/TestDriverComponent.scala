@@ -871,68 +871,68 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
 
-  val threeStepWDL =
-    """
-      |task ps {
-      |  command {
-      |    ps
-      |  }
-      |  output {
-      |    File procs = stdout()
-      |  }
-      |}
-      |
-      |task cgrep {
-      |  File in_file
-      |  String pattern
-      |  command {
-      |    grep '${pattern}' ${in_file} | wc -l
-      |  }
-      |  output {
-      |    Int count = read_int(stdout())
-      |  }
-      |}
-      |
-      |task wc {
-      |  File in_file
-      |  command {
-      |    cat ${in_file} | wc -l
-      |  }
-      |  output {
-      |    Int count = read_int(stdout())
-      |  }
-      |}
-      |
-      |workflow three_step {
-      |  call ps
-      |  call cgrep {
-      |    input: in_file=ps.procs
-      |  }
-      |  call wc {
-      |    input: in_file=ps.procs
-      |  }
-      |}
-    """.stripMargin
-
-  val threeStepWDLName = "three_step"
-
-  val patternInput = makeToolInputParameter("cgrep.pattern", false, makeValueType("String"), "String")
-  val cgrepcountOutput = makeToolOutputParameter("cgrep.count", makeValueType("Int"), "Int")
-  val wccountOutput = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
-  val psprocsOutput = makeToolOutputParameter("ps.procs", makeValueType("File"), "File")
-  val threeStepWDLWorkflowDescription = makeWorkflowDescription(threeStepWDLName, List(patternInput), List(cgrepcountOutput, wccountOutput, psprocsOutput))
-  mockCromwellSwaggerClient.workflowDescriptions += (threeStepWDL -> threeStepWDLWorkflowDescription)
-
-  val threeStepMethod = AgoraEntity(Some("dsde"),Some(threeStepWDLName),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
-
-  val threeStepDockstoreWDLName = threeStepWDLName + "_dockstore"
-  // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
-  val threeStepDockstoreWDL = threeStepWDL.replace(threeStepWDLName, threeStepDockstoreWDLName)
-  val dockstoreResponse =
-    s"""{"type":"WDL","descriptor":"${threeStepDockstoreWDL.replace("\n","\\n")}","url":"bogus"}"""
-
-  val threeStepDockStoreWDLWorkflowDescription = threeStepWDLWorkflowDescription.name(threeStepDockstoreWDLName)
-  mockCromwellSwaggerClient.workflowDescriptions += (threeStepDockstoreWDL -> threeStepWDLWorkflowDescription)
+//  val threeStepWDL =
+//    """
+//      |task ps {
+//      |  command {
+//      |    ps
+//      |  }
+//      |  output {
+//      |    File procs = stdout()
+//      |  }
+//      |}
+//      |
+//      |task cgrep {
+//      |  File in_file
+//      |  String pattern
+//      |  command {
+//      |    grep '${pattern}' ${in_file} | wc -l
+//      |  }
+//      |  output {
+//      |    Int count = read_int(stdout())
+//      |  }
+//      |}
+//      |
+//      |task wc {
+//      |  File in_file
+//      |  command {
+//      |    cat ${in_file} | wc -l
+//      |  }
+//      |  output {
+//      |    Int count = read_int(stdout())
+//      |  }
+//      |}
+//      |
+//      |workflow three_step {
+//      |  call ps
+//      |  call cgrep {
+//      |    input: in_file=ps.procs
+//      |  }
+//      |  call wc {
+//      |    input: in_file=ps.procs
+//      |  }
+//      |}
+//    """.stripMargin
+//
+//  val threeStepWDLName = "three_step"
+//
+//  val patternInput = makeToolInputParameter("cgrep.pattern", false, makeValueType("String"), "String")
+//  val cgrepcountOutput = makeToolOutputParameter("cgrep.count", makeValueType("Int"), "Int")
+//  val wccountOutput = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
+//  val psprocsOutput = makeToolOutputParameter("ps.procs", makeValueType("File"), "File")
+//  val threeStepWDLWorkflowDescription = makeWorkflowDescription(threeStepWDLName, List(patternInput), List(cgrepcountOutput, wccountOutput, psprocsOutput))
+//  mockCromwellSwaggerClient.workflowDescriptions += (threeStepWDL -> threeStepWDLWorkflowDescription)
+//
+//  val threeStepMethod = AgoraEntity(Some("dsde"),Some(threeStepWDLName),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
+//
+//  val threeStepDockstoreWDLName = threeStepWDLName + "_dockstore"
+//  // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
+//  val threeStepDockstoreWDL = threeStepWDL.replace(threeStepWDLName, threeStepDockstoreWDLName)
+//  val dockstoreResponse =
+//    s"""{"type":"WDL","descriptor":"${threeStepDockstoreWDL.replace("\n","\\n")}","url":"bogus"}"""
+//
+//  val threeStepDockStoreWDLWorkflowDescription = threeStepWDLWorkflowDescription.name(threeStepDockstoreWDLName)
+//  mockCromwellSwaggerClient.workflowDescriptions += (threeStepDockstoreWDL -> threeStepWDLWorkflowDescription)
 
   val noInputWdl =
     """

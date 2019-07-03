@@ -113,7 +113,7 @@ trait MethodConfigApiService extends UserInfoDirectives {
       path("methodconfigs" / "template") {
         post {
           entity(as[MethodRepoMethod]) { methodRepoMethod =>
-            complete { workspaceServiceConstructor(userInfo).CreateMethodConfigurationTemplate(userInfo, methodRepoMethod) }
+            complete { workspaceServiceConstructor(userInfo).CreateMethodConfigurationTemplate(methodRepoMethod) }
           }
         }
       } ~
