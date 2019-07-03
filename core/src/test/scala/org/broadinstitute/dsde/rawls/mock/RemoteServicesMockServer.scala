@@ -206,10 +206,6 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
           .withStatusCode(StatusCodes.NotFound.intValue)
       )
 
-    // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
-    val dockstoreResponse =
-      s"""{"type":"WDL","descriptor":"${threeStepWDL.replace("three_step", "three_step_dockstore").replace("\n","\\n")}","url":"bogus"}"""
-
     mockServer.when(
       request()
         .withMethod("GET")

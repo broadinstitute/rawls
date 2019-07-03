@@ -26,7 +26,7 @@ import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.DbResource.conf
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
-import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.WDLParser
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
@@ -74,7 +74,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   val wdlParserConfig = WDLParserConfig(ConfigFactory.load().getConfig("wdl-parsing"))
   val mockCromwellSwaggerClient = new MockCromwellSwaggerClient()
-  val wdlParser = new WDLParser(wdlParserConfig, mockCromwellSwaggerClient)
+  val wdlParser = new CachingWDLParser(wdlParserConfig, mockCromwellSwaggerClient)
   val methodConfigResolver = new MethodConfigResolver(wdlParser)
 
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
@@ -914,15 +914,25 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       |}
     """.stripMargin
 
+  val threeStepWDLName = "three_step"
+
   val patternInput = makeToolInputParameter("cgrep.pattern", false, makeValueType("String"), "String")
   val cgrepcountOutput = makeToolOutputParameter("cgrep.count", makeValueType("Int"), "Int")
   val wccountOutput = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
   val psprocsOutput = makeToolOutputParameter("ps.procs", makeValueType("File"), "File")
-  val threeStepWDLWorkflowDescription = makeWorkflowDescription("three_step", List(patternInput), List(cgrepcountOutput, wccountOutput, psprocsOutput))
+  val threeStepWDLWorkflowDescription = makeWorkflowDescription(threeStepWDLName, List(patternInput), List(cgrepcountOutput, wccountOutput, psprocsOutput))
   mockCromwellSwaggerClient.workflowDescriptions += (threeStepWDL -> threeStepWDLWorkflowDescription)
 
-  val threeStepMethod = AgoraEntity(Some("dsde"),Some("three_step"),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
+  val threeStepMethod = AgoraEntity(Some("dsde"),Some(threeStepWDLName),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
 
+  val threeStepDockstoreWDLName = threeStepWDLName + "_dockstore"
+  // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
+  val threeStepDockstoreWDL = threeStepWDL.replace(threeStepWDLName, threeStepDockstoreWDLName)
+  val dockstoreResponse =
+    s"""{"type":"WDL","descriptor":"${threeStepDockstoreWDL.replace("\n","\\n")}","url":"bogus"}"""
+
+  val threeStepDockStoreWDLWorkflowDescription = threeStepWDLWorkflowDescription.name(threeStepDockstoreWDLName)
+  mockCromwellSwaggerClient.workflowDescriptions += (threeStepDockstoreWDL -> threeStepWDLWorkflowDescription)
 
   val noInputWdl =
     """

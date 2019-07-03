@@ -1113,6 +1113,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   //validates the expressions in the method configuration, taking into account optional inputs
   private def validateMethodConfiguration(methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     withMethodInputs(methodConfiguration, userInfo) { (_, gatherInputsResult) =>
+      println("Do we gather inputs? " + gatherInputsResult.toString)
       val vmc = ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity = methodConfiguration.rootEntityType.isDefined, dataAccess)
       DBIO.successful(vmc)
     }
@@ -1120,6 +1121,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createMCAndValidateExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration) flatMap { _ =>
+     println("ABOUT TO VALIDATE")
       validateMethodConfiguration(methodConfiguration, dataAccess)
     }
   }

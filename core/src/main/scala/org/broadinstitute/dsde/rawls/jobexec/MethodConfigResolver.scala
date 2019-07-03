@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{CromwellSwaggerClient, SlickWor
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.WDLParser
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
@@ -16,7 +16,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-class MethodConfigResolver(wdlParser: WDLParser) {
+class MethodConfigResolver(wdlParser: CachingWDLParser) {
   val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
   val multipleResultError  = "Expected single value for workflow input, but evaluated result set had multiple values"
   val missingMandatoryValueError  = "Mandatory workflow input is not specified in method config"
@@ -54,9 +54,6 @@ class MethodConfigResolver(wdlParser: WDLParser) {
     case _ => getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional)
   }
 
-  // cache-friendly copy of what we need from WdlNamespaceWithWorkflow
-  // these values are materialized instead of lazily-evaluated
-  //case class ParsedWdlWorkflow(inputs: Map[FullyQualifiedName, InputDefinition], outputs: Seq[MethodOutput])
 
   def parseWDL(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = wdlParser.parse(userInfo, wdl)
 

@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.model.UserInfo
 class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
 
 
-  private def getRandomCromwellWomtoolApi(accessToken: String): WomtoolApi = {
+  private def getCromwellWomtoolApi(accessToken: String): WomtoolApi = {
     logger.info("CROMWELL BASE PATH: " + cromwellBasePath)
     val apiClient = new ApiClient()
     apiClient.setAccessToken(accessToken)
@@ -18,8 +18,8 @@ class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
     new WomtoolApi(apiClient)
   }
 
-  def validate(userInfo: UserInfo, wdl: String): WorkflowDescription = {
-    getRandomCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl, null, null, null, null)
+  def describe(userInfo: UserInfo, wdl: String): WorkflowDescription = {
+    getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl, null, null, null, null)
   }
 
 }

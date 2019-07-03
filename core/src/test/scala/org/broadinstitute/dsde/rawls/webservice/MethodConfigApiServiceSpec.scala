@@ -44,7 +44,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   def testCreateMethodConfiguration(method: MethodRepoMethod, wdlName: String, services: TestApiService) = {
     val inputMethodConfig =
-      MethodConfiguration("dsde", s"testConfigNew-${method.repo.scheme}", Some("samples"), None, Map(s"$wdlName.cgrep.pattern" -> AttributeString("this.foo")), Map(s"$wdlName.cgrep.count" -> AttributeString("this.bar")), method)
+      MethodConfiguration("dsde", s"testConfigNew-${method.repo.scheme}", Some("samples"), None, Map(s"cgrep.pattern" -> AttributeString("this.foo")), Map(s"cgrep.count" -> AttributeString("this.bar")), method)
     val expectedMethodConfig = inputMethodConfig.copy(prerequisites = Some(Map())) //test that empty prereqs work too
     withStatsD {
       Post(s"${testData.workspace.path}/methodconfigs", httpJson(inputMethodConfig)) ~>
@@ -900,8 +900,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Post("/methodconfigs/template", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), Map("three_step_dockstore.cgrep.pattern" -> AttributeString("")),
-          Map("three_step_dockstore.ps.procs"->AttributeString(""),"three_step_dockstore.cgrep.count"->AttributeString(""), "three_step_dockstore.wc.count"->AttributeString("")),
+        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), Map("cgrep.pattern" -> AttributeString("")),
+          Map("ps.procs"->AttributeString(""),"cgrep.count"->AttributeString(""), "wc.count"->AttributeString("")),
           method)
         assertResult(methodConfiguration) { responseAs[MethodConfiguration] }
         assertResult(StatusCodes.OK) { status }
@@ -933,8 +933,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expectedIn = Seq(MethodInput("three_step_dockstore.cgrep.pattern", "String", false))
-        val expectedOut = Seq(MethodOutput("three_step_dockstore.ps.procs", "File"), MethodOutput("three_step_dockstore.cgrep.count", "Int"), MethodOutput("three_step_dockstore.wc.count", "Int"))
+        val expectedIn = Seq(MethodInput("cgrep.pattern", "String", false))
+        val expectedOut = Seq(MethodOutput("ps.procs", "File"), MethodOutput("cgrep.count", "Int"), MethodOutput("wc.count", "Int"))
         val result = responseAs[MethodInputsOutputs]
         assertSameElements(expectedIn, result.inputs)
         assertSameElements(expectedOut, result.outputs)

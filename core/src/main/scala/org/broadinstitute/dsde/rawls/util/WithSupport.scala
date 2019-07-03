@@ -29,6 +29,7 @@ trait MethodWiths {
   }
 
   def withMethod[T](method: MethodRepoMethod, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+    println("METHODREPOMETHOD " + method.toString)
     DBIO.from(methodRepoDAO.getMethod(method, userInfo)).asTry.flatMap {
       case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${method.methodUri} from method repo.")))
       case Success(Some(agoraEntity)) => op(agoraEntity)
@@ -46,7 +47,9 @@ trait MethodWiths {
   def withMethodInputs[T](methodConfig: MethodConfiguration, userInfo: UserInfo)(op: (String, GatherInputsResult) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
     // TODO add Method to model instead of exposing AgoraEntity?
     withMethod(methodConfig.methodRepoMethod, userInfo) { method =>
+      println("METHOD " + method.toString)
       withWdl(method) { wdl =>
+        println("WDL " + wdl)
         methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl) match {
           case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
           case Success(gatherInputsResult: GatherInputsResult) =>

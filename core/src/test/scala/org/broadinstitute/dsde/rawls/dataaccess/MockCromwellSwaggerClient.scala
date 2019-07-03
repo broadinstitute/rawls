@@ -12,7 +12,7 @@ class MockCromwellSwaggerClient extends CromwellSwaggerClient("fake/path") {
 
   val workflowDescriptions: mutable.Map[String, WorkflowDescription] =  new TrieMap()
 
-  override def validate(userInfo: UserInfo, wdl: String): WorkflowDescription = {
+  override def describe(userInfo: UserInfo, wdl: String): WorkflowDescription = {
     workflowDescriptions(wdl)
   }
 
