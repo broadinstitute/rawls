@@ -2,20 +2,21 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO}
+import cats.effect.IO
+import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{PendingBucketDeletionRecord, TestDriverComponent}
-import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito
 import org.mockito.Mockito._
-import org.mockito.verification.VerificationMode
+import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
+import scala.concurrent.ExecutionContext.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import org.scalatest.concurrent.Eventually
 
 class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with MockitoSugar with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually {
+  implicit val cs = IO.contextShift(global)
   def this() = this(ActorSystem("BucketDeletionMonitorSpec"))
 
   override def beforeAll(): Unit = {
