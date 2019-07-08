@@ -140,10 +140,10 @@ class MethodConfigResolver(wdlParser: CachingWDLParser) {
     if (workflowDescription.getValid) {
       val inputs = workflowDescription.getInputs.asScala.toList map { input =>
         // TODO: getTypeName can return a type ("Int", "String") or "Optional" parse WorkflowDescription properly
-        model.MethodInput(input.getName, input.getTypeDisplayName, input.getOptional)
+        model.MethodInput(input.getName, input.getTypeDisplayName.replaceAll("\\n", ""), input.getOptional)
       }
-    val outputs = workflowDescription.getOutputs.asScala.toList map { output =>
-      model.MethodOutput(output.getName, output.getTypeDisplayName)
+      val outputs = workflowDescription.getOutputs.asScala.toList map { output =>
+        model.MethodOutput(output.getName, output.getTypeDisplayName.replace("\\n", "").toJson)
     }
     MethodInputsOutputs(inputs, outputs)
   } else throw new RawlsException(workflowDescription.getErrors.asScala.mkString("\n"))

@@ -62,7 +62,6 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
         getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo)
       case dockstoreMethod: DockstoreMethod =>
         getDockstoreMethod(dockstoreMethod) flatMap { response: Option[GA4GHTool] =>
-          println("GETMETHOD RESPONSE: " + response.toString)
           response match {
             case Some(tool) =>
               // TODO: re-using AgoraEntity feels sketchy to me. It seems to work without any changes, but should we create a DockstoreEntity?
@@ -82,13 +81,10 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
   }
 
   private def getDockstoreMethod(method: DockstoreMethod): Future[Option[GA4GHTool]] = {
-    val pip = pipeline[Option[GA4GHTool]] apply Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)) recover {
+    pipeline[Option[GA4GHTool]] apply Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)) recover {
       case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-        println("WHAT IS GOING ONNNN " + notOK.toString)
         None
     }
-    println("PIP " + pip.toString)
-    pip
   }
 
   override def postMethodConfig(namespace: String, name: String, methodConfiguration: MethodConfiguration, userInfo: UserInfo): Future[AgoraEntity] = {
