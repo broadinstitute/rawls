@@ -143,7 +143,7 @@ class MethodConfigResolver(wdlParser: CachingWDLParser) {
         model.MethodInput(input.getName, input.getTypeDisplayName.replaceAll("\\n", ""), input.getOptional)
       }
       val outputs = workflowDescription.getOutputs.asScala.toList map { output =>
-        model.MethodOutput(output.getName, output.getTypeDisplayName.replace("\\n", "").toJson)
+        model.MethodOutput(output.getName, output.getTypeDisplayName.replace("\\n", ""))
     }
     MethodInputsOutputs(inputs, outputs)
   } else throw new RawlsException(workflowDescription.getErrors.asScala.mkString("\n"))
