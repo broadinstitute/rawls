@@ -39,7 +39,6 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
     * and)   the project owner can run an analysis and wait for complete successfully
     * and)   the project owner can delete method config
     * and)   the project owner can delete workspace
-    * and)   the project owner can delete Google billing project
     *
     */
 
@@ -119,9 +118,8 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
         }
       }
 
-      // clean up
+      // owner should be able to delete the workspace
       Rawls.workspaces.delete(billingProjectName, workspaceName)
-      deleteBillingProject(billingProjectName)
     }
 
     "can create a new billing project with a service perimeter" in {
@@ -142,9 +140,6 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
 
       // try to create a project with a perimeter. retry up to 3 times for project to reach 'Ready' status
       val billingProjectName = createNewBillingProject(owner, servicePerimeterOpt = Option(fullyQualifiedServicePerimeterId))
-
-      // cleanup
-      deleteBillingProject(billingProjectName)
     }
   }
 
@@ -177,9 +172,9 @@ class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures w
         withClue(s"Checking status in billing project $billingProjectName") {
           status shouldEqual "Ready"
         }
+        billingProjectName
     }
 
-    billingProjectName
   }
 
   private def deleteBillingProject(billingProjectName: String)(implicit token: AuthToken): Unit = {
