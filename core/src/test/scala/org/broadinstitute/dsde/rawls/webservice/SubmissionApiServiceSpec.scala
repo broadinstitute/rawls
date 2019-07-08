@@ -216,7 +216,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return 201 Created when creating and monitoring a submission with no expression" in withTestDataApiServices { services =>
+  it should "return 201 Created when creating and monitoring a submission with no expression" ignore withTestDataApiServices { services =>
     val wsName = testData.wsName
     val agoraMethodConf = MethodConfiguration("no_input", "dsde", Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
     val dockstoreMethodConf =

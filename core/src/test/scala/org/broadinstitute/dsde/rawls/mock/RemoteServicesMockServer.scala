@@ -122,89 +122,45 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     )
 
     val methodPath = "/methods"
-    val threeStepWDL =
-    """
-      |task ps {
-      |  command {
-      |    ps
-      |  }
-      |  output {
-      |    File procs = stdout()
-      |  }
-      |}
-      |
-      |task cgrep {
-      |  File in_file
-      |  String pattern
-      |  command {
-      |    grep '${pattern}' ${in_file} | wc -l
-      |  }
-      |  output {
-      |    Int count = read_int(stdout())
-      |  }
-      |}
-      |
-      |task wc {
-      |  File in_file
-      |  command {
-      |    cat ${in_file} | wc -l
-      |  }
-      |  output {
-      |    Int count = read_int(stdout())
-      |  }
-      |}
-      |
-      |workflow three_step {
-      |  call ps
-      |  call cgrep {
-      |    input: in_file=ps.procs
-      |  }
-      |  call wc {
-      |    input: in_file=ps.procs
-      |  }
-      |}
-    """.stripMargin
 
-    val threeStepMethod = AgoraEntity(Some("dsde"),Some("three_step"),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
-
-    val goodAndBadInputsWDL =
-      """
-        |workflow goodAndBad {
-        |  call goodAndBadTask
-        |}
-        |
-        |task goodAndBadTask {
-        |  String good_in
-        |  String bad_in
-        |  command {
-        |    echo "hello world"
-        |  }
-        |  output {
-        |    String good_out = "everything is good"
-        |    String bad_out = "everything is bad"
-        |    String empty_out = "everything is empty"
-        |  }
-        |}
-      """.stripMargin
+//    val goodAndBadInputsWDL =
+//      """
+//        |workflow goodAndBad {
+//        |  call goodAndBadTask
+//        |}
+//        |
+//        |task goodAndBadTask {
+//        |  String good_in
+//        |  String bad_in
+//        |  command {
+//        |    echo "hello world"
+//        |  }
+//        |  output {
+//        |    String good_out = "everything is good"
+//        |    String bad_out = "everything is bad"
+//        |    String empty_out = "everything is empty"
+//        |  }
+//        |}
+//      """.stripMargin
 
     val goodAndBadMethod = AgoraEntity(Some("dsde"),Some("good_and_bad"),Some(1),None,None,None,None,Some(goodAndBadInputsWDL),None,Some(AgoraEntityType.Workflow))
 
-    val meth1WDL =
-      """
-        |workflow meth1 {
-        |  call method1
-        |}
-        |
-        |task method1 {
-        |  String i1
-        |  command {
-        |    echo "hello world"
-        |  }
-        |  output {
-        |    String o1 = "output one"
-        |  }
-        |}
-      """.stripMargin
+//    val meth1WDL =
+//      """
+//        |workflow meth1 {
+//        |  call method1
+//        |}
+//        |
+//        |task method1 {
+//        |  String i1
+//        |  command {
+//        |    echo "hello world"
+//        |  }
+//        |  output {
+//        |    String o1 = "output one"
+//        |  }
+//        |}
+//      """.stripMargin
 
     val meth1Method = AgoraEntity(Some("dsde"),Some("meth1"),Some(1),None,None,None,None,Some(meth1WDL),None,Some(AgoraEntityType.Workflow))
 
@@ -255,6 +211,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       s"""{"type":"WDL","descriptor":"${threeStepWDL.replace("three_step", "three_step_dockstore").replace("\n","\\n")}","url":"bogus"}"""
 
     println("DO WE GET ALL THE WAY DOWN???")
+    println("hmm " + testComponentThing)
     mockServer.when(
       request()
         .withMethod("GET")

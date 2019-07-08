@@ -331,8 +331,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       "good_and_bad",
       Some("samples"),
       None,
-      Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse")),
-      Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString("")),
+      Map("goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBadTask.bad_in" -> AttributeString("does.not.parse")),
+      Map("goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString("")),
       goodAndBadMethod)
 
     val dockstoreMethod = DockstoreMethod("dockstore-method-path", "dockstore-method-version")
@@ -365,8 +365,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
 
     val methodConfigArrayType = MethodConfiguration("dsde", "ArrayMethodConfig", Some("SampleSet"), prerequisites=None,
-      inputs=Map("aggregate_data_workflow.aggregate_data.input_array" -> AttributeString("this.samples.type")),
-      outputs=Map("aggregate_data_workflow.aggregate_data.output_array" -> AttributeString("this.output_array")),
+      inputs=Map("aggregate_data.input_array" -> AttributeString("this.samples.type")),
+      outputs=Map("aggregate_data.output_array" -> AttributeString("this.output_array")),
       AgoraMethod("dsde", "array_task", 1))
 
     val methodConfigEntityless = MethodConfiguration("ns", "Entityless", None, None, inputs=Map("cgrep.pattern" -> AttributeString("\"bees\"")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
@@ -871,68 +871,68 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
 
-//  val threeStepWDL =
-//    """
-//      |task ps {
-//      |  command {
-//      |    ps
-//      |  }
-//      |  output {
-//      |    File procs = stdout()
-//      |  }
-//      |}
-//      |
-//      |task cgrep {
-//      |  File in_file
-//      |  String pattern
-//      |  command {
-//      |    grep '${pattern}' ${in_file} | wc -l
-//      |  }
-//      |  output {
-//      |    Int count = read_int(stdout())
-//      |  }
-//      |}
-//      |
-//      |task wc {
-//      |  File in_file
-//      |  command {
-//      |    cat ${in_file} | wc -l
-//      |  }
-//      |  output {
-//      |    Int count = read_int(stdout())
-//      |  }
-//      |}
-//      |
-//      |workflow three_step {
-//      |  call ps
-//      |  call cgrep {
-//      |    input: in_file=ps.procs
-//      |  }
-//      |  call wc {
-//      |    input: in_file=ps.procs
-//      |  }
-//      |}
-//    """.stripMargin
-//
-//  val threeStepWDLName = "three_step"
-//
-//  val patternInput = makeToolInputParameter("cgrep.pattern", false, makeValueType("String"), "String")
-//  val cgrepcountOutput = makeToolOutputParameter("cgrep.count", makeValueType("Int"), "Int")
-//  val wccountOutput = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
-//  val psprocsOutput = makeToolOutputParameter("ps.procs", makeValueType("File"), "File")
-//  val threeStepWDLWorkflowDescription = makeWorkflowDescription(threeStepWDLName, List(patternInput), List(cgrepcountOutput, wccountOutput, psprocsOutput))
-//  mockCromwellSwaggerClient.workflowDescriptions += (threeStepWDL -> threeStepWDLWorkflowDescription)
-//
-//  val threeStepMethod = AgoraEntity(Some("dsde"),Some(threeStepWDLName),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
-//
-//  val threeStepDockstoreWDLName = threeStepWDLName + "_dockstore"
-//  // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
-//  val threeStepDockstoreWDL = threeStepWDL.replace(threeStepWDLName, threeStepDockstoreWDLName)
-//  val dockstoreResponse =
-//    s"""{"type":"WDL","descriptor":"${threeStepDockstoreWDL.replace("\n","\\n")}","url":"bogus"}"""
-//
-//  val threeStepDockStoreWDLWorkflowDescription = threeStepWDLWorkflowDescription.name(threeStepDockstoreWDLName)
-//  mockCromwellSwaggerClient.workflowDescriptions += (threeStepDockstoreWDL -> threeStepWDLWorkflowDescription)
+  val threeStepWDL =
+    """
+      |task ps {
+      |  command {
+      |    ps
+      |  }
+      |  output {
+      |    File procs = stdout()
+      |  }
+      |}
+      |
+      |task cgrep {
+      |  File in_file
+      |  String pattern
+      |  command {
+      |    grep '${pattern}' ${in_file} | wc -l
+      |  }
+      |  output {
+      |    Int count = read_int(stdout())
+      |  }
+      |}
+      |
+      |task wc {
+      |  File in_file
+      |  command {
+      |    cat ${in_file} | wc -l
+      |  }
+      |  output {
+      |    Int count = read_int(stdout())
+      |  }
+      |}
+      |
+      |workflow three_step {
+      |  call ps
+      |  call cgrep {
+      |    input: in_file=ps.procs
+      |  }
+      |  call wc {
+      |    input: in_file=ps.procs
+      |  }
+      |}
+    """.stripMargin
+
+  val threeStepWDLName = "three_step"
+
+  val patternInput = makeToolInputParameter("cgrep.pattern", false, makeValueType("String"), "String")
+  val cgrepcountOutput = makeToolOutputParameter("cgrep.count", makeValueType("Int"), "Int")
+  val wccountOutput = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
+  val psprocsOutput = makeToolOutputParameter("ps.procs", makeValueType("File"), "File")
+  val threeStepWDLWorkflowDescription = makeWorkflowDescription(threeStepWDLName, List(patternInput), List(cgrepcountOutput, wccountOutput, psprocsOutput))
+  mockCromwellSwaggerClient.workflowDescriptions += (threeStepWDL -> threeStepWDLWorkflowDescription)
+
+  val threeStepMethod = AgoraEntity(Some("dsde"),Some(threeStepWDLName),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
+
+  val threeStepDockstoreWDLName = threeStepWDLName + "_dockstore"
+  // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
+  val threeStepDockstoreWDL = threeStepWDL.replace(threeStepWDLName, threeStepDockstoreWDLName)
+  val dockstoreResponse =
+    s"""{"type":"WDL","descriptor":"${threeStepDockstoreWDL.replace("\n","\\n")}","url":"bogus"}"""
+
+  val threeStepDockStoreWDLWorkflowDescription = threeStepWDLWorkflowDescription.name(threeStepDockstoreWDLName)
+  mockCromwellSwaggerClient.workflowDescriptions += (threeStepDockstoreWDL -> threeStepWDLWorkflowDescription)
 
   val noInputWdl =
     """
@@ -957,6 +957,62 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
 
   val noInputMethod = AgoraEntity(Some("dsde"), Some("no_input"), Some(1), None, None, None, None, Some(noInputWdl), None, Some(AgoraEntityType.Workflow))
+
+
+  val goodAndBadInputsWDL =
+    """
+      |workflow goodAndBad {
+      |  call goodAndBadTask
+      |}
+      |
+      |task goodAndBadTask {
+      |  String good_in
+      |  String bad_in
+      |  command {
+      |    echo "hello world"
+      |  }
+      |  output {
+      |    String good_out = "everything is good"
+      |    String bad_out = "everything is bad"
+      |    String empty_out = "everything is empty"
+      |  }
+      |}
+    """.stripMargin
+
+  val goodAndBadWDLName = "goodAndBad"
+  val badIn = makeToolInputParameter("goodAndBadTask.bad_in", false, makeValueType("String"), "String")
+  val goodIn = makeToolInputParameter("goodAndBadTask.good_in", false, makeValueType("String"), "String")
+  val goodOut = makeToolOutputParameter("goodAndBadTask.good_out", makeValueType("String"), "String")
+  val badOut = makeToolOutputParameter("goodAndBadTask.bad_out", makeValueType("String"), "String")
+  val emptyOut = makeToolOutputParameter("goodAndBadTask.empty_out", makeValueType("String"), "String")
+  val goodAndBadWDLWorkflowDescription = makeWorkflowDescription(goodAndBadWDLName, List(badIn, goodIn), List(goodOut, badOut, emptyOut))
+  mockCromwellSwaggerClient.workflowDescriptions += (goodAndBadInputsWDL -> goodAndBadWDLWorkflowDescription)
+
+  val meth1WDL =
+    """
+      |workflow meth1 {
+      |  call method1
+      |}
+      |
+      |task method1 {
+      |  String i1
+      |  command {
+      |    echo "hello world"
+      |  }
+      |  output {
+      |    String o1 = "output one"
+      |  }
+      |}
+    """.stripMargin
+
+  val meth1WDLName = "meth1"
+  val i1Input = makeToolInputParameter("method1.i1", false, makeValueType("String"), "String")
+  val o1Output = makeToolOutputParameter("method1.o1", makeValueType("String"), "String")
+  val meth1WDLWorkflowDescription = makeWorkflowDescription(meth1WDLName, List(i1Input), List(o1Output))
+  mockCromwellSwaggerClient.workflowDescriptions += (meth1WDL -> meth1WDLWorkflowDescription)
+  val testComponentThing = "Uhhh...can we get stuff from this class???"
+
+
 
 }
 
