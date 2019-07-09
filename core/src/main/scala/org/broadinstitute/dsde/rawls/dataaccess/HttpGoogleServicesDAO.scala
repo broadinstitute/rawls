@@ -240,7 +240,7 @@ class HttpGoogleServicesDAO(
         policyGroupsByAccessLevel.map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) } +
           (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
 
-      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).map{ case (role,identities) => role -> NonEmptyList.fromListUnsafe(identities.toList)}
+      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect { case (role,identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)}
 
       //The calls to setBucketPolicyOnly and setIamPolicy are coupled because in this case, we only want to use these specific
       //storage roles _if_ bucket policy only is enabled. See above comment for a more in-depth explanation.
