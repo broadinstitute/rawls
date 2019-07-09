@@ -478,7 +478,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
   // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
   private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, String)] = {
-    val bucketAcls = googleStorageDAO.getBucketAccessControls(bucketName).futureValue.getItems.asScala.toList
+    val googleBucketAcls = googleStorageDAO.getBucketAccessControls(bucketName).futureValue
+    val bucketAcls = Option(googleBucketAcls).map(_.getItems.asScala.toList).getOrElse(List.empty)
     // service account should have owner access
     assert(bucketAcls.exists(acl => Option(acl.getRole()).contains("roles/storage.admin") && Option(acl.getEmail()).exists(_.endsWith(serviceAccountEmailDomain))))
     bucketAcls.collect {
