@@ -11,7 +11,6 @@ class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
 
 
   private def getCromwellWomtoolApi(accessToken: String): WomtoolApi = {
-    logger.info("CROMWELL BASE PATH: " + cromwellBasePath)
     val apiClient = new ApiClient()
     apiClient.setAccessToken(accessToken)
     apiClient.setBasePath(cromwellBasePath)
