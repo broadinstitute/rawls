@@ -175,8 +175,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        // Apparently the mock server url-decodes paths before comparing
-        .withPath("/ga4gh/v1/tools/#workflow/dockstore-method-path/versions/dockstore-method-version/WDL/descriptor")
+        .withPath("/ga4gh/v1/tools/%23workflow%2Fdockstore-method-path/versions/dockstore-method-version/WDL/descriptor")
     ).respond(
       response()
         .withHeaders(jsonHeader)
@@ -214,7 +213,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/ga4gh/v1/tools/#workflow/dockstore-no-input-path/versions/dockstore-no-input-version/WDL/descriptor")
+        .withPath("/ga4gh/v1/tools/%23workflow%2Fdockstore-no-input-path/versions/dockstore-no-input-version/WDL/descriptor")
     ).respond(
       response()
         .withHeaders(jsonHeader)

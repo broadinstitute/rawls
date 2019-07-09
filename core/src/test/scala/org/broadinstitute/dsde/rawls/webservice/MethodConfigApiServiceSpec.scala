@@ -72,7 +72,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     testCreateMethodConfiguration(AgoraMethod("dsde", "three_step", 1), "three_step_dockstore", services)
   }
 
-  it should "return 201 on create method configuration in Dockstore" ignore withTestDataApiServices { services =>
+  it should "return 201 on create method configuration in Dockstore" in withTestDataApiServices { services =>
     testCreateMethodConfiguration(DockstoreMethod("dockstore-method-path", "dockstore-method-version"), "three_step_dockstore", services)
   }
 
@@ -481,11 +481,11 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return 200 on put method configuration" ignore {
+  it should "return 200 on put method configuration" in {
     check200AddMC(Put)
   }
 
-  it should "return 200 on post method configuration" ignore {
+  it should "return 200 on post method configuration" in {
     check200AddMC(Post)
   }
 
@@ -685,11 +685,11 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 201 on copy Dockstore method configuration" ignore withTestDataApiServices { services =>
+  it should "return 201 on copy Dockstore method configuration" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairCreatedDockstore)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, responseAs[String]) {
           status
         }
         assertResult("dockstore-config-name") {
@@ -895,7 +895,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when generating a method config template from a valid Dockstore method" ignore withTestDataApiServices { services =>
+  it should "return 200 when generating a method config template from a valid Dockstore method" in withTestDataApiServices { services =>
     val method: MethodRepoMethod = DockstoreMethod("dockstore-method-path", "dockstore-method-version")
     Post("/methodconfigs/template", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -927,7 +927,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return 200 getting method inputs and outputs for a Dockstore method" ignore withTestDataApiServices { services =>
+  it should "return 200 getting method inputs and outputs for a Dockstore method" in withTestDataApiServices { services =>
     val method: MethodRepoMethod = DockstoreMethod("dockstore-method-path", "dockstore-method-version")
     Post("/methodconfigs/inputsOutputs", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>
