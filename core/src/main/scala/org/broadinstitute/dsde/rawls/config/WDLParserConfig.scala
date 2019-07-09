@@ -1,15 +1,15 @@
 package org.broadinstitute.dsde.rawls.config
 
 import java.util.concurrent.TimeUnit
-
 import com.typesafe.config.Config
-
 import scala.concurrent.duration.Duration
+
 
 case class WDLParserConfig(cacheMaxSize: Int,
                            cacheTTLSuccessSeconds: Duration,
                            cacheTTLFailureSeconds: Duration,
-                           serverBasePath: String
+                           serverBasePath: String,
+                           useCache: Boolean
                           )
 
 case object WDLParserConfig {
@@ -17,6 +17,7 @@ case object WDLParserConfig {
     conf.getInt("cache-max-size"),
     Duration(conf.getInt("cache-ttl-success-seconds"), TimeUnit.SECONDS),
     Duration(conf.getInt("cache-ttl-failure-seconds"), TimeUnit.SECONDS),
-    conf.getString("server")
+    conf.getString("server"),
+    conf.getBoolean("useCache")
   )
 }

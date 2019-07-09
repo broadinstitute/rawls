@@ -1,9 +1,6 @@
 package org.broadinstitute.dsde.rawls.jobexec.wdlparsing
 
-import java.util.concurrent.TimeUnit
-
 import com.github.benmanes.caffeine.cache.Caffeine
-import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import cromwell.client.model.WorkflowDescription
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
@@ -12,10 +9,8 @@ import org.broadinstitute.dsde.rawls.model.UserInfo
 import scalacache.{Cache, Entry, get, put}
 import scalacache.caffeine.CaffeineCache
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.Duration
-import scala.util.{Failure, Random, Success, Try}
-import scala.collection.JavaConverters._
+import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success, Try}
 
 class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient: CromwellSwaggerClient) extends WDLParser with LazyLogging {
 

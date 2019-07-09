@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource, _}

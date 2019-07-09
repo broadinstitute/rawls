@@ -4,14 +4,12 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.metrics.{Expansion, InstrumentedRetry, RawlsExpansion, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model._
 import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
 import scala.util.control.NonFatal
 import akka.http.scaladsl.client.RequestBuilding._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
@@ -22,7 +20,6 @@ import org.broadinstitute.dsde.rawls.util.HttpClientUtilsGzipInstrumented
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.stream.Materializer
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
-import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport._
@@ -82,8 +79,7 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
 
   private def getDockstoreMethod(method: DockstoreMethod): Future[Option[GA4GHTool]] = {
     pipeline[Option[GA4GHTool]] apply Get(method.ga4ghDescriptorUrl(dockstoreServiceURL)) recover {
-      case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-        None
+      case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
     }
   }
 

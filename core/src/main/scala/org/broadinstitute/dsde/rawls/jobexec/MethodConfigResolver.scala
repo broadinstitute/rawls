@@ -1,22 +1,21 @@
 package org.broadinstitute.dsde.rawls.jobexec
 import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model.{ToolInputParameter, WorkflowDescription}
-import org.broadinstitute.dsde.rawls.dataaccess.{CromwellSwaggerClient, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.WDLParser
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import spray.json._
 
 import scala.collection.JavaConverters._
-
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 
-class MethodConfigResolver(wdlParser: CachingWDLParser) {
+class MethodConfigResolver(wdlParser: WDLParser) {
   val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
   val multipleResultError  = "Expected single value for workflow input, but evaluated result set had multiple values"
   val missingMandatoryValueError  = "Mandatory workflow input is not specified in method config"

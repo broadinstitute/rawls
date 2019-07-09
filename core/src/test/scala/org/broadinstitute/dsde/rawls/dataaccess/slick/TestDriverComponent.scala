@@ -11,20 +11,16 @@ import slick.jdbc.MySQLProfile.api._
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.ProjectRoles.Owner
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers, Suite}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.DbResource.conf
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail

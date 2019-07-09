@@ -4,8 +4,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient._
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, SamBillingProjectPolicyNames, SamResourceTypeNames, StatusCheckResponse}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, StatusCheckResponse}
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
@@ -210,8 +209,6 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     val dockstoreResponse =
       s"""{"type":"WDL","descriptor":"${threeStepWDL.replace("three_step", "three_step_dockstore").replace("\n","\\n")}","url":"bogus"}"""
 
-    println("DO WE GET ALL THE WAY DOWN???")
-    println("hmm " + testComponentThing)
     mockServer.when(
       request()
         .withMethod("GET")
@@ -223,7 +220,6 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withBody(dockstoreResponse)
         .withStatusCode(StatusCodes.OK.intValue)
     )
-    println("AND THEN PAST?")
 
     // Saving invalid WDL as a Method Repo Method is allowed
 

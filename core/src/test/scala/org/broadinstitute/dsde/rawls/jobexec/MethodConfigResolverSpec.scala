@@ -9,11 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import java.util.UUID
 
-import cromwell.client.model.{ToolInputParameter, WorkflowDescription}
-import cromwell.client.model.ValueType.TypeNameEnum
-import cromwell.client.model.ValueType
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient._
 
