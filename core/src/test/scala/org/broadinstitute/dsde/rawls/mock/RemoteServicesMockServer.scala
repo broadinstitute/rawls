@@ -122,44 +122,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     val methodPath = "/methods"
 
-//    val goodAndBadInputsWDL =
-//      """
-//        |workflow goodAndBad {
-//        |  call goodAndBadTask
-//        |}
-//        |
-//        |task goodAndBadTask {
-//        |  String good_in
-//        |  String bad_in
-//        |  command {
-//        |    echo "hello world"
-//        |  }
-//        |  output {
-//        |    String good_out = "everything is good"
-//        |    String bad_out = "everything is bad"
-//        |    String empty_out = "everything is empty"
-//        |  }
-//        |}
-//      """.stripMargin
-
     val goodAndBadMethod = AgoraEntity(Some("dsde"),Some("good_and_bad"),Some(1),None,None,None,None,Some(goodAndBadInputsWDL),None,Some(AgoraEntityType.Workflow))
-
-//    val meth1WDL =
-//      """
-//        |workflow meth1 {
-//        |  call method1
-//        |}
-//        |
-//        |task method1 {
-//        |  String i1
-//        |  command {
-//        |    echo "hello world"
-//        |  }
-//        |  output {
-//        |    String o1 = "output one"
-//        |  }
-//        |}
-//      """.stripMargin
 
     val meth1Method = AgoraEntity(Some("dsde"),Some("meth1"),Some(1),None,None,None,None,Some(meth1WDL),None,Some(AgoraEntityType.Workflow))
 
@@ -258,7 +221,6 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withBody(noInputMethodDockstoreResponse)
         .withStatusCode(StatusCodes.OK.intValue)
     )
-
 
     val arrayWdl = """task aggregate_data {
                      |	Array[String] input_array

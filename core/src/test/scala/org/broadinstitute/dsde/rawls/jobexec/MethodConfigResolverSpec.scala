@@ -33,7 +33,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       |}
     """.stripMargin
 
-
   val arrayWdl =
     """
       |task t1 {
@@ -50,8 +49,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       |  }
       |}
     """.stripMargin
-
-
 
   val doubleArrayWdl =
     """
@@ -106,6 +103,35 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       |}
     """.stripMargin
 
+  val wdlVersionOneWdl =
+    """
+      |version 1.0
+      |
+      |task use_this_name {
+      |
+      |  input {
+      |    String s
+      |    File f
+      |  }
+      |
+      |  command {}
+      |
+      |  meta {
+      |    email: "skroob@spaceballs.gov"
+      |    author: "President Skroob"
+      |    description: "Spaceballs: The Unit Test"
+      |  }
+      |
+      |  output {
+      |    File f2 = "a"
+      |  }
+      |
+      |  runtime {
+      |    docker: "docker image"
+      |  }
+      |}
+    """.stripMargin
+
   val badWdl = littleWdl.replace("workflow", "not-a-workflow")
 
   val intArgName = "w1.t1.int_arg"
@@ -113,6 +139,10 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val intArrayName = "w1.int_array"
   val doubleIntArrayName = "w1.aint_array"
   val tripleIntArrayName = "w1.aaint_array"
+  val wdlVersionOneWdlName = "use_this_name"
+  val wdlVersionOneStringInputName = "s"
+  val wdlVersionOneFileInputName = "f"
+  val wdlVersionOneFileOutputName = "f2"
 
   val littleWdlWorkflowDescriptionRequiredInput = makeToolInputParameter(intArgName, false, makeValueType("Int"), "Int")
   val littleWdlWorkflowDescriptionOptionalInput = makeToolInputParameter(intOptName, true, makeValueType("Int"), "Int?")
@@ -133,12 +163,18 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
   val badWdlWorkflowDescription = makeBadWorkflowDescription("badwdl", List("ERROR: Finished parsing without consuming all tokens.\\n\\nnot-a-workflow w1 {\\n^\\n    "))
 
+  val wdlVersionOneWdlStringInput = makeToolInputParameter(wdlVersionOneStringInputName, false, makeValueType("String"), "String")
+  val wdlVersionOneWdlFileInput   = makeToolInputParameter(wdlVersionOneFileInputName, false, makeValueType("File"), "File")
+  val wdlVersionOneWdlFileOutput  = makeToolOutputParameter(wdlVersionOneFileOutputName, makeValueType("File"), "File")
+  val wdlVersionOneWdlWorkflowDescription = makeWorkflowDescription(wdlVersionOneWdlName, List(wdlVersionOneWdlStringInput, wdlVersionOneWdlFileInput), List(wdlVersionOneWdlFileOutput))
+
   mockCromwellSwaggerClient.workflowDescriptions += (littleWdl -> littleWdlWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (arrayWdl  -> requiredArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl -> requiredDoubleArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (optionalDoubleArrayWdl -> optionalDoubleArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (tripleArrayWdl -> requiredTripleArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (badWdl -> badWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (wdlVersionOneWdl -> wdlVersionOneWdlWorkflowDescription)
 
 
   val workspace = Workspace("workspaces", "test_workspace", UUID.randomUUID().toString(), "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
@@ -222,9 +258,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   def withConfigData[T](testCode: => T): T = {
     withCustomTestDatabaseInternal(configData)(testCode)
   }
-
-
-
 
   //Test harness to call resolveInputsForEntities without having to go via the WorkspaceService
   def testResolveInputs(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, dataAccess: DataAccess)
@@ -340,7 +373,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     }
     */
 
-    "parse WDL" in withConfigData {
+    "parse draft2 WDL" in withConfigData {
       val littleWorkflow = methodConfigResolver.parseWDL(userInfo, littleWdl).get
 
       assertResult(littleWdlWorkflowDescription) {
@@ -351,6 +384,14 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
       assertResult(requiredArrayWorkflowDescription) {
         arrayWorkflow
+      }
+    }
+
+    "parse WDL 1.0 wdl" in withConfigData {
+      val wdlVersionOne = methodConfigResolver.parseWDL(userInfo, wdlVersionOneWdl).get
+
+      assertResult(wdlVersionOneWdlWorkflowDescription) {
+        wdlVersionOne
       }
     }
 
