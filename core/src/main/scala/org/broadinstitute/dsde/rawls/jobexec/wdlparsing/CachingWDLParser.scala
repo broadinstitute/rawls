@@ -14,8 +14,6 @@ import scala.util.{Failure, Success, Try}
 
 class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient: CromwellSwaggerClient) extends WDLParser with LazyLogging {
 
-  // TODO: conf should be injected, not read directly. At least this is an object so it happens once.
-
   // set up cache for WDL parsing
   /* from scalacache doc: "Note: If you’re using an in-memory cache (e.g. Guava or Caffeine) then it makes sense
      to use the synchronous mode. But if you’re communicating with a cache over a network (e.g. Redis, Memcached)

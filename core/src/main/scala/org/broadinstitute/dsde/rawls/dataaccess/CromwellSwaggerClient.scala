@@ -6,6 +6,8 @@ import cromwell.client.ApiClient
 import cromwell.client.api.WomtoolApi
 import cromwell.client.model.WorkflowDescription
 import org.broadinstitute.dsde.rawls.model.UserInfo
+import scala.collection.JavaConverters._
+
 
 class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
 
@@ -17,8 +19,19 @@ class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
     new WomtoolApi(apiClient)
   }
 
+
+  // CHANGING THIS MOMENTARILY TO TEST A BUG
   def describe(userInfo: UserInfo, wdl: String): WorkflowDescription = {
-    getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl, null, null, null, null)
+    val wfdescription = getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl, null, null, null, null)
+    val wfdescriptionInputs  = wfdescription.getInputs.asScala.toList.map { input =>
+      val rawInput = input.getName
+      input.name(wfdescription.getName + "." + rawInput)
+    }
+    val wfdescriptionOutputs = wfdescription.getOutputs.asScala.toList map { output =>
+      val rawOutput = output.getName
+      output.name(wfdescription.getName + "." + rawOutput)
+    }
+    wfdescription.inputs(wfdescriptionInputs.asJava).outputs(wfdescriptionOutputs.asJava)
   }
 
 }
