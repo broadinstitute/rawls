@@ -199,7 +199,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       runtimeOptions,
       useCallCache,
       billingProject.cromwellBackend.getOrElse(defaultBackend),
-      workflowFailureMode
+      workflowFailureMode,
+      google_labels = Map("terra-submission-id" -> submissionId.toString)
     )
   }
 
