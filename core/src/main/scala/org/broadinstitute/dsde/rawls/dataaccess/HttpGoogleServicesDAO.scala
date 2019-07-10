@@ -127,6 +127,8 @@ class HttpGoogleServicesDAO(
   proxyNamePrefix: String,
   deploymentMgrProject: String,
   cleanupDeploymentAfterCreating: Boolean,
+  terraBucketReaderRole: String,
+  terraBucketWriterRole: String,
   override val accessContextManagerDAO: AccessContextManagerDAO)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
@@ -224,31 +226,21 @@ class HttpGoogleServicesDAO(
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
       //
-      //it is noteworthy that the objectAdmin role granted below contains getIamPolicy and setIamPolicy, but
-      //these permissions do not apply to buckets that have bucket policy only enabled, which is the case here.
-      //if bucket policy only were NOT enabled, we would not want to grant the objectAdmin role to users.
-      //See https://cloud.google.com/storage/docs/access-control/iam-permissions for more information
-      //
-      // project owner - roles/storage.objectAdmin + roles/storage.legacyBucketReader
-      // workspace owner - roles/storage.objectAdmin + roles/storage.legacyBucketReader
-      // workspace writer - roles/storage.objectAdmin + roles/storage.legacyBucketReader
-      // workspace reader - roles/storage.objectViewer + roles/storage.legacyBucketReader
-      // bucket service account - roles/storage.admin + roles/storage.legacyBucketReader
-      //
-      //Why do all of the above all have legacyBucketReader? The short story is that there is no standard
-      //IAM role available in Google that does exactly what we want. At the object-level, the correct roles exist,
-      //but there is nothing that has those object permissions AND gives the user the ability to read the bucket.
-      //An arguably more correct version of doing this is to create a custom IAM role, but that requires a migration
-      //of all existing projects in the system. The stop-gap solution is to combine the two roles to get exactly
-      //the right set of permissions.
+      // project owner - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace owner - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace writer - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace reader - organizations/$ORG_ID/roles/terraBucketReader
+      // bucket service account - organizations/$ORG_ID/roles/terraBucketWriter + roles/storage.admin
 
-      val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> StorageRole.ObjectAdmin, Owner -> StorageRole.ObjectAdmin, Write -> StorageRole.ObjectAdmin, Read -> StorageRole.ObjectViewer)
+      val terraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
+      val terraBucketWriterRole = StorageRole.CustomStorageRole(terraBucketWriterRole)
+
+      val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> terraBucketWriterRole, Owner -> terraBucketWriterRole, Write -> terraBucketWriterRole, Read -> terraBucketReaderRole)
       val bucketRoles =
         policyGroupsByAccessLevel.map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) } +
-          (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
+          (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin) //TODO! the rawls SA should also have terraBucketWriter
 
-      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect { case (role,identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)} +
-        (StorageRole.LegacyBucketReader -> NonEmptyList.fromListUnsafe(bucketRoles.keys.toList)) //add legacyBucketReader role to all entities that have any permission to interact w/ the bucket
+      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect { case (role,identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)}
 
       //The calls to setBucketPolicyOnly and setIamPolicy are coupled because in this case, we only want to use these specific
       //storage roles _if_ bucket policy only is enabled. See above comment for a more in-depth explanation.

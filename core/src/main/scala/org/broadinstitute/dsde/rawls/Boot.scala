@@ -167,6 +167,8 @@ object Boot extends IOApp with LazyLogging {
         proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
         deploymentMgrProject = dmConfig.projectID,
         cleanupDeploymentAfterCreating = dmConfig.cleanupDeploymentAfterCreating,
+        terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
+        terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
         accessContextManagerDAO = accessContextManagerDAO
       )
 
