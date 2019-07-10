@@ -229,18 +229,26 @@ class HttpGoogleServicesDAO(
       //if bucket policy only were NOT enabled, we would not want to grant the objectAdmin role to users.
       //See https://cloud.google.com/storage/docs/access-control/iam-permissions for more information
       //
-      // project owner - roles/storage.objectAdmin
-      // workspace owner - roles/storage.objectAdmin
-      // workspace writer - roles/storage.objectAdmin
-      // workspace reader - roles/storage.objectViewer
-      // bucket service account - roles/storage.admin
+      // project owner - roles/storage.objectAdmin + roles/storage.legacyBucketReader
+      // workspace owner - roles/storage.objectAdmin + roles/storage.legacyBucketReader
+      // workspace writer - roles/storage.objectAdmin + roles/storage.legacyBucketReader
+      // workspace reader - roles/storage.objectViewer + roles/storage.legacyBucketReader
+      // bucket service account - roles/storage.admin + roles/storage.legacyBucketReader
+      //
+      //Why do all of the above all have legacyBucketReader? The short story is that there is no standard
+      //IAM role available in Google that does exactly what we want. At the object-level, the correct roles exist,
+      //but there is nothing that has those object permissions AND gives the user the ability to read the bucket.
+      //An arguably more correct version of doing this is to create a custom IAM role, but that requires a migration
+      //of all existing projects in the system. The stop-gap solution is to combine the two roles to get exactly
+      //the right set of permissions.
 
       val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> StorageRole.ObjectAdmin, Owner -> StorageRole.ObjectAdmin, Write -> StorageRole.ObjectAdmin, Read -> StorageRole.ObjectViewer)
       val bucketRoles =
         policyGroupsByAccessLevel.map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) } +
           (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
 
-      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect { case (role,identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)}
+      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect { case (role,identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)} +
+        (StorageRole.LegacyBucketReader -> NonEmptyList.fromListUnsafe(bucketRoles.keys.toList)) //add legacyBucketReader role to all entities that have any permission to interact w/ the bucket
 
       //The calls to setBucketPolicyOnly and setIamPolicy are coupled because in this case, we only want to use these specific
       //storage roles _if_ bucket policy only is enabled. See above comment for a more in-depth explanation.
