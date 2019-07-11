@@ -76,7 +76,8 @@ case class ExecutionServiceWorkflowOptions(
   default_runtime_attributes: Option[JsValue],
   read_from_cache: Boolean,
   backend: CromwellBackend,
-  workflow_failure_mode: Option[WorkflowFailureMode] = None
+  workflow_failure_mode: Option[WorkflowFailureMode] = None,
+  google_labels: Map[String, String] = Map.empty
 )
 
 // current possible backends are "JES" and "PAPIv2" but this is subject to change in the future
@@ -342,7 +343,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat11(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat12(ExecutionServiceWorkflowOptions)
 
   implicit val ExecutionServiceLabelResponseFormat = jsonFormat2(ExecutionServiceLabelResponse)
 
