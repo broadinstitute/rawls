@@ -200,7 +200,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       useCallCache,
       billingProject.cromwellBackend.getOrElse(defaultBackend),
       workflowFailureMode,
-      google_labels = Map("terra-submission-id" -> submissionId.toString)
+      google_labels = Map("terra-submission-id" -> s"terra-${submissionId.toString}")
     )
   }
 

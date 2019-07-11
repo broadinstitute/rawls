@@ -244,7 +244,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
             false,
             CromwellBackend("PAPIv2"),
-            google_labels = Map("terra-submission-id" -> submissionRec.id.toString)
+            google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}")
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }
