@@ -7,6 +7,7 @@ import com.google.api.services.bigquery.model.{GetQueryResultsResponse, QueryPar
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
+import org.joda.time.format.DateTimeFormat
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
@@ -20,17 +21,17 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
 
   val stringParamType = new QueryParameterType().setType("STRING")
 
-  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], workspaceNamespace: String): Future[Map[String, Float]] = {
+  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], workspaceNamespace: String, submissionDate: Option[DateTime]): Future[Map[String, Float]] = {
     if( workflowIds.isEmpty ) {
       Future.successful(Map.empty[String, Float])
     } else {
       for {
         //try looking up the workflows via the submission ID.
         //this makes for a smaller query string (though no faster).
-        submissionCosts <- executeSubmissionCostsQuery(submissionId, workspaceNamespace)
+        submissionCosts <- executeSubmissionCostsQuery(submissionId, workspaceNamespace, submissionDate)
         //if that doesn't return anything, fall back to
         fallbackCosts <- if (submissionCosts.size() == 0)
-          executeWorkflowCostsQuery(workflowIds, workspaceNamespace)
+          executeWorkflowCostsQuery(workflowIds, workspaceNamespace, submissionDate)
         else
           Future.successful(submissionCosts)
       } yield {
@@ -41,8 +42,9 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
 
 
   def getWorkflowCost(workflowId: String,
-                       workspaceNamespace: String): Future[Map[String, Float]] = {
-    executeWorkflowCostsQuery(Seq(workflowId), workspaceNamespace) map extractCostResults
+                      workspaceNamespace: String,
+                      submissionDate: Option[DateTime]): Future[Map[String, Float]] = {
+    executeWorkflowCostsQuery(Seq(workflowId), workspaceNamespace, submissionDate) map extractCostResults
   }
 
   /*
@@ -58,8 +60,14 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
     }
   }
 
-  //TODO: add optional _PARTITIONDATE to save $$$. pass in submissionDate: Option[DateTime] = None
-  private def executeSubmissionCostsQuery(submissionId: String, workspaceNamespace: String): Future[util.List[TableRow]] = {
+  private def partitionDateClause(submissionDate: Option[DateTime]): String = {
+    (submissionDate map { d: DateTime =>
+      val date = d.toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
+      s"AND _PARTITIONDATE >= $date"
+    }).getOrElse("")
+  }
+
+  private def executeSubmissionCostsQuery(submissionId: String, workspaceNamespace: String, submissionDate: Option[DateTime]): Future[util.List[TableRow]] = {
 
     val querySql: String =
       s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
@@ -68,6 +76,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
       |WHERE blabels.value = "terra-$submissionId"
       |AND wflabels.key = "cromwell-workflow-id"
       |AND project.id = ?
+      |${partitionDateClause(submissionDate)}
       |GROUP BY wflabels.key, workflowId""".stripMargin
 
     val namespaceParam =
@@ -89,7 +98,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
    * Queries BigQuery for compute costs associated with the workflowIds.
    */
   private def executeWorkflowCostsQuery(workflowIds: Seq[String],
-                                        workspaceNamespace: String): Future[util.List[TableRow]] = {
+                                        workspaceNamespace: String, submissionDate: Option[DateTime]): Future[util.List[TableRow]] = {
     workflowIds match {
       case Seq() => Future.successful(Seq.empty.asJava)
       case ids =>
@@ -99,6 +108,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
               |FROM `$tableName`, UNNEST(labels) as labels
               |WHERE project.id = ?
               |AND labels.key LIKE "cromwell-workflow-id"
+              |${partitionDateClause(submissionDate)}
               |GROUP BY labels.key, workflowId
               |HAVING $subquery""".stripMargin
 

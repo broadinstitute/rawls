@@ -36,7 +36,7 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
    */
   it should "bypass BigQuery with no workflow IDs" in {
     assertResult(Map.empty) {
-      Await.result(submissionCostService.getSubmissionCosts("submission-id", Seq.empty, "test"), 1 minute)
+      Await.result(submissionCostService.getSubmissionCosts("submission-id", Seq.empty, "test", None), 1 minute)
     }
   }
 }
