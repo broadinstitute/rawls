@@ -3,9 +3,10 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.util
 
 import org.broadinstitute.dsde.workbench.google.GoogleBigQueryDAO
-import com.google.api.services.bigquery.model.{QueryParameter, QueryParameterType, QueryParameterValue, TableRow}
+import com.google.api.services.bigquery.model.{GetQueryResultsResponse, QueryParameter, QueryParameterType, QueryParameterValue, TableRow}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.joda.time.DateTime
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
@@ -17,26 +18,70 @@ object SubmissionCostService {
 
 class SubmissionCostService(tableName: String, serviceProject: String, bigQueryDAO: GoogleBigQueryDAO)(implicit val executionContext: ExecutionContext) extends LazyLogging {
 
+  val stringParamType = new QueryParameterType().setType("STRING")
 
-  def getWorkflowCosts(workflowIds: Seq[String],
+  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], workspaceNamespace: String): Future[Map[String, Float]] = {
+    if( workflowIds.isEmpty ) {
+      Future.successful(Map.empty[String, Float])
+    } else {
+      for {
+        //try looking up the workflows via the submission ID.
+        //this makes for a smaller query string (though no faster).
+        submissionCosts <- executeSubmissionCostsQuery(submissionId, workspaceNamespace)
+        //if that doesn't return anything, fall back to
+        fallbackCosts <- if (submissionCosts.size() == 0)
+          executeWorkflowCostsQuery(workflowIds, workspaceNamespace)
+        else
+          Future.successful(submissionCosts)
+      } yield {
+        extractCostResults(fallbackCosts)
+      }
+    }
+  }
+
+
+  def getWorkflowCost(workflowId: String,
                        workspaceNamespace: String): Future[Map[String, Float]] = {
-
-    extractWorkflowCostResults(executeWorkflowCostsQuery(workflowIds, workspaceNamespace))
+    executeWorkflowCostsQuery(Seq(workflowId), workspaceNamespace) map extractCostResults
   }
 
   /*
    * Manipulates and massages a BigQuery result.
    */
-  def extractWorkflowCostResults(rowsFuture: Future[util.List[TableRow]]): Future[Map[String, Float]] = {
+  def extractCostResults(rows: util.List[TableRow]): Map[String, Float] = {
+    Option(rows) match {
+      case Some(rows) => rows.asScala.map { row =>
+        // workflow ID is contained in the 2nd cell, cost is contained in the 3rd cell
+        row.getF.get(1).getV.toString -> row.getF.get(2).getV.toString.toFloat
+      }.toMap
+      case None => Map.empty[String, Float]
+    }
+  }
 
-    rowsFuture map { rowsOrNull =>
-      Option(rowsOrNull) match {
-        case Some(rows) => rows.asScala.map { row =>
-          // workflow ID is contained in the 2nd cell, cost is contained in the 3rd cell
-          row.getF.get(1).getV.toString -> row.getF.get(2).getV.toString.toFloat
-        }.toMap
-        case None => Map.empty[String, Float]
-      }
+  //TODO: add optional _PARTITIONDATE to save $$$. pass in submissionDate: Option[DateTime] = None
+  private def executeSubmissionCostsQuery(submissionId: String, workspaceNamespace: String): Future[util.List[TableRow]] = {
+
+    val querySql: String =
+      s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
+      |FROM `$tableName` as billing, UNNEST(labels) as wflabels
+      |CROSS JOIN UNNEST(billing.labels) as blabels
+      |WHERE blabels.value = "terra-$submissionId"
+      |AND wflabels.key = "cromwell-workflow-id"
+      |AND project.id = ?
+      |GROUP BY wflabels.key, workflowId""".stripMargin
+
+    val namespaceParam =
+      new QueryParameter()
+        .setParameterType(stringParamType)
+        .setParameterValue(new QueryParameterValue().setValue(workspaceNamespace))
+
+    val queryParameters: List[QueryParameter] = List(namespaceParam)
+
+    executeBigQuery(querySql, queryParameters) map { result =>
+      val rowsReturned = result.getTotalRows
+      val bytesProcessed = result.getTotalBytesProcessed
+      logger.debug(s"Queried for costs of submission $submissionId: $rowsReturned Rows Returned and $bytesProcessed Bytes Processed.")
+      result.getRows
     }
   }
 
@@ -56,7 +101,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
               |AND labels.key LIKE "cromwell-workflow-id"
               |GROUP BY labels.key, workflowId
               |HAVING $subquery""".stripMargin
-        val stringParamType = new QueryParameterType().setType("STRING")
+
         val namespaceParam =
           new QueryParameter()
             .setParameterType(stringParamType)
@@ -68,18 +113,23 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
         }
         val queryParameters: List[QueryParameter] = namespaceParam :: subqueryParams
 
-        for {
-          jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject(serviceProject), querySql, queryParameters, "POSITIONAL")
-          job <- bigQueryDAO.getQueryStatus(jobRef)
-          result <- bigQueryDAO.getQueryResult(job)
-        } yield {
+        executeBigQuery(querySql, queryParameters) map { result =>
           val idCount = ids.length
           val rowsReturned = result.getTotalRows
           val bytesProcessed = result.getTotalBytesProcessed
           logger.debug(s"Queried for costs of $idCount Workflow IDs: $rowsReturned Rows Returned and $bytesProcessed Bytes Processed.")
-
           result.getRows
         }
+    }
+  }
+
+  private def executeBigQuery(querySql: String, queryParams: List[QueryParameter]): Future[GetQueryResultsResponse] = {
+    for {
+      jobRef <- bigQueryDAO.startParameterizedQuery(GoogleProject(serviceProject), querySql, queryParams, "POSITIONAL")
+      job <- bigQueryDAO.getQueryStatus(jobRef)
+      result <- bigQueryDAO.getQueryResult(job)
+    } yield {
+      result
     }
   }
 }
