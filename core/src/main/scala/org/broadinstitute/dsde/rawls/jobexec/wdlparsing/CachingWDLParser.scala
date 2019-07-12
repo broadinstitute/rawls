@@ -28,12 +28,10 @@ class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient:
 
 
   override def parse(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
-    val tick = System.currentTimeMillis()
     val key = generateCacheKey(wdl)
 
     get(key) match {
       case Some(parseResult) =>
-        val tock = System.currentTimeMillis() - tick
         parseResult
       case None => parseAndCache(userInfo, wdl, key)
     }

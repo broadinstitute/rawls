@@ -47,9 +47,10 @@ class MethodConfigResolver(wdlParser: WDLParser) {
   }
 
   private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: ToolInputParameter): SubmissionValidationValue = wfInput.getValueType.getTypeName match {
-      // TODO: Fix this match
     case TypeNameEnum.ARRAY => getArrayResult(wfInput.getName, mcSequence)
-    case TypeNameEnum.OPTIONAL  => if (wfInput.getValueType.getOptionalType == TypeNameEnum.ARRAY) getArrayResult(wfInput.getName, mcSequence) else getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional) //send optional-arrays down the same codepath as arrays
+    case TypeNameEnum.OPTIONAL  => if (wfInput.getValueType.getOptionalType == TypeNameEnum.ARRAY)
+                                     getArrayResult(wfInput.getName, mcSequence)
+                                   else getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional) //send optional-arrays down the same codepath as arrays
     case _ => getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional)
   }
 
@@ -138,7 +139,6 @@ class MethodConfigResolver(wdlParser: WDLParser) {
   def getMethodInputsOutputs(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[MethodInputsOutputs] = parseWDL(userInfo, wdl) map { workflowDescription =>
     if (workflowDescription.getValid) {
       val inputs = workflowDescription.getInputs.asScala.toList map { input =>
-        // TODO: getTypeName can return a type ("Int", "String") or "Optional" parse WorkflowDescription properly
         model.MethodInput(input.getName, input.getTypeDisplayName.replaceAll("\\n", ""), input.getOptional)
       }
       val outputs = workflowDescription.getOutputs.asScala.toList map { output =>
