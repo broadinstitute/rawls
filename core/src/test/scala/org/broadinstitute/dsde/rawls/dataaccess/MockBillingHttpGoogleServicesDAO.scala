@@ -42,6 +42,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     clientEmail,
     subEmail,
     pemFile,
+    pathToCredentialJson,
     appsDomain,
     12345,
     groupsPrefix,
@@ -65,6 +66,8 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     proxyNamePrefix = "",
     deploymentMgrProject = "deployment-manager-project",
     cleanupDeploymentAfterCreating = true,
+    terraBucketReaderRole = "fakeTerraBucketReader",
+    terraBucketWriterRole = "fakeTerraBucketWriter",
     accessContextManagerDAO = new MockGoogleAccessContextManagerDAO)(system, materializer, executionContext, cs, timer) {
 
   private var token: String = null
