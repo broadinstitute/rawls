@@ -320,7 +320,9 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     }
 
     // bucket IAM roles for sam policies as described in comments in updateBucketIam function in HttpGoogleServicesDAO
-    val policyToBucketAccessLevel = Map("project-owner" -> "roles/storage.objectAdmin", "owner" -> "roles/storage.objectAdmin", "writer" -> "roles/storage.objectAdmin", "reader" -> "roles/storage.objectViewer")
+    // Note that the role in this map is just the suffix, as the org ID will vary depending on which context this test is run
+    // We will check against just the suffix instead of the entire string
+    val policyToBucketRole = Map("project-owner" -> "terraBucketWriter", "owner" -> "terraBucketWriter", "writer" -> "terraBucketWriter", "reader" -> "terraBucketReader")
 
     "should have correct policies in Sam and ACLs in Google when an unconstrained workspace is created" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
@@ -335,8 +337,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           // check bucket acls. bucket policy only is enabled for workspace buckets so we do not need to look at object acls
           val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
           val expectedBucketRolesWithEmails = samPolicies.collect {
-            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("roles/storage.objectAdmin", emails.head)
-            case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
+            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("terraBucketWriter", emails.head)
+            case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketRole.contains(policyName) => (policyToBucketRole(policyName), email.value)
           }
           actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
         }
@@ -357,7 +359,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             // check bucket acls. bucket policy only is enabled for workspace buckets so we do not need to look at object acls
             val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
             val expectedBucketRolesWithEmails = samPolicies.collect {
-              case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
+              case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketRole.contains(policyName) => (policyToBucketRole(policyName), email.value)
             }
             actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
           }
@@ -480,7 +482,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
   private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, String)] = {
     val googleBucketAcls = googleStorageDAO.getBucketAccessControls(bucketName).futureValue
     val bucketAcls = Option(googleBucketAcls).map(_.getItems.asScala.toList).getOrElse(List.empty)
-    // service account should have owner access
+    // service account should have storage admin access
     assert(bucketAcls.exists(acl => Option(acl.getRole()).contains("roles/storage.admin") && Option(acl.getEmail()).exists(_.endsWith(serviceAccountEmailDomain))))
     bucketAcls.collect {
       case acl if (acl.getRole() != null && !acl.getRole().equals("roles/storage.admin")) => (acl.getRole(), acl.getEmail())

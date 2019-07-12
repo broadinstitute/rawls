@@ -242,7 +242,7 @@ class HttpGoogleServicesDAO(
       val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> customTerraBucketWriterRole, Owner -> customTerraBucketWriterRole, Write -> customTerraBucketWriterRole, Read -> customTerraBucketReaderRole)
       val bucketRoles =
         policyGroupsByAccessLevel.map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) } +
-          (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin) //TODO! the rawls SA should also have terraBucketWriter
+          (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
 
       val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect { case (role,identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)}
 
