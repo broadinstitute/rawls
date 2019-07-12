@@ -10,7 +10,7 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.{Async, ContextShift, IO, Timer}
 import cats.data.NonEmptyList
 import cats.syntax.functor._
 import cats.instances.future._
@@ -66,6 +66,7 @@ import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
 import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
+import io.chrisdavenport.log4cats.Logger
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 
 import scala.collection.JavaConverters._
@@ -186,7 +187,7 @@ class HttpGoogleServicesDAO(
 
     val result = for{
       traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-      _ <- googleStorageService.insertBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Map.empty, Some(traceId))
+      _ <- googleStorageService.insertBucket(hammCromwellMetadata.bucketName, None, Map.empty, Some(traceId))
       _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
       _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
       projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
@@ -232,10 +233,10 @@ class HttpGoogleServicesDAO(
       // workspace reader - organizations/$ORG_ID/roles/terraBucketReader
       // bucket service account - organizations/$ORG_ID/roles/terraBucketWriter + roles/storage.admin
 
-      val terraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
-      val terraBucketWriterRole = StorageRole.CustomStorageRole(terraBucketWriterRole)
+      val customTerraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
+      val customTerraBucketWriterRole = StorageRole.CustomStorageRole(terraBucketWriterRole)
 
-      val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> terraBucketWriterRole, Owner -> terraBucketWriterRole, Write -> terraBucketWriterRole, Read -> terraBucketReaderRole)
+      val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> customTerraBucketWriterRole, Owner -> customTerraBucketWriterRole, Write -> customTerraBucketWriterRole, Read -> customTerraBucketReaderRole)
       val bucketRoles =
         policyGroupsByAccessLevel.map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) } +
           (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin) //TODO! the rawls SA should also have terraBucketWriter
@@ -271,7 +272,7 @@ class HttpGoogleServicesDAO(
     val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- googleStorageService.insertBucket(GoogleProject(project.projectName.value), GcsBucketName(bucketName), None, labels, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- googleStorageService.insertBucket(GcsBucketName(bucketName), None, labels, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
       _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture()
       _ <- setBucketLogging(bucketName)
       _ <- insertInitialStorageLog(bucketName)
