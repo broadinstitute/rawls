@@ -144,6 +144,7 @@ object Boot extends IOApp with LazyLogging {
         clientEmail,
         gcsConfig.getString("subEmail"),
         gcsConfig.getString("pathToPem"),
+        gcsConfig.getString("pathToCredentialJson"),
         gcsConfig.getString("appsDomain"),
         dmConfig.orgID,
         gcsConfig.getString("groupsPrefix"),

@@ -10,7 +10,7 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
-import cats.effect.{Async, ContextShift, IO, Timer}
+import cats.effect.{Async, ContextShift, IO, Resource, Timer}
 import cats.data.NonEmptyList
 import cats.syntax.functor._
 import cats.instances.future._
@@ -66,8 +66,10 @@ import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
 import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
+import io.chrisdavenport.linebacker.Linebacker
 import io.chrisdavenport.log4cats.Logger
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
+import org.broadinstitute.dsde.workbench.util.ExecutionContexts
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
@@ -104,6 +106,7 @@ class HttpGoogleServicesDAO(
   clientEmail: String,
   subEmail: String,
   pemFile: String,
+  pathToCredentialJson: String,
   appsDomain: String,
   orgID: Long,
   groupsPrefix: String,
@@ -271,13 +274,15 @@ class HttpGoogleServicesDAO(
     // setupWorkspace main logic
     val traceId = TraceId(UUID.randomUUID())
 
-    for {
-      _ <- googleStorageService.insertBucket(GcsBucketName(bucketName), None, labels, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
-      _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture()
-      _ <- setBucketLogging(bucketName)
-      _ <- insertInitialStorageLog(bucketName)
-    } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
-  }
+    withNewGoogleStorageInterpreter(GoogleProject(project.projectName.value)).use { googleStorageInterpreter =>
+      for {
+        _ <- googleStorageInterpreter.insertBucket(GcsBucketName(bucketName), None, labels, Option(traceId)).compile.drain //ACL = None because bucket IAM will be set separately in updateBucketIam
+        _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain
+        _ <- IO(setBucketLogging(bucketName))
+        _ <- IO(insertInitialStorageLog(bucketName))
+      } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
+    }
+  }.unsafeToFuture()
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
@@ -1212,6 +1217,14 @@ class HttpGoogleServicesDAO(
     retryExponentially(when500orGoogleError)( () => {
       new CloudResourceManagerV2DAO().getFolderId(folderName, OAuth2BearerToken(credential.getAccessToken))
     })
+  }
+
+  private def withNewGoogleStorageInterpreter(googleProject: GoogleProject): Resource[IO, GoogleStorageService[IO]] = {
+    for {
+      blockingEc <- ExecutionContexts.fixedThreadPool[IO](256) //scala.concurrent.blocking has default max extra thread number 256, so use this number to start with
+      lineBacker = Linebacker.fromExecutionContext[IO](blockingEc)
+      googleStorage <- GoogleStorageService.resource[IO](pathToCredentialJson, Some(googleProject))(ContextShift[IO], Timer[IO], implicitly[Async[IO]], Logger[IO], lineBacker)
+    } yield googleStorage
   }
 }
 
