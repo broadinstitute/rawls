@@ -1,42 +1,37 @@
 package org.broadinstitute.dsde.test.api
 
-import language.postfixOps
 import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
+import cats.effect.IO
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
+import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.dao.Google
 import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
-import org.broadinstitute.dsde.workbench.fixture._
-import org.broadinstitute.dsde.workbench.fixture.{SimpleMethodConfig, MethodData}
-import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO
+import org.broadinstitute.dsde.workbench.fixture.{MethodData, SimpleMethodConfig, _}
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GoogleProject, ServiceAccount}
-import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry}
+import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.util.Retry
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
-import org.scalatest.{FreeSpecLike, Matchers}
 import org.scalatest.time.{Minutes, Seconds, Span}
 import org.scalatest.{FreeSpecLike, Matchers}
-
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
-import scala.concurrent.duration._
-import scala.collection.JavaConverters._
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
-import scala.util.{Random, Try}
 import spray.json._
+
+import scala.collection.JavaConverters._
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
   with CleanUp with RandomUtil with Retry
-  with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures {
+  with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures with RawlsTestSuite {
 
   // We only want to see the users' workspaces so we can't be Project Owners
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
@@ -324,7 +319,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     // We will check against just the suffix instead of the entire string
     val policyToBucketRole = Map("project-owner" -> "terraBucketWriter", "owner" -> "terraBucketWriter", "writer" -> "terraBucketWriter", "reader" -> "terraBucketReader")
 
-    "should have correct policies in Sam and ACLs in Google when an unconstrained workspace is created" in {
+    "should have correct policies in Sam and IAM roles in Google when an unconstrained workspace is created" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
@@ -336,6 +331,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
           // check bucket acls. bucket policy only is enabled for workspace buckets so we do not need to look at object acls
           val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
+
           val expectedBucketRolesWithEmails = samPolicies.collect {
             case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("terraBucketWriter", emails.head)
             case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketRole.contains(policyName) => (policyToBucketRole(policyName), email.value)
@@ -345,7 +341,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       }
     }
 
-    "should have correct policies in Sam and ACLs in Google when a constrained workspace is created" in {
+    "should have correct policies in Sam and IAM roles in Google when a constrained workspace is created" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
@@ -480,12 +476,16 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
   // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
   private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, String)] = {
-    val googleBucketAcls = googleStorageDAO.getBucketAccessControls(bucketName).futureValue
-    val bucketAcls = Option(googleBucketAcls).map(_.getItems.asScala.toList).getOrElse(List.empty)
-    // service account should have storage admin access
-    assert(bucketAcls.exists(acl => Option(acl.getRole()).contains("roles/storage.admin") && Option(acl.getEmail()).exists(_.endsWith(serviceAccountEmailDomain))))
-    bucketAcls.collect {
-      case acl if (acl.getRole() != null && !acl.getRole().equals("roles/storage.admin")) => (acl.getRole(), acl.getEmail())
-    }
+    GoogleStorageService.resource(RawlsConfig.pathToQAJson).use {
+      storage =>
+        for {
+         policy <- storage.getIamPolicy(bucketName, None).compile.lastOrError
+       } yield {
+          println(s"111111 ${policy.getBindings}")
+          policy.getBindings.asScala.collect {
+            case binding if(binding._1.toString.contains("terraBucket")) => (binding._1.toString.split("/")(3), binding._2.asScala.head.getValue)
+          }
+       }.toList
+    }.unsafeRunSync()
   }
 }
