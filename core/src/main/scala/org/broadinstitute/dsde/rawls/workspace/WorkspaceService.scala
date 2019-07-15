@@ -1472,7 +1472,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     submissionWithoutCosts flatMap {
       case (submission) => {
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-        toFutureTry(submissionCostService.getWorkflowCosts(allWorkflowIds, workspaceName.namespace)) map {
+        toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, Option(submission.submissionDate))) map {
           case Failure(ex) =>
             logger.error("Unable to get workflow costs for this submission. ", ex)
             RequestComplete((StatusCodes.OK, SubmissionStatusResponse(submission)))
@@ -1559,17 +1559,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val execIdFutOpt = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, dataAccess) { workspaceContext =>
         withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) { optExecKey =>
-          DBIO.successful(optExecKey)
+          withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
+            DBIO.successful((optExecKey, submission))
+          }
         }
       }
     }
 
     for {
-      optExecId <- execIdFutOpt
+      (optExecId, submission) <- execIdFutOpt
       // we don't need the Execution Service ID, but we do need to confirm the Workflow is in one for this Submission
       // if we weren't able to do so above
       _ <- executionServiceCluster.findExecService(submissionId, workflowId, userInfo, optExecId)
-      costs <- submissionCostService.getWorkflowCosts(Seq(workflowId), workspaceName.namespace)
+      costs <- submissionCostService.getWorkflowCost(workflowId, workspaceName.namespace, Option(submission.submissionDate))
     } yield RequestComplete(StatusCodes.OK, WorkflowCost(workflowId, costs.get(workflowId)))
   }
 
