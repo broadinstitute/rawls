@@ -62,8 +62,9 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
 
   private def partitionDateClause(submissionDate: Option[DateTime]): String = {
     (submissionDate map { d: DateTime =>
-      val date = d.toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
-      s"AND _PARTITIONDATE >= $date"
+      //subtract a day so we never have to deal with timezones
+      val date = d.minusDays(1).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
+      s"""AND _PARTITIONDATE >= "$date""""
     }).getOrElse("")
   }
 
