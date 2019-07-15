@@ -483,7 +483,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
        } yield {
           println(s"111111 ${policy.getBindings}")
           policy.getBindings.asScala.collect {
-            case binding if(binding._1.toString.contains("terraBucket")) => (binding._1.toString.split("/")(3), binding._2.asScala.head.getValue)
+            case binding if(binding._1.toString.contains("terraBucket")) => (binding._1.toString.split("/")(3), binding._2.asScala.map(_.getValue))
           }
        }.toList
     }.unsafeRunSync()
