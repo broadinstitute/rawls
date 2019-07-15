@@ -335,7 +335,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           val expectedBucketRolesWithEmails = samPolicies.collect {
             case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("terraBucketWriter", emails.head)
             case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketRole.contains(policyName) => (policyToBucketRole(policyName), email.value)
-          }
+          }.groupBy{ case (policy, _) => policy}.map{ case (policy, policyRolePairs) => policy -> policyRolePairs.map(_._2)}
           actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
         }
       }
@@ -356,8 +356,8 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
             val expectedBucketRolesWithEmails = samPolicies.collect {
               case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketRole.contains(policyName) => (policyToBucketRole(policyName), email.value)
-            }
-            actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
+            }.groupBy{ case (policy, _) => policy}.map{ case (policy, policyRolePairs) => policy -> policyRolePairs.map(_._2)}
+            actualBucketRolesWithEmails.toMap should contain theSameElementsAs expectedBucketRolesWithEmails
           }
         }
       }
@@ -475,14 +475,14 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
   private val serviceAccountEmailDomain = ".gserviceaccount.com"
 
   // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
-  private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, String)] = {
+  private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, Set[String])] = {
     GoogleStorageService.resource(RawlsConfig.pathToQAJson).use {
       storage =>
         for {
          policy <- storage.getIamPolicy(bucketName, None).compile.lastOrError
        } yield {
           policy.getBindings.asScala.collect {
-            case binding if(binding._1.toString.contains("terraBucket")) => (binding._1.toString.split("/")(3), binding._2.asScala.map(_.getValue))
+            case binding if(binding._1.toString.contains("terraBucket")) => (binding._1.toString.split("/")(3), binding._2.asScala.map(_.getValue).toSet)
           }
        }.toList
     }.unsafeRunSync()
