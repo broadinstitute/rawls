@@ -343,7 +343,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sset))
 
       def inputResolutions(sampleName: String) = {
-        Seq(SubmissionValidationValue(Option(AttributeString(sampleName)), Option("message"), "cgrep.pattern"))
+        Seq(SubmissionValidationValue(Option(AttributeString(sampleName)), Option("message"), "three_step.cgrep.pattern"))
       }
 
       val thisSubmission = createTestSubmission(testData.workspace, testData.methodConfigValid, sset, WorkbenchEmail(testData.userOwner.userEmail.value),

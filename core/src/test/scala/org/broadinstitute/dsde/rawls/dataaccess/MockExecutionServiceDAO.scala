@@ -24,7 +24,7 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
     this.collection = workflowCollection
 
 
-    val inputPattern = """\{"cgrep.pattern":"(sample[0-9])"\}""".r
+    val inputPattern = """\{"three.step.cgrep.pattern":"(sample[0-9])"\}""".r
 
     val workflowIds = inputs.map {
       case inputPattern(sampleName) => sampleName

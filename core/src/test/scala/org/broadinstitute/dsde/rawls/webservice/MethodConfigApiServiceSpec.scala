@@ -69,11 +69,11 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   "MethodConfigApi" should "return 201 on create method configuration in Agora" in withTestDataApiServices { services =>
-    testCreateMethodConfiguration(AgoraMethod("dsde", "three_step", 1), "three_step_dockstore", services)
+    testCreateMethodConfiguration(AgoraMethod("dsde", "three_step", 1), "three_step", services)
   }
 
   it should "return 201 on create method configuration in Dockstore" in withTestDataApiServices { services =>
-    testCreateMethodConfiguration(AgoraMethod("dsde", "three_step", 1), "three_step", services)
+    testCreateMethodConfiguration(DockstoreMethod("dockstore-method-path", "dockstore-method-version"), "three_step_dockstore", services)
   }
 
   it should "update the workspace last modified date on create method configuration" in withTestDataApiServices { services =>
