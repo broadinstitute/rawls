@@ -29,6 +29,8 @@ object Dependencies {
   val akkaTestKit: ModuleID =       "com.typesafe.akka"   %%  "akka-testkit"         % akkaV     % "test"
   val akkaHttpTestKit: ModuleID =   "com.typesafe.akka"   %%  "akka-http-testkit"    % akkaHttpV % "test"
 
+  val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" %% "cromwell-client" % "0.1-15a30475d-SNAP"
+  
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleV)
   val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev7-" + googleV))
   val googleGenomics: ModuleID =              excludeGuavaJDK5("com.google.apis"        % "google-api-services-genomics"              % ("v2alpha1-rev61-" + googleV))
@@ -72,15 +74,7 @@ object Dependencies {
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
   val scalaCache: ModuleID =      "com.github.cb372"              %% "scalacache-caffeine"  % "0.24.2"
-
-  val cromwellWdl: ModuleID = ("org.broadinstitute" %% "wdl-draft2" % cromwellVersion
-    exclude("org.typelevel", "cats_2.12")
-    exclude("io.spray", "spray-json_2.12")
-    exclude("io.spray", "akka-parsing_2.12")
-    exclude("io.spray", "akka-stream_2.12")
-    exclude("com.typesafe.akka", "akka-actor_2.12")
-    exclude("com.typesafe.akka", "akka-http_2.12"))
-
+  
   val workbenchModelV  = "0.13-d4e0782"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogleV = "0.18-4c7acd5"
@@ -89,6 +83,8 @@ object Dependencies {
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.2-4c7acd5" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.5-d4b4838" excludeAll(excludeWorkbenchModel)
   val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
+
+  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.9.0"
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
 
@@ -164,8 +160,9 @@ object Dependencies {
     akkaHttp,
     akkaStream,
     swaggerUI,
+    circeYAML,
     commonsJEXL,
-    cromwellWdl,
+    cromwellClient,
     cats,
     mysqlConnector,
     liquibaseCore,

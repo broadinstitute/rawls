@@ -1,22 +1,23 @@
 package org.broadinstitute.dsde.rawls.util
 
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.expressions.{ExpressionValidator, SlickExpressionParser}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 import akka.http.scaladsl.model.StatusCodes
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 //Well, this is a joke.
 trait MethodWiths {
   val methodRepoDAO: MethodRepoDAO
   val dataSource: SlickDataSource
+  val methodConfigResolver: MethodConfigResolver
 
   import dataSource.dataAccess.driver.api._
 
@@ -45,8 +46,9 @@ trait MethodWiths {
   def withMethodInputs[T](methodConfig: MethodConfiguration, userInfo: UserInfo)(op: (String, GatherInputsResult) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
     // TODO add Method to model instead of exposing AgoraEntity?
     withMethod(methodConfig.methodRepoMethod, userInfo) { method =>
+
       withWdl(method) { wdl =>
-        MethodConfigResolver.gatherInputs(methodConfig, wdl) match {
+        methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl) match {
           case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
           case Success(gatherInputsResult: GatherInputsResult) =>
             op(wdl, gatherInputsResult)

@@ -120,7 +120,7 @@ trait MethodConfigApiService extends UserInfoDirectives {
       path("methodconfigs" / "inputsOutputs") {
         post {
           entity(as[MethodRepoMethod]) { methodRepoMethod =>
-            complete { workspaceServiceConstructor(userInfo).GetMethodInputsOutputs(methodRepoMethod) }
+            complete { workspaceServiceConstructor(userInfo).GetMethodInputsOutputs(userInfo, methodRepoMethod) }
           }
         }
       }

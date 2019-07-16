@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource, _}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
-import org.broadinstitute.dsde.rawls.model.{UserInfo, WorkflowStatuses, CromwellBackend}
+import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
+import org.broadinstitute.dsde.rawls.model.{CromwellBackend, UserInfo, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util
 import spray.json._
@@ -36,7 +36,8 @@ object BootMonitors extends LazyLogging {
                    requesterPaysRole: String,
                    useWorkflowCollectionField: Boolean,
                    useWorkflowCollectionLabel: Boolean,
-                   defaultBackend: CromwellBackend): Unit = {
+                   defaultBackend: CromwellBackend,
+                   methodConfigResolver: MethodConfigResolver): Unit = {
     //Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
 
@@ -49,7 +50,7 @@ object BootMonitors extends LazyLogging {
     startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, samDAO, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
 
     //Boot workflow submission actors
-    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend)
+    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver)
 
     //Boot bucket deletion monitor
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
@@ -85,7 +86,8 @@ object BootMonitors extends LazyLogging {
                                             requesterPaysRole: String,
                                             useWorkflowCollectionField: Boolean,
                                             useWorkflowCollectionLabel: Boolean,
-                                            defaultBackend: CromwellBackend) = {
+                                            defaultBackend: CromwellBackend,
+                                            methodConfigResolver: MethodConfigResolver) = {
     for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
       system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
@@ -106,7 +108,8 @@ object BootMonitors extends LazyLogging {
         requesterPaysRole,
         useWorkflowCollectionField,
         useWorkflowCollectionLabel,
-        defaultBackend
+        defaultBackend,
+        methodConfigResolver
       ))
     }
   }
