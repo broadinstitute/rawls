@@ -55,7 +55,9 @@ class MethodConfigResolver(wdlParser: WDLParser) {
   }
 
 
-  def parseWDL(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = wdlParser.parse(userInfo, wdl)
+  def parseWDL(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
+    wdlParser.parse(userInfo, wdl)
+  }
 
   def gatherInputs(userInfo: UserInfo, methodConfig: MethodConfiguration, wdl: String)(implicit executionContext: ExecutionContext): Try[GatherInputsResult] = parseWDL(userInfo, wdl) map { parsedWdlWorkflow =>
     def isAttributeEmpty(fqn: String): Boolean = {

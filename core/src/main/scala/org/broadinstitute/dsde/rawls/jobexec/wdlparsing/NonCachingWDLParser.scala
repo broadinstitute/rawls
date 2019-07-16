@@ -11,7 +11,9 @@ import scala.util.Try
 class NonCachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient: CromwellSwaggerClient) extends WDLParser {
 
   def parse(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
-    Try { cromwellSwaggerClient.describe(userInfo, wdl) }
+    cromwellSwaggerClient.describe(userInfo, wdl).map { wfDescription =>
+      WDLParser.appendWorkflowNameToInputsAndOutputs(wfDescription)
+    }
   }
 
 

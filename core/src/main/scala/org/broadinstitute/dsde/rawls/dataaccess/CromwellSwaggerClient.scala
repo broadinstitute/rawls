@@ -6,8 +6,10 @@ import cromwell.client.ApiClient
 import cromwell.client.api.WomtoolApi
 import cromwell.client.model.WorkflowDescription
 import org.broadinstitute.dsde.rawls.model.UserInfo
-import scala.collection.JavaConverters._
+import org.broadinstitute.dsde.rawls.util.Retry
+import scala.util.Try
 
+import scala.concurrent.duration._
 
 class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
 
@@ -20,18 +22,8 @@ class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
   }
 
 
-  // CHANGING THIS MOMENTARILY TO TEST A BUG
-  def describe(userInfo: UserInfo, wdl: String): WorkflowDescription = {
-    val wfdescription = getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl, null, null, null, null)
-    val wfdescriptionInputs  = wfdescription.getInputs.asScala.toList.map { input =>
-      val rawInput = input.getName
-      input.name(wfdescription.getName + "." + rawInput)
-    }
-    val wfdescriptionOutputs = wfdescription.getOutputs.asScala.toList map { output =>
-      val rawOutput = output.getName
-      output.name(wfdescription.getName + "." + rawOutput)
-    }
-    wfdescription.inputs(wfdescriptionInputs.asJava).outputs(wfdescriptionOutputs.asJava)
+  def describe(userInfo: UserInfo, wdl: String): Try[WorkflowDescription] = {
+    Retry.retry(5.seconds, 30.seconds) { Try { getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl, null, null, null, null) } }
   }
 
 }

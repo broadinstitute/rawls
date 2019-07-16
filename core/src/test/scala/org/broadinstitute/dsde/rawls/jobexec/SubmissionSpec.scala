@@ -393,7 +393,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     assert {
-      rqComplete.errorReport.message.contains("Invalid inputs: cgrep.pattern")
+      rqComplete.errorReport.message.contains("Invalid inputs: three_step.cgrep.pattern")
     }
   }
 
@@ -408,7 +408,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     assert {
-      rqComplete.errorReport.message.contains("Invalid outputs: cgrep.count")
+      rqComplete.errorReport.message.contains("Invalid outputs: three_step.cgrep.count")
     }
   }
 
@@ -423,10 +423,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     assert {
-      rqComplete.errorReport.message.contains("Invalid inputs: cgrep.pattern")
+      rqComplete.errorReport.message.contains("Invalid inputs: three_step.cgrep.pattern")
     }
     assert {
-      rqComplete.errorReport.message.contains("Invalid outputs: cgrep.count")
+      rqComplete.errorReport.message.contains("Invalid outputs: three_step.cgrep.count")
     }
   }
 
@@ -596,7 +596,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     assert {
-      rqComplete.errorReport.message.contains("Invalid inputs: cgrep.pattern")
+      rqComplete.errorReport.message.contains("Invalid inputs: three_step.cgrep.pattern")
     }
   }
 
@@ -611,7 +611,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     assert {
-      rqComplete.errorReport.message.contains("Invalid outputs: cgrep.count")
+      rqComplete.errorReport.message.contains("Invalid outputs: three_step.cgrep.count")
     }
   }
 

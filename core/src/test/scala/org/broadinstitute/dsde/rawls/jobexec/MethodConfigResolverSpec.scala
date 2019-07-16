@@ -1,17 +1,17 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
+import java.util.UUID
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
-
-import scala.collection.immutable.Map
 import org.scalatest.{Matchers, WordSpecLike}
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
-import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient._
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.WDLParser
+import scala.collection.immutable.Map
+import scala.collection.JavaConverters._
+import scala.concurrent.ExecutionContext
 
 class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDriverComponent {
 
@@ -134,11 +134,17 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
   val badWdl = littleWdl.replace("workflow", "not-a-workflow")
 
-  val intArgName = "w1.t1.int_arg"
-  val intOptName = "w1.t1.int_opt"
-  val intArrayName = "w1.int_array"
-  val doubleIntArrayName = "w1.aint_array"
-  val tripleIntArrayName = "w1.aaint_array"
+  val littleWdlName = "w1"
+  val intArgName = "t1.int_arg"
+  val intArgNameWithWfName = "w1.t1.int_arg"
+  val intOptName = "t1.int_opt"
+  val intOptNameWithWfName = "w1.t1.int_opt"
+  val intArrayName = "int_array"
+  val intArrayNameWithWfName = "w1.int_array"
+  val doubleIntArrayName = "aint_array"
+  val doubleIntArrayNameWithWfName = "w1.aint_array"
+  val tripleIntArrayName = "aaint_array"
+  val tripleIntArrayNameWithWfName = "w1.aaint_array"
   val wdlVersionOneWdlName = "use_this_name"
   val wdlVersionOneStringInputName = "s"
   val wdlVersionOneFileInputName = "f"
@@ -146,20 +152,20 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
   val littleWdlWorkflowDescriptionRequiredInput = makeToolInputParameter(intArgName, false, makeValueType("Int"), "Int")
   val littleWdlWorkflowDescriptionOptionalInput = makeToolInputParameter(intOptName, true, makeValueType("Int"), "Int?")
-  val littleWdlWorkflowDescription = makeWorkflowDescription("", List(littleWdlWorkflowDescriptionRequiredInput, littleWdlWorkflowDescriptionOptionalInput), List.empty)
+  val littleWdlWorkflowDescription = makeWorkflowDescription("w1", List(littleWdlWorkflowDescriptionRequiredInput, littleWdlWorkflowDescriptionOptionalInput), List.empty)
 
   val requiredArrayInput = makeToolInputParameter(intArrayName, false, makeArrayValueType(makeValueType("Int")), "Array[Int]")
-  val requiredArrayWorkflowDescription = makeWorkflowDescription("", List(requiredArrayInput), List.empty)
+  val requiredArrayWorkflowDescription = makeWorkflowDescription("w1", List(requiredArrayInput), List.empty)
 
   val requiredDoubleArrayInput =   makeToolInputParameter(doubleIntArrayName, false, makeArrayValueType(makeArrayValueType(makeValueType("Int"))), "Array[Array[Int]]")
-  val requiredDoubleArrayWorkflowDescription =  makeWorkflowDescription("", List(requiredDoubleArrayInput), List.empty)
+  val requiredDoubleArrayWorkflowDescription =  makeWorkflowDescription("w1", List(requiredDoubleArrayInput), List.empty)
 
   val optionalDoubleArrayInput =   makeToolInputParameter(doubleIntArrayName, false, makeArrayValueType(makeArrayValueType(makeValueType("Int"))), "Array[Array[Int]]")
-  val optionalDoubleArrayWorkflowDescription =  makeWorkflowDescription("", List(optionalDoubleArrayInput), List.empty)
+  val optionalDoubleArrayWorkflowDescription =  makeWorkflowDescription("w1", List(optionalDoubleArrayInput), List.empty)
 
 
   val requiredTripleArrayInput  = makeToolInputParameter(tripleIntArrayName, true, makeArrayValueType(makeArrayValueType(makeArrayValueType(makeValueType("Int")))), "Array[Array[Array[Int]]]")
-  val requiredTripleArrayWorkflowDescription =  makeWorkflowDescription("", List(requiredTripleArrayInput), List.empty)
+  val requiredTripleArrayWorkflowDescription =  makeWorkflowDescription("w1", List(requiredTripleArrayInput), List.empty)
 
   val badWdlWorkflowDescription = makeBadWorkflowDescription("badwdl", List("ERROR: Finished parsing without consuming all tokens.\\n\\nnot-a-workflow w1 {\\n^\\n    "))
 
@@ -211,26 +217,26 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val dummyMethod = AgoraMethod("method_namespace", "test_method", 1)
 
   val configGood = MethodConfiguration("config_namespace", "configGood", Some("Sample"),
-    None, Map(intArgName -> AttributeString("this.blah")), Map.empty, dummyMethod)
+    None, Map(intArgNameWithWfName -> AttributeString("this.blah")), Map.empty, dummyMethod)
 
   val configEvenBetter = MethodConfiguration("config_namespace", "configGood", Some("Sample"),
-    None, Map(intArgName -> AttributeString("this.blah"), intOptName -> AttributeString("this.blah")),
+    None, Map(intArgNameWithWfName -> AttributeString("this.blah"), intOptNameWithWfName -> AttributeString("this.blah")),
     Map.empty, dummyMethod)
 
   val configMissingExpr = MethodConfiguration("config_namespace", "configMissingExpr", Some("Sample"),
     None, Map.empty, Map.empty, dummyMethod)
 
   val configSampleSet = MethodConfiguration("config_namespace", "configSampleSet", Some("SampleSet"),
-    None, Map(intArrayName -> AttributeString("this.samples.blah")), Map.empty, dummyMethod)
+    None, Map(intArrayNameWithWfName -> AttributeString("this.samples.blah")), Map.empty, dummyMethod)
 
   val configEmptyArray = MethodConfiguration("config_namespace", "configSampleSet", Some("SampleSet"),
-    None, Map(intArrayName -> AttributeString("this.nonexistent")), Map.empty, dummyMethod)
+    None, Map(intArrayNameWithWfName -> AttributeString("this.nonexistent")), Map.empty, dummyMethod)
 
   val configRawJsonDoubleArray = MethodConfiguration("config_namespace", "configSampleSet", Some("SampleSet"),
-    None, Map(doubleIntArrayName -> AttributeString("this.rawJsonDoubleArray")), Map.empty, dummyMethod)
+    None, Map(doubleIntArrayNameWithWfName -> AttributeString("this.rawJsonDoubleArray")), Map.empty, dummyMethod)
 
   val configRawJsonTripleArray = MethodConfiguration("config_namespace", "configSample", Some("Sample"),
-    None, Map(tripleIntArrayName -> AttributeString("this.samples.rawJsonDoubleArray")), Map.empty, dummyMethod)
+    None, Map(tripleIntArrayNameWithWfName -> AttributeString("this.samples.rawJsonDoubleArray")), Map.empty, dummyMethod)
 
   class ConfigData extends TestData {
     override def save() = {
@@ -281,21 +287,21 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       val context = SlickWorkspaceContext(workspace)
 
       runAndWait(testResolveInputs(context, configGood, sampleGood, littleWdl, this)) shouldBe
-        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgName)))
+        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgNameWithWfName)))
 
       runAndWait(testResolveInputs(context, configEvenBetter, sampleGood, littleWdl, this)) shouldBe
-        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgName), SubmissionValidationValue(Some(AttributeNumber(1)), None, intOptName)))
+        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgNameWithWfName), SubmissionValidationValue(Some(AttributeNumber(1)), None, intOptNameWithWfName)))
 
       runAndWait(testResolveInputs(context, configSampleSet, sampleSet, arrayWdl, this)) shouldBe
-        Map(sampleSet.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1)))), None, intArrayName)))
+        Map(sampleSet.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1)))), None, intArrayNameWithWfName)))
 
       runAndWait(testResolveInputs(context, configSampleSet, sampleSet2, arrayWdl, this)) shouldBe
-        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, intArrayName)))
+        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, intArrayNameWithWfName)))
 
       // failure cases
       assertResult(true, "Missing values should return an error") {
         runAndWait(testResolveInputs(context, configGood, sampleMissingValue, littleWdl, this)).get("sampleMissingValue").get match {
-          case List(SubmissionValidationValue(None, Some(_), intArg)) if intArg == intArgName => true
+          case List(SubmissionValidationValue(None, Some(_), intArg)) if intArg == intArgNameWithWfName => true
         }
       }
 
@@ -309,15 +315,15 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       val gatheredInputs = methodConfigResolver.gatherInputs(userInfo, configMissingExpr, littleWdl)
       gatheredInputs shouldBe 'success
       gatheredInputs.get.processableInputs shouldBe 'empty
-      gatheredInputs.get.missingInputs shouldBe Set(intArgName)
-      gatheredInputs.get.emptyOptionalInputs.map(_.workflowInput.getName) shouldBe Set(intOptName)
+      gatheredInputs.get.missingInputs shouldBe Set(intArgNameWithWfName)
+      gatheredInputs.get.emptyOptionalInputs.map(_.workflowInput.getName) shouldBe Set("w1.t1.int_opt")
     }
 
     "resolve empty lists into AttributeEmptyLists" in withConfigData {
       val context = SlickWorkspaceContext(workspace)
 
       runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
-        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueEmptyList), None, intArrayName)))
+        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueEmptyList), None, intArrayNameWithWfName)))
     }
 
     "unpack AttributeValueRawJson into WDL-arrays" in withConfigData {
@@ -376,21 +382,28 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     "parse draft2 WDL" in withConfigData {
       val littleWorkflow = methodConfigResolver.parseWDL(userInfo, littleWdl).get
 
-      assertResult(littleWdlWorkflowDescription) {
-        littleWorkflow
-      }
+      littleWorkflow.getName shouldBe littleWdlName
+      littleWorkflow.getValid shouldBe true
+      littleWorkflow.getInputs.size shouldBe (2)
+      littleWorkflow.getInputs shouldBe List(
+        makeToolInputParameter(intArgNameWithWfName, false, makeValueType("Int"), "Int"),
+        makeToolInputParameter(intOptNameWithWfName, true, makeValueType("Int"), "Int?")).asJava
 
       val arrayWorkflow = methodConfigResolver.parseWDL(userInfo, arrayWdl).get
 
-      assertResult(requiredArrayWorkflowDescription) {
-        arrayWorkflow
-      }
+      arrayWorkflow.getName shouldBe littleWdlName
+      arrayWorkflow.getValid shouldBe true
+      arrayWorkflow.getInputs.size shouldBe (1)
+      arrayWorkflow.getInputs shouldBe List(
+        makeToolInputParameter(intArrayNameWithWfName, false, makeArrayValueType(makeValueType("Int")), "Array[Int]")).asJava
+
+
     }
 
     "parse WDL 1.0 wdl" in withConfigData {
       val wdlVersionOne = methodConfigResolver.parseWDL(userInfo, wdlVersionOneWdl).get
 
-      assertResult(wdlVersionOneWdlWorkflowDescription) {
+      assertResult(WDLParser.appendWorkflowNameToInputsAndOutputs(wdlVersionOneWdlWorkflowDescription)) {
         wdlVersionOne
       }
     }
@@ -409,15 +422,15 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
     "get method config inputs and outputs" in withConfigData {
       val expectedLittleIO = MethodInputsOutputs(Seq(
-        MethodInput(intArgName, "Int", false),
-        MethodInput(intOptName, "Int?", true)), Seq())
+        MethodInput(intArgNameWithWfName, "Int", false),
+        MethodInput(intOptNameWithWfName, "Int?", true)), Seq())
 
       assertResult(expectedLittleIO) {
         methodConfigResolver.getMethodInputsOutputs(userInfo, littleWdl).get
       }
 
       val expectedArrayIO = MethodInputsOutputs(Seq(
-        MethodInput(intArrayName, "Array[Int]", false)), Seq())
+        MethodInput(intArrayNameWithWfName, "Array[Int]", false)), Seq())
 
       assertResult(expectedArrayIO) {
         methodConfigResolver.getMethodInputsOutputs(userInfo, arrayWdl).get
@@ -431,12 +444,12 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     }
 
     "create a Method Config from a template" in withConfigData {
-      val expectedLittleInputs = Map(intArgName -> AttributeString(""), intOptName -> AttributeString(""))
+      val expectedLittleInputs = Map(intArgNameWithWfName -> AttributeString(""), intOptNameWithWfName -> AttributeString(""))
       val expectedLittleTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), expectedLittleInputs, Map(), dummyMethod)
 
       assertResult(expectedLittleTemplate) { methodConfigResolver.toMethodConfiguration(userInfo, littleWdl, dummyMethod).get }
 
-      val expectedArrayInputs = Map(intArrayName -> AttributeString(""))
+      val expectedArrayInputs = Map(intArrayNameWithWfName -> AttributeString(""))
       val expectedArrayTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), expectedArrayInputs, Map(), dummyMethod)
 
       assertResult(expectedArrayTemplate) { methodConfigResolver.toMethodConfiguration(userInfo, arrayWdl, dummyMethod).get }

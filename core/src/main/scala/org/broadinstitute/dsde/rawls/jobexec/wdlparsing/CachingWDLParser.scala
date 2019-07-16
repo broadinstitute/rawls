@@ -10,6 +10,7 @@ import scalacache.{Cache, Entry, get, put}
 import scalacache.caffeine.CaffeineCache
 
 import scala.concurrent.ExecutionContext
+import scala.util.hashing.MurmurHash3
 import scala.util.{Failure, Success, Try}
 
 class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient: CromwellSwaggerClient) extends WDLParser with LazyLogging {
@@ -28,30 +29,62 @@ class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient:
 
 
   override def parse(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
+    val tick = System.currentTimeMillis()
     val key = generateCacheKey(wdl)
+    //wdlhash is for logging purposes as we don't want to log full wdls
+    val wdlHash = generateHash(wdl)
 
+    logger.info(s"<parseWDL-cache> looking up $wdlHash ...")
     get(key) match {
       case Some(parseResult) =>
+        val tock = System.currentTimeMillis() - tick
+        logger.info(s"<parseWDL-cache> found cached result for $wdlHash in $tock ms.")
         parseResult
-      case None => parseAndCache(userInfo, wdl, key)
+      case None =>
+        val miss = System.currentTimeMillis() - tick
+        logger.info(s"<parseWDL-cache> encountered cache miss for $wdlHash in $miss ms.")
+        parseAndCache(userInfo, wdl, key, wdlHash, tick)
     }
   }
 
-  private def parseAndCache(userInfo: UserInfo, wdl: String, key: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
-    val parseResult = inContextParse(userInfo, wdl)
+  private def parseAndCache(userInfo: UserInfo, wdl: String, key: String, wdlHash: String, tick: Long)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
+    val parseResult: Try[WorkflowDescription] = inContextParse(userInfo, wdl) map { wfDescription =>
+      WDLParser.appendWorkflowNameToInputsAndOutputs(wfDescription)
+    }
+
+    val parsetime = System.currentTimeMillis() - tick
+    logger.info(s"<parseWDL-cache> actively parsed WDL for $wdlHash in $parsetime ms.")
+
     val timeToLive = parseResult match {
       case Success(_) => Some(wdlParsingConfig.cacheTTLSuccessSeconds)
-      case Failure(ex) => Some(wdlParsingConfig.cacheTTLFailureSeconds)
+      case Failure(ex) =>
+        logger.error(s"<parseWDL-cache> parse failed with with exception $ex on WDL $wdlHash")
+        Some(wdlParsingConfig.cacheTTLFailureSeconds)
     }
+
     put(key)(parseResult, ttl = timeToLive)
+
+    val tock = System.currentTimeMillis() - tick
+    logger.info(s"<parseWDL-cache> cached result $wdlHash in $tock ms.")
     parseResult
   }
 
 
 
   private def inContextParse(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
-   Try { cromwellSwaggerClient.describe(userInfo, wdl) }
+   cromwellSwaggerClient.describe(userInfo, wdl)
   }
+
+  /**
+    * generate a short string that identifies this WDL. Should not be used where uniqueness is a strict
+    * requirement due to the (low) chance of hash collisions.
+    * @param wdl
+    * @return
+    */
+  private def generateHash(wdl: String) = {
+    MurmurHash3.stringHash(wdl).toString
+  }
+
 
   /**
     * this method exists as an abstraction, making it easy to change what we use as a cache key in case
