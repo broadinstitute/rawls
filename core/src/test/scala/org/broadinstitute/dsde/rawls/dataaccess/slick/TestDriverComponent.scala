@@ -70,7 +70,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   val wdlParserConfig = WDLParserConfig(ConfigFactory.load().getConfig("wdl-parsing"))
   val mockCromwellSwaggerClient = new MockCromwellSwaggerClient()
-  val wdlParser = new NonCachingWDLParser(wdlParserConfig, mockCromwellSwaggerClient)
+  val wdlParser = new CachingWDLParser(wdlParserConfig, mockCromwellSwaggerClient)
   val methodConfigResolver = new MethodConfigResolver(wdlParser)
 
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
