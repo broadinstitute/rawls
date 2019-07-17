@@ -190,7 +190,7 @@ class HttpGoogleServicesDAO(
 
     val result = for{
       traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-      _ <- googleStorageService.insertBucket(hammCromwellMetadata.bucketName, None, Map.empty, Some(traceId))
+      _ <- googleStorageService.insertBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Map.empty, Some(traceId))
       _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
       _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
       projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
@@ -274,15 +274,13 @@ class HttpGoogleServicesDAO(
     // setupWorkspace main logic
     val traceId = TraceId(UUID.randomUUID())
 
-    withNewGoogleStorageInterpreter(GoogleProject(project.projectName.value)).use { googleStorageInterpreter =>
-      for {
-        _ <- googleStorageInterpreter.insertBucket(GcsBucketName(bucketName), None, labels, Option(traceId)).compile.drain //ACL = None because bucket IAM will be set separately in updateBucketIam
-        _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain
-        _ <- IO(setBucketLogging(bucketName))
-        _ <- IO(insertInitialStorageLog(bucketName))
-      } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
-    }
-  }.unsafeToFuture()
+    for {
+      _ <- googleStorageService.insertBucket(GoogleProject(project.projectName.value), GcsBucketName(bucketName), None, labels, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture()
+      _ <- setBucketLogging(bucketName)
+      _ <- insertInitialStorageLog(bucketName)
+    } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
+  }
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
     implicit val service = GoogleInstrumentedService.Storage
@@ -1217,14 +1215,6 @@ class HttpGoogleServicesDAO(
     retryExponentially(when500orGoogleError)( () => {
       new CloudResourceManagerV2DAO().getFolderId(folderName, OAuth2BearerToken(credential.getAccessToken))
     })
-  }
-
-  private def withNewGoogleStorageInterpreter(googleProject: GoogleProject): Resource[IO, GoogleStorageService[IO]] = {
-    for {
-      blockingEc <- ExecutionContexts.fixedThreadPool[IO](256) //scala.concurrent.blocking has default max extra thread number 256, so use this number to start with
-      lineBacker = Linebacker.fromExecutionContext[IO](blockingEc)
-      googleStorage <- GoogleStorageService.resource[IO](pathToCredentialJson, Some(googleProject))(ContextShift[IO], Timer[IO], implicitly[Async[IO]], Logger[IO], lineBacker)
-    } yield googleStorage
   }
 }
 
