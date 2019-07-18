@@ -37,7 +37,7 @@ object BootMonitors extends LazyLogging {
                    requesterPaysRole: String,
                    useWorkflowCollectionField: Boolean,
                    useWorkflowCollectionLabel: Boolean,
-                   defaultBackend: CromwellBackend
+                   defaultBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver)(implicit cs: ContextShift[IO]): Unit = {
     //Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)

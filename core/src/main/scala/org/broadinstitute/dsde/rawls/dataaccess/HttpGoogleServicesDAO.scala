@@ -106,7 +106,6 @@ class HttpGoogleServicesDAO(
   clientEmail: String,
   subEmail: String,
   pemFile: String,
-  pathToCredentialJson: String,
   appsDomain: String,
   orgID: Long,
   groupsPrefix: String,
