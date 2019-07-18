@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.expressions
 
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.{AttributeString, ErrorReport, MethodConfiguration, ValidatedMethodConfiguration}
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
@@ -33,7 +32,7 @@ object ExpressionValidator {
                                     allowRootEntity: Boolean,
                                     parser: SlickExpressionParser): ValidatedMethodConfiguration = {
 
-    val inputsToParse = gatherInputsResult.processableInputs map { mi => (mi.workflowInput.localName.value, AttributeString(mi.expression)) }
+    val inputsToParse = gatherInputsResult.processableInputs map { mi => (mi.workflowInput.getName, AttributeString(mi.expression)) }
     val (emptyOutputs, outputsToParse) = methodConfiguration.outputs.partition { case (_, expr) => expr.value.isEmpty }
 
     val parsed = ExpressionParser.parseMCExpressions(inputsToParse.toMap, outputsToParse, allowRootEntity, parser)
@@ -42,7 +41,7 @@ object ExpressionValidator {
     val validatedOutputs = emptyOutputs.keys.toSet ++ parsed.validOutputs
 
     // a MethodInput which is both optional and empty is already valid
-    val emptyOptionalInputs = gatherInputsResult.emptyOptionalInputs map { _.workflowInput.localName.value }
+    val emptyOptionalInputs = gatherInputsResult.emptyOptionalInputs map { _.workflowInput.getName }
 
     ValidatedMethodConfiguration(methodConfiguration, parsed.validInputs ++ emptyOptionalInputs, parsed.invalidInputs, gatherInputsResult.missingInputs, gatherInputsResult.extraInputs, validatedOutputs, parsed.invalidOutputs)
   }

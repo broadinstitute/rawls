@@ -15,16 +15,16 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
   val mockBigQueryDAO = new MockGoogleBigQueryDAO
   val submissionCostService = SubmissionCostService.constructor("test", "test", mockBigQueryDAO)
 
-  val rows = Future(List(
+  val rows = List(
     new TableRow().setF(List(new TableCell().setV("wfKey"), new TableCell().setV("wf1"), new TableCell().setV(1.32f)).asJava),
     new TableRow().setF(List(new TableCell().setV("wfKey"), new TableCell().setV("wf2"), new TableCell().setV(3f)).asJava),
     new TableRow().setF(List(new TableCell().setV("wfKey"), new TableCell().setV("wf3"), new TableCell().setV(101.00f)).asJava)
-  ).asJava)
+  ).asJava
 
   "SubmissionCostService" should "extract a map of workflow ID to cost" in {
     val expected = Map("wf1" -> 1.32f, "wf2" -> 3.00f, "wf3" -> 101.00f)
     assertResult(expected) {
-      Await.result(submissionCostService.extractWorkflowCostResults(rows), 1 minute)
+      submissionCostService.extractCostResults(rows)
     }
   }
 
@@ -36,7 +36,7 @@ class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
    */
   it should "bypass BigQuery with no workflow IDs" in {
     assertResult(Map.empty) {
-      Await.result(submissionCostService.getWorkflowCosts(Seq.empty, "test"), 1 minute)
+      Await.result(submissionCostService.getSubmissionCosts("submission-id", Seq.empty, "test", None), 1 minute)
     }
   }
 }

@@ -101,7 +101,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       "requesterPays",
       false,
       false,
-      CromwellBackend("PAPIv2")
+      CromwellBackend("PAPIv2"),
+      methodConfigResolver
     ))
 
     try {
