@@ -274,10 +274,11 @@ class HttpGoogleServicesDAO(
     val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- googleStorageService.insertBucket(GoogleProject(project.projectName.value), GcsBucketName(bucketName), None, labels, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- googleStorageService.insertBucket(GoogleProject(project.projectName.value), GcsBucketName(bucketName), None, Map.empty, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
       _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture()
       _ <- setBucketLogging(bucketName)
       _ <- insertInitialStorageLog(bucketName)
+      _ <- googleStorageService.setBucketLabels(GcsBucketName(bucketName), labels).compile.drain.unsafeToFuture()
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
   }
 
