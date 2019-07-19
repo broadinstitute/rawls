@@ -30,10 +30,13 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
         //this makes for a smaller query string (though no faster).
         submissionCosts <- executeSubmissionCostsQuery(submissionId, workspaceNamespace, submissionDate)
         //if that doesn't return anything, fall back to
-        fallbackCosts <- if (submissionCosts.size() == 0)
+        fallbackCosts <- submissionCosts match {
+          case None => executeWorkflowCostsQuery(workflowIds, workspaceNamespace, submissionDate)
+          case Some(costs) => if (costs.size() == 0)
           executeWorkflowCostsQuery(workflowIds, workspaceNamespace, submissionDate)
-        else
-          Future.successful(submissionCosts)
+          else
+            Future.successful(costs)
+        }
       } yield {
         extractCostResults(fallbackCosts)
       }
@@ -68,7 +71,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
     }).getOrElse("")
   }
 
-  private def executeSubmissionCostsQuery(submissionId: String, workspaceNamespace: String, submissionDate: Option[DateTime]): Future[util.List[TableRow]] = {
+  private def executeSubmissionCostsQuery(submissionId: String, workspaceNamespace: String, submissionDate: Option[DateTime]): Future[Option[util.List[TableRow]]] = {
 
     val querySql: String =
       s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
@@ -91,7 +94,11 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
       val rowsReturned = result.getTotalRows
       val bytesProcessed = result.getTotalBytesProcessed
       logger.debug(s"Queried for costs of submission $submissionId: $rowsReturned Rows Returned and $bytesProcessed Bytes Processed.")
-      result.getRows
+      if (rowsReturned == 0)   {
+        None
+      } else {
+        Some(result.getRows)
+      }
     }
   }
 
