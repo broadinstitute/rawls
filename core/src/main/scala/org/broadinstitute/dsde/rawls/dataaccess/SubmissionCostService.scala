@@ -94,11 +94,7 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
       val rowsReturned = result.getTotalRows
       val bytesProcessed = result.getTotalBytesProcessed
       logger.debug(s"Queried for costs of submission $submissionId: $rowsReturned Rows Returned and $bytesProcessed Bytes Processed.")
-      if (rowsReturned == 0)   {
-        None
-      } else {
-        Some(result.getRows)
-      }
+      Option(result.getRows)
     }
   }
 
