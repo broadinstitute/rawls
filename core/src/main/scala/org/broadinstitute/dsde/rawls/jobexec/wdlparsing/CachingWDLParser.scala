@@ -58,7 +58,7 @@ class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient:
     val timeToLive = parseResult match {
       case Success(_) => Some(wdlParsingConfig.cacheTTLSuccessSeconds)
       case Failure(ex) =>
-        logger.error(s"<parseWDL-cache> parse failed with with exception $ex on WDL $wdlHash")
+        logger.debug(s"<parseWDL-cache> parse failed with with exception $ex on WDL $wdlHash")
         Some(wdlParsingConfig.cacheTTLFailureSeconds)
     }
 
