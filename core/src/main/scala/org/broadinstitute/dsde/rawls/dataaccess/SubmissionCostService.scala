@@ -88,10 +88,10 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
     val queryParameters: List[QueryParameter] = List(namespaceParam)
 
     executeBigQuery(querySql, queryParameters) map { result =>
-      val rowsReturned = result.getTotalRows
-      val bytesProcessed = result.getTotalBytesProcessed
+      val rowsReturned =  Option(result.getTotalRows).getOrElse(0)
+      val bytesProcessed = Option(result.getTotalBytesProcessed).getOrElse(0)
       logger.debug(s"Queried for costs of submission $submissionId: $rowsReturned Rows Returned and $bytesProcessed Bytes Processed.")
-      result.getRows
+      Option(result.getRows).getOrElse(List.empty[TableRow].asJava)
     }
   }
 
@@ -126,10 +126,10 @@ class SubmissionCostService(tableName: String, serviceProject: String, bigQueryD
 
         executeBigQuery(querySql, queryParameters) map { result =>
           val idCount = ids.length
-          val rowsReturned = result.getTotalRows
-          val bytesProcessed = result.getTotalBytesProcessed
+          val rowsReturned = Option(result.getTotalRows).getOrElse(0)
+          val bytesProcessed = Option(result.getTotalBytesProcessed).getOrElse(0)
           logger.debug(s"Queried for costs of $idCount Workflow IDs: $rowsReturned Rows Returned and $bytesProcessed Bytes Processed.")
-          result.getRows
+          Option(result.getRows).getOrElse(List.empty[TableRow].asJava)
         }
     }
   }
