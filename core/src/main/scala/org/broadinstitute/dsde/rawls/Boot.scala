@@ -16,6 +16,7 @@ import com.google.pubsub.v1.ProjectTopicName
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
+import io.chrisdavenport.linebacker.Linebacker
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import net.ceedubs.ficus.Ficus._
@@ -167,6 +168,8 @@ object Boot extends IOApp with LazyLogging {
         proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
         deploymentMgrProject = dmConfig.projectID,
         cleanupDeploymentAfterCreating = dmConfig.cleanupDeploymentAfterCreating,
+        terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
+        terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
         accessContextManagerDAO = accessContextManagerDAO
       )
 
@@ -418,11 +421,13 @@ object Boot extends IOApp with LazyLogging {
       )
 
       for {
-        _ <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080))).recover {
+        binding <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080))).recover {
           case t: Throwable =>
             logger.error("FATAL - failure starting http server", t)
             throw t
         }
+        _ <- IO.fromFuture(IO(binding.whenTerminated))
+        _ <- IO(system.terminate())
       } yield ()
     }
   }
@@ -463,7 +468,8 @@ object Boot extends IOApp with LazyLogging {
 
     for {
       blockingEc <- ExecutionContexts.fixedThreadPool[F](256) //scala.concurrent.blocking has default max extra thread number 256, so use this number to start with
-      googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, blockingEc, Some(serviceProject))
+      lineBacker = Linebacker.fromExecutionContext[F](blockingEc)
+      googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, Some(serviceProject))(ContextShift[F], Timer[F], implicitly[Async[F]], Logger[F], lineBacker)
       httpClient <- BlazeClientBuilder(executionContext).resource
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)

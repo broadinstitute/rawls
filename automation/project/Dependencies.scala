@@ -8,7 +8,7 @@ object Dependencies {
   val akkaHttpV = "10.0.10"
 
   val serviceTestV = "0.16-e6493d5"
-  val workbenchGoogleV = "0.18-5941525"
+  val workbenchGoogleV = "0.19-084fa1b"
   val workbenchModelV  = "0.13-4c7acd5"
   val workbenchMetricsV  = "0.3-7ad0aa8"
 
@@ -21,6 +21,7 @@ object Dependencies {
   )
 
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV excludeAll(workbenchExclusions:_*)
+  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.5-b149852"
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions:_*)
 
   val rootDependencies = Seq(
@@ -54,6 +55,7 @@ object Dependencies {
     workbenchModel,
     workbenchMetrics,
     workbenchGoogle,
+    workbenchGoogle2,
     workbenchServiceTest,
 
     // required by workbenchGoogle

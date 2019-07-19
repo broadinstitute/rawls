@@ -304,7 +304,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
           for {
             metadata <- executionServiceCluster.callLevelMetadataForCostCalculation(submissionId, workflowId, Some(ExecutionServiceId(execId)), petUser)
             // Rawls only monitor root level workflow
-            _ <- googleServicesDAO.storeCromwellMetadata(GcsBlobName(workflowId), fs2.Stream.emits(metadata.compactPrint.getBytes("UTF-8"))).unsafeToFuture()
+            _ <- googleServicesDAO.storeCromwellMetadata(GcsBlobName(workflowId), fs2.Stream.emits(metadata.compactPrint.getBytes("UTF-8"))).compile.drain.unsafeToFuture()
           } yield ()
       }
     } yield ()

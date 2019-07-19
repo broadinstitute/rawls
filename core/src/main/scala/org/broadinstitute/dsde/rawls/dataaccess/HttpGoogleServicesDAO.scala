@@ -10,7 +10,7 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.{Async, ContextShift, IO, Resource, Timer}
 import cats.data.NonEmptyList
 import cats.syntax.functor._
 import cats.instances.future._
@@ -54,17 +54,22 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2._
-import org.broadinstitute.dsde.workbench.model.google.{GoogleProject, GoogleResourceTypes}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes, model}
+import com.google.cloud.storage.BucketInfo
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
 import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
+import io.chrisdavenport.linebacker.Linebacker
+import io.chrisdavenport.log4cats.Logger
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
+import org.broadinstitute.dsde.workbench.util.ExecutionContexts
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
@@ -125,6 +130,8 @@ class HttpGoogleServicesDAO(
   proxyNamePrefix: String,
   deploymentMgrProject: String,
   cleanupDeploymentAfterCreating: Boolean,
+  terraBucketReaderRole: String,
+  terraBucketWriterRole: String,
   override val accessContextManagerDAO: AccessContextManagerDAO)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
@@ -182,7 +189,7 @@ class HttpGoogleServicesDAO(
 
     val result = for{
       traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-      _ <- googleStorageService.createBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Some(traceId))
+      _ <- googleStorageService.insertBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Map.empty, Some(traceId))
       _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
       _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
       projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
@@ -205,48 +212,48 @@ class HttpGoogleServicesDAO(
 
   override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String]): Future[GoogleWorkspaceInfo] = {
 
-    def insertBucket: Map[WorkspaceAccessLevel, WorkbenchEmail] => Future[String] = { policyGroupsByAccessLevel =>
+    def setBucketLogging(bucketName: String): Future[String] = {
       implicit val service = GoogleInstrumentedService.Storage
-      retryWhen500orGoogleError {
-        () => {
-          // bucket ACLs should be:
-          //   project owner - bucket writer
-          //   workspace owner - bucket writer
-          //   workspace writer - bucket writer
-          //   workspace reader - bucket reader
-          //   bucket service account - bucket owner
-          val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(ProjectOwner -> "WRITER", Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
-          val bucketAcls =
-            policyGroupsByAccessLevel.map { case (access, policyEmail) => newBucketAccessControl(makeGroupEntityString(policyEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
-              newBucketAccessControl("user-" + clientEmail, "OWNER")
 
-          // default object ACLs should be:
-          //   project owner - object reader
-          //   workspace owner - object reader
-          //   workspace writer - object reader
-          //   workspace reader - object reader
-          //   bucket service account - object owner
-          val defaultObjectAcls =
-          policyGroupsByAccessLevel.map { case (_, policyEmail) => newObjectAccessControl(makeGroupEntityString(policyEmail.value), "READER") }.toSeq :+
-              newObjectAccessControl("user-" + clientEmail, "OWNER")
+      val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
+      val bucket = new Bucket().setName(bucketName).setLogging(logging)
 
-          val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
+      val updater = getStorage(getBucketServiceAccountCredential).buckets.update(bucketName, bucket)
 
-          val bucket = new Bucket().
-            setName(bucketName).
-            setAcl(bucketAcls.asJava).
-            setDefaultObjectAcl(defaultObjectAcls.asJava).
-            setLogging(logging).
-            setLabels(labels.asJava)
-          val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
-          executeGoogleRequest(inserter)
-
-          bucketName
-        }
-      }
+      retryWhen500orGoogleError { () =>
+        executeGoogleRequest(updater)
+      }.map(_.getName)
     }
 
-    def insertInitialStorageLog: (String) => Future[Unit] = { (bucketName) =>
+    def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], traceId: TraceId): Stream[IO, Unit] = {
+      //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
+      //do not have separate permissions that deviate from the bucket-level permissions.
+      //
+      // project owner - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace owner - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace writer - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace reader - organizations/$ORG_ID/roles/terraBucketReader
+      // bucket service account - organizations/$ORG_ID/roles/terraBucketWriter + roles/storage.admin
+
+      val customTerraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
+      val customTerraBucketWriterRole = StorageRole.CustomStorageRole(terraBucketWriterRole)
+
+      val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> customTerraBucketWriterRole, Owner -> customTerraBucketWriterRole, Write -> customTerraBucketWriterRole, Read -> customTerraBucketReaderRole)
+      val bucketRoles =
+        policyGroupsByAccessLevel.map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) } +
+          (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
+
+      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect { case (role,identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)}
+
+      //The calls to setBucketPolicyOnly and setIamPolicy are coupled because in this case, we only want to use these specific
+      //storage roles _if_ bucket policy only is enabled. See above comment for a more in-depth explanation.
+      for {
+        _ <- googleStorageService.setBucketPolicyOnly(GcsBucketName(bucketName), true)
+        _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities)
+      } yield ()
+    }
+
+    def insertInitialStorageLog(bucketName: String): Future[Unit] = {
       implicit val service = GoogleInstrumentedService.Storage
       retryWhen500orGoogleError {
         () => {
@@ -264,13 +271,15 @@ class HttpGoogleServicesDAO(
     }
 
     // setupWorkspace main logic
+    val traceId = TraceId(UUID.randomUUID())
 
-    val bucketInsertion = for {
-      bucketName <- insertBucket(policyGroupsByAccessLevel)
+    for {
+      _ <- googleStorageService.insertBucket(GoogleProject(project.projectName.value), GcsBucketName(bucketName), None, Map.empty, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture()
+      _ <- setBucketLogging(bucketName)
       _ <- insertInitialStorageLog(bucketName)
+      _ <- googleStorageService.setBucketLabels(GcsBucketName(bucketName), labels).compile.drain.unsafeToFuture()
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
-
-    bucketInsertion
   }
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
@@ -511,7 +520,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): IO[Unit] = {
+  override def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): Stream[IO, Unit] = {
     val gzipped = (body through fs2.compress.gzip[fs2.Pure](2048)).compile.toList.toArray //after fs2 1.0.4, we can `to[Array]` directly
     googleStorageService.storeObject(hammCromwellMetadata.bucketName, objectName, gzipped, "text/plain")
   }

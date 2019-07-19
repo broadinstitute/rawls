@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem}
+import cats.effect.{ContextShift, IO}
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource, _}
@@ -37,7 +38,7 @@ object BootMonitors extends LazyLogging {
                    useWorkflowCollectionField: Boolean,
                    useWorkflowCollectionLabel: Boolean,
                    defaultBackend: CromwellBackend,
-                   methodConfigResolver: MethodConfigResolver): Unit = {
+                   methodConfigResolver: MethodConfigResolver)(implicit cs: ContextShift[IO]): Unit = {
     //Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
 
@@ -114,7 +115,7 @@ object BootMonitors extends LazyLogging {
     }
   }
 
-  private def startBucketDeletionMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO) = {
+  private def startBucketDeletionMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit cs: ContextShift[IO]) = {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 

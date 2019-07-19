@@ -1,42 +1,37 @@
 package org.broadinstitute.dsde.test.api
 
-import language.postfixOps
 import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
+import cats.effect.IO
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.broadinstitute.dsde.workbench.auth.{AuthToken, ServiceAccountAuthTokenFromJson}
+import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.dao.Google
 import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
-import org.broadinstitute.dsde.workbench.fixture._
-import org.broadinstitute.dsde.workbench.fixture.{SimpleMethodConfig, MethodData}
-import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO
+import org.broadinstitute.dsde.workbench.fixture.{MethodData, SimpleMethodConfig, _}
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GoogleProject, ServiceAccount}
-import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry}
+import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.util.Retry
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
-import org.scalatest.{FreeSpecLike, Matchers}
 import org.scalatest.time.{Minutes, Seconds, Span}
 import org.scalatest.{FreeSpecLike, Matchers}
-
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
-import scala.concurrent.duration._
-import scala.collection.JavaConverters._
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
-import scala.util.{Random, Try}
 import spray.json._
+
+import scala.collection.JavaConverters._
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
   with CleanUp with RandomUtil with Retry
-  with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures {
+  with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures with RawlsTestSuite {
 
   // We only want to see the users' workspaces so we can't be Project Owners
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
@@ -319,11 +314,12 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
       }
     }
 
-    // bucket and object access levels for sam policies as described in comments in insertBucket function in HttpGoogleServicesDAO
-    val policyToBucketAccessLevel = Map("project-owner" -> "WRITER", "owner" -> "WRITER", "writer" -> "WRITER", "reader" -> "READER")
-    val policyToObjectAccessLevel = Map("project-owner" -> "READER", "owner" -> "READER", "writer" -> "READER", "reader" -> "READER")
+    // bucket IAM roles for sam policies as described in comments in updateBucketIam function in HttpGoogleServicesDAO
+    // Note that the role in this map is just the suffix, as the org ID will vary depending on which context this test is run
+    // We will check against just the suffix instead of the entire string
+    val policyToBucketRole = Map("project-owner" -> "terraBucketWriter", "owner" -> "terraBucketWriter", "writer" -> "terraBucketWriter", "reader" -> "terraBucketReader")
 
-    "should have correct policies in Sam and ACLs in Google when an unconstrained workspace is created" in {
+    "should have correct policies in Sam and IAM roles in Google when an unconstrained workspace is created" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
@@ -333,26 +329,19 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
           val samPolicies = verifySamPolicies(workspaceId)
           val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
 
-          // check bucket acls
+          // check bucket acls. bucket policy only is enabled for workspace buckets so we do not need to look at object acls
           val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
-          val expectedBucketRolesWithEmails = samPolicies.collect {
-            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("WRITER", emails.head)
-            case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
-          }
-          actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
 
-          // check object acls
-          val actualObjectRolesWithEmails = getObjectRolesWithEmails(bucketName)
-          val expectedObjectRolesWithEmails = samPolicies.collect {
-            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("READER", emails.head)
-            case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
-          }
-          actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
+          val expectedBucketRolesWithEmails = samPolicies.collect {
+            case AccessPolicyResponseEntry("project-owner", AccessPolicyMembership(emails, _, _), _) => ("terraBucketWriter", emails.head)
+            case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketRole.contains(policyName) => (policyToBucketRole(policyName), email.value)
+          }.groupBy{ case (policy, _) => policy}.map{ case (policy, policyRolePairs) => policy -> policyRolePairs.map(_._2)}
+          actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
         }
       }
     }
 
-    "should have correct policies in Sam and ACLs in Google when a constrained workspace is created" in {
+    "should have correct policies in Sam and IAM roles in Google when a constrained workspace is created" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
@@ -363,19 +352,12 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             val samPolicies = verifySamPolicies(workspaceId)
             val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
 
-            // check bucket acls
+            // check bucket acls. bucket policy only is enabled for workspace buckets so we do not need to look at object acls
             val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
             val expectedBucketRolesWithEmails = samPolicies.collect {
-              case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketAccessLevel.contains(policyName) => (policyToBucketAccessLevel(policyName), email.value)
-            }
-            actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
-
-            // check object acls
-            val actualObjectRolesWithEmails = getObjectRolesWithEmails(bucketName)
-            val expectedObjectRolesWithEmails = samPolicies.collect {
-              case AccessPolicyResponseEntry(policyName, _, email) if policyToObjectAccessLevel.contains(policyName) => (policyToObjectAccessLevel(policyName), email.value)
-            }
-            actualObjectRolesWithEmails should contain theSameElementsAs expectedObjectRolesWithEmails
+              case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketRole.contains(policyName) => (policyToBucketRole(policyName), email.value)
+            }.groupBy{ case (policy, _) => policy}.map{ case (policy, policyRolePairs) => policy -> policyRolePairs.map(_._2)}
+            actualBucketRolesWithEmails.toMap should contain theSameElementsAs expectedBucketRolesWithEmails
           }
         }
       }
@@ -493,22 +475,16 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
   private val serviceAccountEmailDomain = ".gserviceaccount.com"
 
   // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
-  private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, String)] = {
-    val bucketAcls = googleStorageDAO.getBucketAccessControls(bucketName).futureValue.getItems.asScala.toList
-    // service account should have owner access
-    assert(bucketAcls.exists(acl => Option(acl.getRole()).contains("OWNER") && Option(acl.getEmail()).exists(_.endsWith(serviceAccountEmailDomain))))
-    bucketAcls.collect {
-      case acl if (acl.getRole() != null && !acl.getRole().equals("OWNER")) => (acl.getRole(), acl.getEmail())
-    }
-  }
-
-  // Retrieves roles with policy emails for object acls and checks that service account is set up correctly
-  private def getObjectRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, String)] = {
-    val objectAcls = googleStorageDAO.getDefaultObjectAccessControls(bucketName).futureValue.getItems.asScala.toList
-    // service account should have owner access
-    assert(objectAcls.exists(acl => acl.getRole().equals("OWNER") && acl.getEmail().endsWith(serviceAccountEmailDomain)))
-    objectAcls.collect {
-      case acl if (acl.getRole() != null && !acl.getRole().equals("OWNER")) => (acl.getRole(), acl.getEmail())
-    }
+  private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, Set[String])] = {
+    GoogleStorageService.resource(RawlsConfig.pathToQAJson).use {
+      storage =>
+        for {
+         policy <- storage.getIamPolicy(bucketName, None).compile.lastOrError
+       } yield {
+          policy.getBindings.asScala.collect {
+            case binding if(binding._1.toString.contains("terraBucket")) => (binding._1.toString.split("/")(3), binding._2.asScala.map(_.getValue).toSet)
+          }
+       }.toList
+    }.unsafeRunSync()
   }
 }
