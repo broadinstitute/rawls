@@ -58,4 +58,8 @@ object MockCromwellSwaggerClient {
   def makeArrayValueType(value: ValueType): ValueType = {
     new ValueType().typeName(TypeNameEnum.ARRAY).arrayType(value)
   }
+
+  def makeOptionalValueType(value: ValueType): ValueType = {
+    new ValueType().typeName(TypeNameEnum.OPTIONAL).optionalType(value)
+  }
 }
