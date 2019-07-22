@@ -29,7 +29,7 @@ object Dependencies {
   val akkaTestKit: ModuleID =       "com.typesafe.akka"   %%  "akka-testkit"         % akkaV     % "test"
   val akkaHttpTestKit: ModuleID =   "com.typesafe.akka"   %%  "akka-http-testkit"    % akkaHttpV % "test"
 
-  val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" %% "cromwell-client" % "0.1-15a30475d-SNAP"
+  val cromwellClient: ModuleID =    "org.broadinstitute.cromwell" %% "cromwell-client" % "0.1-8b413b45f-SNAP"
   
   val googleApiClient: ModuleID =             excludeGuavaJDK5("com.google.api-client"  % "google-api-client"                         % googleV)
   val googleCloudBilling: ModuleID =          excludeGuavaJDK5("com.google.apis"        % "google-api-services-cloudbilling"          % ("v1-rev7-" + googleV))
