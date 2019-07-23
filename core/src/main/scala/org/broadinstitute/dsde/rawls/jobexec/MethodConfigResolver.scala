@@ -48,7 +48,7 @@ class MethodConfigResolver(wdlParser: WDLParser) {
 
   private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: ToolInputParameter): SubmissionValidationValue = wfInput.getValueType.getTypeName match {
     case TypeNameEnum.ARRAY => getArrayResult(wfInput.getName, mcSequence)
-    case TypeNameEnum.OPTIONAL  => if (wfInput.getValueType.getOptionalType == TypeNameEnum.ARRAY)
+    case TypeNameEnum.OPTIONAL  => if (wfInput.getValueType.getOptionalType.getTypeName == TypeNameEnum.ARRAY)
                                      getArrayResult(wfInput.getName, mcSequence)
                                    else getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional) //send optional-arrays down the same codepath as arrays
     case _ => getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional)

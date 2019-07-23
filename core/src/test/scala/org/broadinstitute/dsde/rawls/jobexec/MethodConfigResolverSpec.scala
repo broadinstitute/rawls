@@ -160,7 +160,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val requiredDoubleArrayInput =   makeToolInputParameter(doubleIntArrayName, false, makeArrayValueType(makeArrayValueType(makeValueType("Int"))), "Array[Array[Int]]")
   val requiredDoubleArrayWorkflowDescription =  makeWorkflowDescription("w1", List(requiredDoubleArrayInput), List.empty)
 
-  val optionalDoubleArrayInput =   makeToolInputParameter(doubleIntArrayName, false, makeArrayValueType(makeArrayValueType(makeValueType("Int"))), "Array[Array[Int]]")
+  val optionalDoubleArrayInput =   makeToolInputParameter(doubleIntArrayName, true, makeOptionalValueType(makeArrayValueType(makeArrayValueType(makeValueType("Int")))), "Array[Array[Int]]?")
   val optionalDoubleArrayWorkflowDescription =  makeWorkflowDescription("w1", List(optionalDoubleArrayInput), List.empty)
 
 
