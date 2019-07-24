@@ -97,7 +97,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    Await.result( mockGoogleServicesDAO.storeToken(userInfo, UUID.randomUUID.toString), Duration.Inf )
     mockServer.startServer()
   }
 
