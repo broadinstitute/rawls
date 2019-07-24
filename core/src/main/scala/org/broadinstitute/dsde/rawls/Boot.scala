@@ -361,7 +361,7 @@ object Boot extends IOApp with LazyLogging {
             executionServiceServers.map(c => c.key -> c.dao).toMap,
             groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
             topicsToCheck = Seq(gcsConfig.getString("notifications.topicName")),
-            bucketsToCheck = Seq.empty //TODO
+            bucketsToCheck = Seq(hammCromwellMetadata.bucketName.value)
           )
           .withDispatcher("health-monitor-dispatcher"),
         "health-monitor"
