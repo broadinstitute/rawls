@@ -95,6 +95,11 @@ trait AdminApiService extends UserInfoDirectives {
         }
       }
     } ~
+    path("admin" / "refreshToken" / Segment ) { userSubjectId =>
+      delete {
+        complete { userServiceConstructor(userInfo).AdminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId))) }
+      }
+    } ~
     path("admin" / "statistics") {
       get {
         parameters('startDate, 'endDate, 'workspaceNamespace.?, 'workspaceName.?) { (startDate, endDate, workspaceNamespace, workspaceName) =>
