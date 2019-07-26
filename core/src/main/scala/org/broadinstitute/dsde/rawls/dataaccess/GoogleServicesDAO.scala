@@ -126,6 +126,11 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @return sequence of RawlsBillingAccounts
     */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
+  def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
+  def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]
+  def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[DateTime]]
+  def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit]
+  def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit]
 
   def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
 
@@ -144,6 +149,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def toGoogleGroupName(groupName: RawlsGroupName): String
   def toBillingProjectGroupName(billingProjectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = s"PROJECT_${billingProjectName.value}-${role.toString}"
 
+  def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]]
   def getBucketServiceAccountCredential: Credential
   def getServiceAccountRawlsUser(): Future[RawlsUser]
   def getServiceAccountUserInfo(): Future[UserInfo]

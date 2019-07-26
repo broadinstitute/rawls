@@ -26,12 +26,24 @@ trait UserApiService extends UserInfoDirectives {
   // standard /api routes begin here
 
   val userRoutes: server.Route = requireUserInfo() { userInfo =>
-    pathPrefix("user" / "billing") {
-      pathEnd {
+    path("user" / "refreshToken") {
+      put {
+        entity(as[UserRefreshToken]) { token =>
+          complete { userServiceConstructor(userInfo).SetRefreshToken(token) }
+        }
+      }
+    } ~
+      path("user" / "refreshTokenDate") {
         get {
-          complete { userServiceConstructor(userInfo).ListBillingProjects }
+          complete { userServiceConstructor(userInfo).GetRefreshTokenDate }
         }
       } ~
+      pathPrefix("user" / "billing") {
+        pathEnd {
+          get {
+            complete { userServiceConstructor(userInfo).ListBillingProjects }
+          }
+        } ~
         path(Segment) { projectName =>
           get {
             complete { userServiceConstructor(userInfo).GetBillingProjectStatus(RawlsBillingProjectName(projectName)) }
