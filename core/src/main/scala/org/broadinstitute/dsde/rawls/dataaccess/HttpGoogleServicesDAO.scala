@@ -69,6 +69,7 @@ import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager
 import io.chrisdavenport.linebacker.Linebacker
 import io.chrisdavenport.log4cats.Logger
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
+import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.util.ExecutionContexts
 
 import scala.collection.JavaConverters._
@@ -249,7 +250,11 @@ class HttpGoogleServicesDAO(
       //storage roles _if_ bucket policy only is enabled. See above comment for a more in-depth explanation.
       for {
         _ <- googleStorageService.setBucketPolicyOnly(GcsBucketName(bucketName), true)
-        _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities)
+
+        // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
+        // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
+        _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities,
+          retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardRetryPredicate, RetryPredicates.whenStatusCode(400)))
       } yield ()
     }
 
