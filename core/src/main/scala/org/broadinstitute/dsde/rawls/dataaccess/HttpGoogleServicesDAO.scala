@@ -190,7 +190,7 @@ class HttpGoogleServicesDAO(
 
     val result = for{
       traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-      _ <- googleStorageService.insertBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Map.empty, Some(traceId))
+      _ <- googleStorageService.insertBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, None, Map.empty, Some(traceId))
       _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
       _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
       projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
@@ -279,7 +279,7 @@ class HttpGoogleServicesDAO(
     val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- googleStorageService.insertBucket(GoogleProject(project.projectName.value), GcsBucketName(bucketName), None, Map.empty, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- googleStorageService.insertBucket(GoogleProject(project.projectName.value), GcsBucketName(bucketName), project.googleRegion.map(_.storageLocation), None, Map.empty, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
       _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture()
       _ <- setBucketLogging(bucketName)
       _ <- insertInitialStorageLog(bucketName)

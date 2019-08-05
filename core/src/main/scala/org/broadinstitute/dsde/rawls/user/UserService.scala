@@ -17,13 +17,12 @@ import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchProjectLocation}
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
-
 import cats.implicits._
 
 /**
@@ -239,7 +238,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   //but that seems extremely shady
   def registerBillingProject(xfer: RawlsBillingProjectTransfer): Future[PerRequestMessage] = {
     val billingProjectName = RawlsBillingProjectName(xfer.project)
-    val project = RawlsBillingProject(billingProjectName, s"gs://${xfer.bucket}", CreationStatuses.Ready, None, None)
+    val project = RawlsBillingProject(billingProjectName, s"gs://${xfer.bucket}", CreationStatuses.Ready, None, Some(WorkbenchProjectLocation.US), None)
     val ownerUserInfo = UserInfo(RawlsUserEmail(xfer.newOwnerEmail), OAuth2BearerToken(xfer.newOwnerToken), 3600, RawlsUserSubjectId("0"))
 
 
@@ -382,7 +381,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
               _ <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, userInfo))
               _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), userInfo))
               _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
-              project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(createProjectRequest.projectName, "gs://" + gcsDAO.getCromwellAuthBucketName(createProjectRequest.projectName), CreationStatuses.Creating, Option(createProjectRequest.billingAccount), None, None, createProjectRequest.servicePerimeter))
+              project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(createProjectRequest.projectName, "gs://" + gcsDAO.getCromwellAuthBucketName(createProjectRequest.projectName), CreationStatuses.Creating, Option(createProjectRequest.billingAccount), WorkbenchProjectLocation.fromName(createProjectRequest.googleRegion), None, None, createProjectRequest.servicePerimeter)) //TODO: bad get, probably just let it be an option
             } yield project
 
           case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))
