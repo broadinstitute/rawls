@@ -44,7 +44,7 @@ object ManagedGroup {
 case class ManagedGroup(membersGroup: RawlsGroup, adminsGroup: RawlsGroup) extends Managed
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], googleRegion: Option[WorkbenchProjectLocation], message: Option[String], cromwellBackend: Option[CromwellBackend] = None, servicePerimeter: Option[ServicePerimeterName] = None, googleProjectNumber: Option[GoogleProjectNumber] = None)
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], location: Option[WorkbenchProjectLocation], message: Option[String], cromwellBackend: Option[CromwellBackend] = None, servicePerimeter: Option[ServicePerimeterName] = None, googleProjectNumber: Option[GoogleProjectNumber] = None)
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
@@ -96,7 +96,7 @@ object CreationStatuses {
 case class CreateRawlsBillingProjectFullRequest(
   projectName: RawlsBillingProjectName,
   billingAccount: RawlsBillingAccountName,
-  googleRegion: String,
+  location: String,
   highSecurityNetwork: Option[Boolean],
   enableFlowLogs: Option[Boolean],
   servicePerimeter: Option[ServicePerimeterName])
