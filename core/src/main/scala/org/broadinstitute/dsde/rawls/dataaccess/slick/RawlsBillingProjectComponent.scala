@@ -21,13 +21,13 @@ trait RawlsBillingProjectComponent {
     def cromwellAuthBucketUrl = column[String]("CROMWELL_BUCKET_URL", O.Length(128))
     def creationStatus = column[String]("CREATION_STATUS", O.Length(20))
     def billingAccount = column[Option[String]]("BILLING_ACCOUNT", O.Length(100))
-    def googleRegion = column[Option[String]]("GOOGLE_LOCATION")
+    def location = column[Option[String]]("LOCATION")
     def message = column[Option[String]]("MESSAGE")
     def cromwellBackend = column[Option[String]]("CROMWELL_BACKEND")
     def servicePerimeter = column[Option[String]]("SERVICE_PERIMETER")
     def googleProjectNumber = column[Option[String]]("GOOGLE_PROJECT_NUMBER")
 
-    def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount, googleRegion, message, cromwellBackend, servicePerimeter, googleProjectNumber) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
+    def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount, location, message, cromwellBackend, servicePerimeter, googleProjectNumber) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
 
   // these 2 implicits are lazy because there is a timing problem initializing MappedColumnType, if they are not lazy
@@ -140,7 +140,7 @@ trait RawlsBillingProjectComponent {
     }
 
     private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject = {
-      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.googleRegion.flatMap(x => WorkbenchProjectLocation.fromName(x)), projectRecord.message, projectRecord.cromwellBackend.map(CromwellBackend), projectRecord.servicePerimeter.map(ServicePerimeterName), projectRecord.googleProjectNumber.map(GoogleProjectNumber)) //TODO: bad get!
+      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.googleRegion.flatMap(location => WorkbenchProjectLocation.fromName(location)), projectRecord.message, projectRecord.cromwellBackend.map(CromwellBackend), projectRecord.servicePerimeter.map(ServicePerimeterName), projectRecord.googleProjectNumber.map(GoogleProjectNumber)) //TODO: bad get!
     }
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {

@@ -3,7 +3,7 @@
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="location_on_billingproject">
         <addColumn tableName="BILLING_PROJECT">
-            <column name="GOOGLE_LOCATION" type="VARCHAR(255)">
+            <column name="LOCATION" type="VARCHAR(255)">
                 <constraints nullable="true"/>
             </column>
         </addColumn>
