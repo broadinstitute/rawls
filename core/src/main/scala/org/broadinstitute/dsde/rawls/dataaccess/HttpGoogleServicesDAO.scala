@@ -831,7 +831,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String], location: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -840,7 +840,9 @@ class HttpGoogleServicesDAO(
     import spray.json.DefaultJsonProtocol._
     import DeploymentManagerJsonSupport._
 
-    val templateLabels = parseTemplateLocation(dmTemplatePath).map(_.toJson).getOrElse(Map("template_path" -> labelSafeString(dmTemplatePath)).toJson)
+    val templateLabels = parseTemplateLocation(dmTemplatePath).map(_.toJson).getOrElse(Map("template_path" -> labelSafeString(dmTemplatePath)).toJson).convertTo[Map[String, String]]
+
+    val projectLocationLabel = Map("project_location" -> location.get) //todo
 
     val properties = Map (
       "billingAccountId" -> billingAccount.accountName.value.toJson,
@@ -855,7 +857,7 @@ class HttpGoogleServicesDAO(
       "enableFlowLogs" -> enableFlowLogs.toJson,
       "fcProjectOwners" -> projectTemplate.owners.toJson,
       "fcProjectEditors" -> projectTemplate.editors.toJson,
-      "labels" -> templateLabels
+      "labels" -> (templateLabels ++ projectLocationLabel).toJson
     ) ++ parentFolderId.map("parentFolder" -> folderNumberOnly(_).toJson).toMap
 
     //a list of one resource: type=composite-type, name=whocares, properties=pokein
