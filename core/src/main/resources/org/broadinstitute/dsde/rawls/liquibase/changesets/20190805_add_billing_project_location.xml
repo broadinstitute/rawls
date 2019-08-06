@@ -11,7 +11,7 @@
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="backfill-project-locations">
         <sql stripComments="true">
-            update BILLING_PROJECT set LOCATION="us" where LOCATION=NULL
+            update BILLING_PROJECT set LOCATION="us" where LOCATION is NULL
         </sql>
     </changeSet>
 
