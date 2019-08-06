@@ -324,7 +324,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Error, Option(s"project ${project1.projectName.value} creation finished with errors: this failed")))) {
+          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Error, Some(WorkbenchProjectLocation.US.name), Option(s"project ${project1.projectName.value} creation finished with errors: this failed")))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
             responseAs[List[RawlsBillingProjectMembership]]
           }
