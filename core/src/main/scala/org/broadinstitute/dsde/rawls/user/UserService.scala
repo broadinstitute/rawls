@@ -184,8 +184,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case SamResourceIdWithPolicyName(resourceId, SamBillingProjectPolicyNames.owner, _, _, _) => (resourceId, ProjectRoles.Owner)
         case SamResourceIdWithPolicyName(resourceId, SamBillingProjectPolicyNames.workspaceCreator, _, _, _) => (resourceId, ProjectRoles.User)
       }.flatMap { case (resourceId, role) =>
-        projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
-          RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
+        projectDetailsByName.get(resourceId).map { case (projectStatus, location, message) =>
+          RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, location, message)
         }
       }.toList.sortBy(_.projectName.value)
     }

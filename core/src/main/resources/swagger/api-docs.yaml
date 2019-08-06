@@ -4804,6 +4804,9 @@ definitions:
       billingAccount:
         type: string
         description: the id of the billing account to use, must start with 'billingAccounts/'
+      location:
+        type: string
+        description: the location where the project's storage and compute will live
       highSecurityNetwork:
         type: boolean
         description: Optional, false if not specified. If true, spin up all compute in a VPC network.
@@ -4818,7 +4821,8 @@ definitions:
     required:
       - projectName
       - role
-      - status
+      - location
+      - creationStatus
     properties:
       projectName:
         type: string
@@ -4826,7 +4830,10 @@ definitions:
       role:
         type: string
         description: the role of the current user in the project
-      status:
+      location:
+        type: string
+        description: the location where the project's storage and compute will live
+      creationStatus:
         type: string
         enum: ["Creating", "Ready", "Error"]
       message:
