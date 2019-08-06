@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchProjectLocation
 
-case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], googleRegion: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String])
+case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], location: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String])
 case class RawlsBillingProjectOperationRecord(projectName: String, operationName: GoogleOperationName, operationId: String, done: Boolean, errorMessage: Option[String], api: GoogleApiType)
 
 trait RawlsBillingProjectComponent {
@@ -140,7 +140,7 @@ trait RawlsBillingProjectComponent {
     }
 
     private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject = {
-      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.googleRegion.flatMap(location => WorkbenchProjectLocation.fromName(location)), projectRecord.message, projectRecord.cromwellBackend.map(CromwellBackend), projectRecord.servicePerimeter.map(ServicePerimeterName), projectRecord.googleProjectNumber.map(GoogleProjectNumber)) //TODO: bad get!
+      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.location.flatMap(location => WorkbenchProjectLocation.fromName(location)), projectRecord.message, projectRecord.cromwellBackend.map(CromwellBackend), projectRecord.servicePerimeter.map(ServicePerimeterName), projectRecord.googleProjectNumber.map(GoogleProjectNumber))
     }
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {
