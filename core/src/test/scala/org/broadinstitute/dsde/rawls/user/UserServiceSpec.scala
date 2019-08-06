@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleSe
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import org.broadinstitute.dsde.workbench.model.WorkbenchProjectLocation
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.mockito.MockitoSugar
@@ -26,7 +27,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
   val defaultGoogleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("42")
   val defaultCromwellBucketUrl: String = "bucket-url"
   val defaultBillingProjectName: RawlsBillingProjectName = RawlsBillingProjectName("test-bp")
-  val defaultBillingProject: RawlsBillingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.Ready, None, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
+  val defaultBillingProject: RawlsBillingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.Ready, None, Some(WorkbenchProjectLocation.US), None, googleProjectNumber = Option(defaultGoogleProjectNumber))
   val defaultMockSamDAO: SamDAO = mock[SamDAO]
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val testConf: Config = ConfigFactory.load()

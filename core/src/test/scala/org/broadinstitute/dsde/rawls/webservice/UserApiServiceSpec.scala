@@ -21,6 +21,7 @@ import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
+import org.broadinstitute.dsde.workbench.model.WorkbenchProjectLocation
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -109,9 +110,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
       // first add the project and user to the DB
 
       val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, Some(WorkbenchProjectLocation.US), None)
 
-      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
+      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, WorkbenchProjectLocation.US.name, None, None, None)
 
       import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 
@@ -188,9 +189,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
       // first add the project and user to the DB
 
       val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, Some(WorkbenchProjectLocation.US), None)
 
-      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
+      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, WorkbenchProjectLocation.US.name, None, None, None)
 
       import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 
@@ -259,9 +260,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
       // first add the project and user to the DB
 
       val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, Some(WorkbenchProjectLocation.US), None)
 
-      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
+      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, WorkbenchProjectLocation.US.name, None, None, None)
 
       import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 
@@ -333,8 +334,8 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when adding a user to a billing project that the caller owns" in withTestDataApiServices { services =>
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
-    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, Some(WorkbenchProjectLocation.US), None)
+    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, WorkbenchProjectLocation.US.name, None, None, None)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 
@@ -361,8 +362,8 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when removing a user from a billing project that the caller owns" in withTestDataApiServices { services =>
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
-    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, Some(WorkbenchProjectLocation.US), None)
+    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, WorkbenchProjectLocation.US.name, None, None, None)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 

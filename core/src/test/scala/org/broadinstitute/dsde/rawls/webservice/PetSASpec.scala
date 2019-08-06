@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.model._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import org.broadinstitute.dsde.workbench.model.WorkbenchProjectLocation
 
 import scala.concurrent.ExecutionContext
 
@@ -115,7 +116,7 @@ class PetSASpec extends ApiServiceSpec {
     val userSAProjectOwnerUserInfo = UserInfo(RawlsUserEmail("project-owner-access-sa@abc.iam.gserviceaccount.com"), OAuth2BearerToken("SA-but-not-pet-token"), 123, RawlsUserSubjectId("123456789876543210202"))
     val userSAProjectOwner = RawlsUser(userSAProjectOwnerUserInfo)
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), "testBucketUrl", CreationStatuses.Ready, None, None)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), "testBucketUrl", CreationStatuses.Ready, None, Some(WorkbenchProjectLocation.US), None)
 
     val workspaceName = WorkspaceName(billingProject.projectName.value, "testworkspace")
 

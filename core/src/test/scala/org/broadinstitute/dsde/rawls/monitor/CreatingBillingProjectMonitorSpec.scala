@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
+import org.broadinstitute.dsde.workbench.model.WorkbenchProjectLocation
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterEach, FlatSpecLike, Matchers}
 import org.mockito.{ArgumentMatcher, ArgumentMatchers}
@@ -40,7 +41,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
 
   "CreatingBillingProjectMonitor" should "set project status to 'AddingToPerimeter' when it's been successfully created and it has a service perimeter" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.Creating, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.Creating, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
       val creatingOperation = RawlsBillingProjectOperationRecord(billingProject.projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, "opid", true, None, GoogleApiTypes.DeploymentManagerApi)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -62,9 +63,9 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
   it should "include projects that are already in the perimeter" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val newBillingProjectNumber = GoogleProjectNumber("1")
-      val newBillingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(newBillingProjectNumber))
+      val newBillingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(newBillingProjectNumber))
       val existingBillingProjectNumber = GoogleProjectNumber("2")
-      val existingBillingProject = RawlsBillingProject(RawlsBillingProjectName("existing-project"), defaultCromwellBucketUrl, CreationStatuses.Ready, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(existingBillingProjectNumber))
+      val existingBillingProject = RawlsBillingProject(RawlsBillingProjectName("existing-project"), defaultCromwellBucketUrl, CreationStatuses.Ready, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(existingBillingProjectNumber))
 
       runAndWait(rawlsBillingProjectQuery.create(newBillingProject))
       runAndWait(rawlsBillingProjectQuery.create(existingBillingProject))
@@ -95,14 +96,14 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
 
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val projectNumber1 = GoogleProjectNumber("1")
-      val billingProject1 = RawlsBillingProject(RawlsBillingProjectName("test-bp1"), defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(projectNumber1))
+      val billingProject1 = RawlsBillingProject(RawlsBillingProjectName("test-bp1"), defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(projectNumber1))
 
       val projectNumber2 = GoogleProjectNumber("2")
-      val billingProject2 = RawlsBillingProject(RawlsBillingProjectName("test-bp2"), defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(projectNumber2))
+      val billingProject2 = RawlsBillingProject(RawlsBillingProjectName("test-bp2"), defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(projectNumber2))
 
       val otherServicePerimeter = ServicePerimeterName("other-perimeter")
       val projectNumber3 = GoogleProjectNumber("3")
-      val billingProject3 = RawlsBillingProject(RawlsBillingProjectName("test-bp3"), defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, None, servicePerimeter = Option(otherServicePerimeter), googleProjectNumber = Option(projectNumber3))
+      val billingProject3 = RawlsBillingProject(RawlsBillingProjectName("test-bp3"), defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(otherServicePerimeter), googleProjectNumber = Option(projectNumber3))
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject1))
       runAndWait(rawlsBillingProjectQuery.create(billingProject2))
@@ -144,7 +145,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
     // billing project in adding to perimeter, with still running operation -- should call google dao to poll but no state change
 
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
       val addingProjectToPerimeterOperation = RawlsBillingProjectOperationRecord(billingProject.projectName.value, GoogleOperationNames.AddProjectToPerimeter, "opid", false, None, GoogleApiTypes.AccessContextManagerApi)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -170,7 +171,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
     // billing project in adding to perimeter, with complete operation -- should call google dao to poll and change state (op done, project ready)
 
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
       val addingProjectToPerimeterOperation = RawlsBillingProjectOperationRecord(billingProject.projectName.value, GoogleOperationNames.AddProjectToPerimeter, "opid", false, None, GoogleApiTypes.AccessContextManagerApi)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -198,7 +199,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
   it should "raise an exception for duplicate primary keys when multiple operations with the same operation name exist for a single project" in {
     // billing project in adding to perimeter, with more than 1 operation -- project should error
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
       val addingProjectToPerimeterOperation = RawlsBillingProjectOperationRecord(billingProject.projectName.value, GoogleOperationNames.AddProjectToPerimeter, "opid", false, None, GoogleApiTypes.AccessContextManagerApi)
       val extraAddProjectToPerimeterOperation = RawlsBillingProjectOperationRecord(billingProject.projectName.value, GoogleOperationNames.AddProjectToPerimeter, "opid", false, None, GoogleApiTypes.AccessContextManagerApi)
 
@@ -212,7 +213,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
   it should "set project state to 'Error' when its state is 'AddingToPerimeter' but no perimeter is saved in the DB" in {
     // billing project in adding to perimeter, no operations, no perimeter specified -- project should error
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, None, servicePerimeter = None, googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = None, googleProjectNumber = Option(defaultGoogleProjectNumber))
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
 
@@ -232,8 +233,8 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
   it should "raise an exception when an existing project in a perimeter has no project number" in {
     // billing project in adding to perimeter, no operations but there is an existing project in perimeter with no project number -- exception
     withEmptyTestDatabase { dataSource: SlickDataSource =>
-      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
-      val existingProjectWithoutNumber = RawlsBillingProject(RawlsBillingProjectName("no-google-project-number"), defaultCromwellBucketUrl, CreationStatuses.Ready, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = None)
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val existingProjectWithoutNumber = RawlsBillingProject(RawlsBillingProjectName("no-google-project-number"), defaultCromwellBucketUrl, CreationStatuses.Ready, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = None)
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(rawlsBillingProjectQuery.create(existingProjectWithoutNumber))
@@ -254,7 +255,7 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
   it should "set project state to 'Error' when call to Google fails" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val number = GoogleProjectNumber("1")
-      val billingProject = RawlsBillingProject(RawlsBillingProjectName("test-bp"), defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(number))
+      val billingProject = RawlsBillingProject(RawlsBillingProjectName("test-bp"), defaultCromwellBucketUrl, CreationStatuses.AddingToPerimeter, None, Some(WorkbenchProjectLocation.US), None, servicePerimeter = Option(defaultServicePerimeterName), googleProjectNumber = Option(number))
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
 
