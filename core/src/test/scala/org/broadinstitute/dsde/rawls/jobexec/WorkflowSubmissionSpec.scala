@@ -218,7 +218,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   it should "submit a workflow with the right parameters and options" in withDefaultTestDatabase {
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
-    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, runtimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-someother"))))) {
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, runtimeOptions = Some(JsObject(Map("foo" -> JsString("bar"), "zones" -> JsString("us-central1-b us-central1-c us-central1-f"))))) {
       override val executionServiceCluster = mockExecCluster
     }
 
@@ -242,7 +242,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}""",
             testData.billingProject.cromwellAuthBucketUrl,
             s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
-            Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
+            Some(JsObject(Map("foo" -> JsString("bar"), "zones" -> JsString("us-central1-b us-central1-c us-central1-f")))),
             false,
             CromwellBackend("PAPIv2"),
             google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}")

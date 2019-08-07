@@ -190,9 +190,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       case None => throw new RawlsException(s"client_email missing for service account key json")
     }
 
+
     val zones = billingProject.location match {
       case Some(x) => x.computeRegionAndZones.values.flatten
-      case None => Seq() // TODO: should this grab some default
+      case None => Seq() // TODO: location will be non-optional... so we will always have it.  At this point should the config
     }
 
     val updatedRuntimeOptions = runtimeOptions match {
@@ -201,13 +202,13 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val updatedJs = if (zones.nonEmpty ) {
           JsObject(x.fields + ("zones" -> JsString(zones.mkString(" "))))
         } else {
-          x
+          x // TODO: similarly here, if there are no zones, we just want to add zones...
         }
         Some(updatedJs)
-      case None => None
+      case None => None // TODO: if there are no runtimeOptions, we still want to specify zones here
     }
 
-    logger.info("ZONES: before" + runtimeOptions + " and after" + updatedRuntimeOptions )
+    logger.info("ZONES: before" + runtimeOptions + " and after" + updatedRuntimeOptions + " based on " + billingProject.location.map( _.name) )
 
     ExecutionServiceWorkflowOptions(
       s"gs://${workspace.bucketName}/${submissionId}",
