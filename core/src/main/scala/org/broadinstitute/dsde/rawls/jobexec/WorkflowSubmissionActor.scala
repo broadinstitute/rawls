@@ -21,6 +21,7 @@ import spray.json._
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import spray.json._
 
 
 object WorkflowSubmissionActor {
@@ -189,6 +190,25 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       case None => throw new RawlsException(s"client_email missing for service account key json")
     }
 
+    val zones = billingProject.location match {
+      case Some(x) => x.computeRegionAndZones.values.flatten
+      case None => Seq() // TODO: should this grab some default
+    }
+
+    val updatedRuntimeOptions = runtimeOptions match {
+      case Some(o) =>
+        val x = o.asJsObject
+        val updatedJs = if (zones.nonEmpty ) {
+          JsObject(x.fields + ("zones" -> JsString(zones.mkString(" "))))
+        } else {
+          x
+        }
+        Some(updatedJs)
+      case None => None
+    }
+
+    logger.info("ZONES: before" + runtimeOptions + " and after" + updatedRuntimeOptions )
+
     ExecutionServiceWorkflowOptions(
       s"gs://${workspace.bucketName}/${submissionId}",
       workspace.namespace,
@@ -197,7 +217,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       petSAJson,
       billingProject.cromwellAuthBucketUrl,
       s"gs://${workspace.bucketName}/${submissionId}/workflow.logs",
-      runtimeOptions,
+      updatedRuntimeOptions,
       useCallCache,
       billingProject.cromwellBackend.getOrElse(defaultBackend),
       workflowFailureMode,
