@@ -56,7 +56,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes}
-import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
+import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail, WorkbenchProjectLocation}
 import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -831,7 +831,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String], location: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String], location: Option[WorkbenchProjectLocation]): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -842,7 +842,7 @@ class HttpGoogleServicesDAO(
 
     val templateLabels = parseTemplateLocation(dmTemplatePath).map(_.toJson).getOrElse(Map("template_path" -> labelSafeString(dmTemplatePath)).toJson).convertTo[Map[String, String]]
 
-    val projectLocationLabel = Map("project_location" -> location.get) //todo
+    val projectLocationLabel = Map("project_location" -> location.get.name) //todo
 
     val properties = Map (
       "billingAccountId" -> billingAccount.accountName.value.toJson,
@@ -852,6 +852,7 @@ class HttpGoogleServicesDAO(
       "fcBillingGroup" -> billingGroupEmail.toJson,
       "projectOwnersGroup" -> ownerGroupEmail.value.toJson,
       "projectViewersGroup" -> computeUserGroupEmail.value.toJson,
+      "storageLocation" -> location.get.storageLocation.toJson,
       "requesterPaysRole" -> requesterPaysRole.toJson,
       "highSecurityNetwork" -> highSecurityNetwork.toJson,
       "enableFlowLogs" -> enableFlowLogs.toJson,

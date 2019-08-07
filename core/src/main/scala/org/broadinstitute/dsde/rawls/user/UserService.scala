@@ -392,10 +392,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, createProjectRequest.projectName)
       computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, createProjectRequest.projectName)
 
-      // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
+      // each service perimeter shostorageLocationuld have a folder which is used to make an aggregate log sink for flow logs
       parentFolderId <- createProjectRequest.servicePerimeter.traverse(lookupFolderIdFromServicePerimeterName)
 
-      createProjectOperation <- gcsDAO.createProject(createProjectRequest.projectName, billingAccount, dmConfig.templatePath, createProjectRequest.highSecurityNetwork.getOrElse(false), createProjectRequest.enableFlowLogs.getOrElse(false), requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate, parentFolderId, Option(createProjectRequest.location)).recoverWith {
+      createProjectOperation <- gcsDAO.createProject(createProjectRequest.projectName, billingAccount, dmConfig.templatePath, createProjectRequest.highSecurityNetwork.getOrElse(false), createProjectRequest.enableFlowLogs.getOrElse(false), requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate, parentFolderId, WorkbenchProjectLocation.fromName(createProjectRequest.location)).recoverWith {
         case t: Throwable =>
           // failed to create project in google land, rollback inserts above
           dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(createProjectRequest.projectName) } map(_ => throw t)

@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogle
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchProjectLocation}
 import org.joda.time.DateTime
 import spray.json._
 
@@ -200,7 +200,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(true)
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String], location: Option[String]): Future[RawlsBillingProjectOperationRecord] =
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String], location: Option[WorkbenchProjectLocation]): Future[RawlsBillingProjectOperationRecord] =
     Future.successful(RawlsBillingProjectOperationRecord(projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, "opid", false, None, GoogleApiTypes.DeploymentManagerApi))
 
   override def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(())
