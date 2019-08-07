@@ -61,7 +61,7 @@ import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes, model}
-import com.google.cloud.storage.BucketInfo
+import com.google.cloud.storage.{BucketInfo, StorageClass}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
@@ -190,7 +190,7 @@ class HttpGoogleServicesDAO(
 
     val result = for{
       traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-      _ <- googleStorageService.insertBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, None, Map.empty, Some(traceId))
+      _ <- googleStorageService.insertBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, None, None, Map.empty, Some(traceId))
       _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
       _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
       projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
@@ -279,7 +279,7 @@ class HttpGoogleServicesDAO(
     val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- googleStorageService.insertBucket(GoogleProject(project.projectName.value), GcsBucketName(bucketName), project.location.map(_.storageLocation), None, Map.empty, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- googleStorageService.insertBucket(GoogleProject(project.projectName.value), GcsBucketName(bucketName), project.location.map(_.storageLocation), project.location.map(x => StorageClass.valueOfStrict(x.storageClass.toUpperCase)), None, Map.empty, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
       _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture()
       _ <- setBucketLogging(bucketName)
       _ <- insertInitialStorageLog(bucketName)
