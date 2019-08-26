@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor
 import java.sql.SQLException
 
 import com.google.api.services.accesscontextmanager.v1beta.model.Operation
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, TestDriverComponent}
@@ -14,6 +15,8 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfterEach, FlatSpecLike, Matchers}
 import org.mockito.{ArgumentMatcher, ArgumentMatchers}
 import org.mockito.Mockito._
+
+import scala.collection.JavaConverters._
 import org.scalatest.mockito.MockitoSugar
 
 import scala.concurrent.duration.Duration
@@ -36,6 +39,17 @@ class CreatingBillingProjectMonitorSpec extends MockitoSugar with FlatSpecLike w
       override val samDAO: SamDAO = new MockSamDAO(dataSource)
       override val requesterPaysRole: String = "requesterPaysRole"
     }
+  }
+
+  "Config" should "optionally include static projects for service perimeters" in {
+    val perimeterKey = "accessPolicies/123456789/servicePerimeters/wicked_secure"
+    val staticProjectsConfig = ConfigFactory.load().getConfig("gcs.servicePerimeters.staticProjects")
+    val staticProjectNumbers = if (staticProjectsConfig.hasPath(perimeterKey)) {
+      staticProjectsConfig.getStringList(perimeterKey).asScala
+    } else {
+      List.empty
+    }
+    staticProjectNumbers should contain theSameElementsAs(List("SOME GOOGLE PROJECT NUMBER"))
   }
 
   "CreatingBillingProjectMonitor" should "set project status to 'AddingToPerimeter' when it's been successfully created and it has a service perimeter" in {

@@ -4,6 +4,7 @@ import akka.actor.Status.Failure
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.services.accesscontextmanager.v1beta.model.Operation
+import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -14,7 +15,7 @@ import org.broadinstitute.dsde.workbench.util.FutureSupport
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util
+import scala.collection.JavaConverters._
 import scala.util.{Success, Try}
 
 /**
@@ -126,7 +127,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     * RawlsBillingProjects that need to be added to the perimeter.  Caution: the Google APIs for PATCHing a Service
     * Perimeter will OVERWRITE the project list with the provided list.  Therefore, whenever we update the list of
     * projects in a perimeter, we must specify the ENTIRE membership list.  We can get the intended membership list from
-    * the Rawls DB.
+    * the Rawls DB and from the Rawls config which can optionally list additional projects that should be included in
+    * a specific perimeter.
     * @param servicePerimeterName
     * @param newProjectsInPerimeter all of these projects must be in servicePerimeterName
     * @throws IllegalArgumentException if there are any members of newProjectsInPerimeter not in servicePerimeterName
@@ -141,7 +143,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
         allProjectsInPerimeter <- datasource.inTransaction { dataAccess =>
           dataAccess.rawlsBillingProjectQuery.listProjectsWithServicePerimeterAndStatus(servicePerimeterName, CreationStatuses.Ready, CreationStatuses.AddingToPerimeter)
         }
-        allProjectNumbers = allProjectsInPerimeter.flatMap { project =>
+        rawlsProjectsInPerimeter = allProjectsInPerimeter.flatMap { project =>
           project.googleProjectNumber match {
             case Some(googleProjectNumber) => Option(googleProjectNumber.value)
             case None if !newProjectsInPerimeter.map(_.projectName).contains(project.projectName) =>
@@ -153,11 +155,29 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
               throw new RawlsException(s"project ${project.projectName} has a perimeter but does not have a project number in the database, please lookup the project in google console and add it to the database. Projects cannot be added to perimeter ${servicePerimeterName.value} until this is fixed")
           }
         }
+        // We overwrite ALL projects in the Perimeter any time a new project is added.  We need to make sure the "static"
+        // projects are not forgotten
+        allProjectNumbers = rawlsProjectsInPerimeter ++ loadStaticProjectsForPerimeter(servicePerimeterName)
         // Initiate operation to overwrite the list of projects in the Perimeter on Google
         operationTry <- gcsDAO.accessContextManagerDAO.overwriteProjectsInServicePerimeter(servicePerimeterName, allProjectNumbers).toTry
 
         _ <- persistUpdatesFromOperation(operationTry, servicePerimeterName, newProjectsInPerimeter)
       } yield ()
+    }
+  }
+
+  /**
+    * The configs hold a list of static project numbers that should be added to a specific Service Perimeter for
+    * administrative purpose.  See https://broadworkbench.atlassian.net/browse/CA-463
+    * @param servicePerimeterName
+    * @return Sequence of Google Project Number strings
+    */
+  private def loadStaticProjectsForPerimeter(servicePerimeterName: ServicePerimeterName): Seq[String] = {
+    val staticProjectsConfig = ConfigFactory.load().getConfig("gcs.servicePerimeters.staticProjects")
+    if (staticProjectsConfig.hasPath(servicePerimeterName.value)) {
+      staticProjectsConfig.getStringList(servicePerimeterName.value).asScala
+    } else {
+      List.empty
     }
   }
 
