@@ -663,7 +663,6 @@ class HttpGoogleServicesDAO(
 
     val cred = getUserCredential(userInfo)
     listBillingAccounts(cred) flatMap { accountList =>
-
       //some users have TONS of billing accounts, enough to hit quota limits.
       //break the list of billing accounts up into chunks, and process the chunks serially.
       //this should slow things down somewhat, though we may need to upgrade this to a throttle.
@@ -672,13 +671,13 @@ class HttpGoogleServicesDAO(
       //Iterate over each chunk.
       val allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks traverse { chunk =>
 
-        //Future.sequence each chunk (i.e. run all tests in the chunk in parallel)
-        IO.fromFuture(IO(Future.sequence(chunk map { acct =>
+        //Run all tests in the chunk in parallel.
+        IO.fromFuture(IO(Future.traverse(chunk){ acct =>
           val acctName = acct.getName
           testDMBillingAccountAccess(acctName) map { firecloudHasAccount =>
             RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount, acct.getDisplayName)
           }
-        })))
+        }))
       }
       allProcessedChunks.map(_.flatten).unsafeToFuture()
     }
