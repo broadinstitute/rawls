@@ -956,7 +956,7 @@ class HttpGoogleServicesDAO(
     val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
-    logger.debug(s"LOGEVERYTHING: addPolicyBindings for ${projectName.value} adding $policiesToAdd")
+    println(s"LOGEVERYTHING: addPolicyBindings for ${projectName.value} adding $policiesToAdd")
 
     for {
       updated <- retryWhen500orGoogleError(() => {
@@ -969,10 +969,10 @@ class HttpGoogleServicesDAO(
         // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
         import cats.implicits._
         val newPolicies = existingPolicies |+| policiesToAdd.filter(_._2.nonEmpty) // ignore empty lists
-        logger.debug(s"LOGEVERYTHING: addPolicyBindings ${projectName.value} \nnewPolicies $newPolicies \nexistingPolicies $existingPolicies")
+        println(s"LOGEVERYTHING: addPolicyBindings ${projectName.value} \nnewPolicies $newPolicies \nexistingPolicies $existingPolicies")
 
         if (newPolicies.equals(existingPolicies)) {
-          logger.debug(s"LOGEVERYTHING: addPolicyBindings ${projectName.value} newPolicies == existingPolicies")
+          println(s"LOGEVERYTHING: addPolicyBindings ${projectName.value} newPolicies == existingPolicies")
           false
         } else {
 
@@ -980,14 +980,14 @@ class HttpGoogleServicesDAO(
             new Binding().setRole(role).setMembers(members.distinct.asJava)
           }.toSeq
 
-          logger.debug(s"LOGEVERYTHING: addPolicyBindings ${projectName.value} updatedBindings $updatedBindings")
+          println(s"LOGEVERYTHING: addPolicyBindings ${projectName.value} updatedBindings $updatedBindings")
 
           // when setting IAM policies, always reuse the existing policy so the etag is preserved.
           val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings.asJava))
           try {
             executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
           } catch {
-            case e: Throwable => logger.debug(s"LOGEVERYTHING: ${e.getMessage}")
+            case e: Throwable => println(s"LOGEVERYTHING: ${e.getMessage}")
           }
 
           true
