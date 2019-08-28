@@ -34,11 +34,12 @@ trait HttpClientUtils extends LazyLogging {
     executeRequest(http, httpRequest) recover { case t: Throwable =>
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"http call failed: ${httpRequest.uri}: ${t.getMessage}", t))
     } flatMap { response =>
+      println(s"LOGEVERYTHING response ${Unmarshal(response.entity).to[String]}")
       if (response.status.isSuccess) {
         Unmarshal(response.entity).to[T]
       } else {
         Unmarshal(response.entity).to[String] map { entityAsString =>
-          logger.debug(s"http error status ${response.status} calling uri ${httpRequest.uri}, response: ${entityAsString}")
+          println(s"LOGEVERYTHING http error status ${response.status} calling uri ${httpRequest.uri}, response: ${entityAsString}")
           val message = if (response.status == StatusCodes.Unauthorized)
             s"The service indicated that this call was unauthorized. " +
               s"If you believe this is a mistake, please try your request again. " +

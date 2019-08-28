@@ -11,12 +11,14 @@ import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 import scala.concurrent.{ExecutionContext, Future}
 
 case class ServiceAccountEmail(client_email: String)
-case class MarthaV2Response(googleServiceAccount: Option[ServiceAccountEmail])
+case class MarthaV2ResponseData(data: Option[ServiceAccountEmail])
+case class MarthaV2Response(googleServiceAccount: Option[MarthaV2ResponseData])
 
 object MarthaJsonSupport {
   import spray.json.DefaultJsonProtocol._
 
   implicit val ServiceAccountEmailFormat = jsonFormat1(ServiceAccountEmail)
+  implicit val MarthaV2ResponseDataFormat = jsonFormat1(MarthaV2ResponseData)
   implicit val MarthaV2ResponseFormat = jsonFormat1(MarthaV2Response)
 }
 
@@ -32,11 +34,15 @@ class MarthaDosResolver(url: String)(implicit val system: ActorSystem, val mater
 
     val content = Map("url" -> dos)
     val marthaResponse: Future[MarthaV2Response] = Marshal(content).to[RequestEntity] flatMap { entity =>
+      println(s"LOGEVERYTHING Asking martha to resolve $dos using entity $entity")
       retry[MarthaV2Response](when500) { () =>
         httpClientUtils.executeRequestUnmarshalResponse[MarthaV2Response](http, Post(url, entity))
       }
     }
 
-    marthaResponse.map(_.googleServiceAccount.map(_.client_email))
+    marthaResponse.map { resp =>
+      println(s"LOGEVERYTHING martha responds $resp")
+      resp.googleServiceAccount.flatMap(_.data.map(_.client_email))
+    }
   }
 }
