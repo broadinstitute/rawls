@@ -664,8 +664,10 @@ class HttpGoogleServicesDAO(
     val cred = getUserCredential(userInfo)
     listBillingAccounts(cred) flatMap { accountList =>
       //some users have TONS of billing accounts, enough to hit quota limits.
-      //break the list of billing accounts up into chunks, and process the chunks serially.
-      //this should slow things down somewhat, though we may need to upgrade this to a throttle.
+      //break the list of billing accounts up into chunks.
+      //each chunk executes all its requests in parallel. the chunks themselves are processed serially.
+      //this limits the amount of parallelism (to 10 inflight requests at a time), which should should slow
+      //our rate of making requests. if this fails to be enough, we may need to upgrade this to an explicit throttle.
       val accountChunks: List[Seq[BillingAccount]] = accountList.grouped(10).toList
 
       //Iterate over each chunk.
