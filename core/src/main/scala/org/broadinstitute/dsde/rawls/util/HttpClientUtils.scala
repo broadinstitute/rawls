@@ -38,6 +38,7 @@ trait HttpClientUtils extends LazyLogging {
         Unmarshal(response.entity).to[T]
       } else {
         Unmarshal(response.entity).to[String] map { entityAsString =>
+          logger.debug(s"http error status ${response.status} calling uri ${httpRequest.uri}, response: ${entityAsString}")
           val message = if (response.status == StatusCodes.Unauthorized)
             s"The service indicated that this call was unauthorized. " +
               s"If you believe this is a mistake, please try your request again. " +

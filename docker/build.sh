@@ -92,17 +92,17 @@ fi
 function make_jar()
 {
     echo "building jar..."
-    #bash ./docker/run-mysql.sh start
+    bash ./docker/run-mysql.sh start
 
     # Get the last commit hash of the model directory and set it as an environment variable
     GIT_MODEL_HASH=$(git log -n 1 --pretty=format:%h model)
 
     # make jar.  cache sbt dependencies. capture output and stop db before returning.
-    JAR_CMD=`docker run --rm -e SKIP_TESTS=$SKIP_TESTS -e GIT_MODEL_HASH=$GIT_MODEL_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working`
+    JAR_CMD=`docker run --rm --link mysql:mysql -e SKIP_TESTS=$SKIP_TESTS -e GIT_MODEL_HASH=$GIT_MODEL_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working`
     EXIT_CODE=$?
 
     # stop mysql
-    #bash ./docker/run-mysql.sh stop
+    bash ./docker/run-mysql.sh stop
 
     # if tests were a fail, fail script
     if [ $EXIT_CODE != 0 ]; then
@@ -177,4 +177,3 @@ if $RUN_DOCKER; then
 fi
 
 cleanup
-

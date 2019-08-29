@@ -25,7 +25,7 @@ import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo, TestIamPermissionsRequest}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
-import com.google.api.services.cloudresourcemanager.model.{Policy, _}
+import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.model.UsageExportLocation
 import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.deploymentmanager.model.{ConfigFile, Deployment, ImportFile, TargetConfiguration}
