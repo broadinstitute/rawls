@@ -6,6 +6,7 @@ import akka.http.scaladsl.client.RequestBuilding._
 import akka.http.scaladsl.marshalling.Marshal
 import akka.http.scaladsl.model.RequestEntity
 import akka.stream.Materializer
+import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -27,7 +28,7 @@ class MarthaDosResolver(url: String)(implicit val system: ActorSystem, val mater
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
 
-  override def dosServiceAccountEmail(dos: String): Future[Option[String]] = {
+  override def dosServiceAccountEmail(dos: String, userInfo: UserInfo): Future[Option[String]] = {
     import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
     import spray.json.DefaultJsonProtocol._
     import MarthaJsonSupport._
@@ -36,7 +37,7 @@ class MarthaDosResolver(url: String)(implicit val system: ActorSystem, val mater
     val marthaResponse: Future[MarthaV2Response] = Marshal(content).to[RequestEntity] flatMap { entity =>
       println(s"LOGEVERYTHING Asking martha to resolve $dos using entity $entity")
       retry[MarthaV2Response](when500) { () =>
-        httpClientUtils.executeRequestUnmarshalResponse[MarthaV2Response](http, Post(url, entity))
+        executeRequestWithToken[MarthaV2Response](userInfo.accessToken)(Post(url, entity))
       }
     }
 

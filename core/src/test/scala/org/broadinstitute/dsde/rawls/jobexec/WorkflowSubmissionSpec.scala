@@ -41,7 +41,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   val mockSamDAO = new MockSamDAO(slickDataSource)
   val dosServiceAccount = "serviceaccount@foo.com"
   val differentDosServiceAccount = "differentserviceaccount@foo.com"
-  val mockDosResolver: DosResolver = (v: String) => Future.successful(if (v.contains("different")) Some(differentDosServiceAccount) else Some(dosServiceAccount))
+  val mockDosResolver: DosResolver = (v: String, userInfo: UserInfo) => Future.successful(if (v.contains("different")) Some(differentDosServiceAccount) else Some(dosServiceAccount))
   private val requesterPaysRole = "requesterPays"
 
   /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
