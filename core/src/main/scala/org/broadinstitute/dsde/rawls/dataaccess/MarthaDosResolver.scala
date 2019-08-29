@@ -43,6 +43,7 @@ class MarthaDosResolver(url: String)(implicit val system: ActorSystem, val mater
 
     marthaResponse.map { resp =>
       println(s"LOGEVERYTHING martha responds $resp")
+      //FIXME: can we make this return less gracefully, so the user is informed if no SA is returned?
       resp.googleServiceAccount.flatMap(_.data.map(_.client_email))
     }
   }
