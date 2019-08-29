@@ -240,9 +240,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     })
   }
 
-  private def resolveDosUriServiceAccounts(dosUris: Set[String])(implicit executionContext: ExecutionContext): Future[Set[String]] = {
+  private def resolveDosUriServiceAccounts(dosUris: Set[String], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Set[String]] = {
     Future.traverse(dosUris) { dosUri =>
-      dosResolver.dosServiceAccountEmail(dosUri)
+      dosResolver.dosServiceAccountEmail(dosUri, userInfo)
     }.map { emails =>
       emails.collect {
         case Some(email) => email
@@ -331,7 +331,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo) <- workflowBatchFuture
-      dosServiceAccounts <- resolveDosUriServiceAccounts(dosUris)
+      dosServiceAccounts <- resolveDosUriServiceAccounts(dosUris, petUserInfo)
       _ <- if (dosServiceAccounts.isEmpty) Future.successful(false) else googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(wfOpts.google_project), Map(requesterPaysRole -> dosServiceAccounts.map("serviceAccount:"+_).toList))
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), Option(wfLabels), wfCollection, petUserInfo)

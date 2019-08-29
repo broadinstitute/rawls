@@ -177,4 +177,3 @@ if $RUN_DOCKER; then
 fi
 
 cleanup
-
