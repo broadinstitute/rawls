@@ -35,14 +35,12 @@ class MarthaDosResolver(url: String)(implicit val system: ActorSystem, val mater
 
     val content = Map("url" -> dos)
     val marthaResponse: Future[MarthaV2Response] = Marshal(content).to[RequestEntity] flatMap { entity =>
-      println(s"LOGEVERYTHING Asking martha to resolve $dos using entity $entity")
       retry[MarthaV2Response](when500) { () =>
         executeRequestWithToken[MarthaV2Response](userInfo.accessToken)(Post(url, entity))
       }
     }
 
     marthaResponse.map { resp =>
-      println(s"LOGEVERYTHING martha responds $resp")
       //FIXME: can we make this return less gracefully, so the user is informed if no SA is returned?
       resp.googleServiceAccount.flatMap(_.data.map(_.client_email))
     }

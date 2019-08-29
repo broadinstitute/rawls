@@ -956,8 +956,6 @@ class HttpGoogleServicesDAO(
     val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
-    println(s"LOGEVERYTHING: addPolicyBindings for ${projectName.value} adding $policiesToAdd")
-
     for {
       updated <- retryWhen500orGoogleError(() => {
         // it is important that we call getIamPolicy within the same retry block as we call setIamPolicy
@@ -969,10 +967,8 @@ class HttpGoogleServicesDAO(
         // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
         import cats.implicits._
         val newPolicies = existingPolicies |+| policiesToAdd.filter(_._2.nonEmpty) // ignore empty lists
-        println(s"LOGEVERYTHING: addPolicyBindings ${projectName.value} \nnewPolicies $newPolicies \nexistingPolicies $existingPolicies")
 
         if (newPolicies.equals(existingPolicies)) {
-          println(s"LOGEVERYTHING: addPolicyBindings ${projectName.value} newPolicies == existingPolicies")
           false
         } else {
 
@@ -980,16 +976,9 @@ class HttpGoogleServicesDAO(
             new Binding().setRole(role).setMembers(members.distinct.asJava)
           }.toSeq
 
-          println(s"LOGEVERYTHING: addPolicyBindings ${projectName.value} updatedBindings $updatedBindings")
-
           // when setting IAM policies, always reuse the existing policy so the etag is preserved.
           val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings.asJava))
-          try {
-            executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
-          } catch {
-            case e: Throwable => println(s"LOGEVERYTHING: ${e.getMessage}")
-          }
-
+          executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
           true
         }
       })

@@ -244,7 +244,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     Future.traverse(dosUris) { dosUri =>
       dosResolver.dosServiceAccountEmail(dosUri, userInfo)
     }.map { emails =>
-      println(s"LOGEVERYTHING: resolveDosUriServiceAccounts for $dosUris returns $emails")
       emails.collect {
         case Some(email) => email
       }
