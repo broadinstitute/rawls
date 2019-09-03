@@ -659,14 +659,29 @@ class HttpGoogleServicesDAO(
   }
 
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
+    import cats.implicits._
+
     val cred = getUserCredential(userInfo)
     listBillingAccounts(cred) flatMap { accountList =>
-      Future.sequence(accountList map { acct =>
-        val acctName = acct.getName
-        testDMBillingAccountAccess(acctName) map { firecloudHasAccount =>
-          RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount, acct.getDisplayName)
-        }
-      })
+      //some users have TONS of billing accounts, enough to hit quota limits.
+      //break the list of billing accounts up into chunks.
+      //each chunk executes all its requests in parallel. the chunks themselves are processed serially.
+      //this limits the amount of parallelism (to 10 inflight requests at a time), which should should slow
+      //our rate of making requests. if this fails to be enough, we may need to upgrade this to an explicit throttle.
+      val accountChunks: List[Seq[BillingAccount]] = accountList.grouped(10).toList
+
+      //Iterate over each chunk.
+      val allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks traverse { chunk =>
+
+        //Run all tests in the chunk in parallel.
+        IO.fromFuture(IO(Future.traverse(chunk){ acct =>
+          val acctName = acct.getName
+          testDMBillingAccountAccess(acctName) map { firecloudHasAccount =>
+            RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount, acct.getDisplayName)
+          }
+        }))
+      }
+      allProcessedChunks.map(_.flatten).unsafeToFuture()
     }
   }
 
