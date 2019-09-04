@@ -327,10 +327,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
       //yield the things we're going to submit to Cromwell
       val dosUris = collectDosUris(workflowBatch)
-      logger.debug(s"collectDosUris found ${dosUris.size} DOS URIs in batch of size ${workflowBatch.size} for submission ${submissionRec.id}")
-      if(dosUris.nonEmpty && dosUris.size <= 20) { //don't log too many in case it upsets the logger
-        logger.debug(dosUris.toString)
-      }
+      logger.debug(s"collectDosUris found ${dosUris.size} DOS URIs in batch of size ${workflowBatch.size} for submission ${submissionRec.id}. First 20 are: ${dosUris.take(20)}")
       (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo)
     }
 
