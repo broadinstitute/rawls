@@ -244,9 +244,11 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     Future.traverse(dosUris) { dosUri =>
       dosResolver.dosServiceAccountEmail(dosUri, userInfo)
     }.map { emails =>
-      emails.collect {
+      val collected = emails.collect {
         case Some(email) => email
       }
+      logger.debug(s"resolveDosUriServiceAccounts found ${collected.size} emails for ${dosUris.size} DOS URIs")
+      collected
     }
   }
 
@@ -324,7 +326,12 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       }
 
       //yield the things we're going to submit to Cromwell
-      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, collectDosUris(workflowBatch), petUserInfo)
+      val dosUris = collectDosUris(workflowBatch)
+      logger.debug(s"collectDosUris found ${dosUris.size} DOS URIs in batch of size ${workflowBatch.size} for submission ${submissionRec.id}")
+      if(dosUris.nonEmpty && dosUris.size <= 20) { //don't log too many in case it upsets the logger
+        logger.debug(dosUris.toString)
+      }
+      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo)
     }
 
 
