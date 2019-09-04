@@ -12,8 +12,8 @@ import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 import scala.concurrent.{ExecutionContext, Future}
 
 case class ServiceAccountEmail(client_email: String)
-case class MarthaV2ResponseData(data: ServiceAccountEmail)
-case class MarthaV2Response(googleServiceAccount: MarthaV2ResponseData)
+case class MarthaV2ResponseData(data: Option[ServiceAccountEmail])
+case class MarthaV2Response(googleServiceAccount: Option[MarthaV2ResponseData])
 
 object MarthaJsonSupport {
   import spray.json.DefaultJsonProtocol._
@@ -41,7 +41,12 @@ class MarthaDosResolver(url: String)(implicit val system: ActorSystem, val mater
     }
 
     marthaResponse.map { resp =>
-      Some(resp.googleServiceAccount.data.client_email)
+      //FIXME: investigate changing the Martha response formats to not contain Option, since Martha should always return an email if provided a bearer token
+      val saEmail = resp.googleServiceAccount.flatMap(_.data.map(_.client_email))
+      if(saEmail.isEmpty) {
+        logger.warn(s"MarthaDosResolver.dosServiceAccountEmail returned no SA for dos URL $dos")
+      }
+      saEmail
     }
   }
 }
