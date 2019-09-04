@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUt
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
@@ -31,7 +31,7 @@ import scala.concurrent.duration.{FiniteDuration, _}
 /**
  * Created by dvoet on 5/17/16.
  */
-class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
+class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with BeforeAndAfterEach with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
   import driver.api._
   implicit val materializer = ActorMaterializer()
 
@@ -99,6 +99,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     super.beforeAll()
     Await.result( mockGoogleServicesDAO.storeToken(userInfo, UUID.randomUUID.toString), Duration.Inf )
     mockServer.startServer()
+  }
+
+  override def beforeEach(): Unit = {
+    mockGoogleServicesDAO.policies.clear()
   }
 
   override def afterAll(): Unit = {
@@ -310,6 +314,38 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val inputResolutions = Seq(
         SubmissionValidationValue(Option(AttributeString("dos://foo/bar")), None, "test_input_dos"),
         SubmissionValidationValue(Option(AttributeValueList(Seq(AttributeString("dos://foo/bar1"), AttributeString("dos://different"), AttributeString("dos://foo/bar3")))), None, "test_input_dos_array"))
+      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
+        Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
+
+      runAndWait(entityQuery.save(ctx, sample))
+      runAndWait(entityQuery.save(ctx, sampleSet))
+      runAndWait(submissionQuery.create(ctx, submissionDos))
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDos, data.workspace)
+
+      // Submit workflow!
+      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+
+      // Verify
+      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.workspace.namespace))(requesterPaysRole) should contain theSameElementsAs List("serviceAccount:" + dosServiceAccount, "serviceAccount:" + differentDosServiceAccount)
+    }
+  }
+
+  it should "resolve DRS URIs when submitting workflows" in withDefaultTestDatabase {
+    val data = testData
+    // Set up system under test
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
+      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
+    }
+
+    withWorkspaceContext(data.workspace) { ctx =>
+      // Create test submission data
+      val sample = Entity("sample", "Sample", Map())
+      val sampleSet = Entity("sampleset", "sample_set",
+        Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference))))
+      val inputResolutions = Seq(
+        SubmissionValidationValue(Option(AttributeString("drs://foo/bar")), None, "test_input_dos"),
+        SubmissionValidationValue(Option(AttributeValueList(Seq(AttributeString("drs://foo/bar1"), AttributeString("drs://different"), AttributeString("drs://foo/bar3")))), None, "test_input_dos_array"))
       val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
         Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
 

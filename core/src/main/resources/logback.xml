@@ -51,6 +51,12 @@
         <appender-ref ref="SYSLOG"/>
     </logger>
 
+    <logger name="org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor" level="debug" additivity="false">
+        <appender-ref ref="file"/>
+        <appender-ref ref="console"/>
+        <appender-ref ref="SYSLOG"/>
+    </logger>
+
     <logger name="org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor" level="debug" additivity="false">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>

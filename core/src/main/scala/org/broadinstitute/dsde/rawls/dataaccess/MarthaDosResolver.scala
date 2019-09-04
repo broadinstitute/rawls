@@ -41,8 +41,12 @@ class MarthaDosResolver(url: String)(implicit val system: ActorSystem, val mater
     }
 
     marthaResponse.map { resp =>
-      //FIXME: can we make this return less gracefully, so the user is informed if no SA is returned?
-      resp.googleServiceAccount.flatMap(_.data.map(_.client_email))
+      //FIXME: investigate changing the Martha response formats to not contain Option, since Martha should always return an email if provided a bearer token
+      val saEmail = resp.googleServiceAccount.flatMap(_.data.map(_.client_email))
+      if(saEmail.isEmpty) {
+        logger.warn(s"MarthaDosResolver.dosServiceAccountEmail returned no SA for dos URL $dos")
+      }
+      saEmail
     }
   }
 }

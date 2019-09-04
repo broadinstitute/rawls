@@ -5,6 +5,6 @@ import org.broadinstitute.dsde.rawls.model.UserInfo
 import scala.concurrent.Future
 
 trait DosResolver {
-  val dosUriPattern: String = "^dos://.*"
+  val dosUriPattern: String = "^(dos|drs)://.*"
   def dosServiceAccountEmail(dos: String, userInfo: UserInfo): Future[Option[String]]
 }
