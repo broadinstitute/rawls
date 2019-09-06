@@ -68,9 +68,9 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
 
   implicit def rejectionHandler = RejectionHandler.newBuilder().handle {
     case mfrqc: MalformedRequestContentRejection => complete((BadRequest, HttpEntity(ContentTypes.`application/json`, s"""{"malformed request": "${mfrqc.message}"}""")))
-  }
+  }.result()
 
-  def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler)) {
+  def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(rejectionHandler)) {
     swaggerRoutes ~
     versionRoutes ~
     statusRoute ~
