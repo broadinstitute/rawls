@@ -416,23 +416,8 @@ case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              workspace: WorkspaceDetails,
                              workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
                              bucketOptions: Option[WorkspaceBucketOptions],
-                             owners: Option[Set[String]],
-                             requestOptions: Map[String, Boolean] // TODO: strongly type this
+                             owners: Option[Set[String]]
                             )
-
-object WorkspaceResponse {
-  def apply(accessLevel: WorkspaceAccessLevel,
-            canShare: Boolean,
-            canCompute: Boolean,
-            catalog: Boolean,
-            workspace: WorkspaceDetails,
-            workspaceSubmissionStats: WorkspaceSubmissionStats,
-            bucketOptions: WorkspaceBucketOptions,
-            owners: Set[String]): WorkspaceResponse = {
-    WorkspaceResponse(Some(accessLevel), Some(canShare), Some(canCompute), Some(catalog), workspace,
-      Some(workspaceSubmissionStats), Some(bucketOptions), Some(owners), Map())
-  }
-}
 
 case class WorkspaceDetails(namespace: String,
                             name: String,
@@ -667,7 +652,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
-  implicit val WorkspaceResponseFormat = jsonFormat9(WorkspaceResponse.apply)
+  implicit val WorkspaceResponseFormat = jsonFormat8(WorkspaceResponse.apply)
 
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 

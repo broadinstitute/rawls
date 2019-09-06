@@ -75,10 +75,10 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(None, None, 0), WorkspaceBucketOptions(false), Set.empty)
+          WorkspaceResponse(Some(WorkspaceAccessLevels.Owner), Some(true), Some(true), Some(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Some(WorkspaceSubmissionStats(None, None, 0)), Some(WorkspaceBucketOptions(false)), Some(Set.empty))
         ){
           val response = responseAs[WorkspaceResponse]
-          WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners, Map())
+          WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners)
         }
       }
   }
@@ -95,10 +95,10 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(None, None, 0), WorkspaceBucketOptions(false), Set.empty)
+          WorkspaceResponse(Some(WorkspaceAccessLevels.Owner), Some(true), Some(true), Some(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Some(WorkspaceSubmissionStats(None, None, 0)), Some(WorkspaceBucketOptions(false)), Some(Set.empty))
         ){
           val response = responseAs[WorkspaceResponse]
-          WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners, Map())
+          WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners)
         }
       }
   }
