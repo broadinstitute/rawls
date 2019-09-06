@@ -69,9 +69,10 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   implicit def rejectionHandler = {
     import spray.json._
     import DefaultJsonProtocol._
-    RejectionHandler.newBuilder().handle {
-      case mfrqc: MalformedRequestContentRejection => complete((BadRequest, HttpEntity(ContentTypes.`application/json`, Map("malformed request" -> mfrqc.message).toJson.toString)))
-    }.result()
+    RejectionHandler.default.mapRejectionResponse {
+      case res @ HttpResponse(status, _, ent: HttpEntity.Strict, _) =>
+        res.copy(entity = HttpEntity(ContentTypes.`application/json`, Map(status.toString -> ent.data.utf8String).toJson.toString))
+    }
   }
 
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(rejectionHandler)) {
