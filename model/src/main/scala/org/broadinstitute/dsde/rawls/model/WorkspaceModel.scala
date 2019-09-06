@@ -409,14 +409,30 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
                                  public: Boolean)
 
-case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
-                             canShare: Boolean,
-                             canCompute: Boolean,
-                             catalog: Boolean,
+case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
+                             canShare: Option[Boolean],
+                             canCompute: Option[Boolean],
+                             catalog: Option[Boolean],
                              workspace: WorkspaceDetails,
-                             workspaceSubmissionStats: WorkspaceSubmissionStats,
-                             bucketOptions: WorkspaceBucketOptions,
-                             owners: Set[String])
+                             workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
+                             bucketOptions: Option[WorkspaceBucketOptions],
+                             owners: Option[Set[String]],
+                             requestOptions: Map[String, Boolean] // TODO: strongly type this
+                            )
+
+object WorkspaceResponse {
+  def apply(accessLevel: WorkspaceAccessLevel,
+            canShare: Boolean,
+            canCompute: Boolean,
+            catalog: Boolean,
+            workspace: WorkspaceDetails,
+            workspaceSubmissionStats: WorkspaceSubmissionStats,
+            bucketOptions: WorkspaceBucketOptions,
+            owners: Set[String]): WorkspaceResponse = {
+    WorkspaceResponse(Some(accessLevel), Some(canShare), Some(canCompute), Some(catalog), workspace,
+      Some(workspaceSubmissionStats), Some(bucketOptions), Some(owners), Map())
+  }
+}
 
 case class WorkspaceDetails(namespace: String,
                             name: String,
@@ -426,10 +442,10 @@ case class WorkspaceDetails(namespace: String,
                             createdDate: DateTime,
                             lastModified: DateTime,
                             createdBy: String,
-                            attributes: AttributeMap,
+                            attributes: Option[AttributeMap],
                             isLocked: Boolean = false,
-                            authorizationDomain: Set[ManagedGroupRef]) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked)
+                            authorizationDomain: Option[Set[ManagedGroupRef]]) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked)
 }
 
 object WorkspaceDetails {
@@ -443,9 +459,9 @@ object WorkspaceDetails {
       workspace.createdDate,
       workspace.lastModified,
       workspace.createdBy,
-      workspace.attributes,
+      Some(workspace.attributes),
       workspace.isLocked,
-      authorizationDomain
+      Some(authorizationDomain)
     )
   }
 }
@@ -651,7 +667,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
-  implicit val WorkspaceResponseFormat = jsonFormat8(WorkspaceResponse)
+  implicit val WorkspaceResponseFormat = jsonFormat9(WorkspaceResponse.apply)
 
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 

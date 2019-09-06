@@ -250,7 +250,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(newWorkspace) {
           val ws = responseAs[WorkspaceDetails]
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty))
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes.getOrElse(Map()), Option(Set.empty))
         }
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
@@ -352,7 +352,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), WorkspaceBucketOptions(false), Set.empty)
         ){
           val response = responseAs[WorkspaceResponse]
-          WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners)
+          WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners, Map())
         }
       }
   }
@@ -815,7 +815,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(testData.workspace.attributes) {
+        assertResult(Some(testData.workspace.attributes)) {
           responseAs[WorkspaceDetails].attributes
         }
       }
@@ -832,7 +832,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.Created) {
             status
           }
-          assertResult(testData.workspace.attributes ++ newAtts) {
+          assertResult(Some(testData.workspace.attributes ++ newAtts)) {
             responseAs[WorkspaceDetails].attributes
           }
         }
