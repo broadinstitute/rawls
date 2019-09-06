@@ -60,7 +60,7 @@ class PetSASpec extends ApiServiceSpec {
         }
         assertResult(newWorkspace) {
           val ws = responseAs[WorkspaceDetails]
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes, Option(Set.empty))
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes.getOrElse(Map()), Option(Set.empty))
         }
       }
   }
@@ -75,7 +75,7 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(None, None, 0), WorkspaceBucketOptions(false), Set.empty)
+          WorkspaceResponse(Option(WorkspaceAccessLevels.Owner), Option(true), Option(true), Option(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), Option(WorkspaceBucketOptions(false)), Option(Set.empty))
         ){
           val response = responseAs[WorkspaceResponse]
           WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners)
@@ -95,7 +95,7 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceResponse(WorkspaceAccessLevels.Owner, true, true, true, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(None, None, 0), WorkspaceBucketOptions(false), Set.empty)
+          WorkspaceResponse(Option(WorkspaceAccessLevels.Owner), Option(true), Option(true), Option(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), Option(WorkspaceBucketOptions(false)), Option(Set.empty))
         ){
           val response = responseAs[WorkspaceResponse]
           WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners)

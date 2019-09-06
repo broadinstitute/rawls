@@ -171,7 +171,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, canCatalog, WorkspaceDetails(workspaceContext.workspace, authDomain.toSet), stats, bucketDetails, owners))
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(Option(accessLevel), Option(canShare), Option(canCompute), Option(canCatalog), WorkspaceDetails(workspaceContext.workspace, authDomain.toSet), Option(stats), Option(bucketDetails), Option(owners)))
             }
           }
         }
