@@ -416,8 +416,7 @@ case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              workspace: WorkspaceDetails,
                              workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
                              bucketOptions: Option[WorkspaceBucketOptions],
-                             owners: Option[Set[String]]
-                            )
+                             owners: Option[Set[String]])
 
 case class WorkspaceDetails(namespace: String,
                             name: String,
@@ -652,7 +651,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
-  implicit val WorkspaceResponseFormat = jsonFormat8(WorkspaceResponse.apply)
+  implicit val WorkspaceResponseFormat = jsonFormat8(WorkspaceResponse)
 
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 
