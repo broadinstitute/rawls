@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.actor.{Actor, Props}
 import akka.event.Logging.LogLevel
 import akka.event.{Logging, LoggingAdapter}
+import akka.http.javadsl.server.MalformedRequestContentRejection
 import org.broadinstitute.dsde.rawls.dataaccess.{HttpSamDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.ExecutionServiceCluster
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -18,7 +19,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.{Directive0, Directive1, ExceptionHandler, Route}
+import akka.http.scaladsl.server.{Directive0, Directive1, ExceptionHandler, RejectionHandler, Route}
 import akka.http.scaladsl.server.RouteResult.Complete
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LogEntry, LoggingMagnet}
 import akka.stream.Materializer
@@ -64,6 +65,10 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   implicit val materializer: Materializer
 
   def apiRoutes = options { complete(OK) } ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes
+
+  implicit def rejectionHandler = RejectionHandler.newBuilder().handle {
+    case mfrqc: MalformedRequestContentRejection => complete((BadRequest, HttpEntity(ContentTypes.`application/json`, s"""{"malformed request": "${mfrqc.message}"}""")))
+  }
 
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler)) {
     swaggerRoutes ~
