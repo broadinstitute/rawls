@@ -443,9 +443,9 @@ object WorkspaceDetails {
       workspace.createdDate,
       workspace.lastModified,
       workspace.createdBy,
-      Some(workspace.attributes),
+      Option(workspace.attributes),
       workspace.isLocked,
-      Some(authorizationDomain)
+      Option(authorizationDomain)
     )
   }
 }

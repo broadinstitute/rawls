@@ -75,7 +75,7 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceResponse(Some(WorkspaceAccessLevels.Owner), Some(true), Some(true), Some(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Some(WorkspaceSubmissionStats(None, None, 0)), Some(WorkspaceBucketOptions(false)), Some(Set.empty))
+          WorkspaceResponse(Option(WorkspaceAccessLevels.Owner), Option(true), Option(true), Option(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), Option(WorkspaceBucketOptions(false)), Option(Set.empty))
         ){
           val response = responseAs[WorkspaceResponse]
           WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners)
@@ -95,7 +95,7 @@ class PetSASpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceResponse(Some(WorkspaceAccessLevels.Owner), Some(true), Some(true), Some(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Some(WorkspaceSubmissionStats(None, None, 0)), Some(WorkspaceBucketOptions(false)), Some(Set.empty))
+          WorkspaceResponse(Option(WorkspaceAccessLevels.Owner), Option(true), Option(true), Option(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), Option(WorkspaceBucketOptions(false)), Option(Set.empty))
         ){
           val response = responseAs[WorkspaceResponse]
           WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners)

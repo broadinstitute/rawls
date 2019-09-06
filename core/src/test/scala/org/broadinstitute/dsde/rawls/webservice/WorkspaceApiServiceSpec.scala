@@ -349,7 +349,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceResponse(Some(WorkspaceAccessLevels.Owner), Some(true), Some(true), Some(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Some(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)), Some(WorkspaceBucketOptions(false)), Some(Set.empty))
+          WorkspaceResponse(Option(WorkspaceAccessLevels.Owner), Option(true), Option(true), Option(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)), Option(WorkspaceBucketOptions(false)), Option(Set.empty))
         ){
           val response = responseAs[WorkspaceResponse]
           WorkspaceResponse(response.accessLevel, response.canShare, response.canCompute, response.catalog, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.bucketOptions, response.owners)
@@ -815,7 +815,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(Some(testData.workspace.attributes)) {
+        assertResult(Option(testData.workspace.attributes)) {
           responseAs[WorkspaceDetails].attributes
         }
       }
@@ -832,7 +832,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.Created) {
             status
           }
-          assertResult(Some(testData.workspace.attributes ++ newAtts)) {
+          assertResult(Option(testData.workspace.attributes ++ newAtts)) {
             responseAs[WorkspaceDetails].attributes
           }
         }
