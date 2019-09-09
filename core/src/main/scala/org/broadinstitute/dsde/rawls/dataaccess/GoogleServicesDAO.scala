@@ -176,7 +176,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * Adds the IAM policies to the project's existing policies
     * @return true if the policy was actually changed
     */
-  def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Boolean]
+  def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, Set[String]]): Future[Boolean]
 
   /**
     *

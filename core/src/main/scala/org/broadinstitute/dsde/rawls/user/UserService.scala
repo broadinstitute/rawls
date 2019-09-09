@@ -51,11 +51,11 @@ object UserService {
 
   def getDefaultGoogleProjectPolicies(ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, requesterPaysRole: String) = {
     Map(
-      "roles/viewer" -> List(s"group:${ownerGroupEmail.value}"),
-      "roles/billing.projectManager" -> List(s"group:${ownerGroupEmail.value}"),
-      "roles/genomics.pipelinesRunner" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
-      requesterPaysRole -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
-      "roles/bigquery.jobUser" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
+      "roles/viewer" -> Set(s"group:${ownerGroupEmail.value}"),
+      "roles/billing.projectManager" -> Set(s"group:${ownerGroupEmail.value}"),
+      "roles/genomics.pipelinesRunner" -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
+      requesterPaysRole -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
+      "roles/bigquery.jobUser" -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
     )
   }
 }
