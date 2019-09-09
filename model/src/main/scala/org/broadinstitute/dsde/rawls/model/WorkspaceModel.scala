@@ -4,7 +4,7 @@ import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, UserOmittedAttributeMap}
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
@@ -24,6 +24,9 @@ object Attributable {
   val entityTypeReservedAttribute = "entityType"
   val reservedAttributeNames = Set(nameReservedAttribute, entityTypeReservedAttribute, workspaceIdAttribute)
   type AttributeMap = Map[AttributeName, Attribute]
+  // UserOmittedAttributeMap is used internally by Rawls code to indicate that the user asked to exclude attributes
+  // from certain API queries.
+  type UserOmittedAttributeMap = AttributeMap
 }
 
 trait Attributable {
@@ -495,7 +498,10 @@ object WorkspaceDetails {
       workspace.createdDate,
       workspace.lastModified,
       workspace.createdBy,
-      Option(workspace.attributes),
+      workspace.attributes match {
+        case x:UserOmittedAttributeMap => None
+        case a => Option(a)
+      },
       workspace.isLocked,
       optAuthorizationDomain
     )

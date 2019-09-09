@@ -193,7 +193,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     def noFuture = Future.successful(None)
 
     dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+      withWorkspaceContext(workspaceName, dataAccess, getParam(options, WorkspaceAttributes)) { workspaceContext =>
         requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
 
           // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
@@ -2045,8 +2045,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
-    dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
+  private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess, getAttributes: Boolean = true)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
+    dataAccess.workspaceQuery.findByName(workspaceName, getAttributes) flatMap {
       case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
       case Some(workspace) => op(SlickWorkspaceContext(workspace))
     }

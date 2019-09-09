@@ -339,7 +339,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  it should "exclude workspace.attributes when asked to" ignore withTestWorkspacesApiServices { services =>
+  it should "exclude workspace.attributes when asked to" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?excludeKey=workspace.attributes") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
