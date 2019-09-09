@@ -205,7 +205,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               Future.successful(WorkspaceAccessLevels.NoAccess)
             }
 
-
           DBIO.from(accessLevelFuture()) flatMap { accessLevel =>
             // options:  accessLevel, bucketOptions, canCompute, canShare, catalog, owners, workspace.attributes, workspace.authorizationDomain, workspaceSubmissionStats
 

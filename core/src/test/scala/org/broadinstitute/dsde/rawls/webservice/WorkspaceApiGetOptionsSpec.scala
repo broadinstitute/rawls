@@ -216,19 +216,16 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
     }
   }
 
-
-  // TODO: unit tests directly against WorkspaceService.parseParams ??
-
-
-
-
-  //
   val testTime = currentTime()
+
+  // possible values for includeKey/excludeKey:
+  //   accessLevel, bucketOptions, canCompute, canShare, catalog, owners,
+  //   workspace.attributes, workspace.authorizationDomain, workspaceSubmissionStats
 
   // canonical full WorkspaceResponse to use in expectations below
   val fullWorkspaceResponse = WorkspaceResponse(Option(WorkspaceAccessLevels.Owner), Option(true), Option(true), Option(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = testTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)), Option(WorkspaceBucketOptions(false)), Option(Set.empty))
 
-  // no includes, no excluces
+  // no includes, no excludes
   "WorkspaceApi" should "include all options when getting a workspace if no params specified" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -242,9 +239,6 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
         }
       }
   }
-
-  // options:  accessLevel, bucketOptions, canCompute, canShare, catalog, owners, workspace.attributes, workspace.authorizationDomain, workspaceSubmissionStats
-
 
   // START excludeKey tests
 
@@ -401,11 +395,165 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
+  // START includeKey tests
 
+  // canonical bare-minimum WorkspaceResponse to use in expectations below
+  val minimalWorkspaceResponse = WorkspaceResponse(None, None, None, None, WorkspaceDetails.fromWorkspaceAndOptionalAuthDomain(testWorkspaces.workspace.copy(lastModified = testTime, attributes = UserOmittedAttributeMap.noneAttributes), None), None, None, None)
 
+  "WorkspaceApi, when using includeKey params" should "include accessLevel when asked to" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?includeKey=accessLevel") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expected = minimalWorkspaceResponse.copy(accessLevel = fullWorkspaceResponse.accessLevel)
+        val parsedResponse = responseAs[WorkspaceResponse]
+        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
+        // targeted assertion
+        assert(actual.accessLevel.isDefined)
+        // compare full results
+        assertResult(expected) { actual }
+      }
+  }
 
+  it should "include bucketOptions appropriately when asked to" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?includeKey=bucketOptions") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expected = minimalWorkspaceResponse.copy(bucketOptions = fullWorkspaceResponse.bucketOptions)
+        val parsedResponse = responseAs[WorkspaceResponse]
+        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
+        // targeted assertion
+        assert(actual.bucketOptions.isDefined)
+        // compare full results
+        assertResult(expected) { actual }
+      }
+  }
 
+  it should "include canCompute appropriately when asked to" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?includeKey=canCompute") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expected = minimalWorkspaceResponse.copy(canCompute = fullWorkspaceResponse.canCompute)
+        val parsedResponse = responseAs[WorkspaceResponse]
+        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
+        // targeted assertion
+        assert(actual.canCompute.isDefined)
+        // compare full results
+        assertResult(expected) { actual }
+      }
+  }
 
+  it should "include canShare appropriately when asked to" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?includeKey=canShare") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expected = minimalWorkspaceResponse.copy(canShare = fullWorkspaceResponse.canShare)
+        val parsedResponse = responseAs[WorkspaceResponse]
+        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
+        // targeted assertion
+        assert(actual.canShare.isDefined)
+        // compare full results
+        assertResult(expected) { actual }
+      }
+  }
+
+  it should "include catalog appropriately when asked to" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?includeKey=catalog") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expected = minimalWorkspaceResponse.copy(catalog = fullWorkspaceResponse.catalog)
+        val parsedResponse = responseAs[WorkspaceResponse]
+        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
+        // targeted assertion
+        assert(actual.catalog.isDefined)
+        // compare full results
+        assertResult(expected) { actual }
+      }
+  }
+
+  it should "include owners appropriately when asked to" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?includeKey=owners") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expected = minimalWorkspaceResponse.copy(owners = fullWorkspaceResponse.owners)
+        val parsedResponse = responseAs[WorkspaceResponse]
+        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
+        // targeted assertion
+        assert(actual.owners.isDefined)
+        // compare full results
+        assertResult(expected) { actual }
+      }
+  }
+
+  it should "include workspace.attributes appropriately when asked to" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?includeKey=workspace.attributes") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expected = minimalWorkspaceResponse.copy(workspace = minimalWorkspaceResponse.workspace.copy(attributes = fullWorkspaceResponse.workspace.attributes))
+        val parsedResponse = responseAs[WorkspaceResponse]
+        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
+        // targeted assertion
+        assert(actual.workspace.attributes.isDefined)
+        // compare full results
+        assertResult(expected) { actual }
+      }
+  }
+
+  it should "include workspace.authorizationDomain appropriately when asked to" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?includeKey=workspace.authorizationDomain") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expected = minimalWorkspaceResponse.copy(workspace = minimalWorkspaceResponse.workspace.copy(authorizationDomain = fullWorkspaceResponse.workspace.authorizationDomain))
+        val parsedResponse = responseAs[WorkspaceResponse]
+        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
+        // targeted assertion
+        assert(actual.workspace.authorizationDomain.isDefined)
+        // compare full results
+        assertResult(expected) { actual }
+      }
+  }
+
+  it should "include workspaceSubmissionStats appropriately when asked to" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?includeKey=workspaceSubmissionStats") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expected = minimalWorkspaceResponse.copy(workspaceSubmissionStats = fullWorkspaceResponse.workspaceSubmissionStats)
+        val parsedResponse = responseAs[WorkspaceResponse]
+        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
+        // targeted assertion
+        assert(actual.workspaceSubmissionStats.isDefined)
+        // compare full results
+        assertResult(expected) { actual }
+      }
+  }
+
+  it should "include multiple keys simultaneously when asked to" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?includeKey=canShare&includeKey=workspace.attributes&includeKey=accessLevel") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expected = minimalWorkspaceResponse.copy(
+          accessLevel = fullWorkspaceResponse.accessLevel,
+          canShare = fullWorkspaceResponse.canShare,
+          workspace = minimalWorkspaceResponse.workspace.copy(attributes = fullWorkspaceResponse.workspace.attributes))
+        val parsedResponse = responseAs[WorkspaceResponse]
+        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
+        // targeted assertions
+        assert(actual.accessLevel.isDefined)
+        assert(actual.canShare.isDefined)
+        assert(actual.workspace.attributes.isDefined)
+        // compare full results
+        assertResult(expected) { actual }
+      }
+  }
 
 }
 

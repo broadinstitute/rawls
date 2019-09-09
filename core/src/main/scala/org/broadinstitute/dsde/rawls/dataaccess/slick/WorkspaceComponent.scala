@@ -8,7 +8,7 @@ import cats.instances.option._
 import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, UserOmittedAttributeMap}
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
@@ -309,12 +309,11 @@ trait WorkspaceComponent {
     }
 
     private def loadWorkspacesWithoutAttributes(lookup: WorkspaceQueryType): ReadAction[Seq[Workspace]] = {
-      val intentionallyOmittedAttributes: UserOmittedAttributeMap = Map()
       for {
         workspaceRecs <- lookup.result
       } yield {
         workspaceRecs.map { workspaceRec =>
-          unmarshalWorkspace(workspaceRec, intentionallyOmittedAttributes)
+          unmarshalWorkspace(workspaceRec, UserOmittedAttributeMap.noneAttributes)
         }
       }
     }
