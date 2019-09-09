@@ -357,6 +357,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  // see also WorkspaceApiGetOptionsSpec for additional tests related to get-workspace
+
   it should "return 404 getting a non-existent workspace" in withTestDataApiServices { services =>
     Get(testData.workspace.copy(name = "DNE").path) ~>
       sealRoute(services.workspaceRoutes) ~>

@@ -38,6 +38,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import cats.implicits._
+import org.broadinstitute.dsde.rawls.model.WorkspaceParamKeys._
 
 /**
  * Created by dvoet on 4/27/15.
@@ -75,7 +76,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   import dataSource.dataAccess.driver.api._
 
   def CreateWorkspace(workspace: WorkspaceRequest) = createWorkspace(workspace)
-  def GetWorkspace(workspaceName: WorkspaceName) = getWorkspace(workspaceName)
+  def GetWorkspace(workspaceName: WorkspaceName, params: GetWorkspaceParams) = getWorkspace(workspaceName, params)
   def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
   def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)
   def UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateLibraryAttributes(workspaceName, operations)
@@ -151,32 +152,127 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
     }
 
-  def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
+
+  def parseParams(params: GetWorkspaceParams): Map[WorkspaceParamKey, Boolean] = {
+
+    // WorkspaceParamKeys.fromString will throw an exception if the inbound String in unrecognized
+    val includes: Set[WorkspaceParamKey] = params.includeKeys.map(WorkspaceParamKeys.fromString)
+    val excludes: Set[WorkspaceParamKey] = params.excludeKeys.map(WorkspaceParamKeys.fromString)
+
+    // if any includeKey is specified, default everything to false.
+    val defaultParamValue: Boolean = includes.isEmpty
+    // build the map of defaults
+    val defaultMap: Map[WorkspaceParamKey, Boolean] = WorkspaceParamKeys.values.map(_ -> defaultParamValue).toMap
+    // build the map of includes
+    val includeMap: Map[WorkspaceParamKey, Boolean] = includes.map(_ -> true).toMap
+    // build the map of excludes
+    val excludeMap: Map[WorkspaceParamKey, Boolean] = excludes.map(_ -> false).toMap
+    // idea: we could instead throw an exception if the same key exists in both includes and excludes
+    /*
+        build the final map. Our desired business logic is:
+          - if present in includes, always TRUE, even if also in excludes
+          - if present in excludes, but not includes, FALSE
+          - if neither in includes or excludes, use default
+              - default is FALSE if any include exists; else TRUE
+     */
+    val opts = defaultMap ++ excludeMap ++ includeMap
+
+    // logger.error(s"******** for i:${includes} and e:${excludes}, intermediates i:${includeMap} and e:${excludeMap}, using options: ${opts}")
+
+    opts
+  }
+
+  def getParam(params: Map[WorkspaceParamKey, Boolean], target: WorkspaceParamKey) =
+    params.getOrElse(target, true)
+
+
+  def getWorkspace(workspaceName: WorkspaceName, params: GetWorkspaceParams): Future[PerRequestMessage] = {
+    // validate the inbound parameters
+    val options = parseParams(params)
+
+    def noFuture = Future.successful(None)
+
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
-          DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel =>
+
+          // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
+          // accessLevel, canCompute, canShare is specified, we have to get it.
+          def accessLevelFuture: () => Future[WorkspaceAccessLevels.WorkspaceAccessLevel] = () =>
+            if (getParam(options, AccessLevel) || getParam(options, CanCompute) || getParam(options, CanShare)) {
+              getMaximumAccessLevel(workspaceContext.workspaceId.toString)
+            } else {
+              Future.successful(WorkspaceAccessLevels.NoAccess)
+            }
+
+
+          DBIO.from(accessLevelFuture()) flatMap { accessLevel =>
+            // options:  accessLevel, bucketOptions, canCompute, canShare, catalog, owners, workspace.attributes, workspace.authorizationDomain, workspaceSubmissionStats
+
+            val optionalAccessLevelForResponse = if (getParam(options, AccessLevel)) { Option(accessLevel) } else { None }
+
+            // determine which parts of the response we'll be calculating
+            def bucketOptionsFuture: () => Future[Option[WorkspaceBucketOptions]] = () => if (getParam(options, BucketOptions)) {
+              gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace)).map(Option(_))
+            } else {
+              noFuture
+            }
+            def canComputeFuture: () => Future[Option[Boolean]] = () => if (getParam(options, CanCompute)) {
+              getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel).map(Option(_))
+            } else {
+              noFuture
+            }
+            def canShareFuture: () => Future[Option[Boolean]] = () => if (getParam(options, CanShare)) {
+              //convoluted but accessLevel for both params because user could at most share with their own access level
+              getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel).map(Option(_))
+            } else {
+              noFuture
+            }
+            def catalogFuture: () => Future[Option[Boolean]] = () => if (getParam(options, Catalog)) {
+              getUserCatalogPermissions(workspaceContext.workspaceId.toString).map(Option(_))
+            } else {
+              noFuture
+            }
+
+            def ownersFuture: () => Future[Option[Set[String]]] = () => if (options.getOrElse(WorkspaceParamKeys.Owners, true)) {
+              getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_))
+            } else {
+              noFuture
+            }
+
+            def workspaceAuthorizationDomainFuture: () => Future[Option[Set[ManagedGroupRef]]] = () => if (getParam(options, WorkspaceAuthorizationDomain)) {
+              loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo).map(Option(_))
+            } else {
+              noFuture
+            }
+
+            def workspaceSubmissionStatsFuture: () => slick.ReadAction[Option[WorkspaceSubmissionStats]] = () => if (getParam(options, WorkspaceParamKeys.WorkspaceSubmissionStats)) {
+              getWorkspaceSubmissionStats(workspaceContext, dataAccess).map(Option(_))
+            } else {
+              DBIO.from(noFuture)
+            }
+
             //run these futures in parallel. this is equivalent to running the for-comp with the futures already defined and running
             val futuresInParallel = (
-              getUserCatalogPermissions(workspaceContext.workspaceId.toString),
-              //convoluted but accessLevel for both params because user could at most share with their own access level
-              getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel),
-              getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel),
-              getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)),
-              loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo),
-              gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace))
+              catalogFuture(),
+              canShareFuture(),
+              canComputeFuture(),
+              ownersFuture(),
+              workspaceAuthorizationDomainFuture(),
+              bucketOptionsFuture()
             ).tupled
 
             for {
               (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
-              stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
+              stats <- workspaceSubmissionStatsFuture()
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(Option(accessLevel), Option(canShare), Option(canCompute), Option(canCatalog), WorkspaceDetails(workspaceContext.workspace, authDomain.toSet), Option(stats), Option(bucketDetails), Option(owners)))
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptionalAuthDomain(workspaceContext.workspace, authDomain), stats, bucketDetails, owners))
             }
           }
         }
       }
     }
+  }
 
   def getBucketOptions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>

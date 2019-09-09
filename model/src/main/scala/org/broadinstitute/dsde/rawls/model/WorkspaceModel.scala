@@ -432,8 +432,60 @@ case class WorkspaceDetails(namespace: String,
   def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked)
 }
 
+final case class GetWorkspaceParams(includeKeys: Set[String] = Set.empty[String],
+                                    excludeKeys: Set[String] = Set.empty[String])
+
+object WorkspaceParamKeys {
+  sealed trait WorkspaceParamKey
+  case object AccessLevel extends WorkspaceParamKey
+  case object BucketOptions extends WorkspaceParamKey
+  case object CanCompute extends WorkspaceParamKey
+  case object CanShare extends WorkspaceParamKey
+  case object Catalog extends WorkspaceParamKey
+  case object Owners extends WorkspaceParamKey
+  case object WorkspaceAttributes extends WorkspaceParamKey
+  case object WorkspaceAuthorizationDomain extends WorkspaceParamKey
+  case object WorkspaceSubmissionStats extends WorkspaceParamKey
+
+  def fromString(key: String): WorkspaceParamKey = {
+    key.toLowerCase match {
+      case "accesslevel" => AccessLevel
+      case "bucketoptions" => BucketOptions
+      case "cancompute" => CanCompute
+      case "canshare" => CanShare
+      case "catalog" => Catalog
+      case "owners" => Owners
+      case "workspace.attributes" => WorkspaceAttributes
+      case "workspace.authorizationdomain" => WorkspaceAuthorizationDomain
+      case "workspacesubmissionstats" => WorkspaceSubmissionStats
+      case _ => throw new RawlsException(s"$key is not a valid workspace parameter")
+    }
+  }
+
+  def toString(param: WorkspaceParamKey): String = {
+    param match {
+      case AccessLevel => "accessLevel"
+      case BucketOptions => "bucketOptions"
+      case CanCompute => "canCompute"
+      case CanShare => "canShare"
+      case Catalog => "catalog"
+      case Owners => "owners"
+      case WorkspaceAttributes => "workspace.attributes"
+      case WorkspaceAuthorizationDomain => "workspace.authorizationDomain"
+      case WorkspaceSubmissionStats => "workspaceSubmissionStats"
+    }
+  }
+
+  def values: Set[WorkspaceParamKey] = Set(AccessLevel, BucketOptions, CanCompute, CanShare, Catalog,
+    Owners, WorkspaceAttributes, WorkspaceAuthorizationDomain, WorkspaceSubmissionStats)
+}
+
+
 object WorkspaceDetails {
   def apply(workspace: Workspace, authorizationDomain: Set[ManagedGroupRef]): WorkspaceDetails = {
+    fromWorkspaceAndOptionalAuthDomain(workspace, Option(authorizationDomain))
+  }
+  def fromWorkspaceAndOptionalAuthDomain(workspace: Workspace, optAuthorizationDomain: Option[Set[ManagedGroupRef]]): WorkspaceDetails = {
     WorkspaceDetails(
       workspace.namespace,
       workspace.name,
@@ -445,7 +497,7 @@ object WorkspaceDetails {
       workspace.createdBy,
       Option(workspace.attributes),
       workspace.isLocked,
-      Option(authorizationDomain)
+      optAuthorizationDomain
     )
   }
 }
