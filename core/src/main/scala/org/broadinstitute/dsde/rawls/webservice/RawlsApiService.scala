@@ -41,6 +41,15 @@ object RawlsApiService {
         complete(StatusCodes.InternalServerError -> ErrorReport(e))
     }
   }
+
+  def rejectionHandler = {
+    import spray.json._
+    import DefaultJsonProtocol._
+    RejectionHandler.default.mapRejectionResponse {
+      case res @ HttpResponse(status, _, ent: HttpEntity.Strict, _) =>
+        res.copy(entity = HttpEntity(ContentTypes.`application/json`, Map(status.toString -> ent.data.utf8String).toJson.toString))
+    }
+  }
 }
 
 trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceService, val userServiceConstructor: UserInfo => UserService, val genomicsServiceConstructor: UserInfo => GenomicsService, val statisticsServiceConstructor: UserInfo => StatisticsService, val statusServiceConstructor: () => StatusService, val executionServiceCluster: ExecutionServiceCluster, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration, override val workbenchMetricBaseName: String, val samDAO: SamDAO, val swaggerConfig: SwaggerConfig)(implicit val executionContext: ExecutionContext, val materializer: Materializer)
@@ -66,16 +75,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
 
   def apiRoutes = options { complete(OK) } ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes
 
-  implicit def rejectionHandler = {
-    import spray.json._
-    import DefaultJsonProtocol._
-    RejectionHandler.default.mapRejectionResponse {
-      case res @ HttpResponse(status, _, ent: HttpEntity.Strict, _) =>
-        res.copy(entity = HttpEntity(ContentTypes.`application/json`, Map(status.toString -> ent.data.utf8String).toJson.toString))
-    }
-  }
-
-  def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(rejectionHandler)) {
+  def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
     swaggerRoutes ~
     versionRoutes ~
     statusRoute ~
