@@ -28,6 +28,7 @@ DOCKERHUB_REGISTRY=${DOCKERHUB_REGISTRY:-broadinstitute/$PROJECT}
 DOCKERHUB_TESTS_REGISTRY=${DOCKERHUB_REGISTRY}-tests
 GCR_REGISTRY=""
 ENV=${ENV:-""}
+SKIP_TESTS=${SKIP_TESTS:-""}
 SERVICE_ACCT_KEY_FILE=""
 
 MAKE_JAR=false
@@ -92,7 +93,7 @@ fi
 function make_jar()
 {
     echo "building jar..."
-    if [ $SKIP_TESTS != "skip-tests" ]; then
+    if [ "$SKIP_TESTS" != "skip-tests" ]; then
         bash ./docker/run-mysql.sh start
     fi
 
@@ -100,14 +101,15 @@ function make_jar()
     GIT_MODEL_HASH=$(git log -n 1 --pretty=format:%h model)
 
     # make jar.  cache sbt dependencies. capture output and stop db before returning.
-    if [ $SKIP_TESTS != "skip-tests" ]; then
-        JAR_CMD=`docker run --rm --link mysql:mysql -e SKIP_TESTS=$SKIP_TESTS -e GIT_MODEL_HASH=$GIT_MODEL_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working`
-    else
-        JAR_CMD=`docker run --rm -e SKIP_TESTS=$SKIP_TESTS -e GIT_MODEL_HASH=$GIT_MODEL_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working`
+    DOCKER_RUN="docker run --rm"
+    if [ "$SKIP_TESTS" != "skip-tests" ]; then
+        DOCKER_RUN="$DOCKER_RUN --link mysql:mysql"
     fi
+    DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e GIT_MODEL_HASH=$GIT_MODEL_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working"
+    JAR_CMD=$($DOCKER_RUN)
     EXIT_CODE=$?
 
-    if [ $SKIP_TESTS != "skip-tests" ]; then
+    if [ "$SKIP_TESTS" != "skip-tests" ]; then
         # stop mysql
         bash ./docker/run-mysql.sh stop
     fi
