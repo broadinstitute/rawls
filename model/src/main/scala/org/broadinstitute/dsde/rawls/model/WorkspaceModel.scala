@@ -29,7 +29,11 @@ object Attributable {
 // singleton used internally by Rawls code to indicate that the user asked to exclude attributes
 // from certain API queries.
 object UserOmittedAttributeMap {
-  val noneAttributes:AttributeMap = Map.empty
+  // note: important to create a brand new instance of a concrete map type here, instead
+  // of using Map.empty or Map(). We match on reference equality in WorkspaceDetails,
+  // and multiple invocations of Map() and Map.empty refer to the same object.
+  // by creating a new concrete object here, we ensure its reference-uniqueness.
+  final val noneAttributes:AttributeMap = new scala.collection.immutable.HashMap()
 }
 
 trait Attributable {
@@ -502,8 +506,8 @@ object WorkspaceDetails {
       workspace.lastModified,
       workspace.createdBy,
       workspace.attributes match {
-        case UserOmittedAttributeMap.`noneAttributes` => None
-        case a => Option(a)
+        case x if x eq UserOmittedAttributeMap.`noneAttributes` => None // note: "eq" uses reference equality!
+        case y => Option(y)
       },
       workspace.isLocked,
       optAuthorizationDomain

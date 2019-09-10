@@ -138,9 +138,14 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
     val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), "testBucketUrl", CreationStatuses.Ready, None, None)
 
     val workspaceName = WorkspaceName(billingProject.projectName.value, "testworkspace")
+    val workspace2Name = WorkspaceName(billingProject.projectName.value, "emptyattrs")
 
     val workspace1Id = UUID.randomUUID().toString
     val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", Some(workspace1Id), testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
+
+    val workspace2Id = UUID.randomUUID().toString
+    val workspace2 = makeWorkspaceWithUsers(billingProject, workspace2Name.name, workspace2Id, "bucket2", Some(workspace2Id), testDate, testDate, "testUser", Map(), false)
+
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
@@ -185,6 +190,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
         rawlsBillingProjectQuery.create(billingProject),
 
         workspaceQuery.save(workspace),
+        workspaceQuery.save(workspace2),
 
         withWorkspaceContext(workspace) { ctx =>
           DBIO.seq(
@@ -552,6 +558,20 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
         assert(actual.workspace.attributes.isDefined)
         // compare full results
         assertResult(expected) { actual }
+      }
+  }
+
+  // this test targets a specific bug that arose during development; worth keeping in.
+  it should "include workspace.attributes even when attributes are empty" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace2.path + "?includeKey=workspace.attributes") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val parsedResponse = responseAs[WorkspaceResponse]
+        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
+        // targeted assertions
+        assert(actual.workspace.attributes.isDefined, "attributes key should be present in response")
+        actual.workspace.attributes.foreach( attrs => assert(attrs.isEmpty, "attributes value should be an empty map"))
       }
   }
 
