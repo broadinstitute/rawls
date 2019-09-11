@@ -967,7 +967,7 @@ class HttpGoogleServicesDAO(
     } yield ()
   }
 
-  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Boolean] = {
+  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, Set[String]]): Future[Boolean] = {
     val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
@@ -977,7 +977,7 @@ class HttpGoogleServicesDAO(
         // getIamPolicy gets the etag that is used in setIamPolicy, the etag is used to detect concurrent
         // modifications and if that happens we need to be sure to get a new etag before retrying setIamPolicy
         val existingPolicy = executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
-        val existingPolicies: Map[String, List[String]] = existingPolicy.getBindings.asScala.map { policy => policy.getRole -> policy.getMembers.asScala.toList }.toMap
+        val existingPolicies: Map[String, Set[String]] = existingPolicy.getBindings.asScala.map { policy => policy.getRole -> policy.getMembers.asScala.toSet }.toMap
 
         // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
         import cats.implicits._
@@ -988,7 +988,7 @@ class HttpGoogleServicesDAO(
         } else {
 
           val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
-            new Binding().setRole(role).setMembers(members.distinct.asJava)
+            new Binding().setRole(role).setMembers(members.toList.asJava)
           }.toSeq
 
           // when setting IAM policies, always reuse the existing policy so the etag is preserved.
@@ -1002,7 +1002,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = {
-    addPolicyBindings(projectName, Map(s"roles/$role" -> List(s"group:${groupEmail.value}")))
+    addPolicyBindings(projectName, Map(s"roles/$role" -> Set(s"group:${groupEmail.value}")))
   }
 
   override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = {
