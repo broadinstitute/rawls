@@ -3,27 +3,19 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.{OAuth2BearerToken, _}
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.mock.MockSamDAO
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito._
-import spray.json.DefaultJsonProtocol._
-import spray.json._
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 /**
  * Created by davidan on 9/9/19.
@@ -56,78 +48,6 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       apiService.cleanupSupervisor
     }
   }
-
-//  val userWriterNoCompute = RawlsUserEmail("writer-access-no-compute")
-//  val userWriterNoComputeOnProject = RawlsUserEmail("writer-access-no-compute-on-project")
-//
-//  def withApiServicesSecure[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
-//    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
-//      override val samDAO: MockSamDAO = new MockSamDAO(dataSource) {
-//        override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
-//          val result = userInfo.userEmail match {
-//            case testData.userOwner.userEmail => true
-//            case testData.userProjectOwner.userEmail => true
-//            case testData.userWriter.userEmail => Set(SamWorkspaceActions.read, SamWorkspaceActions.write, SamWorkspaceActions.compute, SamBillingProjectActions.launchBatchCompute).contains(action)
-//            case `userWriterNoCompute` => Set(SamWorkspaceActions.read, SamWorkspaceActions.write).contains(action)
-//            case `userWriterNoComputeOnProject` => Set(SamWorkspaceActions.read, SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(action)
-//            case testData.userReader.userEmail => Set(SamWorkspaceActions.read).contains(action)
-//            case _ => false
-//          }
-//          Future.successful(result)
-//        }
-//      }
-//    }
-//    try {
-//      testCode(apiService)
-//    } finally {
-//      apiService.cleanupSupervisor
-//    }
-//  }
-//
-//  def withApiServicesMockitoSam[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
-//    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
-//      override val samDAO: SamDAO = mock[SamDAO]
-//    }
-//    try {
-//      testCode(apiService)
-//    } finally {
-//      apiService.cleanupSupervisor
-//    }
-//  }
-//
-//  def withTestDataApiServices[T](testCode: TestApiService => T): T = {
-//    withDefaultTestDatabase { dataSource: SlickDataSource =>
-//      withApiServices(dataSource)(testCode)
-//    }
-//  }
-//
-//  def withTestDataApiServicesAndUser[T](user: String)(testCode: TestApiService => T): T = {
-//    withDefaultTestDatabase { dataSource: SlickDataSource =>
-//      withApiServicesSecure(dataSource, user) { services =>
-//        testCode(services)
-//      }
-//    }
-//  }
-//
-//  def withTestDataApiServicesMockitoSam[T](testCode: TestApiService => T): T = {
-//    withDefaultTestDatabase { dataSource: SlickDataSource =>
-//      withApiServicesMockitoSam(dataSource) { services =>
-//        testCode(services)
-//      }
-//    }
-//  }
-//
-//  def withEmptyWorkspaceApiServices[T](user: String)(testCode: TestApiService => T): T = {
-//    withCustomTestDatabase(new EmptyWorkspace) { dataSource: SlickDataSource =>
-//      withApiServices(dataSource, user)(testCode)
-//    }
-//  }
-//
-//  def withLockedWorkspaceApiServices[T](user: String)(testCode: TestApiService => T): T = {
-//    withCustomTestDatabase(new LockedWorkspace) { dataSource: SlickDataSource =>
-//      withApiServicesSecure(dataSource, user)(testCode)
-//    }
-//  }
 
   class TestWorkspaces() extends TestData {
     val userProjectOwner = RawlsUser(UserInfo(RawlsUserEmail("project-owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543210101")))
@@ -625,9 +545,9 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  // START query param shorthand tests
+  // START query param behavior tests
 
-  "WorkspaceApi, when using 'i' and 'e' query param shorthand" should "honor 'i' and 'e' aliases in the querystring with appropriate precedence" in withTestWorkspacesApiServices { services =>
+  "WorkspaceApi query parameters" should "honor 'i' and 'e' aliases in the querystring with appropriate precedence" in withTestWorkspacesApiServices { services =>
     // the canShare and catalog options here should have no effect
     Get(testWorkspaces.workspace.path + "?i=owners&excludeKey=owners&e=owners") ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -679,6 +599,21 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
         assertResult(expected) { actual }
       }
   }
+
+  List("includeKey", "excludeKey", "i", "e").foreach { param =>
+    it should s"return 400 Bad Request for unknown '$param' value in querystring" in withTestWorkspacesApiServices { services =>
+      Get(testWorkspaces.workspace.path + s"?$param=IntentionallyBadValueForUnitTest") ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) { status }
+
+          val parsedResponse = responseAs[ErrorReport]
+          assert(parsedResponse.message.contains("IntentionallyBadValueForUnitTest is not a valid workspace parameter"))
+        }
+    }
+  }
+
+
 
 }
 

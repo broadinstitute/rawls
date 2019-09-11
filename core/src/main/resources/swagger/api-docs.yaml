@@ -2856,6 +2856,30 @@ paths:
           name: workspaceName
           required: true
           type: string
+        - name: includeKey
+          description: >
+            When specified, include these keys in the response payload and exclude other keys.
+            Allowed values are: _accessLevel, bucketOptions, canCompute, canShare, catalog, owners, workspace.attributes, workspace.authorizationDomain, workspaceSubmissionStats._
+            Keys not listed above will always be returned in the response.
+            If the query specifies both includeKey and excludeKey parameters, the excludeKey values will be ignored.
+          required: false
+          type: array
+          items:
+            type: string
+          collectionFormat: multi
+          in: query
+        - name: excludeKey
+          description: >
+            When specified, exclude these keys in the response payload and include other keys.
+            Allowed values are: _accessLevel, bucketOptions, canCompute, canShare, catalog, owners, workspace.attributes, workspace.authorizationDomain, workspaceSubmissionStats._
+            Keys not listed above will always be returned in the response.
+            If the query specifies both includeKey and excludeKey parameters, the excludeKey values will be ignored.
+          required: false
+          type: array
+          items:
+            type: string
+          collectionFormat: multi
+          in: query
       security:
         - authorization:
             - openid

@@ -152,9 +152,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
     }
 
-
   def parseParams(params: GetWorkspaceParams): Map[WorkspaceParamKey, Boolean] = {
-
     // WorkspaceParamKeys.fromString will throw an exception if the inbound String in unrecognized
     val includes: Set[WorkspaceParamKey] = params.includeKeys.map(WorkspaceParamKeys.fromString)
     val excludes: Set[WorkspaceParamKey] = params.excludeKeys.map(WorkspaceParamKeys.fromString)
@@ -169,17 +167,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val excludeMap: Map[WorkspaceParamKey, Boolean] = excludes.map(_ -> false).toMap
     // idea: we could instead throw an exception if the same key exists in both includes and excludes
     /*
-        build the final map. Our desired business logic is:
+        build the final map. Our desired business logic for each key is:
           - if present in includes, always TRUE, even if also in excludes
-          - if present in excludes, but not includes, FALSE
+          - if present in excludes, but not includes, always FALSE
           - if neither in includes or excludes, use default
               - default is FALSE if any include exists; else TRUE
      */
-    val opts = defaultMap ++ excludeMap ++ includeMap
-
-    // logger.error(s"******** for i:${includes} and e:${excludes}, intermediates i:${includeMap} and e:${excludeMap}, using options: ${opts}")
-
-    opts
+    defaultMap ++ excludeMap ++ includeMap
   }
 
   def getParam(params: Map[WorkspaceParamKey, Boolean], target: WorkspaceParamKey) =
@@ -188,8 +182,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def getWorkspace(workspaceName: WorkspaceName, params: GetWorkspaceParams): Future[PerRequestMessage] = {
     // validate the inbound parameters
-    val options = parseParams(params)
+    val options = Try(parseParams(params)) match {
+      case Success(opts) => opts
+      case Failure(ex) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
+    }
 
+    // dummy function that returns a Future(None)
     def noFuture = Future.successful(None)
 
     dataSource.inTransaction { dataAccess =>
@@ -206,11 +204,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             }
 
           DBIO.from(accessLevelFuture()) flatMap { accessLevel =>
-            // options:  accessLevel, bucketOptions, canCompute, canShare, catalog, owners, workspace.attributes, workspace.authorizationDomain, workspaceSubmissionStats
-
+            // we may have calculated accessLevel because canShare/canCompute needs it;
+            // but if the user didn't ask for it, don't return it
             val optionalAccessLevelForResponse = if (getParam(options, AccessLevel)) { Option(accessLevel) } else { None }
 
-            // determine which parts of the response we'll be calculating
+            // determine which functions to use for the various part of the response
             def bucketOptionsFuture: () => Future[Option[WorkspaceBucketOptions]] = () => if (getParam(options, BucketOptions)) {
               gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace)).map(Option(_))
             } else {

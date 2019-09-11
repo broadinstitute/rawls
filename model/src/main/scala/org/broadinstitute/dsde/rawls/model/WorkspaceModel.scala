@@ -490,7 +490,6 @@ object WorkspaceParamKeys {
     Owners, WorkspaceAttributes, WorkspaceAuthorizationDomain, WorkspaceSubmissionStats)
 }
 
-
 object WorkspaceDetails {
   def apply(workspace: Workspace, authorizationDomain: Set[ManagedGroupRef]): WorkspaceDetails = {
     fromWorkspaceAndOptionalAuthDomain(workspace, Option(authorizationDomain))
