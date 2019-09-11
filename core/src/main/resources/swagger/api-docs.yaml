@@ -2832,6 +2832,10 @@ paths:
           description: Successful Request
           schema:
             $ref: '#/definitions/WorkspaceListResponse'
+        '400':
+          description: Unrecognized query parameters
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '404':
           description: Workspace not found
           schema:
