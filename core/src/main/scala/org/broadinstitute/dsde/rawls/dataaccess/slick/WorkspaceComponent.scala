@@ -313,7 +313,7 @@ trait WorkspaceComponent {
         workspaceRecs <- lookup.result
       } yield {
         workspaceRecs.map { workspaceRec =>
-          unmarshalWorkspace(workspaceRec, UserOmittedAttributeMap.noneAttributes)
+          unmarshalWorkspace(workspaceRec, Map.empty)
         }
       }
     }

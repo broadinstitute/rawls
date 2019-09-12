@@ -324,7 +324,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   // START includeKey tests
 
   // canonical bare-minimum WorkspaceResponse to use in expectations below
-  val minimalWorkspaceResponse = WorkspaceResponse(None, None, None, None, WorkspaceDetails.fromWorkspaceAndOptionalAuthDomain(testWorkspaces.workspace.copy(lastModified = testTime, attributes = UserOmittedAttributeMap.noneAttributes), None), None, None, None)
+  val minimalWorkspaceResponse = WorkspaceResponse(None, None, None, None, WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = testTime), None, false), None, None, None)
 
   "WorkspaceApi, when using includeKey params" should "include accessLevel when asked to" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?includeKey=accessLevel") ~>

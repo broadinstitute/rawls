@@ -190,8 +190,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // dummy function that returns a Future(None)
     def noFuture = Future.successful(None)
 
+    val getAttributes: Boolean = getParam(options, WorkspaceAttributes)
+
     dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess, getParam(options, WorkspaceAttributes)) { workspaceContext =>
+      withWorkspaceContext(workspaceName, dataAccess, getAttributes) { workspaceContext =>
         requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
 
           // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
@@ -263,7 +265,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
               stats <- workspaceSubmissionStatsFuture()
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptionalAuthDomain(workspaceContext.workspace, authDomain), stats, bucketDetails, owners))
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, getAttributes), stats, bucketDetails, owners))
             }
           }
         }

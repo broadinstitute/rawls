@@ -26,16 +26,6 @@ object Attributable {
   type AttributeMap = Map[AttributeName, Attribute]
 }
 
-// singleton used internally by Rawls code to indicate that the user asked to exclude attributes
-// from certain API queries.
-object UserOmittedAttributeMap {
-  // note: important to create a brand new instance of a concrete map type here, instead
-  // of using Map.empty or Map(). We match on reference equality in WorkspaceDetails,
-  // and multiple invocations of Map() and Map.empty refer to the same object.
-  // by creating a new concrete object here, we ensure its reference-uniqueness.
-  final val noneAttributes:AttributeMap = new scala.collection.immutable.HashMap()
-}
-
 trait Attributable {
   def attributes: AttributeMap
   def briefName: String
@@ -492,9 +482,9 @@ object WorkspaceParamKeys {
 
 object WorkspaceDetails {
   def apply(workspace: Workspace, authorizationDomain: Set[ManagedGroupRef]): WorkspaceDetails = {
-    fromWorkspaceAndOptionalAuthDomain(workspace, Option(authorizationDomain))
+    fromWorkspaceAndOptions(workspace, Option(authorizationDomain),true)
   }
-  def fromWorkspaceAndOptionalAuthDomain(workspace: Workspace, optAuthorizationDomain: Option[Set[ManagedGroupRef]]): WorkspaceDetails = {
+  def fromWorkspaceAndOptions(workspace: Workspace, optAuthorizationDomain: Option[Set[ManagedGroupRef]], useAttributes: Boolean): WorkspaceDetails = {
     WorkspaceDetails(
       workspace.namespace,
       workspace.name,
@@ -504,10 +494,7 @@ object WorkspaceDetails {
       workspace.createdDate,
       workspace.lastModified,
       workspace.createdBy,
-      workspace.attributes match {
-        case x if x eq UserOmittedAttributeMap.`noneAttributes` => None // note: "eq" uses reference equality!
-        case y => Option(y)
-      },
+      if (useAttributes) Option(workspace.attributes) else None,
       workspace.isLocked,
       optAuthorizationDomain
     )
