@@ -198,7 +198,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
           // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
           // accessLevel, canCompute, canShare is specified, we have to get it.
-          def accessLevelFuture: () => Future[WorkspaceAccessLevels.WorkspaceAccessLevel] = () =>
+          def accessLevelFuture(): Future[WorkspaceAccessLevels.WorkspaceAccessLevel] =
             if (getParam(options, AccessLevel) || getParam(options, CanCompute) || getParam(options, CanShare)) {
               getMaximumAccessLevel(workspaceContext.workspaceId.toString)
             } else {
@@ -211,41 +211,41 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val optionalAccessLevelForResponse = if (getParam(options, AccessLevel)) { Option(accessLevel) } else { None }
 
             // determine which functions to use for the various part of the response
-            def bucketOptionsFuture: () => Future[Option[WorkspaceBucketOptions]] = () => if (getParam(options, BucketOptions)) {
+            def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (getParam(options, BucketOptions)) {
               gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace)).map(Option(_))
             } else {
               noFuture
             }
-            def canComputeFuture: () => Future[Option[Boolean]] = () => if (getParam(options, CanCompute)) {
+            def canComputeFuture(): Future[Option[Boolean]] = if (getParam(options, CanCompute)) {
               getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel).map(Option(_))
             } else {
               noFuture
             }
-            def canShareFuture: () => Future[Option[Boolean]] = () => if (getParam(options, CanShare)) {
+            def canShareFuture(): Future[Option[Boolean]] = if (getParam(options, CanShare)) {
               //convoluted but accessLevel for both params because user could at most share with their own access level
               getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel).map(Option(_))
             } else {
               noFuture
             }
-            def catalogFuture: () => Future[Option[Boolean]] = () => if (getParam(options, Catalog)) {
+            def catalogFuture(): Future[Option[Boolean]] = if (getParam(options, Catalog)) {
               getUserCatalogPermissions(workspaceContext.workspaceId.toString).map(Option(_))
             } else {
               noFuture
             }
 
-            def ownersFuture: () => Future[Option[Set[String]]] = () => if (options.getOrElse(WorkspaceFields.Owners, true)) {
+            def ownersFuture(): Future[Option[Set[String]]] = if (options.getOrElse(WorkspaceFields.Owners, true)) {
               getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_))
             } else {
               noFuture
             }
 
-            def workspaceAuthorizationDomainFuture: () => Future[Option[Set[ManagedGroupRef]]] = () => if (getParam(options, WorkspaceAuthorizationDomain)) {
+            def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] = if (getParam(options, WorkspaceAuthorizationDomain)) {
               loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo).map(Option(_))
             } else {
               noFuture
             }
 
-            def workspaceSubmissionStatsFuture: () => slick.ReadAction[Option[WorkspaceSubmissionStats]] = () => if (getParam(options, WorkspaceFields.WorkspaceSubmissionStats)) {
+            def workspaceSubmissionStatsFuture(): slick.ReadAction[Option[WorkspaceSubmissionStats]] = if (getParam(options, WorkspaceFields.WorkspaceSubmissionStats)) {
               getWorkspaceSubmissionStats(workspaceContext, dataAccess).map(Option(_))
             } else {
               DBIO.from(noFuture)
