@@ -17,9 +17,13 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.ExecutionContext
 
-/**
- * Created by davidan on 9/9/19.
- */
+/** Tests for the get-workspace API, focused on the user's ability to specify which fields
+  * should be calculated and returned in the WorkspaceResponse.
+  *
+  * created ~ 9/9/19
+  *
+  * @author davidan
+  */
 class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   import driver.api._
 
