@@ -432,22 +432,22 @@ case class WorkspaceDetails(namespace: String,
   def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked)
 }
 
-final case class GetWorkspaceParams(includeKeys: Set[String] = Set.empty[String],
-                                    excludeKeys: Set[String] = Set.empty[String])
+final case class WorkspaceFieldSpecs(includeKeys: Set[String] = Set.empty[String],
+                                     excludeKeys: Set[String] = Set.empty[String])
 
-object WorkspaceParamKeys {
-  sealed trait WorkspaceParamKey
-  case object AccessLevel extends WorkspaceParamKey
-  case object BucketOptions extends WorkspaceParamKey
-  case object CanCompute extends WorkspaceParamKey
-  case object CanShare extends WorkspaceParamKey
-  case object Catalog extends WorkspaceParamKey
-  case object Owners extends WorkspaceParamKey
-  case object WorkspaceAttributes extends WorkspaceParamKey
-  case object WorkspaceAuthorizationDomain extends WorkspaceParamKey
-  case object WorkspaceSubmissionStats extends WorkspaceParamKey
+object WorkspaceFields {
+  sealed trait WorkspaceField
+  case object AccessLevel extends WorkspaceField
+  case object BucketOptions extends WorkspaceField
+  case object CanCompute extends WorkspaceField
+  case object CanShare extends WorkspaceField
+  case object Catalog extends WorkspaceField
+  case object Owners extends WorkspaceField
+  case object WorkspaceAttributes extends WorkspaceField
+  case object WorkspaceAuthorizationDomain extends WorkspaceField
+  case object WorkspaceSubmissionStats extends WorkspaceField
 
-  def fromString(key: String): WorkspaceParamKey = {
+  def fromString(key: String): WorkspaceField = {
     key.toLowerCase match {
       case "accesslevel" => AccessLevel
       case "bucketoptions" => BucketOptions
@@ -462,7 +462,7 @@ object WorkspaceParamKeys {
     }
   }
 
-  def toString(param: WorkspaceParamKey): String = {
+  def toString(param: WorkspaceField): String = {
     param match {
       case AccessLevel => "accessLevel"
       case BucketOptions => "bucketOptions"
@@ -476,7 +476,7 @@ object WorkspaceParamKeys {
     }
   }
 
-  def values: Set[WorkspaceParamKey] = Set(AccessLevel, BucketOptions, CanCompute, CanShare, Catalog,
+  def values: Set[WorkspaceField] = Set(AccessLevel, BucketOptions, CanCompute, CanShare, Catalog,
     Owners, WorkspaceAttributes, WorkspaceAuthorizationDomain, WorkspaceSubmissionStats)
 }
 

@@ -38,7 +38,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import cats.implicits._
-import org.broadinstitute.dsde.rawls.model.WorkspaceParamKeys._
+import org.broadinstitute.dsde.rawls.model.WorkspaceFields._
 
 /**
  * Created by dvoet on 4/27/15.
@@ -76,7 +76,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   import dataSource.dataAccess.driver.api._
 
   def CreateWorkspace(workspace: WorkspaceRequest) = createWorkspace(workspace)
-  def GetWorkspace(workspaceName: WorkspaceName, params: GetWorkspaceParams) = getWorkspace(workspaceName, params)
+  def GetWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs) = getWorkspace(workspaceName, params)
   def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
   def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)
   def UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateLibraryAttributes(workspaceName, operations)
@@ -152,19 +152,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
     }
 
-  def parseParams(params: GetWorkspaceParams): Map[WorkspaceParamKey, Boolean] = {
+  def parseParams(params: WorkspaceFieldSpecs): Map[WorkspaceField, Boolean] = {
     // WorkspaceParamKeys.fromString will throw an exception if the inbound String in unrecognized
-    val includes: Set[WorkspaceParamKey] = params.includeKeys.map(WorkspaceParamKeys.fromString)
-    val excludes: Set[WorkspaceParamKey] = params.excludeKeys.map(WorkspaceParamKeys.fromString)
+    val includes: Set[WorkspaceField] = params.includeKeys.map(WorkspaceFields.fromString)
+    val excludes: Set[WorkspaceField] = params.excludeKeys.map(WorkspaceFields.fromString)
 
     // if any includeKey is specified, default everything to false.
     val defaultParamValue: Boolean = includes.isEmpty
     // build the map of defaults
-    val defaultMap: Map[WorkspaceParamKey, Boolean] = WorkspaceParamKeys.values.map(_ -> defaultParamValue).toMap
+    val defaultMap: Map[WorkspaceField, Boolean] = WorkspaceFields.values.map(_ -> defaultParamValue).toMap
     // build the map of includes
-    val includeMap: Map[WorkspaceParamKey, Boolean] = includes.map(_ -> true).toMap
+    val includeMap: Map[WorkspaceField, Boolean] = includes.map(_ -> true).toMap
     // build the map of excludes
-    val excludeMap: Map[WorkspaceParamKey, Boolean] = excludes.map(_ -> false).toMap
+    val excludeMap: Map[WorkspaceField, Boolean] = excludes.map(_ -> false).toMap
     // idea: we could instead throw an exception if the same key exists in both includes and excludes
     /*
         build the final map. Our desired business logic for each key is:
@@ -176,11 +176,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     defaultMap ++ excludeMap ++ includeMap
   }
 
-  def getParam(params: Map[WorkspaceParamKey, Boolean], target: WorkspaceParamKey) =
+  def getParam(params: Map[WorkspaceField, Boolean], target: WorkspaceField) =
     params.getOrElse(target, true)
 
 
-  def getWorkspace(workspaceName: WorkspaceName, params: GetWorkspaceParams): Future[PerRequestMessage] = {
+  def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs): Future[PerRequestMessage] = {
     // validate the inbound parameters
     val options = Try(parseParams(params)) match {
       case Success(opts) => opts
@@ -233,7 +233,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               noFuture
             }
 
-            def ownersFuture: () => Future[Option[Set[String]]] = () => if (options.getOrElse(WorkspaceParamKeys.Owners, true)) {
+            def ownersFuture: () => Future[Option[Set[String]]] = () => if (options.getOrElse(WorkspaceFields.Owners, true)) {
               getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_))
             } else {
               noFuture
@@ -245,7 +245,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               noFuture
             }
 
-            def workspaceSubmissionStatsFuture: () => slick.ReadAction[Option[WorkspaceSubmissionStats]] = () => if (getParam(options, WorkspaceParamKeys.WorkspaceSubmissionStats)) {
+            def workspaceSubmissionStatsFuture: () => slick.ReadAction[Option[WorkspaceSubmissionStats]] = () => if (getParam(options, WorkspaceFields.WorkspaceSubmissionStats)) {
               getWorkspaceSubmissionStats(workspaceContext, dataAccess).map(Option(_))
             } else {
               DBIO.from(noFuture)
