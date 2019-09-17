@@ -148,10 +148,6 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   val testTime = currentTime()
 
-  // possible values for includeKey/excludeKey:
-  //   accessLevel, bucketOptions, canCompute, canShare, catalog, owners,
-  //   workspace.attributes, workspace.authorizationDomain, workspaceSubmissionStats
-
   // canonical full WorkspaceResponse to use in expectations below
   val fullWorkspaceResponse = WorkspaceResponse(Option(WorkspaceAccessLevels.Owner), Option(true), Option(true), Option(true), WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = testTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)), Option(WorkspaceBucketOptions(false)), Option(Set.empty))
 
@@ -170,168 +166,14 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  // START excludeKey tests
 
-  "WorkspaceApi, when using excludeKey params" should "exclude accessLevel when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?excludeKey=accessLevel") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = fullWorkspaceResponse.copy(accessLevel = None)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assertResult(None) { actual.accessLevel }
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "exclude bucketOptions appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?excludeKey=bucketOptions") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = fullWorkspaceResponse.copy(bucketOptions = None)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assertResult(None) { actual.bucketOptions }
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "exclude canCompute appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?excludeKey=canCompute") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = fullWorkspaceResponse.copy(canCompute = None)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assertResult(None) { actual.canCompute }
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "exclude canShare appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?excludeKey=canShare") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = fullWorkspaceResponse.copy(canShare = None)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assertResult(None) { actual.canShare }
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "exclude catalog appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?excludeKey=catalog") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = fullWorkspaceResponse.copy(catalog = None)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assertResult(None) { actual.catalog }
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "exclude owners appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?excludeKey=owners") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = fullWorkspaceResponse.copy(owners = None)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assertResult(None) { actual.owners }
-        assert(actual.bucketOptions.isDefined, "why is bucket  options empty?????")
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "exclude workspace.attributes when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?excludeKey=workspace.attributes") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = fullWorkspaceResponse.copy(workspace = fullWorkspaceResponse.workspace.copy(attributes = None))
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assertResult(None) { actual.workspace.attributes }
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "exclude workspace.authorizationDomain when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?excludeKey=workspace.authorizationDomain") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = fullWorkspaceResponse.copy(workspace = fullWorkspaceResponse.workspace.copy(authorizationDomain = None))
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assertResult(None) { actual.workspace.authorizationDomain }
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "exclude workspaceSubmissionStats when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?excludeKey=workspaceSubmissionStats") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = fullWorkspaceResponse.copy(workspaceSubmissionStats = None)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assertResult(None) { actual.workspaceSubmissionStats }
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "exclude multiple keys simultaneously when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?excludeKey=bucketOptions&excludeKey=owners&excludeKey=workspaceSubmissionStats") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = fullWorkspaceResponse.copy(bucketOptions = None, owners = None, workspaceSubmissionStats = None)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertions
-        assertResult(None) { actual.bucketOptions }
-        assertResult(None) { actual.owners }
-        assertResult(None) { actual.workspaceSubmissionStats }
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  // START includeKey tests
+  // START fields tests
 
   // canonical bare-minimum WorkspaceResponse to use in expectations below
   val minimalWorkspaceResponse = WorkspaceResponse(None, None, None, None, WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = testTime), None, false), None, None, None)
 
   "WorkspaceApi, when using includeKey params" should "include accessLevel when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=accessLevel") ~>
+    Get(testWorkspaces.workspace.path + "?fields=accessLevel") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -346,7 +188,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   }
 
   it should "include bucketOptions appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=bucketOptions") ~>
+    Get(testWorkspaces.workspace.path + "?fields=bucketOptions") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -361,7 +203,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   }
 
   it should "include canCompute appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=canCompute") ~>
+    Get(testWorkspaces.workspace.path + "?fields=canCompute") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -376,7 +218,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   }
 
   it should "include canShare appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=canShare") ~>
+    Get(testWorkspaces.workspace.path + "?fields=canShare") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -391,7 +233,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   }
 
   it should "include catalog appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=catalog") ~>
+    Get(testWorkspaces.workspace.path + "?fields=catalog") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -406,7 +248,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   }
 
   it should "include owners appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=owners") ~>
+    Get(testWorkspaces.workspace.path + "?fields=owners") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -421,7 +263,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   }
 
   it should "include workspace.attributes appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=workspace.attributes") ~>
+    Get(testWorkspaces.workspace.path + "?fields=workspace.attributes") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -436,7 +278,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   }
 
   it should "include workspace.authorizationDomain appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=workspace.authorizationDomain") ~>
+    Get(testWorkspaces.workspace.path + "?fields=workspace.authorizationDomain") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -451,7 +293,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   }
 
   it should "include workspaceSubmissionStats appropriately when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=workspaceSubmissionStats") ~>
+    Get(testWorkspaces.workspace.path + "?fields=workspaceSubmissionStats") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -466,7 +308,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   }
 
   it should "include multiple keys simultaneously when asked to" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=canShare&includeKey=workspace.attributes&includeKey=accessLevel") ~>
+    Get(testWorkspaces.workspace.path + "?fields=canShare,workspace.attributes,accessLevel") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -487,7 +329,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   // this test targets a specific bug that arose during development; worth keeping in.
   it should "include workspace.attributes even when attributes are empty" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace2.path + "?includeKey=workspace.attributes") ~>
+    Get(testWorkspaces.workspace2.path + "?fields=workspace.attributes") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -499,43 +341,9 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  // START mixed behavior tests
-
-  "WorkspaceApi, when using both includeKey and excludeKey params" should "prioritize includeKey over excludeKey" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=bucketOptions&excludeKey=bucketOptions&includeKey=accessLevel") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(accessLevel = fullWorkspaceResponse.accessLevel, bucketOptions = fullWorkspaceResponse.bucketOptions)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.accessLevel.isDefined)
-        assert(actual.bucketOptions.isDefined)
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "default everything to false except what's included" in withTestWorkspacesApiServices { services =>
-    // the canShare and catalog options here should have no effect
-    Get(testWorkspaces.workspace.path + "?includeKey=workspaceSubmissionStats&excludeKey=canShare&excludeKey=catalog") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(workspaceSubmissionStats = fullWorkspaceResponse.workspaceSubmissionStats)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.workspaceSubmissionStats.isDefined)
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
   it should "handle duplicates just fine" in withTestWorkspacesApiServices { services =>
     // the canShare and catalog options here should have no effect
-    Get(testWorkspaces.workspace.path + "?excludeKey=accessLevel&includeKey=accessLevel&includeKey=accessLevel&excludeKey=accessLevel&excludeKey=accessLevel") ~>
+    Get(testWorkspaces.workspace.path + "?fields=accessLevel,accessLevel") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -551,70 +359,19 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
 
   // START query param behavior tests
 
-  "WorkspaceApi query parameters" should "honor 'i' and 'e' aliases in the querystring with appropriate precedence" in withTestWorkspacesApiServices { services =>
-    // the canShare and catalog options here should have no effect
-    Get(testWorkspaces.workspace.path + "?i=owners&excludeKey=owners&e=owners") ~>
+  it should s"return 400 Bad Request for unknown fields value in querystring" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?fields=IntentionallyBadValueForUnitTest,AnotherBadOne") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(owners = fullWorkspaceResponse.owners)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.owners.isDefined)
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "combine 'i' and 'includeKey' aliases in the querystring" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?includeKey=canShare&i=workspace.attributes&includeKey=accessLevel") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(
-          accessLevel = fullWorkspaceResponse.accessLevel,
-          canShare = fullWorkspaceResponse.canShare,
-          workspace = minimalWorkspaceResponse.workspace.copy(attributes = fullWorkspaceResponse.workspace.attributes))
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertions
-        assert(actual.accessLevel.isDefined)
-        assert(actual.canShare.isDefined)
-        assert(actual.workspace.attributes.isDefined)
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  it should "combine 'e' and 'excludeKey' aliases in the querystring" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?excludeKey=bucketOptions&e=owners&e=workspaceSubmissionStats") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = fullWorkspaceResponse.copy(bucketOptions = None, owners = None, workspaceSubmissionStats = None)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertions
-        assertResult(None) { actual.bucketOptions }
-        assertResult(None) { actual.owners }
-        assertResult(None) { actual.workspaceSubmissionStats }
-        // compare full results
-        assertResult(expected) { actual }
-      }
-  }
-
-  List("includeKey", "excludeKey", "i", "e").foreach { param =>
-    it should s"return 400 Bad Request for unknown '$param' value in querystring" in withTestWorkspacesApiServices { services =>
-      Get(testWorkspaces.workspace.path + s"?$param=IntentionallyBadValueForUnitTest") ~>
-        sealRoute(services.workspaceRoutes) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) { status }
-
-          val parsedResponse = responseAs[ErrorReport]
-          assert(parsedResponse.message.contains("IntentionallyBadValueForUnitTest is not a valid workspace parameter"))
+        assertResult(StatusCodes.BadRequest) {
+          status
         }
-    }
+
+        val parsedResponse = responseAs[ErrorReport]
+        assertResult("Unrecognized field names: AnotherBadOne, IntentionallyBadValueForUnitTest") {
+          parsedResponse.message
+        }
+      }
   }
 
 

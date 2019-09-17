@@ -432,52 +432,26 @@ case class WorkspaceDetails(namespace: String,
   def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked)
 }
 
-final case class WorkspaceFieldSpecs(includeKeys: Set[String] = Set.empty[String],
-                                     excludeKeys: Set[String] = Set.empty[String])
 
-object WorkspaceFields {
-  sealed trait WorkspaceField
-  case object AccessLevel extends WorkspaceField
-  case object BucketOptions extends WorkspaceField
-  case object CanCompute extends WorkspaceField
-  case object CanShare extends WorkspaceField
-  case object Catalog extends WorkspaceField
-  case object Owners extends WorkspaceField
-  case object WorkspaceAttributes extends WorkspaceField
-  case object WorkspaceAuthorizationDomain extends WorkspaceField
-  case object WorkspaceSubmissionStats extends WorkspaceField
+case class WorkspaceFieldSpecs(fields: Option[Set[String]] = None)
 
-  def fromString(key: String): WorkspaceField = {
-    key.toLowerCase match {
-      case "accesslevel" => AccessLevel
-      case "bucketoptions" => BucketOptions
-      case "cancompute" => CanCompute
-      case "canshare" => CanShare
-      case "catalog" => Catalog
-      case "owners" => Owners
-      case "workspace.attributes" => WorkspaceAttributes
-      case "workspace.authorizationdomain" => WorkspaceAuthorizationDomain
-      case "workspacesubmissionstats" => WorkspaceSubmissionStats
-      case _ => throw new RawlsException(s"$key is not a valid workspace parameter")
-    }
-  }
 
-  def toString(param: WorkspaceField): String = {
-    param match {
-      case AccessLevel => "accessLevel"
-      case BucketOptions => "bucketOptions"
-      case CanCompute => "canCompute"
-      case CanShare => "canShare"
-      case Catalog => "catalog"
-      case Owners => "owners"
-      case WorkspaceAttributes => "workspace.attributes"
-      case WorkspaceAuthorizationDomain => "workspace.authorizationDomain"
-      case WorkspaceSubmissionStats => "workspaceSubmissionStats"
-    }
-  }
-
-  def values: Set[WorkspaceField] = Set(AccessLevel, BucketOptions, CanCompute, CanShare, Catalog,
-    Owners, WorkspaceAttributes, WorkspaceAuthorizationDomain, WorkspaceSubmissionStats)
+/** Contains List[String]s with the names of the members of the WorkspaceResponse
+  * and WorkspaceDetails case classes. Also contains the concatenation of those two lists,
+  * with the WorkspaceDetails members prefixed by "workspace." This concatenated list
+  * represents the keys present in in a JSON-serialized WorkspaceResponse object.
+  *
+  * Since WorkspaceFieldNames uses reflection (slow!) to find these names, we build it
+  * as an object so it's only calculated once.
+  */
+object WorkspaceFieldNames {
+  import scala.reflect.runtime.universe._
+  def classAccessors[T: TypeTag]: List[String] = typeOf[T].members.collect {
+    case m: MethodSymbol if m.isCaseAccessor => m.name.toString
+  }.toList
+  lazy val workspaceResponseNames: List[String] = classAccessors[WorkspaceResponse]
+  lazy val workspaceDetailNames: List[String] = classAccessors[WorkspaceDetails]
+  lazy val fieldNames: Set[String] = (workspaceResponseNames ++ workspaceDetailNames.map(k => s"workspace.$k")).toSet
 }
 
 object WorkspaceDetails {

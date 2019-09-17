@@ -51,10 +51,8 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         } ~
           get {
-            parameters("includeKey".as[String].*, "i".as[String].*, "excludeKey".as[String].*, "e".as[String].*) { (includes, i, excludes, e) =>
-              val in:Set[String] = includes.toSet ++ i.toSet
-              val out:Set[String] = excludes.toSet ++ e.toSet
-              complete { workspaceServiceConstructor(userInfo).GetWorkspace(WorkspaceName(workspaceNamespace, workspaceName), WorkspaceFieldSpecs(in, out)) }
+            parameter("fields".as[String].?) { fields =>
+              complete { workspaceServiceConstructor(userInfo).GetWorkspace(WorkspaceName(workspaceNamespace, workspaceName), WorkspaceFieldSpecs(fields.map(_.split(",").toSet))) }
             }
           } ~
           delete {

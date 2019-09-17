@@ -38,7 +38,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import cats.implicits._
-import org.broadinstitute.dsde.rawls.model.WorkspaceFields._
 
 /**
  * Created by dvoet on 4/27/15.
@@ -152,37 +151,28 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
     }
 
-  def parseParams(params: WorkspaceFieldSpecs): Map[WorkspaceField, Boolean] = {
-    // WorkspaceParamKeys.fromString will throw an exception if the inbound String in unrecognized
-    val includes: Set[WorkspaceField] = params.includeKeys.map(WorkspaceFields.fromString)
-    val excludes: Set[WorkspaceField] = params.excludeKeys.map(WorkspaceFields.fromString)
+  /** Returns the Set of legal field names supplied by the user,
+    * or the Set of all legal field names if the user supplied nothing.
+    * Throws an error if the user supplied an unrecognized field name.
+    *
+    * @param params the raw strings supplied by the user
+    * @return the set of field names to be included in the response
+    */
+  def validateParams(params: WorkspaceFieldSpecs): Set[String] = {
+    val args = params.fields.getOrElse(WorkspaceFieldNames.fieldNames).map(_.trim)
+    // did the user specify any fields that we don't know about?
+    val unrecognizedFields: Set[String] = args.diff(WorkspaceFieldNames.fieldNames)
+    if (unrecognizedFields.nonEmpty) {
+      throw new RawlsException(s"Unrecognized field names: ${unrecognizedFields.toList.sorted.mkString(", ")}")
+    }
+    // TODO: add logic for workspace defaults
 
-    // if any includeKey is specified, default everything to false.
-    val defaultParamValue: Boolean = includes.isEmpty
-    // build the map of defaults
-    val defaultMap: Map[WorkspaceField, Boolean] = WorkspaceFields.values.map(_ -> defaultParamValue).toMap
-    // build the map of includes
-    val includeMap: Map[WorkspaceField, Boolean] = includes.map(_ -> true).toMap
-    // build the map of excludes
-    val excludeMap: Map[WorkspaceField, Boolean] = excludes.map(_ -> false).toMap
-    // idea: we could instead throw an exception if the same key exists in both includes and excludes
-    /*
-        build the final map. Our desired business logic for each key is:
-          - if present in includes, always TRUE, even if also in excludes
-          - if present in excludes, but not includes, always FALSE
-          - if neither in includes or excludes, use default
-              - default is FALSE if any include exists; else TRUE
-     */
-    defaultMap ++ excludeMap ++ includeMap
+    args
   }
-
-  def getParam(params: Map[WorkspaceField, Boolean], target: WorkspaceField) =
-    params.getOrElse(target, true)
-
 
   def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs): Future[PerRequestMessage] = {
     // validate the inbound parameters
-    val options = Try(parseParams(params)) match {
+    val options = Try(validateParams(params)) match {
       case Success(opts) => opts
       case Failure(ex) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
     }
@@ -190,7 +180,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // dummy function that returns a Future(None)
     def noFuture = Future.successful(None)
 
-    val getAttributes: Boolean = getParam(options, WorkspaceAttributes)
+    val getAttributes: Boolean = options.contains("workspace.attributes")
 
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess, getAttributes) { workspaceContext =>
@@ -199,7 +189,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
           // accessLevel, canCompute, canShare is specified, we have to get it.
           def accessLevelFuture(): Future[WorkspaceAccessLevels.WorkspaceAccessLevel] =
-            if (getParam(options, AccessLevel) || getParam(options, CanCompute) || getParam(options, CanShare)) {
+            if (options.contains("accessLevel") || options.contains("canCompute") || options.contains("canShare")) {
               getMaximumAccessLevel(workspaceContext.workspaceId.toString)
             } else {
               Future.successful(WorkspaceAccessLevels.NoAccess)
@@ -208,44 +198,44 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           DBIO.from(accessLevelFuture()) flatMap { accessLevel =>
             // we may have calculated accessLevel because canShare/canCompute needs it;
             // but if the user didn't ask for it, don't return it
-            val optionalAccessLevelForResponse = if (getParam(options, AccessLevel)) { Option(accessLevel) } else { None }
+            val optionalAccessLevelForResponse = if (options.contains("accessLevel")) { Option(accessLevel) } else { None }
 
             // determine which functions to use for the various part of the response
-            def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (getParam(options, BucketOptions)) {
+            def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
               gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace)).map(Option(_))
             } else {
               noFuture
             }
-            def canComputeFuture(): Future[Option[Boolean]] = if (getParam(options, CanCompute)) {
+            def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
               getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel).map(Option(_))
             } else {
               noFuture
             }
-            def canShareFuture(): Future[Option[Boolean]] = if (getParam(options, CanShare)) {
+            def canShareFuture(): Future[Option[Boolean]] = if (options.contains("canShare")) {
               //convoluted but accessLevel for both params because user could at most share with their own access level
               getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel).map(Option(_))
             } else {
               noFuture
             }
-            def catalogFuture(): Future[Option[Boolean]] = if (getParam(options, Catalog)) {
+            def catalogFuture(): Future[Option[Boolean]] = if (options.contains("catalog")) {
               getUserCatalogPermissions(workspaceContext.workspaceId.toString).map(Option(_))
             } else {
               noFuture
             }
 
-            def ownersFuture(): Future[Option[Set[String]]] = if (options.getOrElse(WorkspaceFields.Owners, true)) {
+            def ownersFuture(): Future[Option[Set[String]]] = if (options.contains("owners")) {
               getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_))
             } else {
               noFuture
             }
 
-            def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] = if (getParam(options, WorkspaceAuthorizationDomain)) {
+            def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] = if (options.contains("workspace.authorizationDomain")) {
               loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo).map(Option(_))
             } else {
               noFuture
             }
 
-            def workspaceSubmissionStatsFuture(): slick.ReadAction[Option[WorkspaceSubmissionStats]] = if (getParam(options, WorkspaceFields.WorkspaceSubmissionStats)) {
+            def workspaceSubmissionStatsFuture(): slick.ReadAction[Option[WorkspaceSubmissionStats]] = if (options.contains("workspaceSubmissionStats")) {
               getWorkspaceSubmissionStats(workspaceContext, dataAccess).map(Option(_))
             } else {
               DBIO.from(noFuture)
@@ -265,6 +255,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
               stats <- workspaceSubmissionStatsFuture()
             } yield {
+              // TODO: post-process JSON to remove calculated-but-undesired keys
               RequestComplete(StatusCodes.OK, WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, getAttributes), stats, bucketDetails, owners))
             }
           }
