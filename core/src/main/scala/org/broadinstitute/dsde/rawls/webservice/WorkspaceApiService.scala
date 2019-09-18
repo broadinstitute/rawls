@@ -51,8 +51,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         } ~
           get {
-            parameter("fields".as[String].?) { fields =>
-              complete { workspaceServiceConstructor(userInfo).GetWorkspace(WorkspaceName(workspaceNamespace, workspaceName), WorkspaceFieldSpecs(fields.map(_.split(",").toSet))) }
+            parameterSeq { allParams =>
+              complete { workspaceServiceConstructor(userInfo).GetWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
+                WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")) }
             }
           } ~
           delete {

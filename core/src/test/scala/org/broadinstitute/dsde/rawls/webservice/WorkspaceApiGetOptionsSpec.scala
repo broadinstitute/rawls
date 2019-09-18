@@ -320,7 +320,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  it should "handle duplicates just fine" in withTestWorkspacesApiServices { services =>
+  it should "handle duplicate values just fine" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=accessLevel,accessLevel") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -342,6 +342,20 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
         }
         val parsedResponse = responseAs[ErrorReport]
         assertResult("Unrecognized field names: AnotherBadOne, IntentionallyBadValueForUnitTest") {
+          parsedResponse.message
+        }
+      }
+  }
+
+  it should s"return 400 Bad Request if fields param is specified multiple times" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?fields=accessLevel&fields=canShare,workspace.attributes") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+        val parsedResponse = responseAs[ErrorReport]
+        assertResult("Parameter 'fields' may not be present multiple times.") {
           parsedResponse.message
         }
       }

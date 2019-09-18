@@ -3,13 +3,14 @@ package org.broadinstitute.dsde.rawls.model
 import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
 
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
 import com.netaporter.uri.Uri.parse
 import akka.http.scaladsl.model.StatusCode
+import akka.http.scaladsl.model.StatusCodes.BadRequest
 import spray.json._
 import UserModelJsonSupport.ManagedGroupRefFormat
 
@@ -434,6 +435,23 @@ case class WorkspaceDetails(namespace: String,
 
 
 case class WorkspaceFieldSpecs(fields: Option[Set[String]] = None)
+object WorkspaceFieldSpecs {
+  def fromQueryParams(params: Seq[(String, String)], paramName: String): WorkspaceFieldSpecs = {
+    // ensure the "fields" parameter only exists once
+    val paramValues:Seq[String] = params.filter(_._1.equals(paramName)).map(_._2)
+    if (paramValues.size > 1) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' may not be present multiple times.")(ErrorReportSource("rawls")))
+    } else if (paramValues.isEmpty) {
+      new WorkspaceFieldSpecs(None)
+    } else {
+      // un-delimit the (single) param value
+      // The use of a delimited list here is informed by both the JSON:API spec and Google’s FieldMask syntax;
+      // it also reduces the overall length of the URL in the presence of many values.
+      val splitParamValues = paramValues.head.split(',').map(_.trim)
+      new WorkspaceFieldSpecs(Option(splitParamValues.toSet))
+    }
+  }
+}
 
 
 /** Contains List[String]s with the names of the members of the WorkspaceResponse
