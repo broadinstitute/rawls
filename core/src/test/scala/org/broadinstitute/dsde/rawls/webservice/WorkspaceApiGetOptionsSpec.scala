@@ -15,6 +15,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
+import spray.json._
+
 import scala.concurrent.ExecutionContext
 
 /** Tests for the get-workspace API, focused on the user's ability to specify which fields
@@ -65,7 +67,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
     val workspace2Name = WorkspaceName(billingProject.projectName.value, "emptyattrs")
 
     val workspace1Id = UUID.randomUUID().toString
-    val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", Some(workspace1Id), testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
+    val workspace = makeWorkspaceWithUsers(billingProject, workspaceName.name, workspace1Id, "bucket1", Some(workspace1Id), testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x"), AttributeName.withDefaultNS("description") -> AttributeString("my description")), false)
 
     val workspace2Id = UUID.randomUUID().toString
     val workspace2 = makeWorkspaceWithUsers(billingProject, workspace2Name.name, workspace2Id, "bucket2", Some(workspace2Id), testDate, testDate, "testUser", Map(), false)
@@ -172,17 +174,13 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   // canonical bare-minimum WorkspaceResponse to use in expectations below
   val minimalWorkspaceResponse = WorkspaceResponse(None, None, None, None, WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = testTime), None, false), None, None, None)
 
-  "WorkspaceApi, when using includeKey params" should "include accessLevel when asked to" in withTestWorkspacesApiServices { services =>
+  "WorkspaceApi, when using fields param" should "include accessLevel when asked to" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=accessLevel") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(accessLevel = fullWorkspaceResponse.accessLevel)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.accessLevel.isDefined)
-        // compare full results
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("accessLevel" -> JsString(fullWorkspaceResponse.accessLevel.get.toString))
         assertResult(expected) { actual }
       }
   }
@@ -192,12 +190,8 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(bucketOptions = fullWorkspaceResponse.bucketOptions)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.bucketOptions.isDefined)
-        // compare full results
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("bucketOptions" -> fullWorkspaceResponse.bucketOptions.get.toJson)
         assertResult(expected) { actual }
       }
   }
@@ -207,12 +201,8 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(canCompute = fullWorkspaceResponse.canCompute)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.canCompute.isDefined)
-        // compare full results
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("canCompute" -> JsBoolean(fullWorkspaceResponse.canCompute.get))
         assertResult(expected) { actual }
       }
   }
@@ -222,12 +212,8 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(canShare = fullWorkspaceResponse.canShare)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.canShare.isDefined)
-        // compare full results
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("canShare" -> JsBoolean(fullWorkspaceResponse.canShare.get))
         assertResult(expected) { actual }
       }
   }
@@ -237,12 +223,8 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(catalog = fullWorkspaceResponse.catalog)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.catalog.isDefined)
-        // compare full results
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("catalog" -> JsBoolean(fullWorkspaceResponse.catalog.get))
         assertResult(expected) { actual }
       }
   }
@@ -252,12 +234,8 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(owners = fullWorkspaceResponse.owners)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.owners.isDefined)
-        // compare full results
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("owners" -> JsArray(fullWorkspaceResponse.owners.get.toVector.map(JsString(_))))
         assertResult(expected) { actual }
       }
   }
@@ -267,12 +245,23 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(workspace = minimalWorkspaceResponse.workspace.copy(attributes = fullWorkspaceResponse.workspace.attributes))
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.workspace.attributes.isDefined)
-        // compare full results
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("workspace" -> JsObject("attributes" ->
+          JsObject("a" -> JsString("x"), "description" -> JsString("my description"))
+        ))
+        assertResult(expected) { actual }
+      }
+  }
+
+  it should "include individual keys inside workspace.attributes appropriately when asked to" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?fields=workspace.attributes.description") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("workspace" -> JsObject("attributes" ->
+          JsObject("description" -> JsString("my description"))
+        ))
         assertResult(expected) { actual }
       }
   }
@@ -282,12 +271,11 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(workspace = minimalWorkspaceResponse.workspace.copy(authorizationDomain = fullWorkspaceResponse.workspace.authorizationDomain))
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.workspace.authorizationDomain.isDefined)
-        // compare full results
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("workspace" -> JsObject("authorizationDomain" ->
+          JsArray(fullWorkspaceResponse.workspace.authorizationDomain.get.toVector.map(groupRef => JsObject("membersGroupName" -> JsString(groupRef.membersGroupName.value))
+          ))
+        ))
         assertResult(expected) { actual }
       }
   }
@@ -297,12 +285,8 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(workspaceSubmissionStats = fullWorkspaceResponse.workspaceSubmissionStats)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.workspaceSubmissionStats.isDefined)
-        // compare full results
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("workspaceSubmissionStats" -> fullWorkspaceResponse.workspaceSubmissionStats.get.toJson)
         assertResult(expected) { actual }
       }
   }
@@ -312,17 +296,14 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(
-          accessLevel = fullWorkspaceResponse.accessLevel,
-          canShare = fullWorkspaceResponse.canShare,
-          workspace = minimalWorkspaceResponse.workspace.copy(attributes = fullWorkspaceResponse.workspace.attributes))
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertions
-        assert(actual.accessLevel.isDefined)
-        assert(actual.canShare.isDefined)
-        assert(actual.workspace.attributes.isDefined)
-        // compare full results
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject(
+          "accessLevel" -> JsString(fullWorkspaceResponse.accessLevel.get.toString),
+          "canShare" -> JsBoolean(fullWorkspaceResponse.canShare.get),
+          "workspace" -> JsObject(
+            "attributes" -> JsObject("a" -> JsString("x"), "description" -> JsString("my description"))
+          )
+        )
         assertResult(expected) { actual }
       }
   }
@@ -333,26 +314,19 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertions
-        assert(actual.workspace.attributes.isDefined, "attributes key should be present in response")
-        actual.workspace.attributes.foreach( attrs => assert(attrs.isEmpty, "attributes value should be an empty map"))
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("workspace" -> JsObject("attributes" -> JsObject()))
+        assertResult(expected) { actual }
       }
   }
 
   it should "handle duplicates just fine" in withTestWorkspacesApiServices { services =>
-    // the canShare and catalog options here should have no effect
     Get(testWorkspaces.workspace.path + "?fields=accessLevel,accessLevel") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        val expected = minimalWorkspaceResponse.copy(accessLevel = fullWorkspaceResponse.accessLevel)
-        val parsedResponse = responseAs[WorkspaceResponse]
-        val actual = parsedResponse.copy(workspace = parsedResponse.workspace.copy(lastModified = testTime))
-        // targeted assertion
-        assert(actual.accessLevel.isDefined)
-        // compare full results
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject("accessLevel" -> JsString(fullWorkspaceResponse.accessLevel.get.toString))
         assertResult(expected) { actual }
       }
   }
@@ -360,21 +334,18 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
   // START query param behavior tests
 
   it should s"return 400 Bad Request for unknown fields value in querystring" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path + "?fields=IntentionallyBadValueForUnitTest,AnotherBadOne") ~>
+    Get(testWorkspaces.workspace.path + "?fields=accessLevel,IntentionallyBadValueForUnitTest,AnotherBadOne") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
         }
-
         val parsedResponse = responseAs[ErrorReport]
         assertResult("Unrecognized field names: AnotherBadOne, IntentionallyBadValueForUnitTest") {
           parsedResponse.message
         }
       }
   }
-
-
 
 }
 
