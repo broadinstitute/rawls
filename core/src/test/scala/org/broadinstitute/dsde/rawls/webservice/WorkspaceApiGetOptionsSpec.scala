@@ -185,7 +185,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  it should "include bucketOptions appropriately when asked to" in withTestWorkspacesApiServices { services =>
+  it should "include bucketOptions" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=bucketOptions") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -196,7 +196,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  it should "include canCompute appropriately when asked to" in withTestWorkspacesApiServices { services =>
+  it should "include canCompute" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=canCompute") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -207,7 +207,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  it should "include canShare appropriately when asked to" in withTestWorkspacesApiServices { services =>
+  it should "include canShare" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=canShare") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -218,7 +218,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  it should "include catalog appropriately when asked to" in withTestWorkspacesApiServices { services =>
+  it should "include catalog" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=catalog") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -229,7 +229,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  it should "include owners appropriately when asked to" in withTestWorkspacesApiServices { services =>
+  it should "include owners" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=owners") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -240,7 +240,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  it should "include workspace.attributes appropriately when asked to" in withTestWorkspacesApiServices { services =>
+  it should "include workspace.attributes" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=workspace.attributes") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -253,7 +253,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  it should "include individual keys inside workspace.attributes appropriately when asked to" in withTestWorkspacesApiServices { services =>
+  it should "include individual keys inside workspace.attributes" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=workspace.attributes.description") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -266,7 +266,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  it should "include workspace.authorizationDomain appropriately when asked to" in withTestWorkspacesApiServices { services =>
+  it should "include workspace.authorizationDomain" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=workspace.authorizationDomain") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -280,7 +280,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  it should "include workspaceSubmissionStats appropriately when asked to" in withTestWorkspacesApiServices { services =>
+  it should "include workspaceSubmissionStats" in withTestWorkspacesApiServices { services =>
     Get(testWorkspaces.workspace.path + "?fields=workspaceSubmissionStats") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {

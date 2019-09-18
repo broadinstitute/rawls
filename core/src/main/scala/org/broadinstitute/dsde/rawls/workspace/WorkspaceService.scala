@@ -161,52 +161,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def validateParams(params: WorkspaceFieldSpecs): Set[String] = {
     val args = params.fields.getOrElse(WorkspaceFieldNames.fieldNames).map(_.trim)
     // did the user specify any fields that we don't know about?
-    val unrecognizedFields: Set[String] = args.diff(WorkspaceFieldNames.fieldNames)
+    // include custom leniency here for attributes: we can't validate attribute names because they are arbitrary,
+    // so allow any field that starts with "workspace.attributes."
+    val unrecognizedFields: Set[String] = args.diff(WorkspaceFieldNames.fieldNames).filter(!_.startsWith("workspace.attributes."))
     if (unrecognizedFields.nonEmpty) {
       throw new RawlsException(s"Unrecognized field names: ${unrecognizedFields.toList.sorted.mkString(", ")}")
     }
     args
-  }
-
-  /** Generates a json object representing a supplied WorkspaceResponse, but containing only
-    * those json keys specified by the filters.
-    *
-    * @param workspaceResponse
-    * @param filters
-    * @return
-    */
-  def filterWorkspaceResponse(workspaceResponse: WorkspaceResponse, filters: Set[String]): JsObject = {
-    /*
-        business logic:
-          - if no filters, return as-is
-          - if any top-level filters, filter the WorkspaceResponse by those keys
-          - if any workspace.* filters, filter the WorkspaceDetails by those keys and
-               include in the response, even if user didn't specify a "workspace" key
-        currently, we only support top-level filters ("accessLevel", "bucketOptions") and filters inside
-        the WorkspaceDetails ("workspace.attributes",  "workspace.isLocked"). We hardcode custom logic for
-        the WorkspaceDetails. Ideally we'd refactor this to something recursive that handles sub-filtering
-        for any level of nesting.
-     */
-
-    val rawWorkspaceResponse = workspaceResponse.toJson.asJsObject
-    if (filters.isEmpty) {
-      rawWorkspaceResponse
-    } else {
-      // separate out top-level filters for WorkspaceResponse and "workspace.*" filters for WorkspaceDetails
-      val (workspaceDetailFilters, workspaceResponseFilters) = filters.partition(_.startsWith("workspace."))
-
-      // filter the WorkspaceResponse
-      val filteredWorkspaceResponse = shallowFilterJsObject(rawWorkspaceResponse, workspaceResponseFilters)
-
-      // custom handling for workspace details
-      if (workspaceDetailFilters.nonEmpty && !workspaceResponseFilters.contains("workspace")) {
-        val rawWorkspaceDetails = rawWorkspaceResponse.fields.getOrElse("workspace", JsObject()).asJsObject
-        val filteredWorkspaceDetails = shallowFilterJsObject(rawWorkspaceDetails, workspaceDetailFilters.map(_.replace("workspace.", "")))
-        new JsObject(filteredWorkspaceResponse.fields + ("workspace" -> filteredWorkspaceDetails))
-      } else {
-        filteredWorkspaceResponse
-      }
-    }
   }
 
   def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs): Future[PerRequestMessage] = {
@@ -219,7 +180,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // dummy function that returns a Future(None)
     def noFuture = Future.successful(None)
 
-    val getAttributes: Boolean = options.contains("workspace.attributes")
+    // if user requested the entire attributes map, or any individual attributes, retrieve all attributes.
+    // TODO: for a follow-on optimization, only query the DB for the individual attributes the user requested.
+    val getAttributes: Boolean = options.contains("workspace.attributes") || options.exists(_.startsWith("workspace.attributes."))
 
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess, getAttributes) { workspaceContext =>
@@ -296,7 +259,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             } yield {
               // post-process JSON to remove calculated-but-undesired keys
               val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, getAttributes), stats, bucketDetails, owners)
-              val filteredJson = filterWorkspaceResponse(workspaceResponse, options)
+              val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
               RequestComplete(StatusCodes.OK, filteredJson)
             }
           }
