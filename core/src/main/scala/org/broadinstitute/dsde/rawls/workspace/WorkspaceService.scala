@@ -70,7 +70,7 @@ object WorkspaceService {
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
 class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(implicit protected val executionContext: ExecutionContext)
-  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
+  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils {
 
   import dataSource.dataAccess.driver.api._
 
@@ -165,9 +165,48 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     if (unrecognizedFields.nonEmpty) {
       throw new RawlsException(s"Unrecognized field names: ${unrecognizedFields.toList.sorted.mkString(", ")}")
     }
-    // TODO: add logic for workspace defaults
-
     args
+  }
+
+  /** Generates a json object representing a supplied WorkspaceResponse, but containing only
+    * those json keys specified by the filters.
+    *
+    * @param workspaceResponse
+    * @param filters
+    * @return
+    */
+  def filterWorkspaceResponse(workspaceResponse: WorkspaceResponse, filters: Set[String]): JsObject = {
+    /*
+        business logic:
+          - if no filters, return as-is
+          - if any top-level filters, filter the WorkspaceResponse by those keys
+          - if any workspace.* filters, filter the WorkspaceDetails by those keys and
+               include in the response, even if user didn't specify a "workspace" key
+        currently, we only support top-level filters ("accessLevel", "bucketOptions") and filters inside
+        the WorkspaceDetails ("workspace.attributes",  "workspace.isLocked"). We hardcode custom logic for
+        the WorkspaceDetails. Ideally we'd refactor this to something recursive that handles sub-filtering
+        for any level of nesting.
+     */
+
+    val rawWorkspaceResponse = workspaceResponse.toJson.asJsObject
+    if (filters.isEmpty) {
+      rawWorkspaceResponse
+    } else {
+      // separate out top-level filters for WorkspaceResponse and "workspace.*" filters for WorkspaceDetails
+      val (workspaceDetailFilters, workspaceResponseFilters) = filters.partition(_.startsWith("workspace."))
+
+      // filter the WorkspaceResponse
+      val filteredWorkspaceResponse = shallowFilterJsObject(rawWorkspaceResponse, workspaceResponseFilters)
+
+      // custom handling for workspace details
+      if (workspaceDetailFilters.nonEmpty && !workspaceResponseFilters.contains("workspace")) {
+        val rawWorkspaceDetails = rawWorkspaceResponse.fields.getOrElse("workspace", JsObject()).asJsObject
+        val filteredWorkspaceDetails = shallowFilterJsObject(rawWorkspaceDetails, workspaceDetailFilters.map(_.replace("workspace.", "")))
+        new JsObject(filteredWorkspaceResponse.fields + ("workspace" -> filteredWorkspaceDetails))
+      } else {
+        filteredWorkspaceResponse
+      }
+    }
   }
 
   def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs): Future[PerRequestMessage] = {
@@ -255,8 +294,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
               stats <- workspaceSubmissionStatsFuture()
             } yield {
-              // TODO: post-process JSON to remove calculated-but-undesired keys
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, getAttributes), stats, bucketDetails, owners))
+              // post-process JSON to remove calculated-but-undesired keys
+              val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, getAttributes), stats, bucketDetails, owners)
+              val filteredJson = filterWorkspaceResponse(workspaceResponse, options)
+              RequestComplete(StatusCodes.OK, filteredJson)
             }
           }
         }
