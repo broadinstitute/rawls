@@ -380,6 +380,7 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
   }
 
   "WorkspaceFieldNames" - {
+    // if the WorkspaceResponse or WorkspaceDetails case classes change shape, these tests will fail.
     "should introspect WorkspaceResponse correctly" in {
       val expected = List("accessLevel", "canShare", "canCompute", "catalog", "workspace", "workspaceSubmissionStats",
         "bucketOptions", "owners")

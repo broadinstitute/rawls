@@ -151,14 +151,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
     }
 
-  /** Returns the Set of legal field names supplied by the user,
-    * or the Set of all legal field names if the user supplied nothing.
+  /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.
+    * Legal field names are any member of `WorkspaceResponse`, `WorkspaceDetails`,
+    * or any arbitrary key starting with "workspace.attributes."
     *
     * @param params the raw strings supplied by the user
     * @return the set of field names to be included in the response
     */
   def validateParams(params: WorkspaceFieldSpecs): Set[String] = {
+    // be lenient to whitespace, e.g. some user included spaces in their delimited string ("one, two, three")
     val args = params.fields.getOrElse(WorkspaceFieldNames.fieldNames).map(_.trim)
     // did the user specify any fields that we don't know about?
     // include custom leniency here for attributes: we can't validate attribute names because they are arbitrary,

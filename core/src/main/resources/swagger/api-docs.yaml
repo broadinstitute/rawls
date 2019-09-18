@@ -2862,14 +2862,18 @@ paths:
           type: string
         - name: fields
           description: >
-            When specified, include these keys in the response payload and exclude other keys.
-            Top-level keys and workspace-level keys only (TODO: explain)
-            Comma-delimited
+            When specified, include only these keys in the response payload and exclude other keys.
+            Accepts a comma-delimited list of values. To include a nested key, specify the key's path
+            using a dot delimiter; for example, to include {"workspace": {"attributes": {}}}, specify
+            "workspace.attributes". Legal values are any first-level key in the response, any first-level key
+            inside the {"workspace": {}} object, and any first-level key inside the {"workspace": {"attributes": {}}}
+            object.
+            If omitted, will return the full response payload.
           required: false
-          type: string
+          type: array
           items:
             type: string
-          collectionFormat: multi
+          collectionFormat: csv
           in: query
       security:
         - authorization:

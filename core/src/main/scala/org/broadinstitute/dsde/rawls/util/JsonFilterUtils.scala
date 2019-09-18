@@ -3,9 +3,17 @@ package org.broadinstitute.dsde.rawls.util
 import com.typesafe.scalalogging.LazyLogging
 import spray.json.{JsObject, JsValue}
 
+/** Mix in this trait to gain utility methods for filtering/masking JSON objects.
+  */
 trait JsonFilterUtils extends LazyLogging {
 
-  // supports top-level filters only
+  /** Filters a JSON object to only those top-level keys specified in the `filters`
+    * argument. Does not recurse into nested objects.
+    *
+    * @param in the JSON object to be filtered
+    * @param filters the JSON keys to include in the return object
+    * @return a new JSON object filtered to the specified keys, or the original JSON object if no filters specified.
+    */
   def shallowFilterJsObject(in: JsObject, filters: Set[String]): JsObject = {
     if (filters.isEmpty) {
       in
@@ -14,7 +22,13 @@ trait JsonFilterUtils extends LazyLogging {
     }
   }
 
-  // allows nested filters, using "." as a delimiter in the filter string
+  /** Filters a JSON object to only those keys specified in the `filters`
+    * argument. Recurse into nested objects. To specify nested keys, use dot-notation.
+    *
+    * @param in the JSON object to be filtered
+    * @param filters the JSON keys to include in the return object
+    * @return a new JSON object filtered to the specified keys, or the original JSON object if no filters specified.
+    */
   def deepFilterJsObject(in: JsObject, filters: Set[String]): JsObject = {
     val SEP = '.'
 
