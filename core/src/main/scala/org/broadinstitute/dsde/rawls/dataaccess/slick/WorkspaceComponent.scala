@@ -119,8 +119,8 @@ trait WorkspaceComponent {
       }
     }
 
-    def findByName(workspaceName: WorkspaceName): ReadAction[Option[Workspace]] = {
-      loadWorkspace(findByNameQuery(workspaceName))
+    def findByName(workspaceName: WorkspaceName, getAttributes: Boolean = true): ReadAction[Option[Workspace]] = {
+      loadWorkspace(findByNameQuery(workspaceName), getAttributes)
     }
 
     def findById(workspaceId: String): ReadAction[Option[Workspace]] = {
@@ -289,8 +289,11 @@ trait WorkspaceComponent {
       filter(_.id.inSetBind(workspaceIds))
     }
 
-    private def loadWorkspace(lookup: WorkspaceQueryType): ReadAction[Option[Workspace]] = {
-      uniqueResult(loadWorkspaces(lookup))
+    private def loadWorkspace(lookup: WorkspaceQueryType, getAttributes: Boolean = true): ReadAction[Option[Workspace]] = {
+      if (getAttributes)
+        uniqueResult(loadWorkspaces(lookup))
+      else
+        uniqueResult(loadWorkspacesWithoutAttributes(lookup))
     }
 
     private def loadWorkspaces(lookup: WorkspaceQueryType): ReadAction[Seq[Workspace]] = {
@@ -301,6 +304,16 @@ trait WorkspaceComponent {
         val attributesByWsId = workspaceAttributeQuery.unmarshalAttributes(workspaceAttributeRecs)
         workspaceRecs.map { workspaceRec =>
           unmarshalWorkspace(workspaceRec, attributesByWsId.getOrElse(workspaceRec.id, Map.empty))
+        }
+      }
+    }
+
+    private def loadWorkspacesWithoutAttributes(lookup: WorkspaceQueryType): ReadAction[Seq[Workspace]] = {
+      for {
+        workspaceRecs <- lookup.result
+      } yield {
+        workspaceRecs.map { workspaceRec =>
+          unmarshalWorkspace(workspaceRec, Map.empty)
         }
       }
     }

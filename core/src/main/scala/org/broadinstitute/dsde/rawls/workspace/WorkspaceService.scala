@@ -70,12 +70,12 @@ object WorkspaceService {
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
 class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(implicit protected val executionContext: ExecutionContext)
-  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
+  extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils {
 
   import dataSource.dataAccess.driver.api._
 
   def CreateWorkspace(workspace: WorkspaceRequest) = createWorkspace(workspace)
-  def GetWorkspace(workspaceName: WorkspaceName) = getWorkspace(workspaceName)
+  def GetWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs) = getWorkspace(workspaceName, params)
   def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
   def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)
   def UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateLibraryAttributes(workspaceName, operations)
@@ -151,32 +151,124 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
     }
 
-  def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
+  /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
+    * Throws an error if the user supplied an unrecognized field name.
+    * Legal field names are any member of `WorkspaceResponse`, `WorkspaceDetails`,
+    * or any arbitrary key starting with "workspace.attributes."
+    *
+    * @param params the raw strings supplied by the user
+    * @return the set of field names to be included in the response
+    */
+  def validateParams(params: WorkspaceFieldSpecs): Set[String] = {
+    // be lenient to whitespace, e.g. some user included spaces in their delimited string ("one, two, three")
+    val args = params.fields.getOrElse(WorkspaceFieldNames.fieldNames).map(_.trim)
+    // did the user specify any fields that we don't know about?
+    // include custom leniency here for attributes: we can't validate attribute names because they are arbitrary,
+    // so allow any field that starts with "workspace.attributes."
+    val unrecognizedFields: Set[String] = args.diff(WorkspaceFieldNames.fieldNames).filter(!_.startsWith("workspace.attributes."))
+    if (unrecognizedFields.nonEmpty) {
+      throw new RawlsException(s"Unrecognized field names: ${unrecognizedFields.toList.sorted.mkString(", ")}")
+    }
+    args
+  }
+
+  def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs): Future[PerRequestMessage] = {
+    // validate the inbound parameters
+    val options = Try(validateParams(params)) match {
+      case Success(opts) => opts
+      case Failure(ex) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
+    }
+
+    // dummy function that returns a Future(None)
+    def noFuture = Future.successful(None)
+
+    // if user requested the entire attributes map, or any individual attributes, retrieve all attributes.
+    // TODO: for a follow-on optimization, only query the DB for the individual attributes the user requested.
+    val getAttributes: Boolean = options.contains("workspace.attributes") || options.exists(_.startsWith("workspace.attributes."))
+
     dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+      withWorkspaceContext(workspaceName, dataAccess, getAttributes) { workspaceContext =>
         requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
-          DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel =>
+
+          // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
+          // accessLevel, canCompute, canShare is specified, we have to get it.
+          def accessLevelFuture(): Future[WorkspaceAccessLevels.WorkspaceAccessLevel] =
+            if (options.contains("accessLevel") || options.contains("canCompute") || options.contains("canShare")) {
+              getMaximumAccessLevel(workspaceContext.workspaceId.toString)
+            } else {
+              Future.successful(WorkspaceAccessLevels.NoAccess)
+            }
+
+          DBIO.from(accessLevelFuture()) flatMap { accessLevel =>
+            // we may have calculated accessLevel because canShare/canCompute needs it;
+            // but if the user didn't ask for it, don't return it
+            val optionalAccessLevelForResponse = if (options.contains("accessLevel")) { Option(accessLevel) } else { None }
+
+            // determine which functions to use for the various part of the response
+            def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
+              gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace)).map(Option(_))
+            } else {
+              noFuture
+            }
+            def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
+              getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel).map(Option(_))
+            } else {
+              noFuture
+            }
+            def canShareFuture(): Future[Option[Boolean]] = if (options.contains("canShare")) {
+              //convoluted but accessLevel for both params because user could at most share with their own access level
+              getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel).map(Option(_))
+            } else {
+              noFuture
+            }
+            def catalogFuture(): Future[Option[Boolean]] = if (options.contains("catalog")) {
+              getUserCatalogPermissions(workspaceContext.workspaceId.toString).map(Option(_))
+            } else {
+              noFuture
+            }
+
+            def ownersFuture(): Future[Option[Set[String]]] = if (options.contains("owners")) {
+              getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_))
+            } else {
+              noFuture
+            }
+
+            def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] = if (options.contains("workspace.authorizationDomain")) {
+              loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo).map(Option(_))
+            } else {
+              noFuture
+            }
+
+            def workspaceSubmissionStatsFuture(): slick.ReadAction[Option[WorkspaceSubmissionStats]] = if (options.contains("workspaceSubmissionStats")) {
+              getWorkspaceSubmissionStats(workspaceContext, dataAccess).map(Option(_))
+            } else {
+              DBIO.from(noFuture)
+            }
+
             //run these futures in parallel. this is equivalent to running the for-comp with the futures already defined and running
             val futuresInParallel = (
-              getUserCatalogPermissions(workspaceContext.workspaceId.toString),
-              //convoluted but accessLevel for both params because user could at most share with their own access level
-              getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel),
-              getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel),
-              getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)),
-              loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo),
-              gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace))
+              catalogFuture(),
+              canShareFuture(),
+              canComputeFuture(),
+              ownersFuture(),
+              workspaceAuthorizationDomainFuture(),
+              bucketOptionsFuture()
             ).tupled
 
             for {
               (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
-              stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
+              stats <- workspaceSubmissionStatsFuture()
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(Option(accessLevel), Option(canShare), Option(canCompute), Option(canCatalog), WorkspaceDetails(workspaceContext.workspace, authDomain.toSet), Option(stats), Option(bucketDetails), Option(owners)))
+              // post-process JSON to remove calculated-but-undesired keys
+              val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, getAttributes), stats, bucketDetails, owners)
+              val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
+              RequestComplete(StatusCodes.OK, filteredJson)
             }
           }
         }
       }
     }
+  }
 
   def getBucketOptions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
@@ -1949,8 +2041,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
-    dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
+  private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess, getAttributes: Boolean = true)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
+    dataAccess.workspaceQuery.findByName(workspaceName, getAttributes) flatMap {
       case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
       case Some(workspace) => op(SlickWorkspaceContext(workspace))
     }
