@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls
 
 import java.io.StringReader
 import java.net.InetAddress
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Executors, TimeUnit}
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
@@ -12,6 +12,7 @@ import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 import com.google.pubsub.v1.ProjectTopicName
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
@@ -384,6 +385,9 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("groupsPrefix")
       )
 
+      val threadFactory = new ThreadFactoryBuilder().setNameFormat("route-handler-thread-%d").build()
+      val routeHandlingEc = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(25, threadFactory))
+
       val service = new RawlsApiServiceImpl(
         WorkspaceService.constructor(
           slickDataSource,
@@ -418,10 +422,10 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix,
         samDAO,
         conf.as[SwaggerConfig]("swagger")
-      )
+      )(routeHandlingEc, materializer)
 
       for {
-        binding <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080))).recover {
+        binding <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080)))(IO.contextShift(routeHandlingEc)).recover {
           case t: Throwable =>
             logger.error("FATAL - failure starting http server", t)
             throw t

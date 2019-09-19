@@ -28,6 +28,7 @@ class StatusService(val healthMonitor: ActorRef)(implicit val executionContext: 
   def GetStatus = getStatus
 
   def getStatus: Future[PerRequestMessage] = {
+    printf(s"THREAD StatusService getStatus running on ${Thread.currentThread.getName}")
     (healthMonitor ? GetCurrentStatus).mapTo[StatusCheckResponse].map { statusCheckResponse =>
       val criticalStatusOk = Subsystems.CriticalSubsystems.forall { subsystem =>
         statusCheckResponse.systems.get(subsystem).exists(_.ok)

@@ -355,6 +355,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def listWorkspaces(): Future[PerRequestMessage] = {
+    printf(s"THREAD WorkspaceService listWorkspaces running on ${Thread.currentThread.getName}")
     for {
       workspacePolicies <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
       // filter out the policies that are not related to access levels, if a user has only those ignore the workspace
