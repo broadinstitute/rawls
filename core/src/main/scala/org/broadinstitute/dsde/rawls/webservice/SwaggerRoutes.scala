@@ -6,7 +6,7 @@ import akka.http.scaladsl.server.Directives._
 import akka.stream.scaladsl.Flow
 import akka.util.ByteString
 import org.broadinstitute.dsde.rawls.config.SwaggerConfig
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+
 import scala.language.postfixOps
 
 /**
@@ -20,8 +20,8 @@ trait SwaggerRoutes {
   val swaggerRoutes: server.Route = {
     path("") {
       get {
-        parameter("url") { urlparam =>
-          extractUri { uri =>
+        parameter("url") {urlparam =>
+          extractUri {uri =>
             redirect(uri.withRawQueryString(""), StatusCodes.MovedPermanently)
           }
         } ~
@@ -45,10 +45,7 @@ trait SwaggerRoutes {
       }
   }
 
-  private def serveIndex(): server.Route
-
-  =
-  {
+  private def serveIndex(): server.Route = {
     val swaggerOptions =
       """
         |        validatorUrl: null,
@@ -65,10 +62,10 @@ trait SwaggerRoutes {
           .replace("scopeSeparator: \",\"", "scopeSeparator: \" \"")
           .replace("jsonEditor: false,", "jsonEditor: false," + swaggerOptions)
           .replace("url = \"http://petstore.swagger.io/v2/swagger.json\";", "url = '/api-docs.yaml';")
-        )
-      })
+        )})
     } {
       getFromResource(swaggerUiPath + "/index.html")
     }
   }
+
 }
