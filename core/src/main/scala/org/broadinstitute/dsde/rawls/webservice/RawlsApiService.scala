@@ -70,15 +70,18 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   val samDAO: SamDAO
   val swaggerConfig: SwaggerConfig
 
+  //NOTE: This execution context is NOT used to run the routes. You can find that EC passed to bindAndHandle() in Boot.scala.
+  //This EC is pretty much only used in myLoggingFunction(), (you can check in IntelliJ by pressing Ctrl Alt Shift + ).
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
   def apiRoutes =
     options { complete(OK) } ~
-    withExecutionContext(ExecutionContext.global) { //serve real work off the global EC
+    //withExecutionContext(ExecutionContext.global) { //FIXME serve real work off the global EC. or maybe not. we'll see
       workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes
-    }
+    //}
 
+  //Reminder: This route does NOT run as the executionContext that's a member of this class!
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
     swaggerRoutes ~
     versionRoutes ~

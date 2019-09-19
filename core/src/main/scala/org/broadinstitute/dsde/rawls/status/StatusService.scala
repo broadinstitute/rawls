@@ -28,13 +28,15 @@ class StatusService(val healthMonitor: ActorRef)(implicit val executionContext: 
   def GetStatus = getStatus
 
   def getStatus: Future[PerRequestMessage] = {
+    Future.successful(println(s"THREAD StatusService getStatus running on ${Thread.currentThread.getName}")).flatMap { _ => //FIXME trash this, it's only to see who is running this code
     (healthMonitor ? GetCurrentStatus).mapTo[StatusCheckResponse].map { statusCheckResponse =>
-      println(s"THREAD StatusService getStatus running on ${Thread.currentThread.getName}")
+
       val criticalStatusOk = Subsystems.CriticalSubsystems.forall { subsystem =>
         statusCheckResponse.systems.get(subsystem).exists(_.ok)
       }
       val httpStatus = if (criticalStatusOk) StatusCodes.OK else StatusCodes.InternalServerError
       RequestComplete(httpStatus, statusCheckResponse)
     }
+  }
   }
 }

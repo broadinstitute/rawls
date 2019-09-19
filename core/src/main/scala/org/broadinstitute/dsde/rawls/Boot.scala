@@ -6,6 +6,8 @@ import java.util.concurrent.{Executors, TimeUnit}
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.server.{Route, RoutingLog}
+import akka.http.scaladsl.settings.{ParserSettings, RoutingSettings}
 import akka.stream.ActorMaterializer
 import cats.effect._
 import cats.implicits._
@@ -46,7 +48,7 @@ import org.http4s.Uri
 import org.http4s.client.blaze.BlazeClientBuilder
 
 import scala.collection.JavaConverters._
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import net.ceedubs.ficus.Ficus._
@@ -377,8 +379,11 @@ object Boot extends IOApp with LazyLogging {
         HealthMonitor.CheckAll
       )
 
+      val statusThreadFactory = new ThreadFactoryBuilder().setNameFormat("status-service-thread-%d").build()
+      val statusEc = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(25, statusThreadFactory))
+
       val statusServiceConstructor: () => StatusService = () =>
-        StatusService.constructor(healthMonitor)
+        StatusService.constructor(healthMonitor)()(statusEc)
 
       val workspaceServiceConfig = WorkspaceServiceConfig(
         conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),
@@ -386,7 +391,7 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val threadFactory = new ThreadFactoryBuilder().setNameFormat("route-handler-thread-%d").build()
-      val routeHandlingEc = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(25, threadFactory))
+      val routeHandlingEc = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(25, threadFactory)) //FIXME make this cached and unbounded
 
       val service = new RawlsApiServiceImpl(
         WorkspaceService.constructor(
@@ -425,7 +430,13 @@ object Boot extends IOApp with LazyLogging {
       )(routeHandlingEc, materializer)
 
       for {
-        binding <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080)))(IO.contextShift(routeHandlingEc)).recover {
+        binding <- IO.fromFuture(IO(Http().bindAndHandle( //all this to override the execution context with which we handle routes
+          Route.handlerFlow(service.route)(
+            RoutingSettings.default(system),
+            ParserSettings.default(system),
+            materializer,
+            RoutingLog.fromActorSystem(system),
+            routeHandlingEc), "0.0.0.0", 8080))).recover {
           case t: Throwable =>
             logger.error("FATAL - failure starting http server", t)
             throw t

@@ -355,8 +355,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def listWorkspaces(): Future[PerRequestMessage] = {
-    for {
-      _ <- Future.successful(println(s"THREAD WorkspaceService listWorkspaces running on ${Thread.currentThread.getName}"))
+    val x = for {
       workspacePolicies <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
       // filter out the policies that are not related to access levels, if a user has only those ignore the workspace
       accessLevelWorkspacePolicies = workspacePolicies.filter(p => WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty)
@@ -395,6 +394,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         results.map { responses => RequestComplete(StatusCodes.OK, responses) }
       }, TransactionIsolation.ReadCommitted)
     } yield result
+
+    Future.successful(println(s"THREAD WorkspaceService listWorkspaces running on ${Thread.currentThread.getName}")).flatMap(_ => x)
   }
 
   private def getWorkspaceSubmissionStats(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[WorkspaceSubmissionStats] = {
