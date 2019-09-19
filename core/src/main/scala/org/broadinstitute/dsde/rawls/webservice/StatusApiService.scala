@@ -18,8 +18,8 @@ trait StatusApiService {
 
   val statusRoute: server.Route = {
     path("status") {
-      println(s"THREAD StatusApiService /status running on ${Thread.currentThread.getName}")
       get {
+        println(s"THREAD StatusApiService.get /status running on ${Thread.currentThread.getName}")
         complete { statusServiceConstructor().GetStatus }
       }
     }

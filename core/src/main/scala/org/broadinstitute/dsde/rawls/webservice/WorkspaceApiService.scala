@@ -40,6 +40,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
         }
       } ~
         get {
+          println(s"THREAD WorkspaceApiService.get route /workspaces running on ${Thread.currentThread.getName}")
           complete {
             workspaceServiceConstructor(userInfo).ListWorkspaces()
           }
