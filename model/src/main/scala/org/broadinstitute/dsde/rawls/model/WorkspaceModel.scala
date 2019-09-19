@@ -112,6 +112,8 @@ case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
                                     lastFailureDate: Option[DateTime],
                                     runningSubmissionsCount: Int)
 
+case class WorkspaceBucketOptions(requesterPays: Boolean)
+
 case class EntityName(
                    name: String)
 
@@ -342,7 +344,10 @@ case class MethodConfiguration(
                    namespace: String,
                    name: String,
                    rootEntityType: Option[String],
-                   prerequisites: Map[String, AttributeString],
+                   //we used to have prereqs but did nothing with them. so we removed them.
+                   //leaving it as an option means we can accept it being there or not; when we return this object,
+                   //we'll always put Some(Map.empty) here so that clients who might be expecting this key still get it.
+                   prerequisites: Option[Map[String, AttributeString]],
                    inputs: Map[String, AttributeString],
                    outputs: Map[String, AttributeString],
                    methodRepoMethod: MethodRepoMethod,
@@ -404,13 +409,14 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
                                  public: Boolean)
 
-case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
-                             canShare: Boolean,
-                             canCompute: Boolean,
-                             catalog: Boolean,
+case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
+                             canShare: Option[Boolean],
+                             canCompute: Option[Boolean],
+                             catalog: Option[Boolean],
                              workspace: WorkspaceDetails,
-                             workspaceSubmissionStats: WorkspaceSubmissionStats,
-                             owners: Set[String])
+                             workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
+                             bucketOptions: Option[WorkspaceBucketOptions],
+                             owners: Option[Set[String]])
 
 case class WorkspaceDetails(namespace: String,
                             name: String,
@@ -420,10 +426,10 @@ case class WorkspaceDetails(namespace: String,
                             createdDate: DateTime,
                             lastModified: DateTime,
                             createdBy: String,
-                            attributes: AttributeMap,
+                            attributes: Option[AttributeMap],
                             isLocked: Boolean = false,
-                            authorizationDomain: Set[ManagedGroupRef]) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked)
+                            authorizationDomain: Option[Set[ManagedGroupRef]]) {
+  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked)
 }
 
 object WorkspaceDetails {
@@ -437,9 +443,9 @@ object WorkspaceDetails {
       workspace.createdDate,
       workspace.lastModified,
       workspace.createdBy,
-      workspace.attributes,
+      Option(workspace.attributes),
       workspace.isLocked,
-      authorizationDomain
+      Option(authorizationDomain)
     )
   }
 }
@@ -639,11 +645,13 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 
+  implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
+
   implicit val WorkspaceDetailsFormat = jsonFormat11(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
-  implicit val WorkspaceResponseFormat = jsonFormat7(WorkspaceResponse)
+  implicit val WorkspaceResponseFormat = jsonFormat8(WorkspaceResponse)
 
   implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
 

@@ -16,15 +16,17 @@ import com.google.pubsub.v1.ProjectTopicName
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
+import io.chrisdavenport.linebacker.Linebacker
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.config._
+import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
-import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, _}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
@@ -46,9 +48,9 @@ import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
 import net.ceedubs.ficus.Ficus._
-import org.apache.commons.io.FileUtils
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 object Boot extends IOApp with LazyLogging {
@@ -114,11 +116,26 @@ object Boot extends IOApp with LazyLogging {
     val jsonFactory = JacksonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
+
     val hammCromwellMetadataConfig = gcsConfig.getConfig("hamm-cromwell-metadata")
     val serviceProject = gcsConfig.getString("serviceProject")
+    val appName = gcsConfig.getString("appName")
+    val pathToPem = gcsConfig.getString("pathToPem")
+
     val hammCromwellMetadata = HammCromwellMetadata(
       GcsBucketName(hammCromwellMetadataConfig.getString("bucket-name")),
       ProjectTopicName.of(serviceProject, hammCromwellMetadataConfig.getString("topic-name "))
+    )
+
+    //Sanity check deployment manager template path.
+    val dmConfig = DeploymentManagerConfig(gcsConfig.getConfig("deploymentManager"))
+
+    val accessContextManagerDAO = new HttpGoogleAccessContextManagerDAO(
+      clientEmail,
+      pathToPem,
+      appName,
+      serviceProject,
+      workbenchMetricBaseName = metricsPrefix
     )
 
     initAppDependencies[IO](conf).use { appDependencies =>
@@ -129,6 +146,7 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("subEmail"),
         gcsConfig.getString("pathToPem"),
         gcsConfig.getString("appsDomain"),
+        dmConfig.orgID,
         gcsConfig.getString("groupsPrefix"),
         gcsConfig.getString("appName"),
         gcsConfig.getInt("deletedBucketCheckSeconds"),
@@ -138,25 +156,34 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("billingPemEmail"),
         gcsConfig.getString("pathToBillingPem"),
         gcsConfig.getString("billingEmail"),
+        gcsConfig.getString("billingGroupEmail"),
+        gcsConfig.getStringList("billingGroupEmailAliases").asScala.toList,
+        dmConfig.billingProbeEmail,
         gcsConfig.getInt("bucketLogsMaxAge"),
         hammCromwellMetadata = hammCromwellMetadata,
         googleStorageService = appDependencies.googleStorageService,
         googleServiceHttp = appDependencies.googleServiceHttp,
         topicAdmin = appDependencies.topicAdmin,
         workbenchMetricBaseName = metricsPrefix,
-        proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", "")
+        proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
+        deploymentMgrProject = dmConfig.projectID,
+        cleanupDeploymentAfterCreating = dmConfig.cleanupDeploymentAfterCreating,
+        terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
+        terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
+        accessContextManagerDAO = accessContextManagerDAO
       )
+
 
       val pubSubDAO = new HttpGooglePubSubDAO(
         clientEmail,
-        gcsConfig.getString("pathToPem"),
-        gcsConfig.getString("appName"),
-        gcsConfig.getString("serviceProject"),
+        pathToPem,
+        appName,
+        serviceProject,
         workbenchMetricBaseName = metricsPrefix
       )
 
       val bigQueryDAO = new HttpGoogleBigQueryDAO(
-        gcsConfig.getString("appName"),
+        appName,
         Json(gcsConfig.getString("bigQueryJson")),
         metricsPrefix
       )
@@ -225,6 +252,7 @@ object Boot extends IOApp with LazyLogging {
           }
           .toSet
 
+      val cromiamDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(executionServiceConfig.getString("cromiamUrl"), metricsPrefix)
       val shardedExecutionServiceCluster: ExecutionServiceCluster =
         new ShardedHttpExecutionServiceCluster(
           executionServiceServers,
@@ -235,22 +263,17 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getStringList("projectTemplate.owners").asScala
       val projectEditors =
         gcsConfig.getStringList("projectTemplate.editors").asScala
-      val projectServices =
-        gcsConfig.getStringList("projectTemplate.services").asScala
       val projectOwnerGrantableRoles =
         gcsConfig.getStringList("projectTemplate.ownerGrantableRoles")
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
-      val projectTemplate = ProjectTemplate(
-        Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors),
-        projectServices
-      )
+      val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 
       val notificationDAO = new PubSubNotificationDAO(
         pubSubDAO,
         gcsConfig.getString("notifications.topicName")
       )
       val marthaConfig = conf.getConfig("martha")
-      val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl"))
+      val dosResolver = new MarthaDosResolver(marthaConfig.getString("baseUrl_v2"))
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
           slickDataSource,
@@ -258,7 +281,9 @@ object Boot extends IOApp with LazyLogging {
           notificationDAO,
           samDAO,
           projectOwnerGrantableRoles.asScala,
-          requesterPaysRole
+          requesterPaysRole,
+          dmConfig,
+          projectTemplate
         )
       val genomicsServiceConstructor: (UserInfo) => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
@@ -289,6 +314,16 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
       val defaultBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultBackend"))
 
+      val wdlParsingConfig = WDLParserConfig(conf.getConfig("wdl-parsing"))
+      def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
+
+      def wdlParser: WDLParser =
+        if (wdlParsingConfig.useCache)
+          new CachingWDLParser(wdlParsingConfig, cromwellSwaggerClient)
+        else new NonCachingWDLParser(wdlParsingConfig, cromwellSwaggerClient)
+
+      val methodConfigResolver  = new MethodConfigResolver(wdlParser)
+
       if (conf.getBooleanOption("backRawls").getOrElse(false)) {
         logger.info("This instance has been marked as BACK. Booting monitors...")
         BootMonitors.bootMonitors(
@@ -309,7 +344,8 @@ object Boot extends IOApp with LazyLogging {
           requesterPaysRole,
           useWorkflowCollectionField,
           useWorkflowCollectionLabel,
-          defaultBackend
+          defaultBackend,
+          methodConfigResolver
         )
       } else
         logger.info(
@@ -352,8 +388,10 @@ object Boot extends IOApp with LazyLogging {
         WorkspaceService.constructor(
           slickDataSource,
           methodRepoDAO,
+          cromiamDAO,
           shardedExecutionServiceCluster,
           conf.getInt("executionservice.batchSize"),
+          methodConfigResolver,
           gcsDAO,
           samDAO,
           notificationDAO,
@@ -383,11 +421,13 @@ object Boot extends IOApp with LazyLogging {
       )
 
       for {
-        _ <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080))).recover {
+        binding <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080))).recover {
           case t: Throwable =>
             logger.error("FATAL - failure starting http server", t)
             throw t
         }
+        _ <- IO.fromFuture(IO(binding.whenTerminated))
+        _ <- IO(system.terminate())
       } yield ()
     }
   }
@@ -428,7 +468,8 @@ object Boot extends IOApp with LazyLogging {
 
     for {
       blockingEc <- ExecutionContexts.fixedThreadPool[F](256) //scala.concurrent.blocking has default max extra thread number 256, so use this number to start with
-      googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, blockingEc, Some(serviceProject))
+      lineBacker = Linebacker.fromExecutionContext[F](blockingEc)
+      googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, Some(serviceProject))(ContextShift[F], Timer[F], implicitly[Async[F]], Logger[F], lineBacker)
       httpClient <- BlazeClientBuilder(executionContext).resource
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)

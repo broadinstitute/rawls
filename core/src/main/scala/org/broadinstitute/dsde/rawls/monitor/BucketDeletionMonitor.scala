@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor._
+import cats.effect.{ContextShift, IO}
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
@@ -11,9 +12,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.PendingBucketDeletionRecor
 import com.typesafe.scalalogging.LazyLogging
 
 import scala.concurrent.duration._
+import cats.implicits._
 
 object BucketDeletionMonitor {
-  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {
+  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props = {
     Props(new BucketDeletionMonitor(datasource, gcsDAO, initialDelay, pollInterval))
   }
 
@@ -21,7 +23,7 @@ object BucketDeletionMonitor {
   case object CheckAll extends BucketDeletionsMessage
 }
 
-class BucketDeletionMonitor(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext) extends Actor with LazyLogging {
+class BucketDeletionMonitor(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, initialDelay: FiniteDuration, pollInterval: FiniteDuration)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]) extends Actor with LazyLogging {
 
   context.system.scheduler.schedule(initialDelay, pollInterval, self, CheckAll)
 
@@ -35,11 +37,13 @@ class BucketDeletionMonitor(datasource: SlickDataSource, gcsDAO: GoogleServicesD
         dataAccess.pendingBucketDeletionQuery.list()
       }
 
-      _ <- Future.traverse(deleteRecords) { deleteRecord =>
-        deleteBucket(deleteRecord.bucket)
-      }
+      // This used to be Future.traverse but that runs all the futures right now, concurrently. When there are 100s or
+      // 1000s of buckets to delete this causes a problem by overwhelming the thread pool. Switching to use cats
+      // traverse and IO makes this all go serially which is ok in this background process.
+      _ <- deleteRecords.toList.traverse { deleteRecord =>
+        IO.fromFuture(IO(deleteBucket(deleteRecord.bucket)))
+      }.unsafeToFuture()
     } yield ()
-
 
     checkFuture.onFailure {
       // there was a failure, log it and it will retry later

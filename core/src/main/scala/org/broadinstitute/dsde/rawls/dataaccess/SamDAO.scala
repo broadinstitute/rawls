@@ -38,6 +38,7 @@ trait SamDAO {
     */
   def getPetServiceAccountKeyForUser(googleProject: String, userEmail: RawlsUserEmail): Future[String]
   def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String]
+  def deleteUserPetServiceAccount(googleProject: String, userInfo: UserInfo): Future[Unit]
 
   def getStatus(): Future[SubsystemStatus]
 }

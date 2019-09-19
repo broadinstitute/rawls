@@ -59,7 +59,7 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
         '403':
-          description: You must be a user of the google billing account
+          description: You must be a user of the google billing account and have permissions on the service perimeter if one is specified
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
@@ -532,45 +532,6 @@ paths:
             - openid
             - email
             - profile
-  '/api/admin/workspaces/{workspaceNamespace}/{workspaceName}':
-    delete:
-          responses:
-            '202':
-              description: Delete request accepted. Workspace bucket will be deleted within 24 hours.
-            '403':
-              description: You must be an admin to access this endpoint
-              schema:
-                $ref: '#/definitions/ErrorReport'
-            '404':
-              description: Workspace not found
-              schema:
-                $ref: '#/definitions/ErrorReport'
-            '500':
-              description: Rawls Internal Error
-              schema:
-                $ref: '#/definitions/ErrorReport'
-          description: Delete a workspace
-          tags:
-            - admin
-            - workspaces
-          summary: Admin delete workspace
-          operationId: admin_delete_workspace
-          parameters:
-            - in: path
-              description: Workspace Namespace
-              name: workspaceNamespace
-              required: true
-              type: string
-            - in: path
-              description: Workspace Name
-              name: workspaceName
-              required: true
-              type: string
-          security:
-            - authorization:
-                - openid
-                - email
-                - profile
   '/api/admin/refreshToken/{userSubjectId}':
     delete:
       responses:
@@ -664,6 +625,50 @@ paths:
             - openid
             - email
             - profile
+
+  '/api/servicePerimeters/{servicePerimeterName}/projects/{projectName}':
+    put:
+      responses:
+        '202':
+          description: Successful request, check the project's status for completion
+        '400':
+          description: Project is already in perimeter or is not in 'Ready' state
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Service Perimeter does not exist or you do not have access
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '403':
+          description: Project does not exist or you do not have access
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Add a project to a service perimeter, must have 'add_to_service_perimeter' action on project and 'add_project' action on perimeter, included in owner role for both
+      tags:
+        - servicePerimeters
+      summary: Add a project to a service perimeter
+      operationId: addProjectToServicePerimeter
+      parameters:
+        - in: path
+          description: Fully qualified google service perimeter name in the form of accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME], url encoded
+          name: servicePerimeterName
+          required: true
+          type: string
+        - in: path
+          description: Project name
+          name: projectName
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:
@@ -2586,6 +2591,44 @@ paths:
             - email
             - profile
 
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/bucketOptions':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkspaceBucketOptions'
+        '404':
+          description: Workspace not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Returns metadata about the workspace bucket.
+      tags:
+        - workspaces
+      summary: Get metadata about the workspace bucket
+      operationId: getWorkspaceBucketOptions
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/catalog':
     get:
       responses:
@@ -2973,6 +3016,40 @@ paths:
           - openid
           - email
           - profile
+  '/api/workflows/{workflowId}/genomics/{operationId}':
+    get:
+      responses:
+        '200':
+          description: operations info
+        '404':
+          description: workflow or jobId not found or no access
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: retrieve operations info from Google Genomics API
+      tags:
+        - workflows
+      summary: retrieve operations info from Google Genomics API
+      operationId: genomics_operations_get
+      parameters:
+        - in: path
+          description: Workflow Id
+          name: workflowId
+          required: true
+          type: string
+        - in: path
+          description: operations job id; for PAPIv1 in the form of "operations/{id}", for PAPIv2 "projects/{project}/operations/{id}"
+          name: operationId
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/user/refreshToken':
     put:
       responses:
@@ -4012,8 +4089,6 @@ definitions:
       rootEntityType:
         type: string
         description: The root entity type that the method will be running on. Optional if this method config doesn't run on an entity (i.e. uses only workspace attributes and literal inputs).
-      prerequisites:
-        type: object
       inputs:
         type: object
       outputs:
@@ -4448,6 +4523,8 @@ definitions:
         $ref: '#/definitions/Workspace'
       workspaceSubmissionStats:
         $ref: '#/definitions/WorkspaceSubmissionStats'
+      bucketOptions:
+        $ref: '#/definitions/WorkspaceBucketOptions'
       owners:
         type: array
         items:
@@ -4466,6 +4543,15 @@ definitions:
         type: array
         items:
           type: string
+
+  WorkspaceBucketOptions:
+    description: 'Extra information about a GCS bucket attached to a workspace'
+    required:
+      - requesterPays
+    properties:
+      requesterPays:
+        type: boolean
+        description: "Whether the bucket is requester pays"
 
   WorkspaceAccessLevel:
     description: 'The level of access a user or group has on a Workspace. NoAccess, Read, Write, Owner, ProjectOwner'
@@ -4679,6 +4765,15 @@ definitions:
       billingAccount:
         type: string
         description: the id of the billing account to use, must start with 'billingAccounts/'
+      highSecurityNetwork:
+        type: boolean
+        description: Optional, false if not specified. If true, spin up all compute in a VPC network.
+      enableFlowLogs:
+        type: boolean
+        description: Optional, false if not specified. If true, enable flow logs within the high security network. Requires highSecurityNetwork = true.
+      servicePerimeter:
+        type: string
+        description: The fully qualified name of the GCP service perimeter to put this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME]. Caller must have the add_project action for this service perimeter in Sam.
   RawlsBillingProjectMembership:
     description: an element of a list of projects and related role for a user
     required:

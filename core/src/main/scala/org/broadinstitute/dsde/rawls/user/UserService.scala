@@ -5,7 +5,9 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.http.HttpResponseException
+import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
@@ -16,9 +18,13 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
+
+import cats.implicits._
 
 /**
  * Created by dvoet on 10/27/15.
@@ -26,35 +32,35 @@ import scala.util.{Failure, Success}
 object UserService {
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String], requesterPaysRole: String)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, projectOwnerGrantableRoles, requesterPaysRole)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String], requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, projectOwnerGrantableRoles, requesterPaysRole, dmConfig, projectTemplate)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
-  def getGoogleProjectOwnerGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
+  def getGoogleProjectOwnerGroupEmail(samDAO: SamDAO, projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
-      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectPolicyNames.owner)
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.owner)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting owner policy email")))
   }
 
-  def getComputeUserGroupEmail(samDAO: SamDAO, project: RawlsBillingProject)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
+  def getComputeUserGroupEmail(samDAO: SamDAO, projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[WorkbenchEmail] = {
     samDAO
-      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectPolicyNames.canComputeUser)
+      .syncPolicyToGoogle(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.canComputeUser)
       .map(_.keys.headOption.getOrElse(throw new RawlsException("Error getting can compute user policy email")))
   }
 
   def getDefaultGoogleProjectPolicies(ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, requesterPaysRole: String) = {
     Map(
-      "roles/viewer" -> List(s"group:${ownerGroupEmail.value}"),
-      "roles/billing.projectManager" -> List(s"group:${ownerGroupEmail.value}"),
-      "roles/genomics.pipelinesRunner" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
-      requesterPaysRole -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
-      "roles/bigquery.jobUser" -> List(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
+      "roles/viewer" -> Set(s"group:${ownerGroupEmail.value}"),
+      "roles/billing.projectManager" -> Set(s"group:${ownerGroupEmail.value}"),
+      "roles/genomics.pipelinesRunner" -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
+      requesterPaysRole -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
+      "roles/bigquery.jobUser" -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
     )
   }
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String], requesterPaysRole: String)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, projectOwnerGrantableRoles: Seq[String], requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging {
 
   import dataSource.dataAccess.driver.api._
 
@@ -73,7 +79,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def RemoveGoogleRoleFromUser(projectName: RawlsBillingProjectName, targetUserEmail: WorkbenchEmail, role: String) = requireProjectAction(projectName, SamBillingProjectActions.alterGoogleRole) { removeGoogleRoleFromUser(projectName, targetUserEmail, role) }
   def ListBillingAccounts = listBillingAccounts()
 
-  def CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) = startBillingProjectCreation(projectName, billingAccount)
+  def CreateBillingProjectFull(createProjectRequest: CreateRawlsBillingProjectFullRequest) = startBillingProjectCreation(createProjectRequest)
   def GetBillingProjectMembers(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamBillingProjectActions.readPolicies) { getBillingProjectMembers(projectName) }
 
   def AdminDeleteRefreshToken(userRef: RawlsUserRef) = asFCAdmin { deleteRefreshToken(userRef) }
@@ -83,10 +89,19 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def AdminAddLibraryCurator(userEmail: RawlsUserEmail) = asFCAdmin { addLibraryCurator(userEmail) }
   def AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) = asFCAdmin { removeLibraryCurator(userEmail) }
 
+  def AddProjectToServicePerimeter(servicePerimeterName: ServicePerimeterName, projectName: RawlsBillingProjectName) = requirePermissionsToAddToServicePerimeter(servicePerimeterName, projectName) { addProjectToServicePerimeter(servicePerimeterName, projectName) }
+
   def requireProjectAction(projectName: RawlsBillingProjectName, action: SamResourceAction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, userInfo).flatMap {
       case true => op
       case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a project owner.")))
+    }
+  }
+
+  def requireServicePerimeterAction(servicePerimeterName: ServicePerimeterName, action: SamResourceAction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+    samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeterName.value, UTF_8.name), action, userInfo).flatMap {
+      case true => op
+      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Service Perimeter does not exist or you do not have access")))
     }
   }
 
@@ -194,11 +209,21 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def unregisterBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
     val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
     for {
+      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
+      _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
       _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
       _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) }
     } yield {
       RequestComplete(StatusCodes.NoContent)
     }
+  }
+
+  private def destroyPet(userIdInfo: UserIdInfo, projectName: RawlsBillingProjectName): Future[Unit] = {
+    for {
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName.value, RawlsUserEmail(userIdInfo.userEmail))
+      petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName.value, petUserInfo)
+    } yield ()
   }
 
   def deleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
@@ -224,8 +249,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- samDAO.createResource(SamResourceTypeNames.billingProject, billingProjectName.value, ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), ownerUserInfo)
       _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), ownerUserInfo)
-      ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, project)
-      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project)
+      ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, project.projectName)
+      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, project.projectName)
 
       policiesToAdd = getDefaultGoogleProjectPolicies(ownerGroupEmail, computeUserGroupEmail, requesterPaysRole)
 
@@ -307,43 +332,89 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   }
 
-  def startBillingProjectCreation(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName): Future[PerRequestMessage] = {
+  def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[PerRequestMessage] = {
+    for {
+      _ <- validateCreateProjectRequest(createProjectRequest)
+      _ <- checkServicePerimeterAccess(createProjectRequest.servicePerimeter)
+      billingAccount <- checkBillingAccountAccess(createProjectRequest.billingAccount)
+      result <- internalStartBillingProjectCreation(createProjectRequest, billingAccount)
+    } yield result
+  }
+
+  private def validateCreateProjectRequest(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
+    if (createProjectRequest.enableFlowLogs.getOrElse(false) && !createProjectRequest.highSecurityNetwork.getOrElse(false)) {
+      //flow logs require HSN, so error if someone asks for the former without the latter
+      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "enableFlowLogs requires highSecurityNetwork = true")))
+    } else {
+      Future.successful(())
+    }
+  }
+
+  private def checkBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[RawlsBillingAccount] = {
     def createForbiddenErrorMessage(who: String, billingAccountName: RawlsBillingAccountName) = {
       s"""${who} must have the permission "Billing Account User" on ${billingAccountName.value} to create a project with it."""
     }
+
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
       billingAccountNames.find(_.accountName == billingAccountName) match {
-        case Some(billingAccount) if billingAccount.firecloudHasAccess =>
-          for {
-            _ <- dataSource.inTransaction { dataAccess =>
-              dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
-                case None =>
-                  for {
-                    _ <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, projectName.value, userInfo))
-                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), userInfo))
-                    _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
-                    project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
-                  } yield project
-
-                case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))
-              }
-            }
-
-            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount).recoverWith {
-              case t: Throwable =>
-                // failed to create project in google land, rollback inserts above
-                dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) } map(_ => throw t)
-            }
-
-            _ <- dataSource.inTransaction { dataAccess =>
-              dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(createProjectOperation))
-            }
-          } yield {
-            RequestComplete(StatusCodes.Created)
-          }
-        case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, createForbiddenErrorMessage("You", billingAccountName))))
-        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
+        case Some(billingAccount) if billingAccount.firecloudHasAccess => Future.successful(billingAccount)
+        case None => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, createForbiddenErrorMessage("You", billingAccountName))))
+        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
       }
+    }
+  }
+
+  private def checkServicePerimeterAccess(servicePerimeterOption: Option[ServicePerimeterName]): Future[Unit] = {
+    servicePerimeterOption.map { servicePerimeter =>
+      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeter.value, UTF_8.name), SamServicePerimeterActions.addProject, userInfo).flatMap {
+        case true => Future.successful(())
+        case false => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"You do not have the action ${SamServicePerimeterActions.addProject.value} for $servicePerimeter")))
+      }
+    }.getOrElse(Future.successful(()))
+  }
+
+  private def internalStartBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest, billingAccount: RawlsBillingAccount): Future[PerRequestMessage] = {
+    for {
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.load(createProjectRequest.projectName) flatMap {
+          case None =>
+            for {
+              _ <- DBIO.from(samDAO.createResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, userInfo))
+              _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.workspaceCreator)), userInfo))
+              _ <- DBIO.from(samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty, Set.empty, Set(SamProjectRoles.batchComputeUser, SamProjectRoles.notebookUser)), userInfo))
+              project <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(createProjectRequest.projectName, "gs://" + gcsDAO.getCromwellAuthBucketName(createProjectRequest.projectName), CreationStatuses.Creating, Option(createProjectRequest.billingAccount), None, None, createProjectRequest.servicePerimeter))
+            } yield project
+
+          case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))
+        }
+      }
+
+      //NOTE: we're syncing this to Sam ahead of the resource actually existing. is this fine? (ps these are sam calls)
+      ownerGroupEmail <- getGoogleProjectOwnerGroupEmail(samDAO, createProjectRequest.projectName)
+      computeUserGroupEmail <- getComputeUserGroupEmail(samDAO, createProjectRequest.projectName)
+
+      // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
+      parentFolderId <- createProjectRequest.servicePerimeter.traverse(lookupFolderIdFromServicePerimeterName)
+
+      createProjectOperation <- gcsDAO.createProject(createProjectRequest.projectName, billingAccount, dmConfig.templatePath, createProjectRequest.highSecurityNetwork.getOrElse(false), createProjectRequest.enableFlowLogs.getOrElse(false), requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate, parentFolderId).recoverWith {
+        case t: Throwable =>
+          // failed to create project in google land, rollback inserts above
+          dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(createProjectRequest.projectName) } map(_ => throw t)
+      }
+
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(createProjectOperation))
+      }
+    } yield {
+      RequestComplete(StatusCodes.Created)
+    }
+  }
+
+  private def lookupFolderIdFromServicePerimeterName(perimeterName: ServicePerimeterName): Future[String] = {
+    val folderName = perimeterName.value.split("/").last
+    gcsDAO.getFolderId(folderName).flatMap {
+      case None => Future.failed(new RawlsException(s"folder named $folderName corresponding to perimeter $perimeterName not found"))
+      case Some(folderId) => Future.successful(folderId)
     }
   }
 
@@ -352,6 +423,50 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- gcsDAO.revokeToken(rawlsUserRef)
       _ <- gcsDAO.deleteToken(rawlsUserRef).recover { case e: HttpResponseException if e.getStatusCode == 404 => Unit }
     } yield { Unit }
+  }
+
+
+  // User needs to be an owner of the billing project and have the AddProject action on the service perimeter
+  private def requirePermissionsToAddToServicePerimeter(servicePerimeterName: ServicePerimeterName, projectName: RawlsBillingProjectName)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+    requireServicePerimeterAction(servicePerimeterName, SamServicePerimeterActions.addProject) {
+      requireProjectAction(projectName, SamBillingProjectActions.addToServicePerimeter) {
+        op
+      }
+    }
+  }
+
+  def addProjectToServicePerimeter(servicePerimeterName: ServicePerimeterName, projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    for {
+      billingProject <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.load(projectName).map { billingProjectOpt =>
+          billingProjectOpt.getOrElse(throw new RawlsException(s"Sam thinks user has access to project ${projectName.value} but project not found in database"))
+        }
+      }
+
+      _ <- billingProject.servicePerimeter match {
+        case Some(existingServicePerimeter) => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"project ${billingProject.projectName.value} is already in service perimeter $existingServicePerimeter")))
+        case None => Future.successful(())
+      }
+
+      // Even if the project's status is 'Creating' and could possibly still have a perimeter added to it, we throw an exception to avoid a race condition
+      _ <- billingProject.status match {
+        case CreationStatuses.Ready => Future.successful(())
+        case status => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"project ${billingProject.projectName.value} should be Ready but is $status")))
+      }
+
+      // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
+      folderId <- lookupFolderIdFromServicePerimeterName(servicePerimeterName)
+      _ <- gcsDAO.addProjectToFolder(projectName, folderId)
+
+      googleProjectNumber <- billingProject.googleProjectNumber match {
+        case Some(existingGoogleProjectNumber) => Future.successful(existingGoogleProjectNumber)
+        case None => gcsDAO.getGoogleProject(billingProject.projectName).map(googleProject => GoogleProjectNumber(googleProject.getProjectNumber.toString))
+      }
+
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(status = CreationStatuses.AddingToPerimeter, servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(googleProjectNumber))))
+      }
+    } yield RequestComplete(StatusCodes.Accepted)
   }
 }
 

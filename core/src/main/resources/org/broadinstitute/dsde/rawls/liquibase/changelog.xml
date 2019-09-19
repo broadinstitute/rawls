@@ -66,4 +66,7 @@
     <!--<include file="changesets/20180920_submitter_email.xml" relativeToChangelogFile="true"/>-->
     <include file="changesets/20181009_drop_extra_perm_fks.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20181018_workflowcollections_on_workspaces.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20190405_cleanup.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20190503_drop_prereqs.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20190530_serviceperimeter_on_billingproject.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

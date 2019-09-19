@@ -52,7 +52,9 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or500) { () =>
       httpClientUtils.executeRequest(http, httpClientUtils.addHeader(request, authHeader(userInfo))).flatMap { response =>
         response.status match {
-          case s if s.isSuccess => Future(())
+          case s if s.isSuccess =>
+            response.discardEntityBytes()
+            Future(())
           case f =>
             // attempt to propagate an ErrorReport from Sam. If we can't understand Sam's response as an ErrorReport,
             // create our own error message.
@@ -226,6 +228,11 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or500) { () => asRawlsSAPipeline[String] apply RequestBuilding.Get(url) }
   }
 
+  override def deleteUserPetServiceAccount(googleProject: String, userInfo: UserInfo): Future[Unit] = {
+    val url = samServiceURL + s"/api/google/v1/user/petServiceAccount/$googleProject"
+    doSuccessOrFailureRequest(RequestBuilding.Delete(url), userInfo)
+  }
+
   override def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String] = {
     val url = samServiceURL + "/api/google/v1/user/petServiceAccount/key"
     retry(when401or500) { () => pipeline[String](userInfo) apply RequestBuilding.Get(url) }
@@ -254,4 +261,6 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     val httpRequest = RequestBuilding.Get(url).addHeader(authHeader(userInfo))
     retry(when401or500) { () => httpClientUtils.executeRequestUnmarshalResponseAcceptNoContent[String](http, httpRequest) }
   }
+
+
 }

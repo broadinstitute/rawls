@@ -10,8 +10,10 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.{Async, ContextShift, IO, Resource, Timer}
 import cats.data.NonEmptyList
+import cats.syntax.functor._
+import cats.instances.future._
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -21,13 +23,13 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo}
+import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo, TestIamPermissionsRequest}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.model.UsageExportLocation
 import com.google.api.services.compute.{Compute, ComputeScopes}
-import com.google.api.services.genomics.model.Operation
-import com.google.api.services.genomics.{Genomics, GenomicsScopes}
+import com.google.api.services.deploymentmanager.model.{ConfigFile, Deployment, ImportFile, TargetConfiguration}
+import com.google.api.services.deploymentmanager.DeploymentManagerV2Beta
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.google.api.services.servicemanagement.ServiceManagement
@@ -40,11 +42,11 @@ import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.BucketInfo.LifecycleRule
 import com.google.cloud.storage.BucketInfo.LifecycleRule.LifecycleAction
+import fs2.Stream
 import io.grpc.Status.Code
-import fs2._
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
-import org.broadinstitute.dsde.rawls.google.GoogleUtilities
+import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities, HttpGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -52,15 +54,52 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2._
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes, model}
+import com.google.cloud.storage.BucketInfo
+import com.google.api.services.iam.v1.Iam
+import com.google.api.services.iamcredentials.v1.IAMCredentials
+import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
+import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
+import io.chrisdavenport.linebacker.Linebacker
+import io.chrisdavenport.log4cats.Logger
+import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
+import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
+import org.broadinstitute.dsde.workbench.util.ExecutionContexts
+
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
 import scala.io.Source
-import scala.util.Try
+import scala.util.matching.Regex
+
+case class Resources (
+                       name: String,
+                       `type`: String,
+                       properties: Map[String, JsValue]
+                     )
+case class ConfigContents (
+                            resources: Seq[Resources]
+                          )
+
+//we're not using camelcase here because these become GCS labels, which all have to be lowercase.
+case class TemplateLocation(
+                             template_org: String,
+                             template_repo: String,
+                             template_branch: String,
+                             template_path: String
+                           )
+
+object DeploymentManagerJsonSupport {
+  import spray.json.DefaultJsonProtocol._
+  implicit val resourceJsonFormat = jsonFormat3(Resources)
+  implicit val configContentsJsonFormat = jsonFormat1(ConfigContents)
+  implicit val templateLocationJsonFormat = jsonFormat4(TemplateLocation)
+}
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -69,6 +108,7 @@ class HttpGoogleServicesDAO(
   subEmail: String,
   pemFile: String,
   appsDomain: String,
+  orgID: Long,
   groupsPrefix: String,
   appName: String,
   deletedBucketCheckSeconds: Int,
@@ -78,6 +118,9 @@ class HttpGoogleServicesDAO(
   billingPemEmail: String,
   billingPemFile: String,
   val billingEmail: String,
+  val billingGroupEmail: String,
+  billingGroupEmailAliases: List[String],
+  billingProbeEmail: String,
   bucketLogsMaxAge: Int,
   maxPageSize: Int = 200,
   hammCromwellMetadata: HammCromwellMetadata,
@@ -85,14 +128,17 @@ class HttpGoogleServicesDAO(
   googleServiceHttp: GoogleServiceHttp[IO],
   topicAdmin: GoogleTopicAdmin[IO],
   override val workbenchMetricBaseName: String,
-  proxyNamePrefix: String)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
+  proxyNamePrefix: String,
+  deploymentMgrProject: String,
+  cleanupDeploymentAfterCreating: Boolean,
+  terraBucketReaderRole: String,
+  terraBucketWriterRole: String,
+  override val accessContextManagerDAO: AccessContextManagerDAO)(implicit val system: ActorSystem, val materializer: Materializer, implicit val executionContext: ExecutionContext, implicit val cs: ContextShift[IO], implicit val timer: Timer[IO]) extends GoogleServicesDAO(groupsPrefix) with FutureSupport with GoogleUtilities {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger: _root_.io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
-  val API_SERVICE_MANAGEMENT = "ServiceManagement"
-  val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
 
   // modify these if we need more granular access in the future
   val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
@@ -106,6 +152,12 @@ class HttpGoogleServicesDAO(
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
+
+  //we only have to do this once, because there's only one DM project
+  lazy val getDeploymentManagerSAEmail: Future[String] = {
+    getGoogleProject(RawlsBillingProjectName(deploymentMgrProject))
+      .map( p => s"${p.getProjectNumber}@cloudservices.gserviceaccount.com")
+  }
 
   initBuckets()
 
@@ -138,7 +190,7 @@ class HttpGoogleServicesDAO(
 
     val result = for{
       traceId <- Stream.eval(IO(TraceId(UUID.randomUUID())))
-      _ <- googleStorageService.createBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Some(traceId))
+      _ <- googleStorageService.insertBucket(GoogleProject(serviceProject), hammCromwellMetadata.bucketName, None, Map.empty, Some(traceId))
       _ <- googleStorageService.setIamPolicy(hammCromwellMetadata.bucketName, Map(StorageRole.StorageAdmin -> NonEmptyList.of(Identity.serviceAccount(clientEmail))), Some(traceId))
       _ <- googleStorageService.setBucketLifecycle(hammCromwellMetadata.bucketName, List(lifecyleRule), Some(traceId))
       projectServiceAccount <- Stream.eval(googleServiceHttp.getProjectServiceAccount(GoogleProject(serviceProject), Some(traceId)))
@@ -161,48 +213,52 @@ class HttpGoogleServicesDAO(
 
   override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String]): Future[GoogleWorkspaceInfo] = {
 
-    def insertBucket: Map[WorkspaceAccessLevel, WorkbenchEmail] => Future[String] = { policyGroupsByAccessLevel =>
+    def setBucketLogging(bucketName: String): Future[String] = {
       implicit val service = GoogleInstrumentedService.Storage
-      retryWhen500orGoogleError {
-        () => {
-          // bucket ACLs should be:
-          //   project owner - bucket writer
-          //   workspace owner - bucket writer
-          //   workspace writer - bucket writer
-          //   workspace reader - bucket reader
-          //   bucket service account - bucket owner
-          val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(ProjectOwner -> "WRITER", Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
-          val bucketAcls =
-            policyGroupsByAccessLevel.map { case (access, policyEmail) => newBucketAccessControl(makeGroupEntityString(policyEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
-              newBucketAccessControl("user-" + clientEmail, "OWNER")
 
-          // default object ACLs should be:
-          //   project owner - object reader
-          //   workspace owner - object reader
-          //   workspace writer - object reader
-          //   workspace reader - object reader
-          //   bucket service account - object owner
-          val defaultObjectAcls =
-          policyGroupsByAccessLevel.map { case (_, policyEmail) => newObjectAccessControl(makeGroupEntityString(policyEmail.value), "READER") }.toSeq :+
-              newObjectAccessControl("user-" + clientEmail, "OWNER")
+      val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
+      val bucket = new Bucket().setName(bucketName).setLogging(logging)
 
-          val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
+      val updater = getStorage(getBucketServiceAccountCredential).buckets.update(bucketName, bucket)
 
-          val bucket = new Bucket().
-            setName(bucketName).
-            setAcl(bucketAcls.asJava).
-            setDefaultObjectAcl(defaultObjectAcls.asJava).
-            setLogging(logging).
-            setLabels(labels.asJava)
-          val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
-          executeGoogleRequest(inserter)
-
-          bucketName
-        }
-      }
+      retryWhen500orGoogleError { () =>
+        executeGoogleRequest(updater)
+      }.map(_.getName)
     }
 
-    def insertInitialStorageLog: (String) => Future[Unit] = { (bucketName) =>
+    def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], traceId: TraceId): Stream[IO, Unit] = {
+      //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
+      //do not have separate permissions that deviate from the bucket-level permissions.
+      //
+      // project owner - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace owner - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace writer - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace reader - organizations/$ORG_ID/roles/terraBucketReader
+      // bucket service account - organizations/$ORG_ID/roles/terraBucketWriter + roles/storage.admin
+
+      val customTerraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
+      val customTerraBucketWriterRole = StorageRole.CustomStorageRole(terraBucketWriterRole)
+
+      val workspaceAccessToStorageRole: Map[WorkspaceAccessLevel, StorageRole] = Map(ProjectOwner -> customTerraBucketWriterRole, Owner -> customTerraBucketWriterRole, Write -> customTerraBucketWriterRole, Read -> customTerraBucketReaderRole)
+      val bucketRoles =
+        policyGroupsByAccessLevel.map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) } +
+          (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
+
+      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect { case (role,identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)}
+
+      //The calls to setBucketPolicyOnly and setIamPolicy are coupled because in this case, we only want to use these specific
+      //storage roles _if_ bucket policy only is enabled. See above comment for a more in-depth explanation.
+      for {
+        _ <- googleStorageService.setBucketPolicyOnly(GcsBucketName(bucketName), true)
+
+        // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
+        // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
+        _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities,
+          retryConfig = RetryPredicates.retryConfigWithPredicates(RetryPredicates.standardRetryPredicate, RetryPredicates.whenStatusCode(400)))
+      } yield ()
+    }
+
+    def insertInitialStorageLog(bucketName: String): Future[Unit] = {
       implicit val service = GoogleInstrumentedService.Storage
       retryWhen500orGoogleError {
         () => {
@@ -220,13 +276,15 @@ class HttpGoogleServicesDAO(
     }
 
     // setupWorkspace main logic
+    val traceId = TraceId(UUID.randomUUID())
 
-    val bucketInsertion = for {
-      bucketName <- insertBucket(policyGroupsByAccessLevel)
+    for {
+      _ <- googleStorageService.insertBucket(GoogleProject(project.projectName.value), GcsBucketName(bucketName), None, Map.empty, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture()
+      _ <- setBucketLogging(bucketName)
       _ <- insertInitialStorageLog(bucketName)
+      _ <- googleStorageService.setBucketLabels(GcsBucketName(bucketName), labels).compile.drain.unsafeToFuture()
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
-
-    bucketInsertion
   }
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName, projectNumber: Long, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
@@ -467,7 +525,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): IO[Unit] = {
+  override def storeCromwellMetadata(objectName: GcsBlobName, body: fs2.Stream[fs2.Pure, Byte]): Stream[IO, Unit] = {
     val gzipped = (body through fs2.compress.gzip[fs2.Pure](2048)).compile.toList.toArray //after fs2 1.0.4, we can `to[Array]` directly
     googleStorageService.storeObject(hammCromwellMetadata.bucketName, objectName, gzipped, "text/plain")
   }
@@ -538,23 +596,45 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  /**
-    * NOTE: This function will returns "false" in both of the following cases:
-    * if you don't have sufficient scopes
-    *   - Google's JSON response body will contain "message": "Request had insufficient authentication scopes."
-    * if you're not authorized to see the billing account
-    *   - Google's JSON response body will contain "message" : "The caller does not have permission"
-    */
-  protected def credentialOwnsBillingAccount(credential: Credential, billingAccountName: String): Future[Boolean] = {
-    implicit val service = GoogleInstrumentedService.Billing
-    val fetcher = getCloudBillingManager(credential).billingAccounts().get(billingAccountName)
-    retryWithRecoverWhen500orGoogleError(() => {
-      blocking {
-        executeGoogleRequest(fetcher)
-      }
-      true //if the request succeeds, it has access.
-    }) {
-      case e: HttpResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue => false
+  protected def testDMBillingAccountAccess(billingAccountId: String): Future[Boolean] = {
+    implicit val service = GoogleInstrumentedService.IamCredentials
+
+    /* Because we can't assume the identity of the Google SA that actually does the work in DM (it's in their project and we can't access it),
+       we've added billingprobe@terra-deployments-{env} to the Google Group we ask our users to add to their billing accounts.
+       In order to test that users have set up their billing accounts correctly, Rawls creates a token as the billingprobe@ SA and then
+       calls testIamPermissions as it to see if it has the scopes required to associate projects with billing accounts.
+       If it does, the group was correctly added, and the Google DM SA will be fine.
+       (This function would incorrectly return true if users were to add billingprobe@ to their project and not the group or DM SA, but we
+       don't publicise the existence of that account and it's not the thing we ask them to do, so the probability is near-zero.)
+
+       In order for all of this to work, Rawls needs iam.serviceAccountTokenCreator on either the terra-deployments-{env} project
+       or the billingprobe@ SA itself. We could also generate keys for the billingprobe@ SA and put them in Vault, but doing that and then
+       intermittently refreshing them is a chore.
+     */
+    //First, get an access token to act as the Google APIs Service Agent that Deployment Manager runs as.
+    val tokenRequestBody = new GenerateAccessTokenRequest().setScope(List(ComputeScopes.CLOUD_PLATFORM).asJava)
+    val saResourceName = s"projects/-/serviceAccounts/$billingProbeEmail" //the dash is required; a project name will not work. https://bit.ly/2EXrXnj
+    val accessTokenRequest = getIAMCredentials(getDeploymentManagerAccountCredential).projects().serviceAccounts().generateAccessToken(saResourceName, tokenRequestBody)
+
+    val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
+
+    for {
+      tokenResponse <- retryWhen500orGoogleError(() => {
+                        blocking {
+                          executeGoogleRequest (accessTokenRequest)
+                        }})
+
+      //Now we've got an access token, test IAM permissions to see if the SA has permission to create projects.
+      probeSACredential = buildCredentialFromAccessToken(tokenResponse.getAccessToken, billingProbeEmail)
+      testPermissionsBody = new TestIamPermissionsRequest().setPermissions(List(BILLING_ACCOUNT_PERMISSION).asJava)
+      testPermissionsRequest = getCloudBillingManager(probeSACredential).billingAccounts().testIamPermissions(billingAccountId, testPermissionsBody)
+
+      permissionResponse <- retryWhen500orGoogleError(() => {
+                              blocking {
+                                executeGoogleRequest(testPermissionsRequest)
+                              }})
+    } yield {
+      Option(permissionResponse.getPermissions).exists(_.asScala.contains(BILLING_ACCOUNT_PERMISSION))
     }
   }
 
@@ -579,17 +659,29 @@ class HttpGoogleServicesDAO(
   }
 
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
+    import cats.implicits._
+
     val cred = getUserCredential(userInfo)
-    val billingSvcCred = getBillingServiceAccountCredential
     listBillingAccounts(cred) flatMap { accountList =>
-      Future.sequence(accountList map { acct =>
-        val acctName = acct.getName
-        //NOTE: We guarantee that the firecloud billing service account always has the correct scopes.
-        //So credentialOwnsBillingAccount == false definitely means no access (rather than no scopes).
-        credentialOwnsBillingAccount(billingSvcCred, acctName) map { firecloudHasAccount =>
-          RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount, acct.getDisplayName)
-        }
-      })
+      //some users have TONS of billing accounts, enough to hit quota limits.
+      //break the list of billing accounts up into chunks.
+      //each chunk executes all its requests in parallel. the chunks themselves are processed serially.
+      //this limits the amount of parallelism (to 10 inflight requests at a time), which should should slow
+      //our rate of making requests. if this fails to be enough, we may need to upgrade this to an explicit throttle.
+      val accountChunks: List[Seq[BillingAccount]] = accountList.grouped(10).toList
+
+      //Iterate over each chunk.
+      val allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks traverse { chunk =>
+
+        //Run all tests in the chunk in parallel.
+        IO.fromFuture(IO(Future.traverse(chunk){ acct =>
+          val acctName = acct.getName
+          testDMBillingAccountAccess(acctName) map { firecloudHasAccount =>
+            RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount, acct.getDisplayName)
+          }
+        }))
+      }
+      allProcessedChunks.map(_.flatten).unsafeToFuture()
     }
   }
 
@@ -665,38 +757,45 @@ class HttpGoogleServicesDAO(
     } )
   }
 
-  override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = {
+  override def getGenomicsOperation(opId: String): Future[Option[JsObject]] = {
     implicit val service = GoogleInstrumentedService.Genomics
-    val opId = s"operations/$jobId"
-    val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
-    val operationRequest = genomicsApi.operations().get(opId)
+    val genomicsServiceAccountCredential = getGenomicsServiceAccountCredential
+    genomicsServiceAccountCredential.refreshToken()
 
-    retryWithRecoverWhen500orGoogleError(() => {
-      // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
-      // So, use Google's functionality to get the json string, then parse it back into a generic json object
-      Option(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
-    }) {
-      // Recover from Google 404 errors because it's an expected return status.
-      // Here we use `None` to represent a 404 from Google.
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
+    if (opId.startsWith("operations")) {
+      // PAPIv1 ids start with "operations". We have to use a direct http call instead of a client library because
+      // the client lib does not support PAPIv1 and PAPIv2 concurrently.
+      new GenomicsV1DAO().getOperation(opId, OAuth2BearerToken(genomicsServiceAccountCredential.getAccessToken))
+    } else {
+      val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, genomicsServiceAccountCredential).setApplicationName(appName).build()
+      val operationRequest = genomicsApi.projects().operations().get(opId)
+
+      retryWithRecoverWhen500orGoogleError(() => {
+        // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
+        // So, use Google's functionality to get the json string, then parse it back into a generic json object
+        Option(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
+      }) {
+        // Recover from Google 404 errors because it's an expected return status.
+        // Here we use `None` to represent a 404 from Google.
+        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
+      }
     }
   }
 
-  override def listGenomicsOperations(implicit executionContext: ExecutionContext): Future[Seq[Operation]] = {
+  override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.Genomics
-    val opId = "operations"
-    val filter = s"projectId = $serviceProject"
+    val opId = s"projects/$serviceProject/operations"
     val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
-    val operationRequest = genomicsApi.operations().list(opId).setFilter(filter)
+    val operationRequest = genomicsApi.projects().operations().list(opId).setPageSize(1)
     retryWhen500orGoogleError(() => {
-      val list = executeGoogleRequest(operationRequest)
-      list.getOperations.asScala
+      executeGoogleRequest(operationRequest)
+      true
     })
   }
 
   override def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project] = {
     implicit val service = GoogleInstrumentedService.Billing
-    val credential = getBillingServiceAccountCredential
+    val credential = getDeploymentManagerAccountCredential
 
     val cloudResManager = getCloudResourceManager(credential)
 
@@ -705,58 +804,131 @@ class HttpGoogleServicesDAO(
     })
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] = {
-    implicit val service = GoogleInstrumentedService.Billing
-    val credential = getBillingServiceAccountCredential
+  def getDMConfigYamlString(projectName: RawlsBillingProjectName, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
+    import DeploymentManagerJsonSupport._
+    import cats.syntax.either._
+    import io.circe.yaml._
+    import io.circe.yaml.syntax._
 
-    val cloudResManager = getCloudResourceManager(credential)
-
-    retryWhen500orGoogleError(() => {
-      executeGoogleRequest(cloudResManager.projects().create(new Project().setName(projectName.value).setProjectId(projectName.value).setLabels(Map("billingaccount" -> labelSafeString(billingAccount.displayName)).asJava)))
-    }).recover {
-      case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
-    } map ( googleOperation => {
-      if (toScalaBool(googleOperation.getDone) && Option(googleOperation.getError).exists(_.getCode.intValue() == Code.ALREADY_EXISTS.value())) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
-      }
-      RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, googleOperation.getName, toScalaBool(googleOperation.getDone), Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_CLOUD_RESOURCE_MANAGER)
-    })
+    val configContents = ConfigContents(Seq(Resources(projectName.value, dmTemplatePath, properties)))
+    val jsonVersion = io.circe.jawn.parse(configContents.toJson.toString).valueOr(throw _)
+    jsonVersion.asYaml.spaces2
   }
 
-  override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
-    implicit val service = GoogleInstrumentedService.Billing
-    val credential = getBillingServiceAccountCredential
+  /*
+   * Set the deployment policy to "abandon" -- i.e. allows the created project to persist even if the deployment is deleted --
+   * and then delete the deployment. There's a limit of 1000 deployments so this is important to do.
+   */
+  override def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.DeploymentManager
+    val credential = getDeploymentManagerAccountCredential
+    val deploymentManager = getDeploymentManager(credential)
+
+    if( cleanupDeploymentAfterCreating ) {
+      executeGoogleRequestWithRetry(
+        deploymentManager.deployments().delete(deploymentMgrProject, projectToDM(projectName)).setDeletePolicy("ABANDON")).void
+    } else {
+      Future.successful(())
+    }
+  }
+
+  def projectToDM(projectName: RawlsBillingProjectName) = s"dm-${projectName.value}"
+
+
+  def parseTemplateLocation(path: String): Option[TemplateLocation] = {
+    val rx: Regex = "https://raw.githubusercontent.com/(.*)/(.*)/(.*)/(.*)".r
+    rx.findAllMatchIn(path).toList.headOption map { groups =>
+      TemplateLocation(
+        labelSafeString(groups.subgroups(0), ""),
+        labelSafeString(groups.subgroups(1), ""),
+        labelSafeString(groups.subgroups(2), ""),
+        labelSafeString(groups.subgroups(3), ""))
+    }
+  }
+
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
+    implicit val service = GoogleInstrumentedService.DeploymentManager
+    val credential = getDeploymentManagerAccountCredential
+    val deploymentManager = getDeploymentManager(credential)
+
+    import spray.json._
+    import spray.json.DefaultJsonProtocol._
+    import DeploymentManagerJsonSupport._
+
+    val templateLabels = parseTemplateLocation(dmTemplatePath).map(_.toJson).getOrElse(Map("template_path" -> labelSafeString(dmTemplatePath)).toJson)
+
+    val properties = Map (
+      "billingAccountId" -> billingAccount.accountName.value.toJson,
+      "billingAccountFriendlyName" -> billingAccount.displayName.toJson,
+      "projectId" -> projectName.value.toJson,
+      "parentOrganization" -> orgID.toJson,
+      "fcBillingGroup" -> billingGroupEmail.toJson,
+      "projectOwnersGroup" -> ownerGroupEmail.value.toJson,
+      "projectViewersGroup" -> computeUserGroupEmail.value.toJson,
+      "requesterPaysRole" -> requesterPaysRole.toJson,
+      "highSecurityNetwork" -> highSecurityNetwork.toJson,
+      "enableFlowLogs" -> enableFlowLogs.toJson,
+      "fcProjectOwners" -> projectTemplate.owners.toJson,
+      "fcProjectEditors" -> projectTemplate.editors.toJson,
+      "labels" -> templateLabels
+    ) ++ parentFolderId.map("parentFolder" -> folderNumberOnly(_).toJson).toMap
+
+    //a list of one resource: type=composite-type, name=whocares, properties=pokein
+    val yamlConfig = new ConfigFile().setContent(getDMConfigYamlString(projectName, dmTemplatePath, properties))
+    val deploymentConfig = new TargetConfiguration().setConfig(yamlConfig)
+
+    retryWhen500orGoogleError(() => {
+      executeGoogleRequest {
+        deploymentManager.deployments().insert(deploymentMgrProject, new Deployment().setName(projectToDM(projectName)).setTarget(deploymentConfig))
+      }
+    }) map { googleOperation =>
+      val errorStr = Option(googleOperation.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
+      RawlsBillingProjectOperationRecord(projectName.value, GoogleOperationNames.DeploymentManagerCreateProject, googleOperation.getName, false, errorStr, GoogleApiTypes.DeploymentManagerApi)
+    }
+  }
+
+  /**
+    * Google is not consistent when dealing with folder ids. Some apis do not want the folder id to start with
+    * "folders/" but other apis return that or expect that. This function strips the prefix if it exists.
+    *
+    * @param folderId
+    * @return
+    */
+  private def folderNumberOnly(folderId: String) = folderId.stripPrefix("folders/")
+
+  override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
+    val dmCredential = getDeploymentManagerAccountCredential
 
     // this code is a colossal DRY violation but because the operations collection is different
     // for cloudResManager and servicesManager and they return different but identical Status objects
     // there is not much else to be done... too bad scala does not have duck typing.
-    rawlsBillingProjectOperation.api match {
-      case API_CLOUD_RESOURCE_MANAGER =>
-        val cloudResManager = getCloudResourceManager(credential)
+    operationId.apiType match {
+      case GoogleApiTypes.DeploymentManagerApi =>
+        val deploymentManager = getDeploymentManager(dmCredential)
+        implicit val service = GoogleInstrumentedService.DeploymentManager
 
         retryWhen500orGoogleError(() => {
-          executeGoogleRequest(cloudResManager.operations().get(rawlsBillingProjectOperation.operationId))
+          executeGoogleRequest(deploymentManager.operations().get(deploymentMgrProject, operationId.operationId))
         }).map { op =>
-          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
+          val errorStr = Option(op.getError).map(errors => errors.getErrors.asScala.map(e => toErrorMessage(e.getMessage, e.getCode)).mkString("\n"))
+          OperationStatus(op.getStatus == "DONE", errorStr)
         }
 
-      case API_SERVICE_MANAGEMENT =>
-        val servicesManager = getServicesManager(credential)
-
-        retryWhen500orGoogleError(() => {
-          executeGoogleRequest(servicesManager.operations().get(rawlsBillingProjectOperation.operationId))
-        }).map { op =>
-          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
+      case GoogleApiTypes.AccessContextManagerApi =>
+        accessContextManagerDAO.pollOperation(operationId.operationId).map { op =>
+          OperationStatus(toScalaBool(op.getDone), Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
         }
     }
-
   }
 
   /**
    * converts a possibly null java boolean to a scala boolean, null is treated as false
    */
   private def toScalaBool(b: java.lang.Boolean) = Option(b).contains(java.lang.Boolean.TRUE)
+
+  private def toErrorMessage(message: String, code: String): String = {
+    s"${Option(message).getOrElse("")} - code ${code}"
+  }
 
   private def toErrorMessage(message: String, code: Int): String = {
     s"${Option(message).getOrElse("")} - code ${code}"
@@ -795,7 +967,7 @@ class HttpGoogleServicesDAO(
     } yield ()
   }
 
-  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, List[String]]): Future[Boolean] = {
+  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, Set[String]]): Future[Boolean] = {
     val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
@@ -805,7 +977,7 @@ class HttpGoogleServicesDAO(
         // getIamPolicy gets the etag that is used in setIamPolicy, the etag is used to detect concurrent
         // modifications and if that happens we need to be sure to get a new etag before retrying setIamPolicy
         val existingPolicy = executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
-        val existingPolicies: Map[String, List[String]] = existingPolicy.getBindings.asScala.map { policy => policy.getRole -> policy.getMembers.asScala.toList }.toMap
+        val existingPolicies: Map[String, Set[String]] = existingPolicy.getBindings.asScala.map { policy => policy.getRole -> policy.getMembers.asScala.toSet }.toMap
 
         // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
         import cats.implicits._
@@ -816,7 +988,7 @@ class HttpGoogleServicesDAO(
         } else {
 
           val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
-            new Binding().setRole(role).setMembers(members.distinct.asJava)
+            new Binding().setRole(role).setMembers(members.toList.asJava)
           }.toSeq
 
           // when setting IAM policies, always reuse the existing policy so the etag is preserved.
@@ -829,77 +1001,12 @@ class HttpGoogleServicesDAO(
     } yield updated
   }
 
-  override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = {
-    implicit val instrumentedService = GoogleInstrumentedService.Billing
-    val projectName = project.projectName
-    val credential = getBillingServiceAccountCredential
-
-    val billingManager = getCloudBillingManager(credential)
-    val serviceManager = getServicesManager(credential)
-
-    val projectResourceName = s"projects/${projectName.value}"
-
-    // all of these things should be idempotent
-    toFutureTry(for {
-      // set the billing account
-      billing <- retryWhen500orGoogleError(() => {
-        val billingAccount = project.billingAccount.getOrElse(throw new RawlsException(s"billing account undefined for project ${project.projectName.value}")).value
-        executeGoogleRequest(billingManager.projects().updateBillingInfo(projectResourceName, new ProjectBillingInfo().setBillingEnabled(true).setBillingAccountName(billingAccount)))
-      })
-
-      // add new policies to the project
-      _ <- addPolicyBindings(projectName, projectTemplate.policies.mapValues(_.toList))
-
-      // enable appropriate google apis
-      operations <- Future.sequence(projectTemplate.services.map { service => retryWhen500orGoogleError(() => {
-        executeGoogleRequest(serviceManager.services().enable(service, new EnableServiceRequest().setConsumerId(s"project:${projectName.value}")))
-      }) map { googleOperation =>
-        RawlsBillingProjectOperationRecord(projectName.value, service, googleOperation.getName, toScalaBool(googleOperation.getDone), Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_SERVICE_MANAGEMENT)
-      }})
-
-    } yield {
-      operations
-    })
-  }
-
   override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = {
-    addPolicyBindings(projectName, Map(s"roles/$role" -> List(s"group:${groupEmail.value}")))
+    addPolicyBindings(projectName, Map(s"roles/$role" -> Set(s"group:${groupEmail.value}")))
   }
 
   override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = {
     removePolicyBindings(projectName, Map(s"roles/$role" -> Seq(s"group:${groupEmail.value}")))
-  }
-
-  override def completeProjectSetup(project: RawlsBillingProject, authBucketReaders: Set[WorkbenchEmail]): Future[Try[Unit]] = {
-    implicit val service = GoogleInstrumentedService.Billing
-    val projectName = project.projectName
-    val credential = getBillingServiceAccountCredential
-
-    val computeManager = getComputeManager(credential)
-
-    // all of these things should be idempotent
-    toFutureTry(for {
-      // create project usage export bucket
-      exportBucket <- retryWithRecoverWhen500orGoogleError(() => {
-        val bucket = new Bucket().setName(projectUsageExportBucketName(projectName))
-        executeGoogleRequest(getStorage(credential).buckets.insert(projectName.value, bucket))
-      }) { case t: HttpResponseException if t.getStatusCode == 409 => new Bucket().setName(projectUsageExportBucketName(projectName)) }
-
-      // create bucket for workspace bucket storage/usage logs
-      storageLogsBucket <- createStorageLogsBucket(projectName)
-      _ <- retryWhen500orGoogleError(() => { allowGoogleCloudStorageWrite(storageLogsBucket) })
-
-      googleProject <- getGoogleProject(projectName)
-
-      cromwellAuthBucket <- createCromwellAuthBucket(projectName, googleProject.getProjectNumber, authBucketReaders)
-
-      _ <- retryWhen500orGoogleError(() => {
-        val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
-        executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, usageLoc))
-      })
-    } yield {
-      // nothing
-    })
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {
@@ -925,6 +1032,25 @@ class HttpGoogleServicesDAO(
 
   def projectUsageExportBucketName(projectName: RawlsBillingProjectName) = s"${projectName.value}-usage-export"
 
+  override def getBucketDetails(bucketName: String, project: RawlsBillingProjectName): Future[WorkspaceBucketOptions] = {
+    implicit val service = GoogleInstrumentedService.Storage
+    val cloudStorage = getStorage(getBucketServiceAccountCredential)
+    for {
+      bucketDetails <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudStorage.buckets().get(bucketName).setUserProject(project.value))
+      })
+    } yield {
+      val requesterPays = for {
+        billing <- Option(bucketDetails.getBilling)
+        rp <- Option(billing.getRequesterPays)
+      } yield rp.booleanValue()
+
+      WorkspaceBucketOptions(
+        requesterPays = requesterPays.getOrElse(false)
+      )
+    }
+  }
+
   def getComputeManager(credential: Credential): Compute = {
     new Compute.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
@@ -939,6 +1065,18 @@ class HttpGoogleServicesDAO(
 
   def getCloudResourceManager(credential: Credential): CloudResourceManager = {
     new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+  }
+
+  def getIAM(credential: Credential): Iam = {
+    new Iam.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+  }
+
+  def getIAMCredentials(credential: Credential): IAMCredentials = {
+    new IAMCredentials.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+  }
+
+  def getDeploymentManager(credential: Credential): DeploymentManagerV2Beta = {
+    new DeploymentManagerV2Beta.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
 
   def getStorage(credential: Credential) = {
@@ -984,6 +1122,16 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
+  def getDeploymentManagerAccountCredential: Credential = {
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setServiceAccountId(clientEmail)
+      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM).asJavaCollection)
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+      .build()
+  }
+
   def getBillingServiceAccountCredential: Credential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
@@ -1014,6 +1162,13 @@ class HttpGoogleServicesDAO(
       .setJsonFactory(jsonFactory)
       .setClientSecrets(tokenClientSecrets)
       .build().setFromTokenResponse(new TokenResponse().setRefreshToken(refreshToken))
+  }
+
+  private def buildCredentialFromAccessToken(accessToken: String, credentialEmail: String): GoogleCredential = {
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .build().setAccessToken(accessToken)
   }
 
   def getAccessTokenUsingJson(saKey: String) : Future[String] = {
@@ -1061,6 +1216,74 @@ class HttpGoogleServicesDAO(
     retryWhen500orGoogleError(() => { executeGoogleFetch(getter) { is => f(is) } })
   }
 
+  override def addProjectToFolder(projectName: RawlsBillingProjectName, folderId: String): Future[Unit] = {
+    implicit val service = GoogleInstrumentedService.CloudResourceManager
+    val cloudResourceManager = getCloudResourceManager(getBillingServiceAccountCredential)
+
+    retryWhen500orGoogleError( () => {
+      val existingProject = executeGoogleRequest(cloudResourceManager.projects().get(projectName.value))
+
+      val folderResourceId = new ResourceId().setType(GoogleResourceTypes.Folder.value).setId(folderNumberOnly(folderId))
+      executeGoogleRequest(cloudResourceManager.projects().update(projectName.value, existingProject.setParent(folderResourceId)))
+    })
+  }
+
+  override def getFolderId(folderName: String): Future[Option[String]] = {
+    val credential = getBillingServiceAccountCredential
+    credential.refreshToken()
+
+    retryExponentially(when500orGoogleError)( () => {
+      new CloudResourceManagerV2DAO().getFolderId(folderName, OAuth2BearerToken(credential.getAccessToken))
+    })
+  }
 }
 
 class GoogleStorageLogException(message: String) extends RawlsException(message)
+
+class GenomicsV1DAO(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends DsdeHttpDAO {
+  val http = Http(system)
+  val httpClientUtils = HttpClientUtilsStandard()
+
+  def getOperation(opId: String, accessToken: OAuth2BearerToken): Future[Option[JsObject]] = {
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+    import DefaultJsonProtocol._
+    executeRequestWithToken[Option[JsObject]](accessToken)(RequestBuilding.Get(s"https://genomics.googleapis.com/v1alpha2/$opId"))
+  }
+}
+
+/**
+  * The cloud resource manager api is maddening. V2 is not a newer, better version of V1 but a completely different api.
+  * V1 manages projects and organizations, V2 manages folders. But because they appear to be different versions of the
+  * same thing and use the same class names we can't have both client libraries. So this v2 dao calls the folder
+  * apis we need via direct http call.
+  * @param system
+  * @param materializer
+  * @param executionContext
+  */
+class CloudResourceManagerV2DAO(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends DsdeHttpDAO {
+  val http = Http(system)
+  val httpClientUtils = HttpClientUtilsStandard()
+
+  def getFolderId(folderName: String, accessToken: OAuth2BearerToken): Future[Option[String]] = {
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+    import DefaultJsonProtocol._
+
+    implicit val FolderFormat = jsonFormat1(Folder)
+    implicit val FolderSearchResponseFormat = jsonFormat1(FolderSearchResponse)
+
+    executeRequestWithToken[FolderSearchResponse](accessToken)(RequestBuilding.Post(s"https://cloudresourcemanager.googleapis.com/v2/folders:search", Map("query" -> s"displayName=$folderName"))).map { response =>
+      response.folders.flatMap { folders =>
+        if (folders.size > 1) {
+          throw new RawlsException(s"google folder search returned more than one folder with display name $folderName: $folders")
+        } else {
+          folders.headOption.map(_.name)
+        }
+      }
+    }
+  }
+}
+
+object CloudResourceManagerV2Model {
+  case class Folder(name: String)
+  case class FolderSearchResponse(folders: Option[Seq[Folder]])
+}

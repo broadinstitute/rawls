@@ -4,7 +4,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, SamBillingProjectPolicyNames, SamResourceTypeNames, StatusCheckResponse}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, StatusCheckResponse}
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
@@ -32,6 +32,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
   val jsonHeader = new Header("Content-Type", "application/json")
   val mockServer = startClientAndServer(port)
+
 
   def startServer(numWorkflows: Int = 3) = {
     // copy method config endpoint
@@ -120,89 +121,8 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     )
 
     val methodPath = "/methods"
-    val threeStepWDL =
-    """
-      |task ps {
-      |  command {
-      |    ps
-      |  }
-      |  output {
-      |    File procs = stdout()
-      |  }
-      |}
-      |
-      |task cgrep {
-      |  File in_file
-      |  String pattern
-      |  command {
-      |    grep '${pattern}' ${in_file} | wc -l
-      |  }
-      |  output {
-      |    Int count = read_int(stdout())
-      |  }
-      |}
-      |
-      |task wc {
-      |  File in_file
-      |  command {
-      |    cat ${in_file} | wc -l
-      |  }
-      |  output {
-      |    Int count = read_int(stdout())
-      |  }
-      |}
-      |
-      |workflow three_step {
-      |  call ps
-      |  call cgrep {
-      |    input: in_file=ps.procs
-      |  }
-      |  call wc {
-      |    input: in_file=ps.procs
-      |  }
-      |}
-    """.stripMargin
-
-    val threeStepMethod = AgoraEntity(Some("dsde"),Some("three_step"),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
-
-    val goodAndBadInputsWDL =
-      """
-        |workflow goodAndBad {
-        |  call goodAndBadTask
-        |}
-        |
-        |task goodAndBadTask {
-        |  String good_in
-        |  String bad_in
-        |  command {
-        |    echo "hello world"
-        |  }
-        |  output {
-        |    String good_out = "everything is good"
-        |    String bad_out = "everything is bad"
-        |    String empty_out = "everything is empty"
-        |  }
-        |}
-      """.stripMargin
 
     val goodAndBadMethod = AgoraEntity(Some("dsde"),Some("good_and_bad"),Some(1),None,None,None,None,Some(goodAndBadInputsWDL),None,Some(AgoraEntityType.Workflow))
-
-    val meth1WDL =
-      """
-        |workflow meth1 {
-        |  call method1
-        |}
-        |
-        |task method1 {
-        |  String i1
-        |  command {
-        |    echo "hello world"
-        |  }
-        |  output {
-        |    String o1 = "output one"
-        |  }
-        |}
-      """.stripMargin
 
     val meth1Method = AgoraEntity(Some("dsde"),Some("meth1"),Some(1),None,None,None,None,Some(meth1WDL),None,Some(AgoraEntityType.Workflow))
 
@@ -255,8 +175,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        // Apparently the mock server url-decodes paths before comparing
-        .withPath("/ga4gh/v1/tools/#workflow/dockstore-method-path/versions/dockstore-method-version/WDL/descriptor")
+        .withPath("/ga4gh/v1/tools/%23workflow%2Fdockstore-method-path/versions/dockstore-method-version/WDL/descriptor")
     ).respond(
       response()
         .withHeaders(jsonHeader)
@@ -280,21 +199,6 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
-    val noInputWdl =
-      """
-        |task t1 {
-        |  command {
-        |    echo "Hello"
-        |  }
-        |}
-        |
-        |workflow w1 {
-        |  call t1
-        |}
-      """.stripMargin
-
-    val noInputMethod = AgoraEntity(Some("dsde"), Some("no_input"), Some(1), None, None, None, None, Some(noInputWdl), None, Some(AgoraEntityType.Workflow))
-
     mockServer.when(
       request()
         .withMethod("GET")
@@ -306,13 +210,10 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
-    val noInputMethodDockstoreResponse =
-      s"""{"type":"WDL","descriptor":"${noInputWdl.replace("t1", "t1_dockstore").replace("\"", "\\\"").replace("\n","\\n")}","url":"bogus"}"""
-
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/ga4gh/v1/tools/#workflow/dockstore-no-input-path/versions/dockstore-no-input-version/WDL/descriptor")
+        .withPath("/ga4gh/v1/tools/%23workflow%2Fdockstore-no-input-path/versions/dockstore-no-input-version/WDL/descriptor")
     ).respond(
       response()
         .withHeaders(jsonHeader)
@@ -600,6 +501,31 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
             """.stripMargin)
           .withStatusCode(StatusCodes.Created.intValue)
       )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath(submissionPath + "/workflows/v1/workflow_with_job_ids/metadata")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """
+            |{
+            |  "id": "papi_v1_job_id",
+            |  "status": "Unknown",
+            |  "submission": "2010-09-10T11:12:13.456Z",
+            |  "outputs": {"test": ["baz", "bar", "foo"]},
+            |  "calls": {
+            |    "foo": [
+            |      { "jobId": "operations/dummy-job-id" },
+            |      { "jobId": "projects/dummy-project/operations/dummy-job-id" }
+            |    ]
+            |  }
+            |}
+          """.stripMargin)
+        .withStatusCode(StatusCodes.Created.intValue)
+    )
 
     mockServer.when(
       request()

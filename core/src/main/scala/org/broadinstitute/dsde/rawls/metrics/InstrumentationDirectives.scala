@@ -53,12 +53,15 @@ trait InstrumentationDirectives extends RawlsInstrumented {
   private val redactNotifications =
     (Slash ~ "api").? / "notifications" / "workspace" / Segment / Segment
 
+  private val redactPapiIds =
+    (Slash ~ "api").? / "workflows" / Segment / "genomics" / Segment.repeat(0, Int.MaxValue, separator = Slash)
+
 
   // Strip out unique IDs from metrics by providing a redactedUriExpansion
   override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
     Seq(redactBillingProject, redactBillingProjectRoleEmail, redactUserGroup, redactUserGroupRoleEmail, redactGroupAndUser, redactGroups,
       redactWorkflowIds, redactSubmissionIds, redactEntityIds, redactMethodConfigs, redactWorkspaceNames,
-      redactAdminBilling, redactNotifications).map(_.asInstanceOf[PathMatcher[Product]])
+      redactAdminBilling, redactNotifications, redactPapiIds).map(_.asInstanceOf[PathMatcher[Product]])
   )
 
   private lazy val globalRequestCounter = ExpandedMetricBuilder.empty.asCounter("request")

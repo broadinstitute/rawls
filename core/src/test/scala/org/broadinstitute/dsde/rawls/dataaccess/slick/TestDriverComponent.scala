@@ -11,17 +11,18 @@ import slick.jdbc.MySQLProfile.api._
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.ProjectRoles.Owner
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers, Suite}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import org.broadinstitute.dsde.rawls.config.WDLParserConfig
+import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
@@ -66,6 +67,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   // now only serves to encapsulate a Java-ism
   def currentTime() = new DateTime()
   val testDate = currentTime()
+
+  val wdlParserConfig = WDLParserConfig(ConfigFactory.load().getConfig("wdl-parsing"))
+  val mockCromwellSwaggerClient = new MockCromwellSwaggerClient()
+  val wdlParser = new CachingWDLParser(wdlParserConfig, mockCromwellSwaggerClient)
+  val methodConfigResolver = new MethodConfigResolver(wdlParser)
 
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
     Await.result(DbResource.dataSource.inTransaction { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
@@ -308,7 +314,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       "ns",
       "testConfig1",
       Some("Sample"),
-      Map("p1" -> AttributeString("prereq")),
+      None,
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
       agoraMethod
@@ -320,7 +326,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       "dsde",
       "good_and_bad",
       Some("samples"),
-      Map(),
+      None,
       Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse")),
       Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString("")),
       goodAndBadMethod)
@@ -331,35 +337,35 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       "dockstore-config-namespace",
       "dockstore-config-name",
       Some("Sample"),
-      Map("p1" -> AttributeString("prereq")),
+      None,
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
       dockstoreMethod
     )
 
-    val methodConfigDockstore = MethodConfiguration("dsde", "DockstoreConfig", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), DockstoreMethod("dockstore-path", "dockstore-version"))
-    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(wsName.namespace, "method-a", 1))
-    val methodConfig3 = MethodConfiguration("dsde", "testConfig", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigDockstore = MethodConfiguration("dsde", "DockstoreConfig", Some("Sample"), None, Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), DockstoreMethod("dockstore-path", "dockstore-version"))
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", Some("Sample"), None, Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(wsName.namespace, "method-a", 1))
+    val methodConfig3 = MethodConfiguration("dsde", "testConfig", Some("Sample"), None, Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Sample"), Map(), Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
-    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
-    val methodConfigWorkspaceLibraryUpdate = MethodConfiguration("ns", "testConfigLib", Some("Sample"), Map(), Map(), Map("o1" -> AttributeString("workspace.library:foo")), AgoraMethod("ns-config", "meth1", 1))
-    val methodConfigMissingOutputs = MethodConfiguration("ns", "testConfigMissingOutputs", Some("Sample"), Map(), Map(), Map("some.workflow.output" -> AttributeString("this.might_not_be_here")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Sample"), None, Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigWorkspaceLibraryUpdate = MethodConfiguration("ns", "testConfigLib", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.library:foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigMissingOutputs = MethodConfiguration("ns", "testConfigMissingOutputs", Some("Sample"), None, Map(), Map("some.workflow.output" -> AttributeString("this.might_not_be_here")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigUnparseableInputs = MethodConfiguration("dsde", "UnparseableInputsMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigUnparseableOutputs = MethodConfiguration("dsde", "UnparseableOutputsMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), AgoraMethod("dsde", "three_step", 1))
-    val methodConfigUnparseableBoth = MethodConfiguration("dsde", "UnparseableBothMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..is...bad")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), AgoraMethod("dsde", "three_step", 1))
-    val methodConfigEmptyOutputs = MethodConfiguration("dsde", "EmptyOutputsMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("")), AgoraMethod("dsde", "three_step", 1))
-    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableInputs = MethodConfiguration("dsde", "UnparseableInputsMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableOutputs = MethodConfiguration("dsde", "UnparseableOutputsMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseableBoth = MethodConfiguration("dsde", "UnparseableBothMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..is...bad")), outputs=Map("three_step.cgrep.count" -> AttributeString("this..wont.parse")), AgoraMethod("dsde", "three_step", 1))
+    val methodConfigEmptyOutputs = MethodConfiguration("dsde", "EmptyOutputsMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map("three_step.cgrep.count" -> AttributeString("")), AgoraMethod("dsde", "three_step", 1))
+    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
 
-    val methodConfigArrayType = MethodConfiguration("dsde", "ArrayMethodConfig", Some("SampleSet"), prerequisites=Map.empty,
+    val methodConfigArrayType = MethodConfiguration("dsde", "ArrayMethodConfig", Some("SampleSet"), prerequisites=None,
       inputs=Map("aggregate_data_workflow.aggregate_data.input_array" -> AttributeString("this.samples.type")),
       outputs=Map("aggregate_data_workflow.aggregate_data.output_array" -> AttributeString("this.output_array")),
       AgoraMethod("dsde", "array_task", 1))
 
-    val methodConfigEntityless = MethodConfiguration("ns", "Entityless", None, Map(), inputs=Map("three_step.cgrep.pattern" -> AttributeString("\"bees\"")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigEntityless = MethodConfiguration("ns", "Entityless", None, None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("\"bees\"")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
 
     val agoraMethodConfigName = MethodConfigurationName(agoraMethodConfig.name, agoraMethodConfig.namespace, wsName)
     val dockstoreMethodConfigName = MethodConfigurationName(dockstoreMethodConfig.name, dockstoreMethodConfig.namespace, wsName)
@@ -733,22 +739,23 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       "ns",
       "testConfig1",
       Some("Sample"),
-      Map("p1" -> AttributeString("prereq")),
+      None,
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
       AgoraMethod("ns-config", "meth1", 1)
     )
 
-    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(wsName.namespace, "method-a", 1))
-    val methodConfig3 = MethodConfiguration("dsde", "testConfig", Some("Sample"), Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", Some("Sample"), None, Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), AgoraMethod(wsName.namespace, "method-a", 1))
+    val methodConfig3 = MethodConfiguration("dsde", "testConfig", Some("Sample"), None, Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Spample"), Map(), Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
-    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", Some("Spample"), None, Map(), Map("o1" -> AttributeString("this.foo")), AgoraMethod("ns-config", "meth1", 1))
+    val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", Some("Sample"), None, Map(), Map("o1" -> AttributeString("workspace.foo")), AgoraMethod("ns-config", "meth1", 1))
 
-    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
-    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", Some("Sample"), prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", Some("Sample"), prerequisites=None, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, AgoraMethod("dsde", "three_step", 1))
+
 
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, wsName)
     val methodConfigName2 = methodConfigName.copy(name="novelName")
@@ -859,6 +866,155 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     // workflows to an appropriate EXEC_SERVICE_KEY.
     sql"update WORKFLOW set EXEC_SERVICE_KEY = ${execKey} where EXEC_SERVICE_KEY is null and EXTERNAL_ID is not null;".as[Int]
   }
+
+
+  val threeStepWDL =
+    """
+      |task ps {
+      |  command {
+      |    ps
+      |  }
+      |  output {
+      |    File procs = stdout()
+      |  }
+      |}
+      |
+      |task cgrep {
+      |  File in_file
+      |  String pattern
+      |  command {
+      |    grep '${pattern}' ${in_file} | wc -l
+      |  }
+      |  output {
+      |    Int count = read_int(stdout())
+      |  }
+      |}
+      |
+      |task wc {
+      |  File in_file
+      |  command {
+      |    cat ${in_file} | wc -l
+      |  }
+      |  output {
+      |    Int count = read_int(stdout())
+      |  }
+      |}
+      |
+      |workflow three_step {
+      |  call ps
+      |  call cgrep {
+      |    input: in_file=ps.procs
+      |  }
+      |  call wc {
+      |    input: in_file=ps.procs
+      |  }
+      |}
+    """.stripMargin
+
+  val threeStepWDLName = "three_step"
+
+  val patternInput = makeToolInputParameter("cgrep.pattern", false, makeValueType("String"), "String")
+  val cgrepcountOutput = makeToolOutputParameter("cgrep.count", makeValueType("Int"), "Int")
+  val wccountOutput = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
+  val psprocsOutput = makeToolOutputParameter("ps.procs", makeValueType("File"), "File")
+  val threeStepWDLWorkflowDescription = makeWorkflowDescription(threeStepWDLName, List(patternInput), List(cgrepcountOutput, wccountOutput, psprocsOutput))
+  mockCromwellSwaggerClient.workflowDescriptions += (threeStepWDL -> threeStepWDLWorkflowDescription)
+
+  val threeStepMethod = AgoraEntity(Some("dsde"),Some(threeStepWDLName),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
+
+  val threeStepDockstoreWDLName = threeStepWDLName + "_dockstore"
+  // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
+  val threeStepDockstoreWDL = threeStepWDL.replace(threeStepWDLName, threeStepDockstoreWDLName)
+  val dockstoreResponse =
+    s"""{"type":"WDL","descriptor":"${threeStepDockstoreWDL.replace("\n","\\n")}","url":"bogus"}"""
+
+  val patternInputDockstore = makeToolInputParameter("cgrep.pattern", false, makeValueType("String"), "String")
+  val cgrepcountOutputDockstore = makeToolOutputParameter("cgrep.count", makeValueType("Int"), "Int")
+  val wccountOutputDockstore = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
+  val psprocsOutputDockstore = makeToolOutputParameter("ps.procs", makeValueType("File"), "File")
+  val threeStepDockStoreWDLWorkflowDescription = makeWorkflowDescription(threeStepDockstoreWDLName, List(patternInputDockstore), List(cgrepcountOutputDockstore, wccountOutputDockstore, psprocsOutputDockstore))
+  mockCromwellSwaggerClient.workflowDescriptions += (threeStepDockstoreWDL -> threeStepDockStoreWDLWorkflowDescription )
+
+  val noInputWdl =
+    """
+      |task t1 {
+      |  command {
+      |    echo "Hello"
+      |  }
+      |}
+      |
+      |workflow w1 {
+      |  call t1
+      |}
+    """.stripMargin
+
+  val noInputWdlWorkflowDescription = makeWorkflowDescription("w1", List(), List())
+  mockCromwellSwaggerClient.workflowDescriptions += (noInputWdl -> noInputWdlWorkflowDescription)
+
+  val noInputMethodDockstoreResponse =
+    s"""{"type":"WDL","descriptor":"${noInputWdl.replace("t1", "t1_dockstore").replace("\"", "\\\"").replace("\n","\\n")}","url":"bogus"}"""
+  val noInputMethodDockstoreWorkflowDescription = makeWorkflowDescription("w1", List(), List())
+  mockCromwellSwaggerClient.workflowDescriptions += (noInputWdl.replace("t1", "t1_dockstore") -> noInputWdlWorkflowDescription)
+
+
+  val noInputMethod = AgoraEntity(Some("dsde"), Some("no_input"), Some(1), None, None, None, None, Some(noInputWdl), None, Some(AgoraEntityType.Workflow))
+
+
+  val goodAndBadInputsWDL =
+    """
+      |workflow goodAndBad {
+      |  call goodAndBadTask
+      |}
+      |
+      |task goodAndBadTask {
+      |  String good_in
+      |  String bad_in
+      |  command {
+      |    echo "hello world"
+      |  }
+      |  output {
+      |    String good_out = "everything is good"
+      |    String bad_out = "everything is bad"
+      |    String empty_out = "everything is empty"
+      |  }
+      |}
+    """.stripMargin
+
+  val goodAndBadWDLName = "goodAndBad"
+  val badIn = makeToolInputParameter("goodAndBadTask.bad_in", false, makeValueType("String"), "String")
+  val goodIn = makeToolInputParameter("goodAndBadTask.good_in", false, makeValueType("String"), "String")
+  val goodOut = makeToolOutputParameter("goodAndBadTask.good_out", makeValueType("String"), "String")
+  val badOut = makeToolOutputParameter("goodAndBadTask.bad_out", makeValueType("String"), "String")
+  val emptyOut = makeToolOutputParameter("goodAndBadTask.empty_out", makeValueType("String"), "String")
+  val goodAndBadWDLWorkflowDescription = makeWorkflowDescription(goodAndBadWDLName, List(badIn, goodIn), List(goodOut, badOut, emptyOut))
+  mockCromwellSwaggerClient.workflowDescriptions += (goodAndBadInputsWDL -> goodAndBadWDLWorkflowDescription)
+
+  val meth1WDL =
+    """
+      |workflow meth1 {
+      |  call method1
+      |}
+      |
+      |task method1 {
+      |  String i1
+      |  command {
+      |    echo "hello world"
+      |  }
+      |  output {
+      |    String o1 = "output one"
+      |  }
+      |}
+    """.stripMargin
+
+  val meth1WDLName = "meth1"
+  val i1Input = makeToolInputParameter("method1.i1", false, makeValueType("String"), "String")
+  val o1Output = makeToolOutputParameter("method1.o1", makeValueType("String"), "String")
+  val meth1WDLWorkflowDescription = makeWorkflowDescription(meth1WDLName, List(i1Input), List(o1Output))
+  mockCromwellSwaggerClient.workflowDescriptions += (meth1WDL -> meth1WDLWorkflowDescription)
+  val testComponentThing = "Uhhh...can we get stuff from this class???"
+
+
+
 }
 
 trait TestData {

@@ -15,9 +15,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, addJitter}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, util}
 import akka.http.scaladsl.model.StatusCodes
-import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -44,8 +42,9 @@ object WorkflowSubmissionActor {
             requesterPaysRole: String,
             useWorkflowCollectionField: Boolean,
             useWorkflowCollectionLabel: Boolean,
-            defaultBackend: CromwellBackend): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend))
+            defaultBackend: CromwellBackend,
+            methodConfigResolver: MethodConfigResolver): Props = {
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, samDAO, dosResolver, executionServiceCluster, batchSize, credential, processInterval, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions, trackDetailedSubmissionMetrics, workbenchMetricBaseName, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver))
   }
 
   case class WorkflowBatch(workflowIds: Seq[Long], submissionRec: SubmissionRecord, workspaceRec: WorkspaceRecord)
@@ -76,7 +75,8 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val requesterPaysRole: String,
                               val useWorkflowCollectionField: Boolean,
                               val useWorkflowCollectionLabel: Boolean,
-                              val defaultBackend: CromwellBackend) extends Actor with WorkflowSubmission with LazyLogging {
+                              val defaultBackend: CromwellBackend,
+                              val methodConfigResolver: MethodConfigResolver) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
 
@@ -125,6 +125,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val useWorkflowCollectionField: Boolean
   val useWorkflowCollectionLabel: Boolean
   val defaultBackend: CromwellBackend
+  val methodConfigResolver: MethodConfigResolver
 
   import dataSource.dataAccess.driver.api._
 
@@ -199,7 +200,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       runtimeOptions,
       useCallCache,
       billingProject.cromwellBackend.getOrElse(defaultBackend),
-      workflowFailureMode
+      workflowFailureMode,
+      google_labels = Map("terra-submission-id" -> s"terra-${submissionId.toString}")
     )
   }
 
@@ -238,13 +240,15 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     })
   }
 
-  private def resolveDosUriServiceAccounts(dosUris: Set[String])(implicit executionContext: ExecutionContext): Future[Set[String]] = {
+  private def resolveDosUriServiceAccounts(dosUris: Set[String], userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Set[String]] = {
     Future.traverse(dosUris) { dosUri =>
-      dosResolver.dosServiceAccountEmail(dosUri)
+      dosResolver.dosServiceAccountEmail(dosUri, userInfo)
     }.map { emails =>
-      emails.collect {
+      val collected = emails.collect {
         case Some(email) => email
       }
+      logger.debug(s"resolveDosUriServiceAccounts found ${collected.size} emails for ${dosUris.size} DOS URIs")
+      collected
     }
   }
 
@@ -318,19 +322,21 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
           case svv: SubmissionValidationValue if svv.value.isDefined =>
             svv.inputName -> svv.value.get
         }
-        MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+        methodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
       }
 
       //yield the things we're going to submit to Cromwell
-      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, collectDosUris(workflowBatch), petUserInfo)
+      val dosUris = collectDosUris(workflowBatch)
+      logger.debug(s"collectDosUris found ${dosUris.size} DOS URIs in batch of size ${workflowBatch.size} for submission ${submissionRec.id}. First 20 are: ${dosUris.take(20)}")
+      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo)
     }
 
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo) <- workflowBatchFuture
-      dosServiceAccounts <- resolveDosUriServiceAccounts(dosUris)
-      _ <- if (dosServiceAccounts.isEmpty) Future.successful(false) else googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(wfOpts.google_project), Map(requesterPaysRole -> dosServiceAccounts.map("user:"+_).toList))
+      dosServiceAccounts <- resolveDosUriServiceAccounts(dosUris, petUserInfo)
+      _ <- if (dosServiceAccounts.isEmpty) Future.successful(false) else googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(wfOpts.google_project), Map(requesterPaysRole -> dosServiceAccounts.map("serviceAccount:"+_)))
       // Should labels be an Option? It's not optional for rawls (but then wfOpts are options too)
       workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), Option(wfLabels), wfCollection, petUserInfo)
     } yield {

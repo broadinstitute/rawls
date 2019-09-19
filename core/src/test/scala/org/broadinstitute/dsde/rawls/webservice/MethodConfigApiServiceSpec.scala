@@ -43,20 +43,21 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   def testCreateMethodConfiguration(method: MethodRepoMethod, wdlName: String, services: TestApiService) = {
-    val newMethodConfig =
-      MethodConfiguration("dsde", s"testConfigNew-${method.repo.scheme}", Some("samples"), Map(), Map(s"$wdlName.cgrep.pattern" -> AttributeString("this.foo")), Map(s"$wdlName.cgrep.count" -> AttributeString("this.bar")), method)
+    val inputMethodConfig =
+      MethodConfiguration("dsde", s"testConfigNew-${method.repo.scheme}", Some("samples"), None, Map(s"$wdlName.cgrep.pattern" -> AttributeString("this.foo")), Map(s"$wdlName.cgrep.count" -> AttributeString("this.bar")), method)
+    val expectedMethodConfig = inputMethodConfig.copy(prerequisites = Some(Map())) //test that empty prereqs work too
     withStatsD {
-      Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
+      Post(s"${testData.workspace.path}/methodconfigs", httpJson(inputMethodConfig)) ~>
         services.sealedInstrumentedRoutes ~>
         check {
           assertResult(StatusCodes.Created) {
             status
           }
-          assertResult(newMethodConfig) {
-            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get
+          assertResult(expectedMethodConfig) {
+            runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), inputMethodConfig.namespace, inputMethodConfig.name)).get
           }
           // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-          assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
+          assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(expectedMethodConfig.path(testData.wsName)))))) {
             header("Location")
           }
         }
@@ -76,7 +77,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the workspace last modified date on create method configuration" in withTestDataApiServices { services =>
-    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), Map(), Map("three_step.cgrep.pattern" -> AttributeString("this.foo")), Map("three_step.cgrep.count" -> AttributeString("this.bar")),
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), None, Map("three_step.cgrep.pattern" -> AttributeString("this.foo")), Map("three_step.cgrep.count" -> AttributeString("this.bar")),
       AgoraMethod("dsde", "three_step", 1))
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -102,7 +103,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     //This tests that invalid MC expressions still return 201 and a ValidatedMethodConfiguration with validation results in it
     val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("does.not.parse"))
     val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("also.does.not.parse"), "empty_out" -> AttributeString(""))
-    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), Map(), inputs, outputs,
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), None, inputs, outputs,
       AgoraMethod("dsde", "good_and_bad", 1))
 
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
@@ -137,7 +138,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     //This tests that invalid MC expressions still return 201 and a ValidatedMethodConfiguration with validation results in it
     val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("workspace.foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("blah"))
     val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("workspace.bar"), "goodAndBad.goodAndBadTask.bad_out" -> AttributeString("this.nomodel"), "empty_out" -> AttributeString(""))
-    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", None, Map(), inputs, outputs,
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", None, None, inputs, outputs,
       AgoraMethod("dsde", "good_and_bad", 1))
 
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
@@ -169,7 +170,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 if you try to create a method configuration that points to an unknown method" in withTestDataApiServices { services =>
-    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), Map(), Map(), Map(),
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), None, Map(), Map(),
       AgoraMethod("dsde", "method_doesnt_exist", 1))
 
     Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
@@ -184,7 +185,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   it should "not allow library attributes in outputs for create method configuration by curator" in withTestDataApiServices { services =>
     val inputs = Map("lib_ent_in" -> AttributeString("this.library:foo"), "lib_ws_in" -> AttributeString("workspace.library:foo"))
     val outputs = Map("lib_ent_out" -> AttributeString("this.library:bar"),"lib_ws_out" -> AttributeString("workspace.library:bar"))
-    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), Map("ready" -> AttributeString("true")), inputs, outputs,
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), None, inputs, outputs,
       AgoraMethod(testData.wsName.namespace, "method-a", 1))
 
     val expectedSuccessInputs = Seq("lib_ent_in", "lib_ws_in")
@@ -203,7 +204,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val inputs = Map("goodAndBad.goodAndBadTask.good_in" -> AttributeString("this.library:foo"), "goodAndBad.goodAndBadTask.bad_in" -> AttributeString("workspace.library:foo"))
     val outputs = Map("goodAndBad.goodAndBadTask.good_out" -> AttributeString("this.bar"),"goodAndBad.goodAndBadTask.bad_out" -> AttributeString("workspace.bar"))
 
-    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), Map(), inputs, outputs,
+    val newMethodConfig = MethodConfiguration("dsde", "good_and_bad2", Some("samples"), None, inputs, outputs,
       AgoraMethod("dsde", "good_and_bad", 1))
 
     val expectedSuccessInputs = Set("goodAndBad.goodAndBadTask.good_in", "goodAndBad.goodAndBadTask.bad_in")
@@ -233,7 +234,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   it should "not allow library attributes in outputs for create method configuration by non-curator" in withTestDataApiServices { services =>
     val inputs = Map("lib_ent_in" -> AttributeString("this.library:foo"), "lib_ws_in" -> AttributeString("workspace.library:foo"))
     val outputs = Map("lib_ent_out" -> AttributeString("this.library:bar"),"lib_ws_out" -> AttributeString("workspace.library:bar"))
-    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), Map("ready" -> AttributeString("true")), inputs, outputs,
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", Some("samples"), None, inputs, outputs,
       AgoraMethod(testData.wsName.namespace, "method-a", 1))
 
     revokeCuratorRole(services)
@@ -252,8 +253,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   // DSDEEPB-1433
   it should "successfully create two method configs with the same name but different namespaces" in withTestDataApiServices { services =>
-    val mc1 = MethodConfiguration("ws1", "testConfig", Some("samples"), Map(), Map(), Map(), AgoraMethod("dsde", "good_and_bad", 1))
-    val mc2 = MethodConfiguration("ws2", "testConfig", Some("samples"), Map(), Map(), Map(), AgoraMethod("dsde", "good_and_bad", 1))
+    val mc1 = MethodConfiguration("ws1", "testConfig", Some("samples"), None, Map(), Map(), AgoraMethod("dsde", "good_and_bad", 1))
+    val mc2 = MethodConfiguration("ws2", "testConfig", Some("samples"), None, Map(), Map(), AgoraMethod("dsde", "good_and_bad", 1))
 
     create(mc1)
     create(mc2)
@@ -642,7 +643,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "goodAndBad.goodAndBadTask.empty_out")
     val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Failed at line 1, column 1: 'workspace.' expected but 'a' found")
 
-    val mc = testData.goodAndBadMethodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
+    val mc = testData.goodAndBadMethodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs, prerequisites = Some(Map()))
 
     runAndWait(methodConfigurationQuery.create(SlickWorkspaceContext(testData.workspace), mc))
 
@@ -886,7 +887,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Post("/methodconfigs/template", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), Map(), Map("three_step.cgrep.pattern" -> AttributeString("")),
+        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), Map("three_step.cgrep.pattern" -> AttributeString("")),
           Map("three_step.ps.procs"->AttributeString(""),"three_step.cgrep.count"->AttributeString(""), "three_step.wc.count"->AttributeString("")),
           AgoraMethod("dsde","three_step",1))
         assertResult(methodConfiguration) { responseAs[MethodConfiguration] }
@@ -899,7 +900,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Post("/methodconfigs/template", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), Map(), Map("three_step_dockstore.cgrep.pattern" -> AttributeString("")),
+        val methodConfiguration = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), Map("three_step_dockstore.cgrep.pattern" -> AttributeString("")),
           Map("three_step_dockstore.ps.procs"->AttributeString(""),"three_step_dockstore.cgrep.count"->AttributeString(""), "three_step_dockstore.wc.count"->AttributeString("")),
           method)
         assertResult(methodConfiguration) { responseAs[MethodConfiguration] }

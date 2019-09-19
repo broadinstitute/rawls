@@ -16,6 +16,7 @@ import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
+import spray.json.{JsObject, JsValue}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
@@ -1358,6 +1359,17 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.BadRequest) {
           status
         }
+      }
+  }
+
+  it should "return an error in real json when patching entity with badly shaped request body" in withTestDataApiServices { services =>
+    Patch(testData.sample1.path(testData.workspace), httpJson(AddListMember(AttributeName.withDefaultNS("somefoo"), AttributeString("adsf")):AttributeUpdateOperation)) ~>
+      sealRoute(services.entityRoutes)(rejectionHandler=RawlsApiService.rejectionHandler) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+        responseAs[JsObject]
       }
   }
 

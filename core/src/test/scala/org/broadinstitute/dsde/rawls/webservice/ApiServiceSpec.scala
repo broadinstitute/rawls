@@ -10,12 +10,12 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{SubmissionSupervisor, SubmissionMonitorConfig}
+import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
-import org.broadinstitute.dsde.rawls.monitor.{BucketDeletionMonitor, HealthMonitor}
+import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -31,7 +31,8 @@ import spray.json._
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
-import org.broadinstitute.dsde.rawls.config.{MethodRepoConfig, SwaggerConfig}
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import scala.concurrent.duration._
@@ -123,6 +124,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       workbenchMetricBaseName
     ).withDispatcher("submission-monitor-dispatcher"))
 
+    val testConf = ConfigFactory.load()
+
     val googleGroupSyncTopic = "test-topic-name"
 
     val notificationTopic = "test-notification-topic"
@@ -136,7 +139,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       notificationDAO,
       samDAO,
       Seq("bigquery.jobUser"),
-      "requesterPaysRole"
+      "requesterPaysRole",
+      DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
+      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
     )_
 
 
@@ -171,8 +176,10 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       methodRepoDAO,
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       executionServiceCluster,
       execServiceBatchSize,
+      methodConfigResolver,
       gcsDAO,
       samDAO,
       notificationDAO,

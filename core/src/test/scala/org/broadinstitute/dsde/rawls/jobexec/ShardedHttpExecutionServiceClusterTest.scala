@@ -70,7 +70,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sample1),
-            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("std", "someMethod", 1))),
+            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("std", "someMethod", 1))),
             submissionQuery.create(context, submissionWithExecutionKeys)
           )
         },

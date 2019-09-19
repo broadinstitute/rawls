@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUt
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpecLike, Matchers}
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
@@ -31,7 +31,7 @@ import scala.concurrent.duration.{FiniteDuration, _}
 /**
  * Created by dvoet on 5/17/16.
  */
-class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
+class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with BeforeAndAfterEach with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
   import driver.api._
   implicit val materializer = ActorMaterializer()
 
@@ -41,7 +41,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   val mockSamDAO = new MockSamDAO(slickDataSource)
   val dosServiceAccount = "serviceaccount@foo.com"
   val differentDosServiceAccount = "differentserviceaccount@foo.com"
-  val mockDosResolver: DosResolver = (v: String) => Future.successful(if (v.contains("different")) Some(differentDosServiceAccount) else Some(dosServiceAccount))
+  val mockDosResolver: DosResolver = (v: String, userInfo: UserInfo) => Future.successful(if (v.contains("different")) Some(differentDosServiceAccount) else Some(dosServiceAccount))
   private val requesterPaysRole = "requesterPays"
 
   /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
@@ -59,7 +59,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val requesterPaysRole: String = requesterPaysRole,
     val useWorkflowCollectionField: Boolean = false,
     val useWorkflowCollectionLabel: Boolean = false,
-    val defaultBackend: CromwellBackend = CromwellBackend("PAPIv2")) extends WorkflowSubmission {
+    val defaultBackend: CromwellBackend = CromwellBackend("PAPIv2"),
+    val methodConfigResolver: MethodConfigResolver = methodConfigResolver) extends WorkflowSubmission {
 
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
@@ -98,6 +99,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     super.beforeAll()
     Await.result( mockGoogleServicesDAO.storeToken(userInfo, UUID.randomUUID.toString), Duration.Inf )
     mockServer.startServer()
+  }
+
+  override def beforeEach(): Unit = {
+    mockGoogleServicesDAO.policies.clear()
   }
 
   override def afterAll(): Unit = {
@@ -243,7 +248,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
             Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
             false,
-            CromwellBackend("PAPIv2")
+            CromwellBackend("PAPIv2"),
+            google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}")
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }
@@ -320,7 +326,39 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
 
       // Verify
-      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.workspace.namespace))(requesterPaysRole) should contain theSameElementsAs List("user:" + dosServiceAccount, "user:" + differentDosServiceAccount)
+      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.workspace.namespace))(requesterPaysRole) should contain theSameElementsAs List("serviceAccount:" + dosServiceAccount, "serviceAccount:" + differentDosServiceAccount)
+    }
+  }
+
+  it should "resolve DRS URIs when submitting workflows" in withDefaultTestDatabase {
+    val data = testData
+    // Set up system under test
+    val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource) {
+      override val executionServiceCluster: ExecutionServiceCluster = mockExecCluster
+    }
+
+    withWorkspaceContext(data.workspace) { ctx =>
+      // Create test submission data
+      val sample = Entity("sample", "Sample", Map())
+      val sampleSet = Entity("sampleset", "sample_set",
+        Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference))))
+      val inputResolutions = Seq(
+        SubmissionValidationValue(Option(AttributeString("drs://foo/bar")), None, "test_input_dos"),
+        SubmissionValidationValue(Option(AttributeValueList(Seq(AttributeString("drs://foo/bar1"), AttributeString("drs://different"), AttributeString("drs://foo/bar3")))), None, "test_input_dos_array"))
+      val submissionDos = createTestSubmission(data.workspace, data.agoraMethodConfig, sampleSet, WorkbenchEmail(data.userOwner.userEmail.value),
+        Seq(sample), Map(sample -> inputResolutions), Seq(), Map())
+
+      runAndWait(entityQuery.save(ctx, sample))
+      runAndWait(entityQuery.save(ctx, sampleSet))
+      runAndWait(submissionQuery.create(ctx, submissionDos))
+      val (workflowRecs, submissionRec, workspaceRec) = getWorkflowSubmissionWorkspaceRecords(submissionDos, data.workspace)
+
+      // Submit workflow!
+      Await.result(workflowSubmission.submitWorkflowBatch(WorkflowBatch(workflowRecs.map(_.id), submissionRec, workspaceRec)), Duration.Inf)
+
+      // Verify
+      mockGoogleServicesDAO.policies(RawlsBillingProjectName(ctx.workspace.namespace))(requesterPaysRole) should contain theSameElementsAs List("serviceAccount:" + dosServiceAccount, "serviceAccount:" + differentDosServiceAccount)
     }
   }
 
@@ -405,7 +443,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource),
-        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"))
+        3, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"),
+        methodConfigResolver)
       )
 
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).exists(_ == WorkflowStatuses.Submitted.toString), 10 seconds)
@@ -440,7 +479,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         mockSamDAO,
         mockDosResolver,
         MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
-        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"))
+        batchSize, credential, 1 milliseconds, 1 milliseconds, 100, 100, None, true, "test", requesterPaysRole, false, false, CromwellBackend("PAPIv2"),
+        methodConfigResolver)
       )
 
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)

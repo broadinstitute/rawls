@@ -1,10 +1,14 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleApiTypes, GoogleOperationNames}
+import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
+import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
+import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model._
 
-case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String])
-case class RawlsBillingProjectOperationRecord(projectName: String, operationName: String, operationId: String, done: Boolean, errorMessage: Option[String], api: String)
+case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String])
+case class RawlsBillingProjectOperationRecord(projectName: String, operationName: GoogleOperationName, operationId: String, done: Boolean, errorMessage: Option[String], api: GoogleApiType)
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
@@ -18,17 +22,31 @@ trait RawlsBillingProjectComponent {
     def billingAccount = column[Option[String]]("BILLING_ACCOUNT", O.Length(100))
     def message = column[Option[String]]("MESSAGE")
     def cromwellBackend = column[Option[String]]("CROMWELL_BACKEND")
+    def servicePerimeter = column[Option[String]]("SERVICE_PERIMETER")
+    def googleProjectNumber = column[Option[String]]("GOOGLE_PROJECT_NUMBER")
 
-    def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount, message, cromwellBackend) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
+    def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount, message, cromwellBackend, servicePerimeter, googleProjectNumber) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
+
+  // these 2 implicits are lazy because there is a timing problem initializing MappedColumnType, if they are not lazy
+  // we get null pointer exceptions
+  implicit lazy val googleApiTypeColumnType = MappedColumnType.base[GoogleApiType, String](
+    { apiType => apiType.toString },
+    { stringValue => GoogleApiTypes.withName(stringValue) }
+  )
+
+  implicit lazy val googleOperationNameColumnType = MappedColumnType.base[GoogleOperationName, String](
+    { operationName => operationName.toString },
+    { stringValue => GoogleOperationNames.withName(stringValue)}
+  )
 
   class RawlsBillingProjectOperationTable(tag: Tag) extends Table[RawlsBillingProjectOperationRecord](tag, "BILLING_PROJECT_OPERATION") {
     def projectName = column[String]("PROJECT_NAME", O.Length(254))
-    def operationName = column[String]("OPERATION_NAME", O.Length(254))
+    def operationName = column[GoogleOperationName]("OPERATION_NAME", O.Length(254))
     def operationId = column[String]("OPERATION_ID", O.Length(254))
     def done = column[Boolean]("DONE")
     def errorMessage = column[Option[String]]("ERROR_MESSAGE")
-    def api = column[String]("API")
+    def api = column[GoogleApiType]("API")
 
     def pk = primaryKey("PK_BILLING_PROJECT_OPERATION", (projectName, operationName))
 
@@ -69,12 +87,28 @@ trait RawlsBillingProjectComponent {
       }
     }
 
+    def listProjectsWithServicePerimeterAndStatus(servicePerimeter: ServicePerimeterName, statuses: CreationStatus*): ReadWriteAction[Seq[RawlsBillingProject]] = {
+      for {
+        projectRecords <- filter(rec => rec.servicePerimeter === servicePerimeter.value && rec.creationStatus.inSetBind(statuses.map(_.toString))).result
+      } yield {
+        projectRecords.map(unmarshalBillingProject)
+      }
+    }
+
     def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
       uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).map(_.map(unmarshalBillingProject))
     }
 
     def delete(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] = {
       rawlsBillingProjectQuery.filter(_.projectName === billingProjectName.value).delete map { count => count > 0 }
+    }
+
+    def getBillingProjects(projectNames: Set[RawlsBillingProjectName]): ReadAction[Seq[RawlsBillingProject]] = {
+      val query = for {
+        project <- rawlsBillingProjectQuery if (project.projectName.inSetBind(projectNames.map(_.value)))
+      } yield project
+
+      query.result.map(_.map(unmarshalBillingProject))
     }
 
     def getBillingProjectDetails(projectNames: Set[RawlsBillingProjectName]): ReadAction[Map[String, (CreationStatuses.CreationStatus, Option[String])]] = {
@@ -95,16 +129,16 @@ trait RawlsBillingProjectComponent {
       DBIO.sequence(operations.map(rec => rawlsBillingProjectOperationQuery.filter(x => x.projectName === rec.projectName && x.operationName === rec.operationName).update(rec)))
     }
 
-    def loadOperationsForProjects(projectNames: Seq[RawlsBillingProjectName]): ReadAction[Seq[RawlsBillingProjectOperationRecord]] = {
-      rawlsBillingProjectOperationQuery.filter(_.projectName.inSetBind(projectNames.map(_.value))).result
+    def loadOperationsForProjects(projectNames: Seq[RawlsBillingProjectName], operationName: GoogleOperationName): ReadAction[Seq[RawlsBillingProjectOperationRecord]] = {
+      rawlsBillingProjectOperationQuery.filter(x => x.projectName.inSetBind(projectNames.map(_.value)) && x.operationName === operationName).result
     }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
-      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message, billingProject.cromwellBackend.map(_.value))
+      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message, billingProject.cromwellBackend.map(_.value), billingProject.servicePerimeter.map(_.value), billingProject.googleProjectNumber.map(_.value))
     }
 
     private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject = {
-      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message, projectRecord.cromwellBackend.map(CromwellBackend))
+      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message, projectRecord.cromwellBackend.map(CromwellBackend), projectRecord.servicePerimeter.map(ServicePerimeterName), projectRecord.googleProjectNumber.map(GoogleProjectNumber))
     }
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {

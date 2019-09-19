@@ -44,18 +44,32 @@ import cats.implicits._
  */
 
 object WorkspaceService {
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) = {
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService, config)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) = {
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, cromiamDAO, executionServiceCluster, execServiceBatchSize, methodConfigResolver, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService, config)
   }
 
   val SECURITY_LABEL_KEY = "security"
   val HIGH_SECURITY_LABEL = "high"
   val LOW_SECURITY_LABEL = "low"
+
+  private[workspace] def extractOperationIdsFromCromwellMetadata(metadataJson: JsObject): Iterable[String] = {
+    case class Call(jobId: Option[String])
+    case class OpMetadata(calls: Option[Map[String, Seq[Call]]])
+    implicit val callFormat = jsonFormat1(Call)
+    implicit val opMetadataFormat = jsonFormat1(OpMetadata)
+
+    for {
+      calls <- metadataJson.convertTo[OpMetadata].calls.toList // toList on the Option makes the compiler like the for comp
+      call <- calls.values.flatten
+      jobId <- call.jobId
+    } yield jobId
+  }
+
 }
 
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(implicit protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(implicit protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented {
 
   import dataSource.dataAccess.driver.api._
@@ -79,6 +93,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def UnlockWorkspace(workspaceName: WorkspaceName) = unlockWorkspace(workspaceName)
   def CheckBucketReadAccess(workspaceName: WorkspaceName) = checkBucketReadAccess(workspaceName)
   def GetBucketUsage(workspaceName: WorkspaceName) = getBucketUsage(workspaceName)
+  def GetBucketOptions(workspaceName: WorkspaceName) = getBucketOptions(workspaceName)
+  //def UpdateBucketOptions(workspaceName: WorkspaceName, bucketOptions: WorkspaceBucketOptions) = updateBucketOptions(workspaceName, bucketOptions)
   def GetAccessInstructions(workspaceName: WorkspaceName) = getAccessInstructions(workspaceName)
 
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
@@ -106,8 +122,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def ListAgoraMethodConfigurations(workspaceName: WorkspaceName) = listAgoraMethodConfigurations(workspaceName)
   def ListMethodConfigurations(workspaceName: WorkspaceName) = listMethodConfigurations(workspaceName)
   def CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) = createMethodConfigurationTemplate(methodRepoMethod)
-  def GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) = getMethodInputsOutputs(methodRepoMethod)
+  def GetMethodInputsOutputs(userInfo: UserInfo, methodRepoMethod: MethodRepoMethod ) = getMethodInputsOutputs(userInfo, methodRepoMethod)
   def GetAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) = getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
+  def GetGenomicsOperationV2(workflowId: String, operationId: List[String]) = getGenomicsOperationV2(workflowId, operationId)
 
   def ListSubmissions(workspaceName: WorkspaceName) = listSubmissions(workspaceName)
   def CountSubmissions(workspaceName: WorkspaceName) = countSubmissions(workspaceName)
@@ -138,20 +155,39 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
           DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceId.toString)) flatMap { accessLevel =>
+            //run these futures in parallel. this is equivalent to running the for-comp with the futures already defined and running
+            val futuresInParallel = (
+              getUserCatalogPermissions(workspaceContext.workspaceId.toString),
+              //convoluted but accessLevel for both params because user could at most share with their own access level
+              getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel),
+              getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel),
+              getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)),
+              loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo),
+              gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace))
+            ).tupled
+
             for {
-              canCatalog <- DBIO.from(getUserCatalogPermissions(workspaceContext.workspaceId.toString))
-              canShare <- DBIO.from(getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel)) //convoluted but accessLevel for both params because user could at most share with their own access level
-              canCompute <- DBIO.from(getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel))
+              (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
               stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
-              owners <- DBIO.from(getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)))
-              authDomain <- DBIO.from(loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo))
             } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, canCompute, canCatalog, WorkspaceDetails(workspaceContext.workspace, authDomain.toSet), stats, owners))
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(Option(accessLevel), Option(canShare), Option(canCompute), Option(canCatalog), WorkspaceDetails(workspaceContext.workspace, authDomain.toSet), Option(stats), Option(bucketDetails), Option(owners)))
             }
           }
         }
       }
     }
+
+  def getBucketOptions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
+          DBIO.from(gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace))) map { details =>
+            RequestComplete(StatusCodes.OK, details)
+          }
+        }
+      }
+    }
+  }
 
   private def loadResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[ManagedGroupRef]] = {
     samDAO.getResourceAuthDomain(resourceTypeName, resourceId, userInfo).map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
@@ -1256,7 +1292,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def convertToMethodConfiguration(agoraMethodConfig: AgoraMethodConfiguration): MethodConfiguration = {
-    MethodConfiguration(agoraMethodConfig.namespace, agoraMethodConfig.name, Some(agoraMethodConfig.rootEntityType), agoraMethodConfig.prerequisites, agoraMethodConfig.inputs, agoraMethodConfig.outputs, agoraMethodConfig.methodRepoMethod)
+    MethodConfiguration(agoraMethodConfig.namespace, agoraMethodConfig.name, Some(agoraMethodConfig.rootEntityType), Some(Map.empty[String, AttributeString]), agoraMethodConfig.inputs, agoraMethodConfig.outputs, agoraMethodConfig.methodRepoMethod)
   }
 
   def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[PerRequestMessage] = {
@@ -1301,10 +1337,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def createMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
+  def createMethodConfigurationTemplate(methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withMethod(methodRepoMethod, userInfo) { method =>
-        withWdl(method) { wdl => MethodConfigResolver.toMethodConfiguration(wdl, methodRepoMethod) match {
+        withWdl(method) { wdl => methodConfigResolver.toMethodConfiguration(userInfo, wdl, methodRepoMethod) match {
           case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
           case Success(methodConfig) => DBIO.successful(RequestComplete(StatusCodes.OK, methodConfig))
         }}
@@ -1312,10 +1348,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def getMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
+  def getMethodInputsOutputs(userInfo: UserInfo, methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withMethod(methodRepoMethod, userInfo) { method =>
-        withWdl(method) { wdl => MethodConfigResolver.getMethodInputsOutputs(wdl) match {
+        withWdl(method) { wdl => methodConfigResolver.getMethodInputsOutputs(userInfo, wdl) match {
           case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
           case Success(inputsOutputs) => DBIO.successful(RequestComplete(StatusCodes.OK, inputsOutputs))
         }}
@@ -1435,7 +1471,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     submissionWithoutCosts flatMap {
       case (submission) => {
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-        toFutureTry(submissionCostService.getWorkflowCosts(allWorkflowIds, workspaceName.namespace)) map {
+        toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, Option(submission.submissionDate))) map {
           case Failure(ex) =>
             logger.error("Unable to get workflow costs for this submission. ", ex)
             RequestComplete((StatusCodes.OK, SubmissionStatusResponse(submission)))
@@ -1522,17 +1558,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val execIdFutOpt = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, dataAccess) { workspaceContext =>
         withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) { optExecKey =>
-          DBIO.successful(optExecKey)
+          withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
+            DBIO.successful((optExecKey, submission))
+          }
         }
       }
     }
 
     for {
-      optExecId <- execIdFutOpt
+      (optExecId, submission) <- execIdFutOpt
       // we don't need the Execution Service ID, but we do need to confirm the Workflow is in one for this Submission
       // if we weren't able to do so above
       _ <- executionServiceCluster.findExecService(submissionId, workflowId, userInfo, optExecId)
-      costs <- submissionCostService.getWorkflowCosts(Seq(workflowId), workspaceName.namespace)
+      costs <- submissionCostService.getWorkflowCost(workflowId, workspaceName.namespace, Option(submission.submissionDate))
     } yield RequestComplete(StatusCodes.OK, WorkflowCost(workflowId, costs.get(workflowId)))
   }
 
@@ -1704,6 +1742,22 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield RequestComplete(StatusCodes.OK, instructions.flatten)
   }
 
+  def getGenomicsOperationV2(workflowId: String, operationId: List[String]): Future[PerRequestMessage] = {
+    // note that cromiam should only give back metadata if the user is authorized to see it
+    cromiamDAO.callLevelMetadata(workflowId, MetadataParams(includeKeys = Set("jobId")), userInfo).flatMap { metadataJson =>
+      val operationIds: Iterable[String] = WorkspaceService.extractOperationIdsFromCromwellMetadata(metadataJson)
+
+      val operationIdString = operationId.mkString("/")
+      // check that the requested operation id actually exists in the workflow
+      if (operationIds.toList.contains(operationIdString)) {
+        val genomicsServiceRef = genomicsServiceConstructor(userInfo)
+        genomicsServiceRef.GetOperation(operationIdString)
+      } else {
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"operation id ${operationIdString} not found in workflow $workflowId")))
+      }
+    }
+  }
+
   // helper methods
 
   // note: success is indicated by  Map.empty
@@ -1856,11 +1910,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       response <- userHasAction match {
         case true =>
           dataAccess.rawlsBillingProjectQuery.load(projectName).flatMap {
-            case Some(RawlsBillingProject(_, _, CreationStatuses.Ready, _, _, _)) => op //Sam will check to make sure the Auth Domain selection is valid
-            case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Creating, _, _, _)) =>
+            case Some(RawlsBillingProject(_, _, CreationStatuses.Ready, _, _, _, _, _)) => op //Sam will check to make sure the Auth Domain selection is valid
+            case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Creating, _, _, _, _, _)) =>
               DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"${name} is still being created")))
 
-            case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Error, _, messageOp, _)) =>
+            case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Error, _, messageOp, _, _, _)) =>
               DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Error creating ${name}: ${messageOp.getOrElse("no message")}")))
 
             case None =>
@@ -2095,12 +2149,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               withSubmissionEntityRecs(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntityRecs =>
                 withWorkflowFailureMode(submissionRequest) { workflowFailureMode =>
                   //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-                  MethodConfigResolver.evaluateInputExpressions(workspaceContext, gatherInputsResult.processableInputs, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
+                  methodConfigResolver.evaluateInputExpressions(workspaceContext, gatherInputsResult.processableInputs, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
                     valuesByEntity
                       .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values.toSet) })
                       .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
                       case (succeeded, failed) =>
-                        val methodConfigInputs = gatherInputsResult.processableInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.localName.value, methodInput.expression) }
+                        val methodConfigInputs = gatherInputsResult.processableInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.getName, methodInput.expression) }
                         val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
                         op(dataAccess, workspaceContext, wdl, header, succeeded.toSeq, failed.toSeq, workflowFailureMode)
                     }

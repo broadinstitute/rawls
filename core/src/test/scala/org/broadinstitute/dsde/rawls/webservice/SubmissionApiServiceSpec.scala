@@ -56,6 +56,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  def withEmptyTestDataApiServices[T](testCode: TestApiService => T): T = {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
+
   val largeSampleTestData = new LargeSampleSetTestData()
 
   def withLargeSubmissionApiServices[T](testCode: TestApiService => T): T = {
@@ -95,7 +101,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       "requesterPays",
       false,
       false,
-      CromwellBackend("PAPIv2")
+      CromwellBackend("PAPIv2"),
+      methodConfigResolver
     ))
 
     try {
@@ -117,7 +124,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
     val mcName = MethodConfigurationName("three_step","dsde", testData.wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,Some("Pattern"), Map.empty, Map("three_step.cgrep.pattern"->AttributeString("this.input_expression")), Map.empty, AgoraMethod("dsde","three_step",1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,Some("Pattern"), None, Map("three_step.cgrep.pattern"->AttributeString("this.input_expression")), Map.empty, AgoraMethod("dsde","three_step",1))
     Post(s"${testData.wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
@@ -211,9 +218,9 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   it should "return 201 Created when creating and monitoring a submission with no expression" in withTestDataApiServices { services =>
     val wsName = testData.wsName
-    val agoraMethodConf = MethodConfiguration("no_input", "dsde", Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val agoraMethodConf = MethodConfiguration("no_input", "dsde", Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
     val dockstoreMethodConf =
-      MethodConfiguration("no_input_dockstore", "dsde", Some("Sample"), Map.empty, Map.empty, Map.empty, DockstoreMethod("dockstore-no-input-path", "dockstore-no-input-version"))
+      MethodConfiguration("no_input_dockstore", "dsde", Some("Sample"), None, Map.empty, Map.empty, DockstoreMethod("dockstore-no-input-path", "dockstore-no-input-version"))
 
     List(agoraMethodConf, dockstoreMethodConf) foreach { conf =>
       val submission = createAndMonitorSubmission(wsName, conf, testData.sample1, None, services)
@@ -226,7 +233,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "return 201 Created when creating and monitoring a submission with valid expression" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
@@ -238,7 +245,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "update the last modified date on a workspace for submission entries" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
@@ -253,7 +260,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "return 201 Created when creating submission with a workflow_failure_mode" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
 
@@ -265,7 +272,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "return workflow_failure_mode in submission GET calls" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     // calls GET ../submissions/<sub-id> and returns the SubmissionStatusResponse
     val submissionResponseWithFailureMode = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
@@ -311,7 +318,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "abort a submission" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     // create a submission
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
@@ -328,7 +335,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "create and abort a large submission" in withLargeSubmissionApiServices { services =>
     val wsName = largeSampleTestData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     // create a submission
     val submission = createAndMonitorSubmission(wsName, methodConf, largeSampleTestData.sampleSet, Option("this.hasSamples"), services)
@@ -349,7 +356,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     withWorkflowSubmissionActor(services) { _ =>
       val wsName = largeSampleTestData.wsName
       val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-      val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+      val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
       val numIterations = 20
 
       (1 to numIterations).map { i =>
@@ -368,7 +375,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "return 400 Bad Request when passing an unknown workflow_failure_mode" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), Map.empty, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
     val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, Some(testData.sample1.entityType), Some(testData.sample1.name), None, false, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
     val jsonStr = submissionRq.toJson.toString.replace("ContinueWhilePossible", "Bogus")
@@ -661,5 +668,61 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         entityQuery.save(SlickWorkspaceContext(workspace), lotsOfSamples :+ sampleSet)
       )
     }
+  }
+
+  it should "return 200 when reading a Google Genomics operation with PAPIv1 job id" in withEmptyTestDataApiServices { services =>
+    withStatsD {
+      Get(s"/workflows/workflow_with_job_ids/genomics/operations/dummy-job-id") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK, responseAs[String]) {
+            status
+          }
+          // message returned by MockGoogleServicesDAO
+          assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
+            responseAs[JsObject]
+          }
+        }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = "workflows.redacted.genomics.redacted.redacted"
+      val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
+  }
+
+  it should "return 200 when reading a Google Genomics operation with PAPIv2 job id" in withEmptyTestDataApiServices { services =>
+    withStatsD {
+      Get(s"/workflows/workflow_with_job_ids/genomics/projects/dummy-project/operations/dummy-job-id") ~> services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          // message returned by MockGoogleServicesDAO
+          assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
+            responseAs[JsObject]
+          }
+        }
+    } { capturedMetrics =>
+      val wsPathForRequestMetrics = "workflows.redacted.genomics.redacted.redacted.redacted.redacted"
+      val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a non-existent workflow" in withEmptyTestDataApiServices { services =>
+    Get(s"/workflows/bogus/genomics/projects/dummy-project/operations/dummy-job-id") ~> services.submissionRoutes ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when reading a Google Genomics operation for a non-existent job" in withEmptyTestDataApiServices { services =>
+    Get(s"/workflows/workflow_with_job_ids/genomics/projects/dummy-project/operations/bogus") ~> services.submissionRoutes ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
   }
 }
