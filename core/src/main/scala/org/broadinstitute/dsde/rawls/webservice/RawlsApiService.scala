@@ -27,7 +27,7 @@ import akka.stream.scaladsl.Sink
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.SwaggerConfig
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.FiniteDuration
 
 object RawlsApiService {
@@ -70,25 +70,21 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   val samDAO: SamDAO
   val swaggerConfig: SwaggerConfig
 
-  //NOTE: This execution context is NOT used to run the routes. You can find that EC passed to bindAndHandle() in Boot.scala.
-  //This EC is pretty much only used in myLoggingFunction(), (you can check in IntelliJ by pressing Ctrl Alt Shift + ).
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
   def apiRoutes =
     options { complete(OK) } ~
-    withExecutionContext(ExecutionContext.global) { //FIXME serve real work off the global EC. or maybe not. we'll see
+    withExecutionContext(ExecutionContext.global) { //Serve real work off the global EC to free up the dispatcher to run more routes, including status
       workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes
     }
 
-  //Reminder: This route does NOT run as the executionContext that's a member of this class!
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
-    withExecutionContext(executionContext.asInstanceOf[ExecutionContextExecutor]) {
-      swaggerRoutes ~
-      versionRoutes ~
-      statusRoute ~
-      pathPrefix("api") { apiRoutes }
-  }}
+    swaggerRoutes ~
+    versionRoutes ~
+    statusRoute ~
+    pathPrefix("api") { apiRoutes }
+  }
 
   // basis for logRequestResult lifted from http://stackoverflow.com/questions/32475471/how-does-one-log-akka-http-client-requests
   private def logRequestResult: Directive0 = {

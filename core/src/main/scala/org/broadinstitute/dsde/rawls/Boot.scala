@@ -2,19 +2,16 @@ package org.broadinstitute.dsde.rawls
 
 import java.io.StringReader
 import java.net.InetAddress
-import java.util.concurrent.{Executors, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.server.{Route, RoutingLog}
-import akka.http.scaladsl.settings.{ParserSettings, RoutingSettings}
 import akka.stream.ActorMaterializer
 import cats.effect._
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.google.common.util.concurrent.ThreadFactoryBuilder
 import com.google.pubsub.v1.ProjectTopicName
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
@@ -48,7 +45,7 @@ import org.http4s.Uri
 import org.http4s.client.blaze.BlazeClientBuilder
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import net.ceedubs.ficus.Ficus._
