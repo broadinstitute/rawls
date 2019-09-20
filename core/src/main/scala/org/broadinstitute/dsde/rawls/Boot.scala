@@ -392,6 +392,7 @@ object Boot extends IOApp with LazyLogging {
 
       val threadFactory = new ThreadFactoryBuilder().setNameFormat("route-handler-thread-%d").build()
       val routeHandlingEc = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(25, threadFactory)) //FIXME make this cached and unbounded
+      val routeHandlingCs = IO.contextShift(routeHandlingEc)
 
       val service = new RawlsApiServiceImpl(
         WorkspaceService.constructor(
@@ -436,7 +437,7 @@ object Boot extends IOApp with LazyLogging {
             ParserSettings.default(system),
             materializer,
             RoutingLog.fromActorSystem(system),
-            routeHandlingEc), "0.0.0.0", 8080))).recover {
+            routeHandlingEc), "0.0.0.0", 8080)))(routeHandlingCs).recover {
           case t: Throwable =>
             logger.error("FATAL - failure starting http server", t)
             throw t
