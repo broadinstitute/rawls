@@ -29,7 +29,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
 
   val workspaceRoutes: server.Route = requireUserInfo() { userInfo =>
     path("workspaces") {
-      println(s"THREAD WorkspaceApiService route /workspaces running on ${Thread.currentThread.getName}")
       post {
         entity(as[WorkspaceRequest]) { workspace =>
           addLocationHeader(workspace.path) {
@@ -41,7 +40,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
       } ~
         get {
           complete {
-            println(s"THREAD WorkspaceApiService.get route /workspaces running on ${Thread.currentThread.getName}")
             workspaceServiceConstructor(userInfo).ListWorkspaces()
           }
         }

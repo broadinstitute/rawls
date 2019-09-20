@@ -379,20 +379,13 @@ object Boot extends IOApp with LazyLogging {
         HealthMonitor.CheckAll
       )
 
-      val statusThreadFactory = new ThreadFactoryBuilder().setNameFormat("status-service-thread-%d").build()
-      val statusEc = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(25, statusThreadFactory))
-
       val statusServiceConstructor: () => StatusService = () =>
-        StatusService.constructor(healthMonitor)()(statusEc)
+        StatusService.constructor(healthMonitor)
 
       val workspaceServiceConfig = WorkspaceServiceConfig(
         conf.getBoolean("submissionmonitor.trackDetailedSubmissionMetrics"),
         gcsConfig.getString("groupsPrefix")
       )
-
-      val threadFactory = new ThreadFactoryBuilder().setNameFormat("route-handler-thread-%d").build()
-      val routeHandlingEc = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(25, threadFactory)) //FIXME make this cached and unbounded
-      val routeHandlingCs = IO.contextShift(routeHandlingEc)
 
       val service = new RawlsApiServiceImpl(
         WorkspaceService.constructor(
@@ -428,16 +421,10 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix,
         samDAO,
         conf.as[SwaggerConfig]("swagger")
-      )(routeHandlingEc, materializer)
+      )
 
       for {
-        binding <- IO.fromFuture(IO(Http().bindAndHandle( //all this to override the execution context with which we handle routes
-          Route.handlerFlow(service.route)(
-            RoutingSettings.default(system),
-            ParserSettings.default(system),
-            materializer,
-            RoutingLog.fromActorSystem(system),
-            routeHandlingEc), "0.0.0.0", 8080)))(routeHandlingCs).recover {
+        binding <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080))).recover {
           case t: Throwable =>
             logger.error("FATAL - failure starting http server", t)
             throw t

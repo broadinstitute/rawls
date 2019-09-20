@@ -27,7 +27,7 @@ import akka.stream.scaladsl.Sink
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.SwaggerConfig
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.FiniteDuration
 
 object RawlsApiService {
@@ -77,17 +77,18 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
 
   def apiRoutes =
     options { complete(OK) } ~
-    //withExecutionContext(ExecutionContext.global) { //FIXME serve real work off the global EC. or maybe not. we'll see
+    withExecutionContext(ExecutionContext.global) { //FIXME serve real work off the global EC. or maybe not. we'll see
       workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes
-    //}
+    }
 
   //Reminder: This route does NOT run as the executionContext that's a member of this class!
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
-    swaggerRoutes ~
-    versionRoutes ~
-    statusRoute ~
-    pathPrefix("api") { apiRoutes }
-  }
+    withExecutionContext(executionContext.asInstanceOf[ExecutionContextExecutor]) {
+      swaggerRoutes ~
+      versionRoutes ~
+      statusRoute ~
+      pathPrefix("api") { apiRoutes }
+  }}
 
   // basis for logRequestResult lifted from http://stackoverflow.com/questions/32475471/how-does-one-log-akka-http-client-requests
   private def logRequestResult: Directive0 = {
