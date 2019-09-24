@@ -53,7 +53,6 @@ object UserService {
     Map(
       "roles/viewer" -> Set(s"group:${ownerGroupEmail.value}"),
       "roles/billing.projectManager" -> Set(s"group:${ownerGroupEmail.value}"),
-      "roles/genomics.pipelinesRunner" -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
       requesterPaysRole -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
       "roles/bigquery.jobUser" -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
     )
