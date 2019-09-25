@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.joda.time.DateTime
+import slick.jdbc.{GetResult, JdbcProfile}
 /**
  * Created by dvoet on 2/4/16.
  */
@@ -55,6 +56,79 @@ trait WorkspaceComponent {
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
     def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+  }
+
+  /** raw/optimized SQL queries for working with workspace attributes
+    */
+  object workspaceAttributesRawSqlQuery extends RawSqlQuery {
+    val driver: JdbcProfile = WorkspaceComponent.this.driver
+
+    // convenience case class to simplify signatures
+    case class WorkspaceAttributeWithReference(attribute: WorkspaceAttributeRecord,
+                                               entityRec: Option[EntityRecord])
+
+    // tells slick how to convert a result row from a raw sql query to an instance of WorkspaceAttributeWithReference
+    implicit val getAttributeWithReferenceResult:GetResult[WorkspaceAttributeWithReference] = GetResult { r =>
+      // note that the number and order of all the r.<< match precisely with the select clause of workspaceAttributesWithReferences
+      val attrRec: WorkspaceAttributeRecord = WorkspaceAttributeRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+
+      val entityIdOption: Option[Long] = r.<<
+      val entityRecOption = entityIdOption.map(id => EntityRecord(id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+
+      WorkspaceAttributeWithReference(attrRec, entityRecOption)
+    }
+
+    /** direct replacement for WorkspaceComponent.workspaceAttributesWithReferences, now with optimized SQL
+      *
+      * @param workspaceIds the workspaces for which to query attributes
+      * @param attributeSpecs which attributes to return
+      * @return attributes found in the db, with optional entity values
+      */
+    def workspaceAttributesWithReferences(workspaceIds: Seq[UUID], attributeSpecs: Option[WorkspaceAttributeSpecs]): ReadAction[Seq[( (UUID, WorkspaceAttributeRecord), Option[EntityRecord] )]] = {
+      // if user requested specific attributes, but specified the empty list, short-circuit and return nothing
+      attributeSpecs match {
+        case Some(specs) if !specs.all && specs.attrsToSelect.isEmpty =>
+          DBIO.successful(Seq())
+
+        case _ =>
+          val workspaceIdList = reduceSqlActionsWithDelim(workspaceIds.map { id => sql"$id" })
+
+          // does this need "AND WORKSPACE_ATTRIBUTE.deleted = FALSE"?
+          // the method this replaced did not specify that, so we also don't specify it here.
+          val startSql =
+            sql"""select
+              a.id, a.owner_id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
+              e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
+              from WORKSPACE_ATTRIBUTE a
+              left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id
+              where a.owner_id in ("""
+
+          val endSql = attributeSpecs match {
+            case None =>
+              // user did not supply a filter. For now, get all attributes, i.e. don't include an attribute filter
+              sql""")"""
+            case Some(specs) if specs.all =>
+              // user supplied a filter but explicitly told us to get all attributes
+              sql""")"""
+            case Some(specs) if specs.attrsToSelect.nonEmpty =>
+              // user requested specific attributes. include them in the where clause.
+              val attrNamespaceNameTuples = reduceSqlActionsWithDelim(specs.attrsToSelect.map { attrName => sql"(${attrName.namespace}, ${attrName.name})" })
+              concatSqlActions(sql") and (a.namespace, a.name) in (", attrNamespaceNameTuples, sql")")
+            case _ =>
+              // this case should never happen, because of the short-circuit at the beginning of the method.
+              throw new RawlsException(s"encountered unexpected attributeSpecs: $attributeSpecs")
+          }
+
+          val sqlResult = concatSqlActions(startSql, workspaceIdList, endSql).as[WorkspaceAttributeWithReference](getAttributeWithReferenceResult)
+
+          // this implementation is a refactor of a previous impl that returns a Seq[ ( (UUID, WorkspaceAttributeRecord), Option[EntityRecord] ) ]
+          // it's an awkward signature, but we'll return exactly that here:
+          sqlResult.map { attrsWithRefs => attrsWithRefs.map { attrWithRef =>
+            ( (attrWithRef.attribute.ownerId, attrWithRef.attribute), attrWithRef.entityRec)
+          }}
+        }
+    }
+
   }
 
   object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
@@ -119,8 +193,8 @@ trait WorkspaceComponent {
       }
     }
 
-    def findByName(workspaceName: WorkspaceName, getAttributes: Boolean = true): ReadAction[Option[Workspace]] = {
-      loadWorkspace(findByNameQuery(workspaceName), getAttributes)
+    def findByName(workspaceName: WorkspaceName, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Option[Workspace]] = {
+      loadWorkspace(findByNameQuery(workspaceName), attributeSpecs)
     }
 
     def findById(workspaceId: String): ReadAction[Option[Workspace]] = {
@@ -261,13 +335,9 @@ trait WorkspaceComponent {
       } toMap
     }
 
-    private def workspaceAttributes(lookup: WorkspaceQueryType) = for {
+    private def workspaceAttributes(lookup: WorkspaceQueryType, attributeSpecs: Option[WorkspaceAttributeSpecs] = None) = for {
       workspaceAttrRec <- workspaceAttributeQuery if workspaceAttrRec.ownerId.in(lookup.map(_.id))
     } yield (workspaceAttrRec.ownerId, workspaceAttrRec)
-
-    private def workspaceAttributesWithReferences(lookup: WorkspaceQueryType) = {
-      workspaceAttributes(lookup) joinLeft entityQuery on (_._2.valueEntityRef === _.id)
-    }
 
     private def deleteWorkspaceAttributes(attributeRecords: Seq[WorkspaceAttributeRecord]) = {
       workspaceAttributeQuery.deleteAttributeRecordsById(attributeRecords.map(_.id))
@@ -289,17 +359,19 @@ trait WorkspaceComponent {
       filter(_.id.inSetBind(workspaceIds))
     }
 
-    private def loadWorkspace(lookup: WorkspaceQueryType, getAttributes: Boolean = true): ReadAction[Option[Workspace]] = {
-      if (getAttributes)
-        uniqueResult(loadWorkspaces(lookup))
-      else
-        uniqueResult(loadWorkspacesWithoutAttributes(lookup))
+    private def loadWorkspace(lookup: WorkspaceQueryType, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Option[Workspace]] = {
+      attributeSpecs match {
+        case Some(specs) if specs.all || specs.attrsToSelect.nonEmpty =>
+          uniqueResult(loadWorkspaces(lookup, attributeSpecs))
+        case _ =>
+          uniqueResult(loadWorkspacesWithoutAttributes(lookup))
+      }
     }
 
-    private def loadWorkspaces(lookup: WorkspaceQueryType): ReadAction[Seq[Workspace]] = {
+    private def loadWorkspaces(lookup: WorkspaceQueryType, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Seq[Workspace]] = {
       for {
         workspaceRecs <- lookup.result
-        workspaceAttributeRecs <- workspaceAttributesWithReferences(lookup).result
+        workspaceAttributeRecs <- workspaceAttributesRawSqlQuery.workspaceAttributesWithReferences(workspaceRecs.map(_.id), attributeSpecs)
       } yield {
         val attributesByWsId = workspaceAttributeQuery.unmarshalAttributes(workspaceAttributeRecs)
         workspaceRecs.map { workspaceRec =>
@@ -313,6 +385,7 @@ trait WorkspaceComponent {
         workspaceRecs <- lookup.result
       } yield {
         workspaceRecs.map { workspaceRec =>
+          // TODO: need a None here, not a Map.empty
           unmarshalWorkspace(workspaceRec, Map.empty)
         }
       }

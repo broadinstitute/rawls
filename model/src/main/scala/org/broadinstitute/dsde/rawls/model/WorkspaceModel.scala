@@ -453,6 +453,12 @@ object WorkspaceFieldSpecs {
   }
 }
 
+/** Criteria to use when reading one or more workspaces: which attributes should be returned?
+  * if `all` is true, always return all attributes for this workspace.
+  * if `all` is false, but `attrsToSelect` is populated, return only the attrs in `attrsToSelect`.
+  */
+case class WorkspaceAttributeSpecs(all: Boolean, attrsToSelect: List[AttributeName] = List.empty[AttributeName])
+
 
 /** Contains List[String]s with the names of the members of the WorkspaceResponse
   * and WorkspaceDetails case classes. Also contains the concatenation of those two lists,

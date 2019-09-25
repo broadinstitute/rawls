@@ -182,12 +182,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     // dummy function that returns a Future(None)
     def noFuture = Future.successful(None)
 
-    // if user requested the entire attributes map, or any individual attributes, retrieve all attributes.
-    // TODO: for a follow-on optimization, only query the DB for the individual attributes the user requested.
-    val getAttributes: Boolean = options.contains("workspace.attributes") || options.exists(_.startsWith("workspace.attributes."))
+    // if user requested the entire attributes map, or any individual attributes, retrieve attributes.
+    val attrSpecs = WorkspaceAttributeSpecs(
+      options.contains("workspace.attributes"),
+      options.filter(_.startsWith("workspace.attributes."))
+        .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.",""))).toList
+    )
 
     dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess, getAttributes) { workspaceContext =>
+      withWorkspaceContext(workspaceName, dataAccess, Option(attrSpecs)) { workspaceContext =>
         requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
 
           // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
@@ -260,7 +263,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               stats <- workspaceSubmissionStatsFuture()
             } yield {
               // post-process JSON to remove calculated-but-undesired keys
-              val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, getAttributes), stats, bucketDetails, owners)
+              val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, attrSpecs.all || attrSpecs.attrsToSelect.nonEmpty), stats, bucketDetails, owners)
               val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
               RequestComplete(StatusCodes.OK, filteredJson)
             }
@@ -2041,8 +2044,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess, getAttributes: Boolean = true)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
-    dataAccess.workspaceQuery.findByName(workspaceName, getAttributes) flatMap {
+  private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess, attributeSpecs: Option[WorkspaceAttributeSpecs] = None)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
+    dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs) flatMap {
       case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
       case Some(workspace) => op(SlickWorkspaceContext(workspace))
     }
