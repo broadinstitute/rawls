@@ -79,7 +79,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
   def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)
   def UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateLibraryAttributes(workspaceName, operations)
-  def ListWorkspaces() = listWorkspaces()
+  def ListWorkspaces(params: WorkspaceFieldSpecs) = listWorkspaces(params)
   def ListAllWorkspaces = listAllWorkspaces()
   def GetTags(query: Option[String]) = getTags(query)
   def AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) = asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) }
@@ -449,15 +449,43 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def listWorkspaces(): Future[PerRequestMessage] = {
+  def listWorkspaces(params: WorkspaceFieldSpecs): Future[PerRequestMessage] = {
+
+    // validate the inbound parameters
+    // TODO: validation allows fields like "canShare" which are not present in the list response
+    val options = Try(validateParams(params)) match {
+      case Success(opts) => opts
+      case Failure(ex) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
+    }
+
+    // TODO: clean up how we handle specific options. Can this be shared with get-workspace?
+    val optionsExist = options.nonEmpty
+    val submissionStatsEnabled = options.contains("workspaceSubmissionStats")
+    val allAttributesEnabled = options.contains("workspace.attributes")
+    val selectedAttributes = options.filter(_.startsWith("workspace.attributes."))
+    val selectedAttributesEnabled = selectedAttributes.nonEmpty
+    val attributeSpecs = if(allAttributesEnabled || selectedAttributesEnabled) {
+      val attrNames = selectedAttributes.map(_.replaceFirst("workspace.attributes.", ""))
+      Option(WorkspaceAttributeSpecs(allAttributesEnabled, attrNames.map(x => AttributeName.fromDelimitedName(x)).toList))
+    } else {
+      None
+    }
+
     for {
       workspacePolicies <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
       // filter out the policies that are not related to access levels, if a user has only those ignore the workspace
       accessLevelWorkspacePolicies = workspacePolicies.filter(p => WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty)
       result <- dataSource.inTransaction({ dataAccess =>
+
+        def workspaceSubmissionStatsFuture(): slick.ReadAction[Map[UUID, WorkspaceSubmissionStats]] = if (submissionStatsEnabled) {
+          dataAccess.workspaceQuery.listSubmissionSummaryStats(accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
+        } else {
+          DBIO.from(Future(Map()))
+        }
+
         val query = for {
-          submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
-          workspaces <- dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq)
+          submissionSummaryStats <- workspaceSubmissionStatsFuture()
+          workspaces <- dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq, attributeSpecs)
         } yield (submissionSummaryStats, workspaces)
 
         val results = query.map { case (submissionSummaryStats, workspaces) =>
@@ -481,12 +509,31 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val wsId = UUID.fromString(workspace.workspaceId)
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
             val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
-            val workspaceDetails = WorkspaceDetails(workspace, workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value))))
-            WorkspaceListResponse(accessLevel, workspaceDetails, submissionSummaryStats(wsId), workspacePolicy.public)
+            // remove attributes if they were not requested
+            val useAttrs = !optionsExist || allAttributesEnabled || selectedAttributesEnabled
+            val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), useAttrs)
+            // remove submission stats if they were not requested
+            val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
+              Option(submissionSummaryStats(wsId))
+            } else {
+              None
+            }
+
+            WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public)
           }
         }
 
-        results.map { responses => RequestComplete(StatusCodes.OK, responses) }
+        results.map { responses =>
+          if (!optionsExist) {
+            RequestComplete(StatusCodes.OK, responses)
+          } else {
+            // perform json-filtering of payload
+            val filteredResponses = responses.map { resp =>
+              deepFilterJsObject(resp.toJson.asJsObject, options)
+            }
+            RequestComplete(StatusCodes.OK, JsArray(filteredResponses.toVector))
+          }
+        }
       }, TransactionIsolation.ReadCommitted)
     } yield result
   }

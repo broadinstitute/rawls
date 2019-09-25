@@ -407,7 +407,7 @@ case class MethodRepoConfigurationExport(
 
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspace: WorkspaceDetails,
-                                 workspaceSubmissionStats: WorkspaceSubmissionStats,
+                                 workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
                                  public: Boolean)
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],

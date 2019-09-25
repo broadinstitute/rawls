@@ -201,8 +201,8 @@ trait WorkspaceComponent {
       loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)))
     }
 
-    def listByIds(workspaceIds: Seq[UUID]): ReadAction[Seq[Workspace]] = {
-      loadWorkspaces(findByIdsQuery(workspaceIds))
+    def listByIds(workspaceIds: Seq[UUID], attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Seq[Workspace]] = {
+      loadWorkspaces(findByIdsQuery(workspaceIds), attributeSpecs)
     }
 
     def delete(workspaceName: WorkspaceName): ReadWriteAction[Boolean] = {
@@ -385,7 +385,6 @@ trait WorkspaceComponent {
         workspaceRecs <- lookup.result
       } yield {
         workspaceRecs.map { workspaceRec =>
-          // TODO: need a None here, not a Map.empty
           unmarshalWorkspace(workspaceRec, Map.empty)
         }
       }
