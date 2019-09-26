@@ -384,12 +384,12 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
     "should introspect WorkspaceResponse correctly" in {
       val expected = List("accessLevel", "canShare", "canCompute", "catalog", "workspace", "workspaceSubmissionStats",
         "bucketOptions", "owners")
-      WorkspaceFieldNames.workspaceResponseNames should contain theSameElementsAs expected
+      WorkspaceFieldNames.workspaceResponseClassNames should contain theSameElementsAs expected
     }
     "should introspect WorkspaceDetails correctly" in {
       val expected = List("namespace", "name", "workspaceId", "bucketName", "workflowCollectionName", "createdDate",
         "lastModified", "createdBy", "attributes", "isLocked", "authorizationDomain")
-      WorkspaceFieldNames.workspaceDetailNames should contain theSameElementsAs expected
+      WorkspaceFieldNames.workspaceDetailClassNames should contain theSameElementsAs expected
     }
     "should collate WorkspaceResponse and WorkspaceDetails correctly" in {
       val expected = List("accessLevel", "canShare", "canCompute", "catalog", "workspace", "workspaceSubmissionStats",
@@ -398,7 +398,7 @@ class WorkspaceModelSpec extends FreeSpec with Matchers {
         "workspace.workflowCollectionName", "workspace.createdDate", "workspace.lastModified", "workspace.createdBy",
         "workspace.attributes", "workspace.isLocked", "workspace.authorizationDomain"
       )
-      WorkspaceFieldNames.fieldNames should contain theSameElementsAs(expected)
+      WorkspaceFieldNames.workspaceResponseFieldNames should contain theSameElementsAs(expected)
     }
   }
 

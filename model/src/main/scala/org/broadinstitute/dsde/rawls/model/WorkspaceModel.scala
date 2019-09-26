@@ -473,9 +473,13 @@ object WorkspaceFieldNames {
   def classAccessors[T: TypeTag]: List[String] = typeOf[T].members.collect {
     case m: MethodSymbol if m.isCaseAccessor => m.name.toString
   }.toList
-  lazy val workspaceResponseNames: List[String] = classAccessors[WorkspaceResponse]
-  lazy val workspaceDetailNames: List[String] = classAccessors[WorkspaceDetails]
-  lazy val fieldNames: Set[String] = (workspaceResponseNames ++ workspaceDetailNames.map(k => s"workspace.$k")).toSet
+  lazy val workspaceResponseClassNames: List[String] = classAccessors[WorkspaceResponse]
+  lazy val workspaceListResponseClassNames: List[String] = classAccessors[WorkspaceListResponse]
+  lazy val workspaceDetailClassNames: List[String] = classAccessors[WorkspaceDetails]
+
+  lazy val workspaceResponseFieldNames: Set[String] = (workspaceResponseClassNames ++ workspaceDetailClassNames.map(k => s"workspace.$k")).toSet
+  lazy val workspaceListResponseFieldNames: Set[String] = (workspaceListResponseClassNames ++ workspaceDetailClassNames.map(k => s"workspace.$k")).toSet
+
 }
 
 object WorkspaceDetails {

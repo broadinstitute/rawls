@@ -159,13 +159,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     * @param params the raw strings supplied by the user
     * @return the set of field names to be included in the response
     */
-  def validateParams(params: WorkspaceFieldSpecs): Set[String] = {
+  def validateParams(params: WorkspaceFieldSpecs, default: Set[String]): Set[String] = {
     // be lenient to whitespace, e.g. some user included spaces in their delimited string ("one, two, three")
-    val args = params.fields.getOrElse(WorkspaceFieldNames.fieldNames).map(_.trim)
+    val args = params.fields.getOrElse(default).map(_.trim)
     // did the user specify any fields that we don't know about?
     // include custom leniency here for attributes: we can't validate attribute names because they are arbitrary,
     // so allow any field that starts with "workspace.attributes."
-    val unrecognizedFields: Set[String] = args.diff(WorkspaceFieldNames.fieldNames).filter(!_.startsWith("workspace.attributes."))
+    val unrecognizedFields: Set[String] = args.diff(default).filter(!_.startsWith("workspace.attributes."))
     if (unrecognizedFields.nonEmpty) {
       throw new RawlsException(s"Unrecognized field names: ${unrecognizedFields.toList.sorted.mkString(", ")}")
     }
@@ -174,7 +174,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs): Future[PerRequestMessage] = {
     // validate the inbound parameters
-    val options = Try(validateParams(params)) match {
+    val options = Try(validateParams(params, WorkspaceFieldNames.workspaceResponseFieldNames)) match {
       case Success(opts) => opts
       case Failure(ex) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
     }
@@ -452,10 +452,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def listWorkspaces(params: WorkspaceFieldSpecs): Future[PerRequestMessage] = {
 
     // validate the inbound parameters
-    // TODO: validation allows fields like "canShare" which are not present in the list response
-    val options = Try(validateParams(params)) match {
+    val options = Try(validateParams(params, WorkspaceFieldNames.workspaceListResponseFieldNames)) match {
       case Success(opts) => opts
-      case Failure(ex) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
+      case Failure(ex) =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
     }
 
     // TODO: clean up how we handle specific options. Can this be shared with get-workspace?
@@ -464,7 +464,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val allAttributesEnabled = options.contains("workspace.attributes")
     val selectedAttributes = options.filter(_.startsWith("workspace.attributes."))
     val selectedAttributesEnabled = selectedAttributes.nonEmpty
-    val attributeSpecs = if(allAttributesEnabled || selectedAttributesEnabled) {
+    val attributeSpecs = if(optionsExist) {
       val attrNames = selectedAttributes.map(_.replaceFirst("workspace.attributes.", ""))
       Option(WorkspaceAttributeSpecs(allAttributesEnabled, attrNames.map(x => AttributeName.fromDelimitedName(x)).toList))
     } else {
@@ -510,7 +510,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
             val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
             // remove attributes if they were not requested
-            val useAttrs = !optionsExist || allAttributesEnabled || selectedAttributesEnabled
+            val useAttrs = attributeSpecs.nonEmpty
             val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), useAttrs)
             // remove submission stats if they were not requested
             val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
@@ -528,6 +528,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             RequestComplete(StatusCodes.OK, responses)
           } else {
             // perform json-filtering of payload
+            // TODO: use deepFilterJsValue() instead of loop
             val filteredResponses = responses.map { resp =>
               deepFilterJsObject(resp.toJson.asJsObject, options)
             }
