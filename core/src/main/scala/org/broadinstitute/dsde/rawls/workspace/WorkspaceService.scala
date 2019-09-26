@@ -464,12 +464,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val allAttributesEnabled = options.contains("workspace.attributes")
     val selectedAttributes = options.filter(_.startsWith("workspace.attributes."))
     val selectedAttributesEnabled = selectedAttributes.nonEmpty
-    val attributeSpecs = if(optionsExist) {
-      val attrNames = selectedAttributes.map(_.replaceFirst("workspace.attributes.", ""))
-      Option(WorkspaceAttributeSpecs(allAttributesEnabled, attrNames.map(x => AttributeName.fromDelimitedName(x)).toList))
-    } else {
-      None
-    }
+
+    // if user requested the entire attributes map, or any individual attributes, retrieve attributes.
+    val attributeSpecs = WorkspaceAttributeSpecs(
+      options.contains("workspace.attributes"),
+      options.filter(_.startsWith("workspace.attributes."))
+        .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.",""))).toList
+    )
 
     for {
       workspacePolicies <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
@@ -485,7 +486,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         val query = for {
           submissionSummaryStats <- workspaceSubmissionStatsFuture()
-          workspaces <- dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq, attributeSpecs)
+          workspaces <- dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq, Option(attributeSpecs))
         } yield (submissionSummaryStats, workspaces)
 
         val results = query.map { case (submissionSummaryStats, workspaces) =>
@@ -510,7 +511,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
             val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
             // remove attributes if they were not requested
-            val useAttrs = attributeSpecs.nonEmpty
+            val useAttrs = attributeSpecs.all || attributeSpecs.attrsToSelect.nonEmpty
             val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), useAttrs)
             // remove submission stats if they were not requested
             val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
