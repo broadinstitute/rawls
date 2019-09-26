@@ -1289,55 +1289,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return 200 when reading a Google Genomics operation" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
-    withStatsD {
-      Get(s"${testWorkspaces.workspace.path}/genomics/operations/dummy-job-id") ~> services.sealedInstrumentedRoutes ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          // message returned by MockGoogleServicesDAO
-          assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
-            responseAs[JsObject]
-          }
-        }
-    } { capturedMetrics =>
-      val wsPathForRequestMetrics = "workspaces.redacted.redacted.genomics.operations.redacted"
-      val expected = expectedHttpRequestMetrics("get", wsPathForRequestMetrics, StatusCodes.OK.intValue, 1)
-      assertSubsetOf(expected, capturedMetrics)
-    }
-  }
-
-  it should "return 404 when reading a Google Genomics operation for a non-existent workspace" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
-    Get(s"${testWorkspaces.workspace.copy(name = "bogus").path}/genomics/operations/dummy-job-id") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-  }
-
-  it should "return 404 when reading a Google Genomics operation for a non-existent job" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
-    Get(s"${testWorkspaces.workspace.path}/genomics/operations/bogus") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-  }
-
-  it should "return 404 when reading a Google Genomics operation for a user with no access" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
-    Get(s"${testWorkspaces.workspace.path}/genomics/operations/dummy-job-id") ~>
-      sealRoute(services.workspaceRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-  }
-
   it should "prevent user without compute permission from creating submission" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     testCreateSubmission(dataSource, userWriterNoCompute, StatusCodes.Forbidden)
   }

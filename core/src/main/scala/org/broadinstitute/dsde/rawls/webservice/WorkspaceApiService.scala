@@ -141,11 +141,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
         post {
           complete { workspaceServiceConstructor(userInfo).SendChangeNotifications(WorkspaceName(namespace, name)) }
         }
-      } ~
-      path("workspaces" / Segment / Segment / "genomics" / "operations" / Segment) { (namespace, name, jobId) =>
-        get {
-          complete { workspaceServiceConstructor(userInfo).GetGenomicsOperation(WorkspaceName(namespace, name), jobId) }
-        }
       }
   }
 }

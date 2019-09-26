@@ -44,9 +44,6 @@ trait InstrumentationDirectives extends RawlsInstrumented {
   private val redactMethodConfigs =
     (Slash ~ "api").? / "workspaces" / Segment / Segment / "methodconfigs" / Segment / (Segment ~ SegmentIgnore.repeat(0, Int.MaxValue, separator = Slash))
 
-  private val redactGenomicsOperations =
-    (Slash ~ "api").? / "workspaces" / Segment / Segment / "genomics" / "operations" / Segment
-
   private val redactWorkspaceNames =
     (Slash ~ "api").? / "workspaces" / (!"entities" ~ Segment) / (Segment ~ SegmentIgnore.repeat(0, Int.MaxValue, separator = Slash))
 
@@ -63,7 +60,7 @@ trait InstrumentationDirectives extends RawlsInstrumented {
   // Strip out unique IDs from metrics by providing a redactedUriExpansion
   override protected val UriExpansion: Expansion[Uri] = RawlsExpansion.redactedUriExpansion(
     Seq(redactBillingProject, redactBillingProjectRoleEmail, redactUserGroup, redactUserGroupRoleEmail, redactGroupAndUser, redactGroups,
-      redactWorkflowIds, redactSubmissionIds, redactEntityIds, redactMethodConfigs, redactGenomicsOperations, redactWorkspaceNames,
+      redactWorkflowIds, redactSubmissionIds, redactEntityIds, redactMethodConfigs, redactWorkspaceNames,
       redactAdminBilling, redactNotifications, redactPapiIds).map(_.asInstanceOf[PathMatcher[Product]])
   )
 
