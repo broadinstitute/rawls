@@ -528,11 +528,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             RequestComplete(StatusCodes.OK, responses)
           } else {
             // perform json-filtering of payload
-            // TODO: use deepFilterJsValue() instead of loop
-            val filteredResponses = responses.map { resp =>
-              deepFilterJsObject(resp.toJson.asJsObject, options)
-            }
-            RequestComplete(StatusCodes.OK, JsArray(filteredResponses.toVector))
+            RequestComplete(StatusCodes.OK, deepFilterJsValue(responses.toJson, options))
           }
         }
       }, TransactionIsolation.ReadCommitted)
