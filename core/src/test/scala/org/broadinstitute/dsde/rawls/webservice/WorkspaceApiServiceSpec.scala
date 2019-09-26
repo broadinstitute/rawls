@@ -494,6 +494,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
   }
 
+  // see also WorkspaceApiListOptionsSpec for tests against list-workspaces that use the ?fields query param
   it should "list workspaces" in withTestWorkspacesApiServices { services =>
     Get("/workspaces") ~>
       sealRoute(services.workspaceRoutes) ~>

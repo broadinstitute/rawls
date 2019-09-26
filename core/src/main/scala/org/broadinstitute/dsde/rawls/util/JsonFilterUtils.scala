@@ -12,11 +12,11 @@ trait JsonFilterUtils extends LazyLogging {
     *
     * @param in the JSON object to be filtered
     * @param filters the JSON keys to include in the return object
-    * @return a new JSON object filtered to the specified keys, or the original JSON object if no filters specified.
+    * @return a new JSON object filtered to the specified keys, or a copy of the original JSON object if no filters specified.
     */
   def shallowFilterJsObject(in: JsObject, filters: Set[String]): JsObject = {
     if (filters.isEmpty) {
-      in
+      in.copy()
     } else {
       JsObject(in.fields.filterKeys(filters.contains))
     }
