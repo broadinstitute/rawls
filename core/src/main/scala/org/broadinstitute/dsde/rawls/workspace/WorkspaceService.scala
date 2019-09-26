@@ -458,19 +458,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ex))
     }
 
-    // TODO: clean up how we handle specific options. Can this be shared with get-workspace?
-    val optionsExist = options.nonEmpty
-    val submissionStatsEnabled = options.contains("workspaceSubmissionStats")
-    val allAttributesEnabled = options.contains("workspace.attributes")
-    val selectedAttributes = options.filter(_.startsWith("workspace.attributes."))
-    val selectedAttributesEnabled = selectedAttributes.nonEmpty
-
     // if user requested the entire attributes map, or any individual attributes, retrieve attributes.
     val attributeSpecs = WorkspaceAttributeSpecs(
       options.contains("workspace.attributes"),
       options.filter(_.startsWith("workspace.attributes."))
         .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.",""))).toList
     )
+
+    // Can this be shared with get-workspace somehow?
+    val optionsExist = options.nonEmpty
+    val submissionStatsEnabled = options.contains("workspaceSubmissionStats")
+    val attributesEnabled = attributeSpecs.all || attributeSpecs.attrsToSelect.nonEmpty
 
     for {
       workspacePolicies <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
@@ -511,8 +509,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
             val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
             // remove attributes if they were not requested
-            val useAttrs = attributeSpecs.all || attributeSpecs.attrsToSelect.nonEmpty
-            val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), useAttrs)
+            val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled)
             // remove submission stats if they were not requested
             val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
               Option(submissionSummaryStats(wsId))
