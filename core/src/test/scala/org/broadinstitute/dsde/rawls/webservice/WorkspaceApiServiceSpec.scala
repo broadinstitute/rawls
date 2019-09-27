@@ -494,6 +494,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
   }
 
+  // see also WorkspaceApiListOptionsSpec for tests against list-workspaces that use the ?fields query param
   it should "list workspaces" in withTestWorkspacesApiServices { services =>
     Get("/workspaces") ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -504,8 +505,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         val dateTime = currentTime()
         assertResult(Set(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), false),
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), WorkspaceSubmissionStats(None, None, 0), false)
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false)
         )) {
           responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
         }

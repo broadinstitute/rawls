@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.util
 
 import com.typesafe.scalalogging.LazyLogging
-import spray.json.{JsObject, JsValue}
+import spray.json.{JsArray, JsObject, JsValue}
 
 /** Mix in this trait to gain utility methods for filtering/masking JSON objects.
   */
@@ -12,11 +12,11 @@ trait JsonFilterUtils extends LazyLogging {
     *
     * @param in the JSON object to be filtered
     * @param filters the JSON keys to include in the return object
-    * @return a new JSON object filtered to the specified keys, or the original JSON object if no filters specified.
+    * @return a new JSON object filtered to the specified keys, or a copy of the original JSON object if no filters specified.
     */
   def shallowFilterJsObject(in: JsObject, filters: Set[String]): JsObject = {
     if (filters.isEmpty) {
-      in
+      in.copy()
     } else {
       JsObject(in.fields.filterKeys(filters.contains))
     }
@@ -67,8 +67,9 @@ trait JsonFilterUtils extends LazyLogging {
               // if we've filtered out all of the nested object, don't include it in the parent.
               None
             }
+          case Some(arr:JsArray) => Option(key -> deepFilterJsValue(arr, filters))
           case Some(otherJson:JsValue) =>
-            // it's some other json, probably an array; return as-is. We may need to inspect arrays in the future.
+            // it's some other json, like a scalar; return as-is.
             logger.debug(s"nested filter specified for '$key', but '$key' does not contain an object.")
             Option(key -> otherJson)
           case _ =>
@@ -80,4 +81,15 @@ trait JsonFilterUtils extends LazyLogging {
       JsObject(baseResponse.fields ++ partialFields)
     }
   }
+
+  def deepFilterJsValue(json: JsValue, filters: Set[String]): JsValue = {
+    json match {
+      case jso:JsObject => deepFilterJsObject(jso, filters)
+      case jsa:JsArray =>
+        val filteredElements = jsa.elements.map{ el => deepFilterJsValue(el, filters) }
+        JsArray(filteredElements)
+      case js => js // some other JsValue, like a scalar; pass as-is
+    }
+  }
+
 }

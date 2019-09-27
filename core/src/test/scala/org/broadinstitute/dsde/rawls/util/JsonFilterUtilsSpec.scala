@@ -42,7 +42,7 @@ class JsonFilterUtilsSpec extends FreeSpec with JsonFilterUtils {
 
   "JsonFilterUtils" - {
 
-    "shallow filter" - {
+    "shallow object filter" - {
 
       "should return unchanged with no filters" in {
         val actual = shallowFilterJsObject(in, Set.empty)
@@ -64,7 +64,7 @@ class JsonFilterUtilsSpec extends FreeSpec with JsonFilterUtils {
       }
 
       List("topLevelBoolean", "firstLevelObject", "topLevelString", "anotherObject") foreach { key =>
-        s"should filter to any single key ('$key'), even when additional unrecogized keys exist" in {
+        s"should filter to any single key ('$key'), even when additional unrecognized keys exist" in {
           val actual = shallowFilterJsObject(in, Set(key, "something", "else"))
           val expected = JsObject(key -> in.fields(key))
           assertResult(expected) { actual }
@@ -82,7 +82,7 @@ class JsonFilterUtilsSpec extends FreeSpec with JsonFilterUtils {
 
     }
 
-    "deep filter" - {
+    "deep object filter" - {
 
       "should return unchanged with no filters" in {
         val actual = deepFilterJsObject(in, Set.empty)
@@ -179,6 +179,118 @@ class JsonFilterUtilsSpec extends FreeSpec with JsonFilterUtils {
 
         assertResult(expected) { actual }
 
+      }
+
+    }
+
+    "deep JsValue filter" - {
+
+      "should handle a single object transparently" in {
+        // since we validated behavior of deepFilterJsObject above, we can use it to calculate expected value
+        val actual = deepFilterJsValue(in, Set("firstLevelObject.secondLevelObject"))
+        val expected = deepFilterJsObject(in, Set("firstLevelObject.secondLevelObject"))
+        assertResult(expected) { actual }
+      }
+
+      "should filter objects in array" in {
+        val input = JsArray(firstLevel, secondLevel, thirdLevel)
+        val actual = deepFilterJsValue(input, Set("str", "num"))
+        val expected = JsArray(
+          JsObject(
+            "str" -> JsString("foo"),
+            "num" -> JsNumber(1)
+          ),
+          JsObject(
+            "str" -> JsString("foo"),
+            "num" -> JsNumber(2)
+          ),
+          JsObject(
+            "str" -> JsString("foo"),
+            "num" -> JsNumber(3)
+          )
+        )
+        assertResult(expected) { actual }
+      }
+
+      "should filter objects in a mixed array" in {
+        val input = JsArray(firstLevel, JsTrue, secondLevel, JsString("extra"), thirdLevel)
+        val actual = deepFilterJsValue(input, Set("str", "num"))
+        val expected = JsArray(
+          JsObject(
+            "str" -> JsString("foo"),
+            "num" -> JsNumber(1)
+          ),
+          JsTrue,
+          JsObject(
+            "str" -> JsString("foo"),
+            "num" -> JsNumber(2)
+          ),
+          JsString("extra"),
+          JsObject(
+            "str" -> JsString("foo"),
+            "num" -> JsNumber(3)
+          )
+        )
+        assertResult(expected) { actual }
+      }
+
+      "should filter nested arrays" in {
+        val input = JsArray(
+          JsObject(
+            "str" -> JsString("top.one"),
+            "num" -> JsNumber(1),
+            "nested" -> JsArray(
+              JsObject(
+                "str" -> JsString("nested.one"),
+                "num" -> JsNumber(1.1),
+              ),
+              JsObject(
+                "str" -> JsString("nested.two"),
+                "num" -> JsNumber(1.2),
+              )
+            )
+          ),
+          JsObject(
+            "str" -> JsString("top.two"),
+            "num" -> JsNumber(2),
+            "nested" -> JsArray(
+              JsObject(
+                "str" -> JsString("nested.three"),
+                "num" -> JsNumber(2.1),
+              ),
+              JsObject(
+                "str" -> JsString("nested.four"),
+                "num" -> JsNumber(2.2),
+              )
+            )
+          ),
+        )
+        val actual = deepFilterJsValue(input, Set("num", "nested.num"))
+        val expected = JsArray(
+          JsObject(
+            "num" -> JsNumber(1),
+            "nested" -> JsArray(
+              JsObject(
+                "num" -> JsNumber(1.1),
+              ),
+              JsObject(
+                "num" -> JsNumber(1.2),
+              )
+            )
+          ),
+          JsObject(
+            "num" -> JsNumber(2),
+            "nested" -> JsArray(
+              JsObject(
+                "num" -> JsNumber(2.1),
+              ),
+              JsObject(
+                "num" -> JsNumber(2.2),
+              )
+            )
+          ),
+        )
+        assertResult(expected) { actual }
       }
 
     }

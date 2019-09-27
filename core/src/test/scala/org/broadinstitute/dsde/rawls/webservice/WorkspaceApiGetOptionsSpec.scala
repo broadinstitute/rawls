@@ -331,6 +331,21 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
+  it should "not return any attributes that aren't in the db" in withTestWorkspacesApiServices { services =>
+    Get(testWorkspaces.workspace.path + "?fields=workspace.attributes.description,workspace.attributes.tag:tags,workspace.attributes.library:orsp") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val actual = responseAs[String].parseJson.asJsObject
+        val expected = JsObject(
+          "workspace" -> JsObject(
+            "attributes" -> JsObject("description" -> JsString("my description"))
+          )
+        )
+        assertResult(expected) { actual }
+      }
+  }
+
   // START query param behavior tests
 
   it should s"return 400 Bad Request for unknown fields value in querystring" in withTestWorkspacesApiServices { services =>
