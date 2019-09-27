@@ -21,7 +21,7 @@ See the wiki for detailed documentation.
 
 
 ## Developer quick links:
-* Swagger UI: https://rawls-dev.broadinstitute.org
+* Swagger UI: https://rawls.dsde-dev.broadinstitute.org
 * Jenkins: https://dsde-jenkins.broadinstitute.org/job/rawls-dev-build
 * Running locally in docker https://github.com/broadinstitute/firecloud-develop
 
