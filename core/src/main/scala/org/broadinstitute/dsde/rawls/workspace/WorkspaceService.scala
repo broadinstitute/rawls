@@ -2018,8 +2018,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           val bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
           saveNewWorkspace(workspaceId, workspaceRequest, bucketName, dataAccess).flatMap { savedWorkspace =>
             for {
-              project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
-              projectOwnerGroupEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, project.get.projectName.value, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))
+              //there's potential for a perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
+              //the projectOwnerEmail, so we don't need to get it from sam
+              projectOwnerGroupEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))
               policyEmails <- DBIO.from(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map(_.flatMap(policy =>
                 if(policy.policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
                   // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
@@ -2029,7 +2030,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 } else {
                   WorkspaceAccessLevels.withPolicyName(policy.policyName.value).map(_ -> policy.email)
                 }).toMap))
-              _ <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList)))
+              _ <- DBIO.from(gcsDAO.setupWorkspace(userInfo, RawlsBillingProjectName(workspaceRequest.namespace), policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList)))
               response <- op(SlickWorkspaceContext(savedWorkspace))
             } yield response
           }
