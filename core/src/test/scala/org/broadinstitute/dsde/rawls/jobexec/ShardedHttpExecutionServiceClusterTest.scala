@@ -141,7 +141,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
 
     // confirm exception with relevant info when the instance is not found
 
-    val mapWithoutInstance = instanceMap.filterNot { case ClusterMember(id, _, _) => id == testExecId }
+    val mapWithoutInstance = instanceMap.filterNot { case ClusterMember(id, _) => id == testExecId }
     val clusterWithoutInstance = new ShardedHttpExecutionServiceCluster(mapWithoutInstance, mapWithoutInstance, slickDataSource)
 
     val exception = clusterWithoutInstance.findExecService(subId, wfId, userInfo, None).failed.futureValue

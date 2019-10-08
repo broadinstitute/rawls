@@ -54,7 +54,7 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
 
   def abort(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]] =
     // the abort operation is special, it needs to go to a specific cromwell
-    getMember(workflowRec).effectiveAbortDao.abort(workflowRec.externalId.get, userInfo)
+    getMember(workflowRec).dao.abort(workflowRec.externalId.get, userInfo)
 
   def version: Future[ExecutionServiceVersion] =
     getRandomReadMember.dao.version
@@ -217,9 +217,5 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
 
 case class ClusterMember(
   key: ExecutionServiceId,
-  dao: ExecutionServiceDAO,
-  abortDao: Option[ExecutionServiceDAO] = None
-) {
-  val effectiveAbortDao = abortDao.getOrElse(dao)
-}
-
+  dao: ExecutionServiceDAO
+)
