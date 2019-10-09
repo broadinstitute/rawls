@@ -110,9 +110,15 @@ object SamWorkflowCollectionPolicyNames {
 
 case class SamPolicy(memberEmails: Set[WorkbenchEmail], actions: Set[SamResourceAction], roles: Set[SamResourceRole])
 case class SamPolicyWithNameAndEmail(policyName: SamResourcePolicyName, policy: SamPolicy, email: WorkbenchEmail)
-case class SamResourceWithPolicies(resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String])
+case class SamResourceWithPolicies(resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], returnResource: Boolean = false)
 case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: SamResourcePolicyName, authDomainGroups: Set[WorkbenchGroupName], missingAuthDomainGroups: Set[WorkbenchGroupName], public: Boolean)
 case class SamPolicySyncStatus(lastSyncDate: String, email: WorkbenchEmail)
+
+case class SamCreateResourceResponse(resourceTypeName: String, resourceId: String, authDomain: Set[String], accessPolicies: Set[SamCreateResourcePolicyResponse])
+case class SamCreateResourcePolicyResponse(id: SamCreateResourceAccessPolicyIdResponse, email: String)
+case class SamCreateResourceAccessPolicyIdResponse(accessPolicyName: String, resource: SamCreateResourceAccessPolicyIdResourceIdResponse)
+case class SamCreateResourceAccessPolicyIdResourceIdResponse(resourceId: String, resourceTypeName: String)
+
 
 object SamModelJsonSupport extends JsonSupport {
   implicit val SamResourcePolicyNameFormat = ValueObjectFormat(SamResourcePolicyName)
@@ -121,7 +127,12 @@ object SamModelJsonSupport extends JsonSupport {
 
   implicit val SamPolicyFormat = jsonFormat3(SamPolicy)
   implicit val SamPolicyWithNameAndEmailFormat = jsonFormat3(SamPolicyWithNameAndEmail)
-  implicit val SamResourceWithPoliciesFormat = jsonFormat3(SamResourceWithPolicies)
+  implicit val SamResourceWithPoliciesFormat = jsonFormat4(SamResourceWithPolicies)
   implicit val SamResourceIdWithPolicyNameFormat = jsonFormat5(SamResourceIdWithPolicyName)
   implicit val SamPolicySyncStatusFormat = jsonFormat2(SamPolicySyncStatus)
+
+  implicit val SamCreateResourceAccessPolicyIdResourceIdResponseFormat = jsonFormat2(SamCreateResourceAccessPolicyIdResourceIdResponse)
+  implicit val SamCreateResourceAccessPolicyIdResponseFormat = jsonFormat2(SamCreateResourceAccessPolicyIdResponse)
+  implicit val samCreateResourcePolicyResponseFormat = jsonFormat2(SamCreateResourcePolicyResponse)
+  implicit val SamCreateResourceResponseFormat = jsonFormat4(SamCreateResourceResponse)
 }

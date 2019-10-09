@@ -20,7 +20,9 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = Future.successful(())
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = Future.successful(())
+  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[SamCreateResourceResponse] =
+    Future.successful(SamCreateResourceResponse(resourceTypeName.value, resourceId, authDomain, Set()))
+
 
   override def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit] = Future.successful(())
 
