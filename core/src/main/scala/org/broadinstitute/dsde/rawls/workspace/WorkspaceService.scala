@@ -1958,7 +1958,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case ads => Map(WorkspaceService.SECURITY_LABEL_KEY -> WorkspaceService.HIGH_SECURITY_LABEL) ++ ads.map(ad => gcsDAO.labelSafeString(ad.membersGroupName.value, "ad-") -> "")
     }
 
-    def saveNewWorkspace(workspaceId: String, workspaceRequest: WorkspaceRequest, bucketName: String, dataAccess: DataAccess): ReadWriteAction[Workspace] = {
+    def saveNewWorkspace(workspaceId: String, workspaceRequest: WorkspaceRequest, bucketName: String, projectOwnerPolicyEmail: WorkbenchEmail, dataAccess: DataAccess): ReadWriteAction[Workspace] = {
       val currentDate = DateTime.now
 
       val workspace = Workspace(
@@ -1975,9 +1975,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       dataAccess.workspaceQuery.save(workspace).flatMap { _ =>
         for {
-          projectOwnerEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo))
           policies <- {
-            val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(projectOwnerEmail.email), Set.empty, Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.projectOwner))
+            val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(projectOwnerPolicyEmail), Set.empty, Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.projectOwner))
             val ownerPolicy = SamWorkspacePolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set(SamWorkspaceRoles.owner))
             val writerPolicy = SamWorkspacePolicyNames.writer -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.writer))
             val readerPolicy = SamWorkspacePolicyNames.reader -> SamPolicy(Set.empty, Set.empty, Set(SamWorkspaceRoles.reader))
@@ -2016,22 +2015,25 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case None =>
           val workspaceId = UUID.randomUUID.toString
           val bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
-          saveNewWorkspace(workspaceId, workspaceRequest, bucketName, dataAccess).flatMap { savedWorkspace =>
-            for {
-              project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
-              projectOwnerGroupEmail <- DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, project.get.projectName.value, SamBillingProjectPolicyNames.owner, userInfo).map(_.email))
-              policyEmails <- DBIO.from(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map(_.flatMap(policy =>
-                if(policy.policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
-                  // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
-                  // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
-                  // the limit of 2000
-                  Option(WorkspaceAccessLevels.ProjectOwner -> projectOwnerGroupEmail)
-                } else {
-                  WorkspaceAccessLevels.withPolicyName(policy.policyName.value).map(_ -> policy.email)
-                }).toMap))
-              _ <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList)))
-              response <- op(SlickWorkspaceContext(savedWorkspace))
-            } yield response
+          DBIO.from(samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email)).flatMap { projectOwnerPolicyEmail =>
+            saveNewWorkspace(workspaceId, workspaceRequest, bucketName, projectOwnerPolicyEmail, dataAccess).flatMap { savedWorkspace =>
+              for {
+                //there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
+                //the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
+                //will never change, which would eliminate the call to sam entirely
+                policyEmails <- DBIO.from(samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map(_.flatMap(policy =>
+                  if (policy.policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
+                    // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
+                    // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
+                    // the limit of 2000
+                    Option(WorkspaceAccessLevels.ProjectOwner -> projectOwnerPolicyEmail)
+                  } else {
+                    WorkspaceAccessLevels.withPolicyName(policy.policyName.value).map(_ -> policy.email)
+                  }).toMap))
+                _ <- DBIO.from(gcsDAO.setupWorkspace(userInfo, RawlsBillingProjectName(workspaceRequest.namespace), policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList)))
+                response <- op(SlickWorkspaceContext(savedWorkspace))
+              } yield response
+            }
           }
       }
     }
