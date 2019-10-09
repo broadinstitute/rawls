@@ -205,18 +205,6 @@ object Boot extends IOApp with LazyLogging {
         executionServiceConfig.getDuration("workflowSubmissionTimeout")
       )
 
-      val executionServiceAbortServers: Map[String, ExecutionServiceDAO] =
-        executionServiceConfig
-          .getObjectOption("abortServers")
-          .map(_.entrySet().asScala.map { entry =>
-            val (strName, strHostname) = entry.toTuple
-            strName -> new HttpExecutionServiceDAO(
-              strHostname.unwrapped.toString,
-              metricsPrefix
-            )
-          }.toMap)
-          .getOrElse(Map.empty)
-
       val executionServiceServers: Set[ClusterMember] = executionServiceConfig
         .getObject("readServers")
         .entrySet()
@@ -228,8 +216,7 @@ object Boot extends IOApp with LazyLogging {
             new HttpExecutionServiceDAO(
               strHostname.unwrapped.toString,
               metricsPrefix
-            ),
-            executionServiceAbortServers.get(strName)
+            )
           )
         }
         .toSet
@@ -246,8 +233,7 @@ object Boot extends IOApp with LazyLogging {
               new HttpExecutionServiceDAO(
                 strHostname.unwrapped.toString,
                 metricsPrefix
-              ),
-              executionServiceAbortServers.get(strName)
+              )
             )
           }
           .toSet
