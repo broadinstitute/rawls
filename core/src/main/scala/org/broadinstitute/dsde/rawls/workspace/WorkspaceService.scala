@@ -2005,7 +2005,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 // only sync policies that have corresponding WorkspaceAccessLevels to google because only those are
                 // granted bucket access (and thus need a google group)
                 samDAO.syncPolicyToGoogle(SamResourceTypeNames.workspace, workspaceId, policyName)
-                Future.successful(())
               } else {
                 Future.successful(())
               }
