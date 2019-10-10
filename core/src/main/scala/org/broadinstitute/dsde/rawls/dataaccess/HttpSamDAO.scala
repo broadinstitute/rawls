@@ -87,12 +87,14 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[Unit] = {
+  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo): Future[SamCreateResourceResponse] = {
     val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}"
 
-    val httpRequest = RequestBuilding.Post(url, SamResourceWithPolicies(resourceId, policies.map(x => x._1 -> x._2), authDomain))
+    val httpRequest = RequestBuilding.Post(url, SamResourceWithPolicies(resourceId, policies.map(x => x._1 -> x._2), authDomain, returnResource = true))
 
-    doSuccessOrFailureRequest(httpRequest, userInfo)
+    retry(when401or500) { () =>
+      pipeline[SamCreateResourceResponse](userInfo) apply httpRequest
+    }
   }
 
   override def listPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]] = {
