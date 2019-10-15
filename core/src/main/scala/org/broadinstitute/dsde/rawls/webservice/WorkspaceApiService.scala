@@ -16,6 +16,7 @@ import akka.http.scaladsl.server.Directive0
 import CustomDirectives._
 
 import scala.concurrent.ExecutionContext
+import io.opencensus.scala.akka.http.TracingDirective._
 
 /**
   * Created by dvoet on 6/4/15.
@@ -32,8 +33,10 @@ trait WorkspaceApiService extends UserInfoDirectives {
       post {
         entity(as[WorkspaceRequest]) { workspace =>
           addLocationHeader(workspace.path) {
-            complete {
-              workspaceServiceConstructor(userInfo).CreateWorkspace(workspace).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+            traceRequest { span =>
+              complete {
+                workspaceServiceConstructor(userInfo).CreateWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+              }
             }
           }
         }

@@ -88,6 +88,19 @@ object Dependencies {
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1beta-rev55-1.25.0"
 
+
+  val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.0-M2"
+  val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.0-M2"
+  val opencensusStackDriverExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-stackdriver" % "0.23.0"
+  val opencensusLoggingExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-logging"     % "0.23.0"
+
+  val openCensusDependencies = Seq(
+    opencensusScalaCode,
+    opencensusAkkaHttp,
+    opencensusStackDriverExporter,
+    opencensusLoggingExporter
+  )
+
   val metricsDependencies = Seq(
     metricsScala,
     metricsStatsd,
@@ -151,7 +164,7 @@ object Dependencies {
     scalatest
   )
 
-  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ metricsDependencies ++ Seq(
+  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ metricsDependencies ++ openCensusDependencies ++ Seq(
     typesafeConfig,
     parserCombinators,
     ravenLogback,
