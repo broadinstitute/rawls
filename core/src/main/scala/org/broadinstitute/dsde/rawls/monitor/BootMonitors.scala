@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import cats.effect.{ContextShift, IO}
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
@@ -44,7 +44,10 @@ object BootMonitors extends LazyLogging {
                    useWorkflowCollectionField: Boolean,
                    useWorkflowCollectionLabel: Boolean,
                    defaultBackend: CromwellBackend,
-                   methodConfigResolver: MethodConfigResolver)(implicit cs: ContextShift[IO]): Unit = {
+                   methodConfigResolver: MethodConfigResolver,
+                   avroUpsertPubSubTopic: String,
+                   avroUpsertPubSubSubscription: String,
+                   avroUpsertBucketName: String)(implicit cs: ContextShift[IO]): Unit = {
     //Reset "Launching" workflows to "Queued"
 //    resetLaunchingWorkflows(slickDataSource)
 
@@ -62,7 +65,7 @@ object BootMonitors extends LazyLogging {
     //Boot bucket deletion monitor
 //    startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
 
-    startAvroUpsertMonitor(system, workspaceService, gcsDAO, samDAO, googleStorage, pubSubDAO)
+    startAvroUpsertMonitor(system, workspaceService, gcsDAO, samDAO, googleStorage, pubSubDAO, avroUpsertPubSubTopic, avroUpsertPubSubSubscription, avroUpsertBucketName)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
@@ -128,18 +131,19 @@ object BootMonitors extends LazyLogging {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
-  private def startAvroUpsertMonitor(system: ActorSystem, workspaceService: UserInfo => WorkspaceService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO)(implicit cs: ContextShift[IO]) = {
+  private def startAvroUpsertMonitor(system: ActorSystem, workspaceService: UserInfo => WorkspaceService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, avroUpsertPubSubTopic: String, avroUpsertPubSubSubscription: String, avroUpsertBucketName: String)(implicit cs: ContextShift[IO]) = {
     system.actorOf(
       AvroUpsertMonitorSupervisor.props(
-        FiniteDuration.apply(1, TimeUnit.MINUTES),
+        FiniteDuration.apply(10, TimeUnit.SECONDS),
         FiniteDuration.apply(10, TimeUnit.SECONDS),
         workspaceService,
         googleServicesDAO,
         samDAO,
         googleStorage,
         googlePubSubDAO,
-        "mb-test-avro-pubsub-topic",
-        "mb-test-avro-pubsub-sub",
+        avroUpsertPubSubTopic,
+        avroUpsertPubSubSubscription,
+        avroUpsertBucketName,
         1
       ))
   }

@@ -11,12 +11,12 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.broadinstitute.dsde.workbench.google.GoogleStorageDAO
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.util.FutureSupport
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.{FiniteDuration, _}
@@ -40,6 +40,7 @@ object AvroUpsertMonitorSupervisor {
              pubSubDao: GooglePubSubDAO,
              pubSubTopicName: String,
              pubSubSubscriptionName: String,
+             avroUpsertBucketName: String,
              workerCount: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
     Props(
       new AvroUpsertMonitorSupervisor(
@@ -52,6 +53,7 @@ object AvroUpsertMonitorSupervisor {
         pubSubDao,
         pubSubTopicName,
         pubSubSubscriptionName,
+        avroUpsertBucketName,
         workerCount))
 }
 
@@ -65,6 +67,7 @@ class AvroUpsertMonitorSupervisor(
                                        pubSubDao: GooglePubSubDAO,
                                        pubSubTopicName: String,
                                        pubSubSubscriptionName: String,
+                                       avroUpsertBucketName: String,
                                        workerCount: Int)
   extends Actor
     with LazyLogging {
@@ -88,7 +91,7 @@ class AvroUpsertMonitorSupervisor(
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName))
+    actorOf(AvroUpsertMonitor.props(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, avroUpsertBucketName))
   }
 
   override val supervisorStrategy =
@@ -113,8 +116,9 @@ object AvroUpsertMonitor {
              samDAO: SamDAO,
              googleStorage: GoogleStorageService[IO],
              pubSubDao: GooglePubSubDAO,
-             pubSubSubscriptionName: String): Props =
-    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName))
+             pubSubSubscriptionName: String,
+             avroUpsertBucketName: String): Props =
+    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, avroUpsertBucketName))
 }
 
 class AvroUpsertMonitorActor(
@@ -125,12 +129,17 @@ class AvroUpsertMonitorActor(
                                   samDAO: SamDAO,
                                   googleStorage: GoogleStorageService[IO],
                                   pubSubDao: GooglePubSubDAO,
-                                  pubSubSubscriptionName: String)
+                                  pubSubSubscriptionName: String,
+                                  avroUpsertBucketName: String)
   extends Actor
     with LazyLogging
     with FutureSupport {
   import AvroUpsertMonitor._
   import context._
+
+  case class AvroUpsertJson(namespace: String, name: String, userSubjectId: String, userEmail: String, payload: Array[EntityUpdateDefinition])
+
+  implicit val avroUpsertJsonFormat = jsonFormat5(AvroUpsertJson)
 
   self ! StartMonitorPass
 
@@ -170,24 +179,14 @@ class AvroUpsertMonitorActor(
 //      self ! StartMonitorPass TODO: should this restart the monitor if we've got an unhandled message? I think so.
   }
 
-  private def initAvroUpsert(jobId: String, file: String) = {
-    println(s"jobId: ${jobId}, file: ${file}")
-    val start = System.currentTimeMillis()
+  private def initAvroUpsert(jobId: String, file: String): Future[Unit] = {
     for {
       avroJson <- readUpsertObject(s"$jobId/$file")
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(avroJson.namespace, RawlsUserEmail(avroJson.userEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
       _ <- workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroJson.namespace, avroJson.name), avroJson.payload.toSeq, true)
-    } yield {
-      println(s"took ${System.currentTimeMillis() - start} millis")
-      ()
-    }
+    } yield ()
   }
-
-  case class Thing(namespace: String, name: String, userSubjectId: String, userEmail: String, payload: Array[EntityUpdateDefinition])
-
-  import spray.json.DefaultJsonProtocol._
-  implicit val thingFormat = jsonFormat5(Thing)
 
   private def acknowledgeMessage(ackId: String) =
     pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, Seq(ackId))
@@ -201,12 +200,10 @@ class AvroUpsertMonitorActor(
     }
   }
 
-  private def readUpsertObject(path: String): Future[Thing] = {
-    import spray.json.DefaultJsonProtocol._
-
-    println(path)
-    val y = googleStorage.getBlobBody(GcsBucketName("mb-test-avro-pubsub"), GcsBlobName(path)).compile.to[Array].unsafeToFuture().map(x => x.map(_.toChar).mkString)
-    y.map(_.parseJson.convertTo[Thing])
+  private def readUpsertObject(path: String): Future[AvroUpsertJson] = {
+    googleStorage.getBlobBody(GcsBucketName(avroUpsertBucketName), GcsBlobName(path)).compile.to[Array].unsafeToFuture().map { byteArray =>
+      byteArray.map(_.toChar).mkString.parseJson.convertTo[AvroUpsertJson]
+    }
   }
 
   override val supervisorStrategy =

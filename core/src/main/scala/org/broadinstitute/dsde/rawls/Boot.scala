@@ -403,7 +403,10 @@ object Boot extends IOApp with LazyLogging {
           useWorkflowCollectionField,
           useWorkflowCollectionLabel,
           defaultBackend,
-          methodConfigResolver
+          methodConfigResolver,
+          conf.getString("avroUpsertMonitor.pubSubTopic"),
+          conf.getString("avroUpsertMonitor.pubSubSubscription"),
+          conf.getString("avroUpsertMonitor.bucketName")
         )
       } else
         logger.info(
