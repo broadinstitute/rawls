@@ -310,34 +310,6 @@ object Boot extends IOApp with LazyLogging {
 
       val methodConfigResolver  = new MethodConfigResolver(wdlParser)
 
-      if (conf.getBooleanOption("backRawls").getOrElse(false)) {
-        logger.info("This instance has been marked as BACK. Booting monitors...")
-        BootMonitors.bootMonitors(
-          system,
-          conf,
-          slickDataSource,
-          gcsDAO,
-          samDAO,
-          pubSubDAO,
-          methodRepoDAO,
-          dosResolver,
-          shardedExecutionServiceCluster,
-          maxActiveWorkflowsTotal,
-          maxActiveWorkflowsPerUser,
-          userServiceConstructor,
-          projectTemplate,
-          metricsPrefix,
-          requesterPaysRole,
-          useWorkflowCollectionField,
-          useWorkflowCollectionLabel,
-          defaultBackend,
-          methodConfigResolver
-        )
-      } else
-        logger.info(
-          "This instance has been marked as FRONT. Monitors will not be booted..."
-        )
-
       val healthMonitor = system.actorOf(
         HealthMonitor
           .props(
@@ -370,25 +342,27 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("groupsPrefix")
       )
 
+      val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
+        slickDataSource,
+        methodRepoDAO,
+        cromiamDAO,
+        shardedExecutionServiceCluster,
+        conf.getInt("executionservice.batchSize"),
+        methodConfigResolver,
+        gcsDAO,
+        samDAO,
+        notificationDAO,
+        userServiceConstructor,
+        genomicsServiceConstructor,
+        maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser,
+        workbenchMetricBaseName = metricsPrefix,
+        submissionCostService,
+        workspaceServiceConfig
+      )
+
       val service = new RawlsApiServiceImpl(
-        WorkspaceService.constructor(
-          slickDataSource,
-          methodRepoDAO,
-          cromiamDAO,
-          shardedExecutionServiceCluster,
-          conf.getInt("executionservice.batchSize"),
-          methodConfigResolver,
-          gcsDAO,
-          samDAO,
-          notificationDAO,
-          userServiceConstructor,
-          genomicsServiceConstructor,
-          maxActiveWorkflowsTotal,
-          maxActiveWorkflowsPerUser,
-          workbenchMetricBaseName = metricsPrefix,
-          submissionCostService,
-          workspaceServiceConfig
-        ),
+        workspaceServiceConstructor,
         userServiceConstructor,
         genomicsServiceConstructor,
         statisticsServiceConstructor,
@@ -405,6 +379,36 @@ object Boot extends IOApp with LazyLogging {
         samDAO,
         conf.as[SwaggerConfig]("swagger")
       )
+
+      if (conf.getBooleanOption("backRawls").getOrElse(false)) {
+        logger.info("This instance has been marked as BACK. Booting monitors...")
+        BootMonitors.bootMonitors(
+          system,
+          conf,
+          slickDataSource,
+          gcsDAO,
+          samDAO,
+          pubSubDAO,
+          appDependencies.googleStorageService,
+          methodRepoDAO,
+          dosResolver,
+          workspaceServiceConstructor,
+          shardedExecutionServiceCluster,
+          maxActiveWorkflowsTotal,
+          maxActiveWorkflowsPerUser,
+          userServiceConstructor,
+          projectTemplate,
+          metricsPrefix,
+          requesterPaysRole,
+          useWorkflowCollectionField,
+          useWorkflowCollectionLabel,
+          defaultBackend,
+          methodConfigResolver
+        )
+      } else
+        logger.info(
+          "This instance has been marked as FRONT. Monitors will not be booted..."
+        )
 
       for {
         binding <- IO.fromFuture(IO(Http().bindAndHandle(service.route, "0.0.0.0", 8080))).recover {

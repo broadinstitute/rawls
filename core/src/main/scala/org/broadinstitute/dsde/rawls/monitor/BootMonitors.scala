@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.{ActorRef, ActorSystem}
 import cats.effect.{ContextShift, IO}
 import com.typesafe.config.{Config, ConfigRenderOptions}
@@ -10,6 +12,8 @@ import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMo
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, UserInfo, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import spray.json._
 
 import scala.concurrent.Await
@@ -26,8 +30,10 @@ object BootMonitors extends LazyLogging {
                    gcsDAO: GoogleServicesDAO,
                    samDAO: SamDAO,
                    pubSubDAO: GooglePubSubDAO,
+                   googleStorage: GoogleStorageService[IO],
                    methodRepoDAO: MethodRepoDAO,
                    dosResolver: DosResolver,
+                   workspaceService: (org.broadinstitute.dsde.rawls.model.UserInfo) => WorkspaceService,
                    shardedExecutionServiceCluster: ExecutionServiceCluster,
                    maxActiveWorkflowsTotal: Int,
                    maxActiveWorkflowsPerUser: Int,
@@ -40,21 +46,23 @@ object BootMonitors extends LazyLogging {
                    defaultBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver)(implicit cs: ContextShift[IO]): Unit = {
     //Reset "Launching" workflows to "Queued"
-    resetLaunchingWorkflows(slickDataSource)
+//    resetLaunchingWorkflows(slickDataSource)
 
     //Boot billing project creation monitor
-    startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
+//    startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
 
     //Boot submission monitor supervisor
     val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
     val submissionMonitorConfig = SubmissionMonitorConfig(util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")), submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"))
-    startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, samDAO, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
+//    startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, samDAO, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
 
     //Boot workflow submission actors
-    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver)
+//    startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver)
 
     //Boot bucket deletion monitor
-    startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
+//    startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
+
+    startAvroUpsertMonitor(system, workspaceService, gcsDAO, samDAO, googleStorage, pubSubDAO)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
@@ -80,6 +88,7 @@ object BootMonitors extends LazyLogging {
                                             samDAO: SamDAO,
                                             methodRepoDAO: MethodRepoDAO,
                                             dosResolver: DosResolver,
+                                            workspaceService: WorkspaceService,
                                             shardedExecutionServiceCluster: ExecutionServiceCluster,
                                             maxActiveWorkflowsTotal: Int,
                                             maxActiveWorkflowsPerUser: Int,
@@ -117,6 +126,22 @@ object BootMonitors extends LazyLogging {
 
   private def startBucketDeletionMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit cs: ContextShift[IO]) = {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
+  }
+
+  private def startAvroUpsertMonitor(system: ActorSystem, workspaceService: UserInfo => WorkspaceService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO)(implicit cs: ContextShift[IO]) = {
+    system.actorOf(
+      AvroUpsertMonitorSupervisor.props(
+        FiniteDuration.apply(1, TimeUnit.MINUTES),
+        FiniteDuration.apply(10, TimeUnit.SECONDS),
+        workspaceService,
+        googleServicesDAO,
+        samDAO,
+        googleStorage,
+        googlePubSubDAO,
+        "mb-test-avro-pubsub-topic",
+        "mb-test-avro-pubsub-sub",
+        1
+      ))
   }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) = {
