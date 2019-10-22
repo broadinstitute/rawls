@@ -93,7 +93,6 @@ object BootMonitors extends LazyLogging {
                                             samDAO: SamDAO,
                                             methodRepoDAO: MethodRepoDAO,
                                             dosResolver: DosResolver,
-                                            workspaceService: WorkspaceService,
                                             shardedExecutionServiceCluster: ExecutionServiceCluster,
                                             maxActiveWorkflowsTotal: Int,
                                             maxActiveWorkflowsPerUser: Int,
