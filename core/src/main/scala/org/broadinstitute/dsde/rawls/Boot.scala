@@ -404,6 +404,7 @@ object Boot extends IOApp with LazyLogging {
           useWorkflowCollectionLabel,
           defaultBackend,
           methodConfigResolver,
+          GoogleProject(conf.getString("avroUpsertMonitor.pubSubProject")),
           conf.getString("avroUpsertMonitor.pubSubTopic"),
           conf.getString("avroUpsertMonitor.pubSubSubscription"),
           conf.getString("avroUpsertMonitor.bucketName")

@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, WorkspaceN
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
-import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.util.FutureSupport
 import spray.json._
 import spray.json.DefaultJsonProtocol._
@@ -38,6 +38,7 @@ object AvroUpsertMonitorSupervisor {
              samDAO: SamDAO,
              googleStorage: GoogleStorageService[IO],
              pubSubDao: GooglePubSubDAO,
+             avroUpsertPubSubProject: GoogleProject,
              pubSubTopicName: String,
              pubSubSubscriptionName: String,
              avroUpsertBucketName: String,
@@ -51,6 +52,7 @@ object AvroUpsertMonitorSupervisor {
         samDAO: SamDAO,
         googleStorage,
         pubSubDao,
+        avroUpsertPubSubProject,
         pubSubTopicName,
         pubSubSubscriptionName,
         avroUpsertBucketName,
@@ -65,6 +67,7 @@ class AvroUpsertMonitorSupervisor(
                                        samDAO: SamDAO,
                                        googleStorage: GoogleStorageService[IO],
                                        pubSubDao: GooglePubSubDAO,
+                                       avroUpsertPubSubProject: GoogleProject,
                                        pubSubTopicName: String,
                                        pubSubSubscriptionName: String,
                                        avroUpsertBucketName: String,
@@ -82,11 +85,11 @@ class AvroUpsertMonitorSupervisor(
     case Status.Failure(t) => logger.error("error initializing avro upsert monitor", t)
   }
 
-  def topicToFullPath(topicName: String) = s"projects/broad-dsde-dev/topics/mb-test-avro-pubsub-topic" //TODO: read from config
+  def topicToFullPath(topicName: String) = s"projects/${avroUpsertPubSubProject.value}/topics/${pubSubTopicName}" //TODO: read from config
 
   def init =
     for {
-      _ <- pubSubDao.createSubscription(pubSubTopicName, "mb-test-avro-pubsub-sub") //TODO: read from config
+      _ <- pubSubDao.createSubscription(pubSubTopicName, pubSubSubscriptionName) //TODO: read from config
     } yield Start
 
   def startOne(): Unit = {
