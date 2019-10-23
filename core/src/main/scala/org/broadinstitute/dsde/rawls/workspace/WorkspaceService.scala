@@ -2016,7 +2016,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
 
     requireCreateWorkspaceAccess(workspaceRequest, dataAccess) {
-      dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName) flatMap {
+      dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName, Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName]))) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None =>
           val workspaceId = UUID.randomUUID.toString
