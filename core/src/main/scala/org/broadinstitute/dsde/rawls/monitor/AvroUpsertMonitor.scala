@@ -43,6 +43,7 @@ object AvroUpsertMonitorSupervisor {
              pubSubTopicName: String,
              pubSubSubscriptionName: String,
              avroUpsertBucketName: String,
+             batchSize: Int,
              workerCount: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
     Props(
       new AvroUpsertMonitorSupervisor(
@@ -57,6 +58,7 @@ object AvroUpsertMonitorSupervisor {
         pubSubTopicName,
         pubSubSubscriptionName,
         avroUpsertBucketName,
+        batchSize,
         workerCount))
 }
 
@@ -72,6 +74,7 @@ class AvroUpsertMonitorSupervisor(
                                        pubSubTopicName: String,
                                        pubSubSubscriptionName: String,
                                        avroUpsertBucketName: String,
+                                       batchSize: Int,
                                        workerCount: Int)(implicit cs: ContextShift[IO])
   extends Actor
     with LazyLogging {
@@ -86,7 +89,7 @@ class AvroUpsertMonitorSupervisor(
     case Status.Failure(t) => logger.error("error initializing avro upsert monitor", t)
   }
 
-  def topicToFullPath(topicName: String) = s"projects/${avroUpsertPubSubProject.value}/topics/${pubSubTopicName}" //TODO: read from config
+  def topicToFullPath(topicName: String) = s"projects/${avroUpsertPubSubProject.value}/topics/${pubSubTopicName}"
 
   def init =
     for {
@@ -95,7 +98,7 @@ class AvroUpsertMonitorSupervisor(
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, avroUpsertBucketName))
+    actorOf(AvroUpsertMonitor.props(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, avroUpsertBucketName, batchSize))
   }
 
   override val supervisorStrategy =
@@ -121,8 +124,9 @@ object AvroUpsertMonitor {
              googleStorage: GoogleStorageService[IO],
              pubSubDao: GooglePubSubDAO,
              pubSubSubscriptionName: String,
-             avroUpsertBucketName: String)(implicit cs: ContextShift[IO]): Props =
-    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, avroUpsertBucketName))
+             avroUpsertBucketName: String,
+             batchSize: Int)(implicit cs: ContextShift[IO]): Props =
+    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, avroUpsertBucketName, batchSize))
 }
 
 class AvroUpsertMonitorActor(
@@ -134,16 +138,15 @@ class AvroUpsertMonitorActor(
                                   googleStorage: GoogleStorageService[IO],
                                   pubSubDao: GooglePubSubDAO,
                                   pubSubSubscriptionName: String,
-                                  avroUpsertBucketName: String)(implicit cs: ContextShift[IO])
+                                  avroUpsertBucketName: String,
+                                  batchSize: Int)(implicit cs: ContextShift[IO])
   extends Actor
     with LazyLogging
     with FutureSupport {
   import AvroUpsertMonitor._
   import context._
 
-//  case class AvroUpsertJson(namespace: String, name: String, userSubjectId: String, userEmail: String, payload: Array[EntityUpdateDefinition])
   case class AvroMetadataJson(namespace: String, name: String, userSubjectId: String, userEmail: String)
-
   implicit val avroMetadataJsonFormat = jsonFormat4(AvroMetadataJson)
 
   self ! StartMonitorPass
@@ -195,7 +198,7 @@ class AvroUpsertMonitorActor(
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(avroMetadataJson.namespace, RawlsUserEmail(avroMetadataJson.userEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
       _ <-
-        avroUpsertJson.grouped(500).toList.traverse { x =>
+        avroUpsertJson.grouped(batchSize).toList.traverse { x =>
           IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), x, true)))
         }.unsafeToFuture
     } yield ()

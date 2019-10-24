@@ -407,7 +407,8 @@ object Boot extends IOApp with LazyLogging {
           GoogleProject(conf.getString("avroUpsertMonitor.pubSubProject")),
           conf.getString("avroUpsertMonitor.pubSubTopic"),
           conf.getString("avroUpsertMonitor.pubSubSubscription"),
-          conf.getString("avroUpsertMonitor.bucketName")
+          conf.getString("avroUpsertMonitor.bucketName"),
+          conf.getInt("avroUpsertMonitor.batchSize")
         )
       } else
         logger.info(
