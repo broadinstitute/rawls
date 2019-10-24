@@ -68,6 +68,7 @@ import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenReques
 import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
 import io.chrisdavenport.linebacker.Linebacker
 import io.chrisdavenport.log4cats.Logger
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.util.ExecutionContexts
@@ -76,6 +77,9 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
 import scala.io.Source
 import scala.util.matching.Regex
+
+import io.opencensus.scala.Tracing._
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
 
 case class Resources (
                        name: String,
@@ -211,7 +215,7 @@ class HttpGoogleServicesDAO(
     executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
-  override def setupWorkspace(userInfo: UserInfo, projectName: RawlsBillingProjectName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, projectName: RawlsBillingProjectName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
 
     def setBucketLogging(bucketName: String): Future[String] = {
       implicit val service = GoogleInstrumentedService.Storage
@@ -279,11 +283,11 @@ class HttpGoogleServicesDAO(
     val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- googleStorageService.insertBucket(GoogleProject(projectName.value), GcsBucketName(bucketName), None, Map.empty, Option(traceId)).compile.drain.unsafeToFuture() //ACL = None because bucket IAM will be set separately in updateBucketIam
-      _ <- updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture()
-      _ <- setBucketLogging(bucketName)
-      _ <- insertInitialStorageLog(bucketName)
-      _ <- googleStorageService.setBucketLabels(GcsBucketName(bucketName), labels).compile.drain.unsafeToFuture()
+      _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(GoogleProject(projectName.value), GcsBucketName(bucketName), None, Map.empty, Option(traceId)).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
+      _ <- traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture())
+      _ <- traceWithParent("setBucketLogging", parentSpan)(_ => setBucketLogging(bucketName))
+      _ <- traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
+      _ <- traceWithParent("setBucketLabels", parentSpan)(_ => googleStorageService.setBucketLabels(GcsBucketName(bucketName), labels).compile.drain.unsafeToFuture())
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
   }
 

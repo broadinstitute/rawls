@@ -10,6 +10,7 @@ import com.google.api.services.storage.model.{Bucket, BucketAccessControl, Stora
 import com.google.pubsub.v1.ProjectTopicName
 import com.typesafe.config.Config
 import fs2.Stream
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
@@ -34,7 +35,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingGroupEmail: String
 
   // returns bucket and group information
-  def setupWorkspace(userInfo: UserInfo, projectName: RawlsBillingProjectName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String]): Future[GoogleWorkspaceInfo]
+  def setupWorkspace(userInfo: UserInfo, projectName: RawlsBillingProjectName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo]
 
   def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project]
 
