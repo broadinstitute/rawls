@@ -4,6 +4,7 @@ import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
 import akka.pattern._
 import cats.effect.{ContextShift, IO}
+import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
@@ -71,7 +72,7 @@ class AvroUpsertMonitorSupervisor(
                                        pubSubTopicName: String,
                                        pubSubSubscriptionName: String,
                                        avroUpsertBucketName: String,
-                                       workerCount: Int)
+                                       workerCount: Int)(implicit cs: ContextShift[IO])
   extends Actor
     with LazyLogging {
   import AvroUpsertMonitorSupervisor._
@@ -89,7 +90,7 @@ class AvroUpsertMonitorSupervisor(
 
   def init =
     for {
-      _ <- pubSubDao.createSubscription(pubSubTopicName, pubSubSubscriptionName) //TODO: read from config
+      _ <- pubSubDao.createSubscription(pubSubTopicName, pubSubSubscriptionName, Some(600)) //TODO: read from config
     } yield Start
 
   def startOne(): Unit = {
@@ -120,7 +121,7 @@ object AvroUpsertMonitor {
              googleStorage: GoogleStorageService[IO],
              pubSubDao: GooglePubSubDAO,
              pubSubSubscriptionName: String,
-             avroUpsertBucketName: String): Props =
+             avroUpsertBucketName: String)(implicit cs: ContextShift[IO]): Props =
     Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, avroUpsertBucketName))
 }
 
@@ -133,16 +134,17 @@ class AvroUpsertMonitorActor(
                                   googleStorage: GoogleStorageService[IO],
                                   pubSubDao: GooglePubSubDAO,
                                   pubSubSubscriptionName: String,
-                                  avroUpsertBucketName: String)
+                                  avroUpsertBucketName: String)(implicit cs: ContextShift[IO])
   extends Actor
     with LazyLogging
     with FutureSupport {
   import AvroUpsertMonitor._
   import context._
 
-  case class AvroUpsertJson(namespace: String, name: String, userSubjectId: String, userEmail: String, payload: Array[EntityUpdateDefinition])
+//  case class AvroUpsertJson(namespace: String, name: String, userSubjectId: String, userEmail: String, payload: Array[EntityUpdateDefinition])
+  case class AvroMetadataJson(namespace: String, name: String, userSubjectId: String, userEmail: String)
 
-  implicit val avroUpsertJsonFormat = jsonFormat5(AvroUpsertJson)
+  implicit val avroMetadataJsonFormat = jsonFormat4(AvroMetadataJson)
 
   self ! StartMonitorPass
 
@@ -162,16 +164,20 @@ class AvroUpsertMonitorActor(
     case Some(message: PubSubMessage) =>
       logger.info(s"received avro upsert message: $message")
       val (jobId, file) = parseMessage(message)
-      initAvroUpsert(jobId, file).map(response => (response, message.ackId)) pipeTo self
+
+      file match {
+        case "upsert.json" => initAvroUpsert(jobId, file).map(response => (response, message.ackId)) pipeTo self
+        case _ => acknowledgeMessage(message.ackId) pipeTo self //some other file (i.e. success/failure log, metadata.json)
+      }
 
     case None =>
       // there was no message so wait and try again
       val nextTime = org.broadinstitute.dsde.workbench.util.addJitter(pollInterval, pollIntervalJitter)
       system.scheduler.scheduleOnce(nextTime.asInstanceOf[FiniteDuration], self, StartMonitorPass)
 
-    case ((), ackId: String) =>
+    case ((), ackId: String) => self ! None
       acknowledgeMessage(ackId).map(_ => StartMonitorPass) pipeTo self
-
+//
     case Status.Failure(t) => throw t
 
     case ReceiveTimeout =>
@@ -179,15 +185,19 @@ class AvroUpsertMonitorActor(
 
     case x =>
       logger.info(s"unhandled $x")
-//      self ! StartMonitorPass TODO: should this restart the monitor if we've got an unhandled message? I think so.
+      self ! None
   }
 
   private def initAvroUpsert(jobId: String, file: String): Future[Unit] = {
     for {
-      avroJson <- readUpsertObject(s"$jobId/$file")
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(avroJson.namespace, RawlsUserEmail(avroJson.userEmail))
+      avroUpsertJson <- readUpsertObject(s"$jobId/upsert.json")
+      avroMetadataJson <- readMetadataObject(s"$jobId/metadata.json")
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(avroMetadataJson.namespace, RawlsUserEmail(avroMetadataJson.userEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-      _ <- workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroJson.namespace, avroJson.name), avroJson.payload.toSeq, true)
+      _ <-
+        avroUpsertJson.grouped(500).toList.traverse { x =>
+          IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), x, true)))
+        }.unsafeToFuture
     } yield ()
   }
 
@@ -203,9 +213,15 @@ class AvroUpsertMonitorActor(
     }
   }
 
-  private def readUpsertObject(path: String): Future[AvroUpsertJson] = {
+  private def readUpsertObject(path: String): Future[Seq[EntityUpdateDefinition]] = {
     googleStorage.getBlobBody(GcsBucketName(avroUpsertBucketName), GcsBlobName(path)).compile.to[Array].unsafeToFuture().map { byteArray =>
-      byteArray.map(_.toChar).mkString.parseJson.convertTo[AvroUpsertJson]
+      byteArray.map(_.toChar).mkString.parseJson.convertTo[Seq[EntityUpdateDefinition]]
+    }
+  }
+
+  private def readMetadataObject(path: String): Future[AvroMetadataJson] = {
+    googleStorage.getBlobBody(GcsBucketName(avroUpsertBucketName), GcsBlobName(path)).compile.to[Array].unsafeToFuture().map { byteArray =>
+      byteArray.map(_.toChar).mkString.parseJson.convertTo[AvroMetadataJson]
     }
   }
 

@@ -60,9 +60,12 @@ class HttpGooglePubSubDAO(clientEmail: String,
     }
   }
 
-  override def createSubscription(topicName: String, subscriptionName: String) = {
+  override def createSubscription(topicName: String, subscriptionName: String, ackDeadlineSeconds: Option[Int] = None) = {
     retryWithRecoverWhen500orGoogleError(() => {
       val subscription = new Subscription().setTopic(topicToFullPath(topicName))
+      ackDeadlineSeconds.map { secs =>
+        subscription.setAckDeadlineSeconds(secs)
+      }
       executeGoogleRequest(getPubSubDirectory.projects().subscriptions().create(subscriptionToFullPath(subscriptionName), subscription))
       true
     }) {
