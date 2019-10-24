@@ -77,7 +77,7 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
     startingLength != topics.size
   }
 
-  override def createSubscription(topicName: String, subscriptionName: String, , ackDeadlineSeconds: Option[Int] = None): Future[Boolean] = Future {
+  override def createSubscription(topicName: String, subscriptionName: String, ackDeadlineSeconds: Option[Int] = None): Future[Boolean] = Future {
     if (!topics.contains(topicName)) throw new RawlsException(s"no topic named $topicName")
     if (subscriptionsByName.contains(subscriptionName)) {
       false
