@@ -32,17 +32,16 @@ object AvroUpsertMonitorSupervisor {
   case object Init extends AvroUpsertMonitorSupervisorMessage
   case object Start extends AvroUpsertMonitorSupervisorMessage
 
-  final case class AvroUpsertMonitorConfig(pubSubProject: GoogleProject,
+  final case class AvroUpsertMonitorConfig(pollInterval: FiniteDuration,
+                                           pollIntervalJitter: FiniteDuration,
+                                           pubSubProject: GoogleProject,
                                            pubSubTopic: String,
                                            pubSubSubscription: String,
                                            bucketName: String,
                                            batchSize: Int,
                                            workerCount: Int)
 
-  def props(
-             pollInterval: FiniteDuration,
-             pollIntervalJitter: FiniteDuration,
-             workspaceService: UserInfo => WorkspaceService,
+  def props(workspaceService: UserInfo => WorkspaceService,
              googleServicesDAO: GoogleServicesDAO,
              samDAO: SamDAO,
              googleStorage: GoogleStorageService[IO],
@@ -50,8 +49,6 @@ object AvroUpsertMonitorSupervisor {
              avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
     Props(
       new AvroUpsertMonitorSupervisor(
-        pollInterval,
-        pollIntervalJitter,
         workspaceService,
         googleServicesDAO,
         samDAO,
@@ -60,15 +57,12 @@ object AvroUpsertMonitorSupervisor {
         avroUpsertMonitorConfig))
 }
 
-class AvroUpsertMonitorSupervisor(
-                                       val pollInterval: FiniteDuration,
-                                       pollIntervalJitter: FiniteDuration,
-                                       workspaceService: UserInfo => WorkspaceService,
-                                       googleServicesDAO: GoogleServicesDAO,
-                                       samDAO: SamDAO,
-                                       googleStorage: GoogleStorageService[IO],
-                                       pubSubDao: GooglePubSubDAO,
-                                       avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO])
+class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService,
+                                  googleServicesDAO: GoogleServicesDAO,
+                                  samDAO: SamDAO,
+                                  googleStorage: GoogleStorageService[IO],
+                                  pubSubDao: GooglePubSubDAO,
+                                  avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO])
   extends Actor
     with LazyLogging {
   import AvroUpsertMonitorSupervisor._
@@ -91,7 +85,7 @@ class AvroUpsertMonitorSupervisor(
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, avroUpsertMonitorConfig.pubSubSubscription, avroUpsertMonitorConfig.bucketName, avroUpsertMonitorConfig.batchSize))
+    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, avroUpsertMonitorConfig.pubSubSubscription, avroUpsertMonitorConfig.bucketName, avroUpsertMonitorConfig.batchSize))
   }
 
   override val supervisorStrategy =
@@ -167,13 +161,15 @@ class AvroUpsertMonitorActor(
 
       file match {
         case "upsert.json" => initAvroUpsert(jobId, message.ackId).map(_ => ImportComplete) pipeTo self
-        case _ => acknowledgeMessage(message.ackId) pipeTo self //some other file (i.e. success/failure log, metadata.json)
+        case _ => acknowledgeMessage(message.ackId).map(_ => None) pipeTo self //some other file (i.e. success/failure log, metadata.json)
       }
 
     case None =>
       // there was no message so wait and try again
       val nextTime = org.broadinstitute.dsde.workbench.util.addJitter(pollInterval, pollIntervalJitter)
-      system.scheduler.scheduleOnce(nextTime.asInstanceOf[FiniteDuration], self, StartMonitorPass)
+
+      println(s"Scheduling again in ${nextTime}")
+      system.scheduler.scheduleOnce(nextTime, self, StartMonitorPass)
 
     case ImportComplete => self ! None
 

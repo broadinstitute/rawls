@@ -51,7 +51,6 @@ import scala.concurrent.duration._
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
-import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 object Boot extends IOApp with LazyLogging {
@@ -384,15 +383,6 @@ object Boot extends IOApp with LazyLogging {
       if (conf.getBooleanOption("backRawls").getOrElse(false)) {
         logger.info("This instance has been marked as BACK. Booting monitors...")
 
-        val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
-          GoogleProject(conf.getString("avroUpsertMonitor.pubSubProject")),
-          conf.getString("avroUpsertMonitor.pubSubTopic"),
-          conf.getString("avroUpsertMonitor.pubSubSubscription"),
-          conf.getString("avroUpsertMonitor.bucketName"),
-          conf.getInt("avroUpsertMonitor.batchSize"),
-          conf.getInt("avroUpsertMonitor.workerCount")
-        )
-
         BootMonitors.bootMonitors(
           system,
           conf,
@@ -414,8 +404,7 @@ object Boot extends IOApp with LazyLogging {
           useWorkflowCollectionField,
           useWorkflowCollectionLabel,
           defaultBackend,
-          methodConfigResolver,
-          avroUpsertMonitorConfig
+          methodConfigResolver
         )
       } else
         logger.info(
