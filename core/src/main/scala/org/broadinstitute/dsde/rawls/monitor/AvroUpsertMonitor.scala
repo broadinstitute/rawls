@@ -167,8 +167,6 @@ class AvroUpsertMonitorActor(
     case None =>
       // there was no message so wait and try again
       val nextTime = org.broadinstitute.dsde.workbench.util.addJitter(pollInterval, pollIntervalJitter)
-
-      println(s"Scheduling again in ${nextTime}")
       system.scheduler.scheduleOnce(nextTime, self, StartMonitorPass)
 
     case ImportComplete => self ! None
@@ -194,9 +192,9 @@ class AvroUpsertMonitorActor(
         avroUpsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
           IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), upsertBatch, true)))
         }.unsafeToFuture
-    } yield upsertResults.map { results =>
+    } yield {
       logger.info(s"completed Avro upsert job ${avroMetadataJson.jobId} for user: ${avroMetadataJson.userEmail} with size ${avroUpsertJson.size} entities")
-      results
+      ()
     }
   }
 
