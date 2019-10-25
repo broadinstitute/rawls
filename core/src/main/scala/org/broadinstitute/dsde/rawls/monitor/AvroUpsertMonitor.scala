@@ -142,7 +142,7 @@ class AvroUpsertMonitorActor(
   self ! StartMonitorPass
 
   // fail safe in case this actor is idle too long but not too fast (1 second lower limit)
-  setReceiveTimeout(max((pollInterval + pollIntervalJitter) * 10, 1 second))
+  setReceiveTimeout(max((pollInterval + pollIntervalJitter) * 20, 1 second))
 
   private def max(durations: FiniteDuration*): FiniteDuration = {
     implicit val finiteDurationIsOrdered = scala.concurrent.duration.FiniteDuration.FiniteDurationIsOrdered
@@ -187,10 +187,10 @@ class AvroUpsertMonitorActor(
     for {
       avroMetadataJson <- readMetadataObject(s"$jobId/metadata.json")
       //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the uspert is lost
-      ackResponse <- acknowledgeMessage(ackId)
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(avroMetadataJson.namespace, RawlsUserEmail(avroMetadataJson.userEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
       avroUpsertJson <- readUpsertObjectFuture
+      ackResponse <- acknowledgeMessage(ackId)
       upsertResults <-
         avroUpsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
           IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), upsertBatch, true)))
