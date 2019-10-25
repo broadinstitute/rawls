@@ -181,13 +181,16 @@ class AvroUpsertMonitorActor(
   }
 
   private def initAvroUpsert(jobId: String, ackId: String): Future[Unit] = {
+    //start this Future asap because it can be long-running
+    val readUpsertObjectFuture = readUpsertObject(s"$jobId/upsert.json")
+
     for {
-      avroUpsertJson <- readUpsertObject(s"$jobId/upsert.json")
       avroMetadataJson <- readMetadataObject(s"$jobId/metadata.json")
       //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the uspert is lost
       ackResponse <- acknowledgeMessage(ackId)
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(avroMetadataJson.namespace, RawlsUserEmail(avroMetadataJson.userEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
+      avroUpsertJson <- readUpsertObjectFuture
       upsertResults <-
         avroUpsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
           IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), upsertBatch, true)))
