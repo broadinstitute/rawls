@@ -114,6 +114,9 @@ class AvroUpsertMonitorSupervisor(
 
 object AvroUpsertMonitor {
   case object StartMonitorPass
+  case object ImportComplete
+
+  val objectIdPattern = """"([^/]+)/([^/]+)"""".r
 
   def props(
              pollInterval: FiniteDuration,
@@ -146,8 +149,8 @@ class AvroUpsertMonitorActor(
   import AvroUpsertMonitor._
   import context._
 
-  case class AvroMetadataJson(namespace: String, name: String, userSubjectId: String, userEmail: String)
-  implicit val avroMetadataJsonFormat = jsonFormat4(AvroMetadataJson)
+  case class AvroMetadataJson(namespace: String, name: String, userSubjectId: String, userEmail: String, jobId: String)
+  implicit val avroMetadataJsonFormat = jsonFormat5(AvroMetadataJson)
 
   self ! StartMonitorPass
 
@@ -165,11 +168,12 @@ class AvroUpsertMonitorActor(
       pubSubDao.pullMessages(pubSubSubscriptionName, 1).map(_.headOption) pipeTo self
 
     case Some(message: PubSubMessage) =>
+      //we received a message, so we will parse it and try to upsert it
       logger.info(s"received avro upsert message: $message")
       val (jobId, file) = parseMessage(message)
 
       file match {
-        case "upsert.json" => initAvroUpsert(jobId, file).map(response => (response, message.ackId)) pipeTo self
+        case "upsert.json" => initAvroUpsert(jobId, message.ackId).map(_ => ImportComplete) pipeTo self
         case _ => acknowledgeMessage(message.ackId) pipeTo self //some other file (i.e. success/failure log, metadata.json)
       }
 
@@ -178,38 +182,39 @@ class AvroUpsertMonitorActor(
       val nextTime = org.broadinstitute.dsde.workbench.util.addJitter(pollInterval, pollIntervalJitter)
       system.scheduler.scheduleOnce(nextTime.asInstanceOf[FiniteDuration], self, StartMonitorPass)
 
-    case ((), ackId: String) => self ! None
-      acknowledgeMessage(ackId).map(_ => StartMonitorPass) pipeTo self
-//
+    case ImportComplete => self ! None
+
     case Status.Failure(t) => throw t
 
-    case ReceiveTimeout =>
-      throw new WorkbenchException("AvroUpsertMonitorActor has received no messages for too long")
+    case ReceiveTimeout => throw new WorkbenchException("AvroUpsertMonitorActor has received no messages for too long")
 
     case x =>
       logger.info(s"unhandled $x")
       self ! None
   }
 
-  private def initAvroUpsert(jobId: String, file: String): Future[Unit] = {
+  private def initAvroUpsert(jobId: String, ackId: String): Future[Unit] = {
     for {
       avroUpsertJson <- readUpsertObject(s"$jobId/upsert.json")
       avroMetadataJson <- readMetadataObject(s"$jobId/metadata.json")
+      //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts, con: if someone restarts rawls here the uspert is lost
+      ackResponse <- acknowledgeMessage(ackId)
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(avroMetadataJson.namespace, RawlsUserEmail(avroMetadataJson.userEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-      _ <-
-        avroUpsertJson.grouped(batchSize).toList.traverse { x =>
-          IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), x, true)))
+      upsertResults <-
+        avroUpsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
+          IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), upsertBatch, true)))
         }.unsafeToFuture
-    } yield ()
+    } yield upsertResults.map { results =>
+      logger.info(s"completed Avro upsert job ${avroMetadataJson.} for user: ${avroMetadataJson.userEmail} with size ${avroUpsertJson.size} entites")
+      results
+    }
   }
 
   private def acknowledgeMessage(ackId: String) =
     pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, Seq(ackId))
 
   private def parseMessage(message: PubSubMessage) = {
-    val objectIdPattern = """"([^/]+)/([^/]+)"""".r
-
     message.contents.parseJson.asJsObject.getFields("name").head.compactPrint match {
       case objectIdPattern(jobId, file) => (jobId, file)
       case m => throw new Exception(s"unable to parse message $m")
@@ -217,14 +222,16 @@ class AvroUpsertMonitorActor(
   }
 
   private def readUpsertObject(path: String): Future[Seq[EntityUpdateDefinition]] = {
-    googleStorage.getBlobBody(GcsBucketName(avroUpsertBucketName), GcsBlobName(path)).compile.to[Array].unsafeToFuture().map { byteArray =>
-      byteArray.map(_.toChar).mkString.parseJson.convertTo[Seq[EntityUpdateDefinition]]
-    }
+    readObject[Seq[EntityUpdateDefinition]](path)
   }
 
   private def readMetadataObject(path: String): Future[AvroMetadataJson] = {
+    readObject[AvroMetadataJson](path)
+  }
+
+  private def readObject[T](path: String)(implicit reader: JsonReader[T]): Future[T] = {
     googleStorage.getBlobBody(GcsBucketName(avroUpsertBucketName), GcsBlobName(path)).compile.to[Array].unsafeToFuture().map { byteArray =>
-      byteArray.map(_.toChar).mkString.parseJson.convertTo[AvroMetadataJson]
+      byteArray.map(_.toChar).mkString.parseJson.convertTo[T]
     }
   }
 
