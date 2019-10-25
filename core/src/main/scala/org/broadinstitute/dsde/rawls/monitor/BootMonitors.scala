@@ -10,11 +10,11 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSou
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, UserInfo, WorkflowStatuses}
+import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json._
 
 import scala.concurrent.Await
@@ -46,11 +46,7 @@ object BootMonitors extends LazyLogging {
                    useWorkflowCollectionLabel: Boolean,
                    defaultBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver,
-                   avroUpsertPubSubProject: GoogleProject,
-                   avroUpsertPubSubTopic: String,
-                   avroUpsertPubSubSubscription: String,
-                   avroUpsertBucketName: String,
-                   avroUpsertBatchSize: Int)(implicit cs: ContextShift[IO]): Unit = {
+                   avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO]): Unit = {
     //Reset "Launching" workflows to "Queued"
 //    resetLaunchingWorkflows(slickDataSource)
 
@@ -69,7 +65,7 @@ object BootMonitors extends LazyLogging {
 //    startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
 
     //Boot the avro upsert monitor to read and process messages in the specified PubSub topic
-    startAvroUpsertMonitor(system, workspaceService, gcsDAO, samDAO, googleStorage, pubSubDAO, avroUpsertPubSubProject, avroUpsertPubSubTopic, avroUpsertPubSubSubscription, avroUpsertBucketName, avroUpsertBatchSize)
+    startAvroUpsertMonitor(system, workspaceService, gcsDAO, samDAO, googleStorage, pubSubDAO, avroUpsertMonitorConfig)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
@@ -134,7 +130,7 @@ object BootMonitors extends LazyLogging {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
-  private def startAvroUpsertMonitor(system: ActorSystem, workspaceService: UserInfo => WorkspaceService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, avroUpsertPubSubProject: GoogleProject, avroUpsertPubSubTopic: String, avroUpsertPubSubSubscription: String, avroUpsertBucketName: String, batchSize: Int)(implicit cs: ContextShift[IO]) = {
+  private def startAvroUpsertMonitor(system: ActorSystem, workspaceService: UserInfo => WorkspaceService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO]) = {
     system.actorOf(
       AvroUpsertMonitorSupervisor.props(
         FiniteDuration.apply(10, TimeUnit.MINUTES),
@@ -144,12 +140,7 @@ object BootMonitors extends LazyLogging {
         samDAO,
         googleStorage,
         googlePubSubDAO,
-        avroUpsertPubSubProject,
-        avroUpsertPubSubTopic,
-        avroUpsertPubSubSubscription,
-        avroUpsertBucketName,
-        batchSize,
-        1
+        avroUpsertMonitorConfig
       ))
   }
 

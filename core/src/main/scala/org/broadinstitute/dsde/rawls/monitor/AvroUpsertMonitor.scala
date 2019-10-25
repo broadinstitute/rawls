@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
@@ -31,6 +32,13 @@ object AvroUpsertMonitorSupervisor {
   case object Init extends AvroUpsertMonitorSupervisorMessage
   case object Start extends AvroUpsertMonitorSupervisorMessage
 
+  final case class AvroUpsertMonitorConfig(pubSubProject: GoogleProject,
+                                           pubSubTopic: String,
+                                           pubSubSubscription: String,
+                                           bucketName: String,
+                                           batchSize: Int,
+                                           workerCount: Int)
+
   def props(
              pollInterval: FiniteDuration,
              pollIntervalJitter: FiniteDuration,
@@ -39,12 +47,7 @@ object AvroUpsertMonitorSupervisor {
              samDAO: SamDAO,
              googleStorage: GoogleStorageService[IO],
              pubSubDao: GooglePubSubDAO,
-             avroUpsertPubSubProject: GoogleProject,
-             pubSubTopicName: String,
-             pubSubSubscriptionName: String,
-             avroUpsertBucketName: String,
-             batchSize: Int,
-             workerCount: Int)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
+             avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
     Props(
       new AvroUpsertMonitorSupervisor(
         pollInterval,
@@ -54,12 +57,7 @@ object AvroUpsertMonitorSupervisor {
         samDAO,
         googleStorage,
         pubSubDao,
-        avroUpsertPubSubProject,
-        pubSubTopicName,
-        pubSubSubscriptionName,
-        avroUpsertBucketName,
-        batchSize,
-        workerCount))
+        avroUpsertMonitorConfig))
 }
 
 class AvroUpsertMonitorSupervisor(
@@ -70,12 +68,7 @@ class AvroUpsertMonitorSupervisor(
                                        samDAO: SamDAO,
                                        googleStorage: GoogleStorageService[IO],
                                        pubSubDao: GooglePubSubDAO,
-                                       avroUpsertPubSubProject: GoogleProject,
-                                       pubSubTopicName: String,
-                                       pubSubSubscriptionName: String,
-                                       avroUpsertBucketName: String,
-                                       batchSize: Int,
-                                       workerCount: Int)(implicit cs: ContextShift[IO])
+                                       avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO])
   extends Actor
     with LazyLogging {
   import AvroUpsertMonitorSupervisor._
@@ -85,20 +78,20 @@ class AvroUpsertMonitorSupervisor(
 
   override def receive = {
     case Init => init pipeTo self
-    case Start => for (i <- 1 to workerCount) startOne()
+    case Start => for (i <- 1 to avroUpsertMonitorConfig.workerCount) startOne()
     case Status.Failure(t) => logger.error("error initializing avro upsert monitor", t)
   }
 
-  def topicToFullPath(topicName: String) = s"projects/${avroUpsertPubSubProject.value}/topics/${pubSubTopicName}"
+  def topicToFullPath(topicName: String) = s"projects/${avroUpsertMonitorConfig.pubSubProject.value}/topics/${avroUpsertMonitorConfig.pubSubTopic}"
 
   def init =
     for {
-      _ <- pubSubDao.createSubscription(pubSubTopicName, pubSubSubscriptionName, Some(600)) //TODO: read from config
+      _ <- pubSubDao.createSubscription(avroUpsertMonitorConfig.pubSubTopic, avroUpsertMonitorConfig.pubSubSubscription, Some(600)) //TODO: read from config
     } yield Start
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, avroUpsertBucketName, batchSize))
+    actorOf(AvroUpsertMonitor.props(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, avroUpsertMonitorConfig.pubSubSubscription, avroUpsertMonitorConfig.bucketName, avroUpsertMonitorConfig.batchSize))
   }
 
   override val supervisorStrategy =
@@ -206,7 +199,7 @@ class AvroUpsertMonitorActor(
           IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), upsertBatch, true)))
         }.unsafeToFuture
     } yield upsertResults.map { results =>
-      logger.info(s"completed Avro upsert job ${avroMetadataJson.} for user: ${avroMetadataJson.userEmail} with size ${avroUpsertJson.size} entites")
+      logger.info(s"completed Avro upsert job ${avroMetadataJson.jobId} for user: ${avroMetadataJson.userEmail} with size ${avroUpsertJson.size} entities")
       results
     }
   }
