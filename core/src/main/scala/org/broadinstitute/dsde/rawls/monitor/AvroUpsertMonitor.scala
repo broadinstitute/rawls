@@ -186,7 +186,7 @@ class AvroUpsertMonitorActor(
     for {
       avroUpsertJson <- readUpsertObject(s"$jobId/upsert.json")
       avroMetadataJson <- readMetadataObject(s"$jobId/metadata.json")
-      //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts, con: if someone restarts rawls here the uspert is lost
+      //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the uspert is lost
       ackResponse <- acknowledgeMessage(ackId)
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(avroMetadataJson.namespace, RawlsUserEmail(avroMetadataJson.userEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
