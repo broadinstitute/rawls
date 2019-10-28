@@ -1,5 +1,8 @@
 package org.broadinstitute.dsde.rawls.monitor
 
+import java.io.ByteArrayInputStream
+import java.util.zip.GZIPInputStream
+
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
 import akka.pattern._
@@ -136,8 +139,8 @@ class AvroUpsertMonitorActor(
   import AvroUpsertMonitor._
   import context._
 
-  case class AvroMetadataJson(namespace: String, name: String, userSubjectId: String, userEmail: String, jobId: String)
-  implicit val avroMetadataJsonFormat = jsonFormat5(AvroMetadataJson)
+  case class AvroMetadataJson(namespace: String, name: String, userSubjectId: String, userEmail: String, jobId: String, startTime: String)
+  implicit val avroMetadataJsonFormat = jsonFormat6(AvroMetadataJson)
 
   self ! StartMonitorPass
 
@@ -161,7 +164,7 @@ class AvroUpsertMonitorActor(
 
       file match {
         case "upsert.json" => initAvroUpsert(jobId, message.ackId).map(_ => ImportComplete) pipeTo self
-        case _ => acknowledgeMessage(message.ackId).map(_ => None) pipeTo self //some other file (i.e. success/failure log, metadata.json)
+        case _ => acknowledgeMessage(message.ackId).map(_ => ImportComplete) pipeTo self //some other file (i.e. success/failure log, metadata.json)
       }
 
     case None =>
@@ -171,7 +174,10 @@ class AvroUpsertMonitorActor(
 
     case ImportComplete => self ! StartMonitorPass
 
-    case Status.Failure(t) => throw t
+    case Status.Failure(t) => {
+      throw t
+      self ! StartMonitorPass
+    }
 
     case ReceiveTimeout => throw new WorkbenchException("AvroUpsertMonitorActor has received no messages for too long")
 
@@ -181,22 +187,19 @@ class AvroUpsertMonitorActor(
   }
 
   private def initAvroUpsert(jobId: String, ackId: String): Future[Unit] = {
-    //start this Future asap because it can be long-running
-    val readUpsertObjectFuture = readUpsertObject(s"$jobId/upsert.json")
-
     for {
       avroMetadataJson <- readMetadataObject(s"$jobId/metadata.json")
       //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the uspert is lost
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(avroMetadataJson.namespace, RawlsUserEmail(avroMetadataJson.userEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-      avroUpsertJson <- readUpsertObjectFuture
+      avroUpsertJson <- readUpsertObject(s"$jobId/upsert.json")
       ackResponse <- acknowledgeMessage(ackId)
       upsertResults <-
         avroUpsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
           IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), upsertBatch, true)))
         }.unsafeToFuture
     } yield {
-      logger.info(s"completed Avro upsert job ${avroMetadataJson.jobId} for user: ${avroMetadataJson.userEmail} with size ${avroUpsertJson.size} entities")
+      logger.info(s"completed Avro upsert job ${avroMetadataJson.jobId} for user: ${avroMetadataJson.userEmail} with ${avroUpsertJson.size} entities")
       ()
     }
   }
@@ -212,18 +215,27 @@ class AvroUpsertMonitorActor(
   }
 
   private def readUpsertObject(path: String): Future[Seq[EntityUpdateDefinition]] = {
-    readObject[Seq[EntityUpdateDefinition]](path)
+    readObject[Seq[EntityUpdateDefinition]](path, decompress = true)
   }
 
   private def readMetadataObject(path: String): Future[AvroMetadataJson] = {
     readObject[AvroMetadataJson](path)
   }
 
-  private def readObject[T](path: String)(implicit reader: JsonReader[T]): Future[T] = {
+  private def readObject[T](path: String, decompress: Boolean = false)(implicit reader: JsonReader[T]): Future[T] = {
     googleStorage.getBlobBody(GcsBucketName(avroUpsertBucketName), GcsBlobName(path)).compile.to[Array].unsafeToFuture().map { byteArray =>
-      byteArray.map(_.toChar).mkString.parseJson.convertTo[T]
+      if(decompress) decompressGzip(byteArray).map(_.toChar).mkString.parseJson.convertTo[T]
+      else byteArray.map(_.toChar).mkString.parseJson.convertTo[T]
     }
   }
+
+  private def decompressGzip(compressed: Array[Byte]): Array[Byte] = {
+    val inputStream = new GZIPInputStream(new ByteArrayInputStream(compressed))
+    val result = org.apache.commons.io.IOUtils.toByteArray(inputStream)
+    inputStream.close()
+    result
+  }
+
 
   override val supervisorStrategy =
     OneForOneStrategy() {

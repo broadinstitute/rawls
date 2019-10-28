@@ -74,6 +74,7 @@ object Dependencies {
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "3.9.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
   val scalaCache: ModuleID =      "com.github.cb372"              %% "scalacache-caffeine"  % "0.24.2"
+  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
   
   val workbenchModelV  = "0.13-d4e0782"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
@@ -179,6 +180,7 @@ object Dependencies {
     workbenchGoogleMocks,
     workbenchUtil,
     ficus,
-    scalaCache
+    scalaCache,
+    apacheCommonsIO
   )
 }
