@@ -169,7 +169,7 @@ class AvroUpsertMonitorActor(
       val nextTime = org.broadinstitute.dsde.workbench.util.addJitter(pollInterval, pollIntervalJitter)
       system.scheduler.scheduleOnce(nextTime, self, StartMonitorPass)
 
-    case ImportComplete => self ! None
+    case ImportComplete => self ! StartMonitorPass
 
     case Status.Failure(t) => throw t
 
