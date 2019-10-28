@@ -32,6 +32,7 @@ object BootMonitors extends LazyLogging {
                    gcsDAO: GoogleServicesDAO,
                    samDAO: SamDAO,
                    pubSubDAO: GooglePubSubDAO,
+                   avroUpsertpubSubDAO: GooglePubSubDAO,
                    googleStorage: GoogleStorageService[IO],
                    methodRepoDAO: MethodRepoDAO,
                    dosResolver: DosResolver,
