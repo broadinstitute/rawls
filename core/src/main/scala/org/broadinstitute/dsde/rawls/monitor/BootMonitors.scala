@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.actor.{ActorRef, ActorSystem}
+import java.util.concurrent.TimeUnit
+
+import akka.actor.ActorSystem
 import cats.effect.{ContextShift, IO}
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
@@ -8,8 +10,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSou
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, UserInfo, WorkflowStatuses}
+import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json._
 
 import scala.concurrent.Await
@@ -26,8 +32,10 @@ object BootMonitors extends LazyLogging {
                    gcsDAO: GoogleServicesDAO,
                    samDAO: SamDAO,
                    pubSubDAO: GooglePubSubDAO,
+                   googleStorage: GoogleStorageService[IO],
                    methodRepoDAO: MethodRepoDAO,
                    dosResolver: DosResolver,
+                   workspaceService: (org.broadinstitute.dsde.rawls.model.UserInfo) => WorkspaceService,
                    shardedExecutionServiceCluster: ExecutionServiceCluster,
                    maxActiveWorkflowsTotal: Int,
                    maxActiveWorkflowsPerUser: Int,
@@ -55,6 +63,20 @@ object BootMonitors extends LazyLogging {
 
     //Boot bucket deletion monitor
     startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
+
+    val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
+      util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
+      util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollJitter")),
+      GoogleProject(conf.getString("avroUpsertMonitor.pubSubProject")),
+      conf.getString("avroUpsertMonitor.pubSubTopic"),
+      conf.getString("avroUpsertMonitor.pubSubSubscription"),
+      conf.getString("avroUpsertMonitor.bucketName"),
+      conf.getInt("avroUpsertMonitor.batchSize"),
+      conf.getInt("avroUpsertMonitor.workerCount")
+    )
+
+    //Boot the avro upsert monitor to read and process messages in the specified PubSub topic
+    startAvroUpsertMonitor(system, workspaceService, gcsDAO, samDAO, googleStorage, pubSubDAO, avroUpsertMonitorConfig)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
@@ -117,6 +139,18 @@ object BootMonitors extends LazyLogging {
 
   private def startBucketDeletionMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit cs: ContextShift[IO]) = {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
+  }
+
+  private def startAvroUpsertMonitor(system: ActorSystem, workspaceService: UserInfo => WorkspaceService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO]) = {
+    system.actorOf(
+      AvroUpsertMonitorSupervisor.props(
+        workspaceService,
+        googleServicesDAO,
+        samDAO,
+        googleStorage,
+        googlePubSubDAO,
+        avroUpsertMonitorConfig
+      ))
   }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) = {
