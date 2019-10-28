@@ -77,7 +77,7 @@ object BootMonitors extends LazyLogging {
     )
 
     //Boot the avro upsert monitor to read and process messages in the specified PubSub topic
-    startAvroUpsertMonitor(system, workspaceService, gcsDAO, samDAO, googleStorage, pubSubDAO, avroUpsertMonitorConfig)
+    startAvroUpsertMonitor(system, workspaceService, gcsDAO, samDAO, googleStorage, avroUpsertpubSubDAO, avroUpsertMonitorConfig)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
