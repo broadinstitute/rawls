@@ -163,8 +163,12 @@ class AvroUpsertMonitorActor(
       val (jobId, file) = parseMessage(message)
 
       file match {
-        case "upsert.json" => initAvroUpsert(jobId, message.ackId).map(_ => ImportComplete) pipeTo self
-        case _ => acknowledgeMessage(message.ackId).map(_ => ImportComplete) pipeTo self //some other file (i.e. success/failure log, metadata.json)
+        case "upsert.json" =>
+          logger.info(s"processing $file message for job $jobId with ackId ${message.ackId} in message: $message")
+          initAvroUpsert(jobId, message.ackId).map(_ => ImportComplete) pipeTo self
+        case _ =>
+          logger.info(s"found ignorable file $file message for job $jobId with ackId ${message.ackId} in message: $message")
+          acknowledgeMessage(message.ackId).map(_ => ImportComplete) pipeTo self //some other file (i.e. success/failure log, metadata.json)
       }
 
     case None =>
@@ -196,6 +200,7 @@ class AvroUpsertMonitorActor(
       ackResponse <- acknowledgeMessage(ackId)
       upsertResults <-
         avroUpsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
+          logger.info(s"starting upsert for $jobId with ${upsertBatch.size} entities ...")
           IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), upsertBatch, true)))
         }.unsafeToFuture
     } yield {
@@ -204,8 +209,10 @@ class AvroUpsertMonitorActor(
     }
   }
 
-  private def acknowledgeMessage(ackId: String) =
+  private def acknowledgeMessage(ackId: String) = {
+    logger.info(s"acking message with ackId $ackId")
     pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, Seq(ackId))
+  }
 
   private def parseMessage(message: PubSubMessage) = {
     message.contents.parseJson.asJsObject.getFields("name").head.compactPrint match {
@@ -223,9 +230,13 @@ class AvroUpsertMonitorActor(
   }
 
   private def readObject[T](path: String, decompress: Boolean = false)(implicit reader: JsonReader[T]): Future[T] = {
+    logger.info(s"reading ${if (decompress) "compressed " else ""}object $path ...")
     googleStorage.getBlobBody(GcsBucketName(avroUpsertBucketName), GcsBlobName(path)).compile.to[Array].unsafeToFuture().map { byteArray =>
-      if(decompress) decompressGzip(byteArray).map(_.toChar).mkString.parseJson.convertTo[T]
-      else byteArray.map(_.toChar).mkString.parseJson.convertTo[T]
+      val bytes = if (decompress) decompressGzip(byteArray) else byteArray
+      logger.info(s"successfully read $path; parsing ...")
+      val obj = bytes.map(_.toChar).mkString.parseJson.convertTo[T]
+      logger.info(s"successfully parsed $path")
+      obj
     }
   }
 
