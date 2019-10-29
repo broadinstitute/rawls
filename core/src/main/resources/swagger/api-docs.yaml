@@ -491,7 +491,7 @@ paths:
           schema:
             type: array
             items:
-              $ref: '#/definitions/Workspace'
+              $ref: '#/definitions/WorkspaceDetails'
         '403':
           description: You must be an admin to list workspaces
           schema:
@@ -2717,6 +2717,8 @@ paths:
       responses:
         '201':
           description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkspaceDetails'
           headers:
             Location:
               description: The path to the newly created workspace
@@ -2770,7 +2772,10 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: List workspaces you have access to
+      description: >
+        List all workspaces to which you have access, optionally filtered to only the specified fields. See the
+        get-workspace API at GET /api/workspaces/{workspaceNamespace}/{workspaceName} to retrieve additional
+        information about a given workspace.
       tags:
         - workspaces
       summary: List workspaces
@@ -2802,7 +2807,7 @@ paths:
         '200':
           description: Successful Request
           schema:
-            $ref: '#/definitions/Workspace'
+            $ref: '#/definitions/WorkspaceDetails'
         '400':
           description: Attribute does not exist or is of an unexpected type
           schema:
@@ -2864,7 +2869,10 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: Get workspace details
+      description: >
+        Get a single workspace's details, optionally filtered to only the specified fields. See additional GET methods
+        in this section to retrieve additional details about the workspace. For instance, this API only returns the
+        workspace's owners; use the GET .../acl method to retrieve the full list of all users at all permission levels.
       tags:
         - workspaces
       summary: Get workspace details
@@ -2942,6 +2950,8 @@ paths:
       responses:
         '201':
           description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkspaceDetails'
           headers:
             Location:
               description: The path to the newly cloned workspace
@@ -4405,58 +4415,55 @@ definitions:
         type: boolean
         description: True if the user can launch compute in this workspace, false otherwise
 
-  Workspace:
+  WorkspaceDetails:
     description: ''
     required:
-      - namespace
-      - name
-      - workspaceId
       - bucketName
-      - createdDate
       - createdBy
-      - attributes
-      - accessLevels
+      - createdDate
+      - isLocked
+      - lastModified
+      - name
+      - namespace
+      - workspaceId
     properties:
-      namespace:
-        type: string
-        description: The namespace the workspace belongs to
-      name:
-        type: string
-        description: The name of the workspace
+      attributes:
+        type: object
+        description: Map[String, Attribute]
       authorizationDomain:
         type: array
         items:
           $ref: '#/definitions/ManagedGroupRef'
         description: The list of groups in the Authorization Domain (empty if no AD is set)
-      workspaceId:
-        type: string
-        description: A UUID associated with the workspace
       bucketName:
         type: string
         description: The name of the bucket associated with the workspace
+      createdBy:
+        type: string
+        description: The user who created the workspace
       createdDate:
         type: string
         format: date-time
         description: 'The date the workspace was created in yyyy-MM-ddTHH:mm:ss.SSSZZ format'
+      isLocked:
+        type: boolean
+        description: Can the Workspace currently be modified?
       lastModified:
         type: string
         format: date-time
         description: 'The date the workspace was last modified in yyyy-MM-ddTHH:mm:ss.SSSZZ format'
-      createdBy:
+      name:
         type: string
-        description: The user who created the workspace
-      attributes:
-        type: object
-        description: Map[String, Attribute]
-      accessLevels:
-         type: object
-         description: Map[String, RawlsGroupRef]
-      authDomainACLs:
-         type: object
-         description: Map[String, RawlsGroupRef]
-      isLocked:
-        type: boolean
-        description: Can the Workspace currently be modified?
+        description: The name of the workspace
+      namespace:
+        type: string
+        description: The namespace the workspace belongs to
+      workflowCollectionName:
+        type: string
+        description: The name of the workflow collection associated with the workspace
+      workspaceId:
+        type: string
+        description: A UUID associated with the workspace
 
   WorkspaceSubmissionStats:
     description: Statistics about submissions in a workspace
@@ -4547,41 +4554,42 @@ definitions:
         format: date-time
         description: When the event finished
 
-  WorkspaceListResponse:
-    description: ''
-    properties:
-      accessLevel:
-        $ref: '#/definitions/WorkspaceAccessLevel'
-      canShare:
-        type: boolean
-      canCompute:
-        type: boolean
-      catalog:
-        type: boolean
-      workspace:
-        $ref: '#/definitions/Workspace'
-      workspaceSubmissionStats:
-        $ref: '#/definitions/WorkspaceSubmissionStats'
-      bucketOptions:
-        $ref: '#/definitions/WorkspaceBucketOptions'
-      owners:
-        type: array
-        items:
-          type: string
-
   WorkspaceResponse:
     description: ''
     properties:
       accessLevel:
         $ref: '#/definitions/WorkspaceAccessLevel'
-      workspace:
-        $ref: '#/definitions/Workspace'
-      workspaceSubmissionStats:
-        $ref: '#/definitions/WorkspaceSubmissionStats'
+      bucketOptions:
+        $ref: '#/definitions/WorkspaceBucketOptions'
+      canCompute:
+        type: boolean
+      canShare:
+        type: boolean
+      catalog:
+        type: boolean
       owners:
         type: array
         items:
           type: string
+        description: >
+          Owners of this workspace. This API only lists owners; use the get-workspace-ACL API to get the full list of
+          all users at all permission levels.
+      workspace:
+        $ref: '#/definitions/WorkspaceDetails'
+      workspaceSubmissionStats:
+        $ref: '#/definitions/WorkspaceSubmissionStats'
+
+  WorkspaceListResponse:
+    description: ''
+    properties:
+      accessLevel:
+        $ref: '#/definitions/WorkspaceAccessLevel'
+      public:
+        type: boolean
+      workspace:
+        $ref: '#/definitions/WorkspaceDetails'
+      workspaceSubmissionStats:
+        $ref: '#/definitions/WorkspaceSubmissionStats'
 
   WorkspaceBucketOptions:
     description: 'Extra information about a GCS bucket attached to a workspace'
@@ -4594,10 +4602,13 @@ definitions:
 
   WorkspaceAccessLevel:
     description: 'The level of access a user or group has on a Workspace. NoAccess, Read, Write, Owner, ProjectOwner'
-    properties:
-      name:
-        type: string
-        description: Workspace Access Level
+    type: string
+    enum:
+      - PROJECT_OWNER
+      - OWNER
+      - WRITER
+      - READER
+      - NO ACCESS
 
   CallMetadata:
     description: Stuff you need to know about calls
