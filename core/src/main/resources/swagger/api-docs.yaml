@@ -333,15 +333,20 @@ paths:
           required: true
           type: string
         - in: body
-          name: newOwnerEmail
+          name: ownerInfo
+          schema:
+            type: object
+            required:
+              - newOwnerEmail
+              - newOwnerToken
+            properties:
+              newOwnerEmail:
+                type: string
+                description: Email of the current owner
+              newOwnerToken:
+                type: string
+                description: OAuth2Token of the current owner
           required: true
-          type: string
-          description: Email of the current owner
-        - in: body
-          name: newOwnerToken
-          required: true
-          type: string
-          description: OAuth2Token of the current owner
       responses:
         204:
           description: Successful project record removal
