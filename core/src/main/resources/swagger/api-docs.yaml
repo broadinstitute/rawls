@@ -2761,7 +2761,7 @@ paths:
           schema:
             type: array
             items:
-              $ref: '#/definitions/WorkspaceResponse'
+              $ref: '#/definitions/WorkspaceListResponse'
         '400':
           description: Unrecognized query parameters
           schema:
@@ -2851,7 +2851,7 @@ paths:
         '200':
           description: Successful Request
           schema:
-            $ref: '#/definitions/WorkspaceListResponse'
+            $ref: '#/definitions/WorkspaceResponse'
         '400':
           description: Unrecognized query parameters
           schema:
@@ -4547,7 +4547,7 @@ definitions:
         format: date-time
         description: When the event finished
 
-  WorkspaceResponse:
+  WorkspaceListResponse:
     description: ''
     properties:
       accessLevel:
@@ -4569,7 +4569,7 @@ definitions:
         items:
           type: string
 
-  WorkspaceListResponse:
+  WorkspaceResponse:
     description: ''
     properties:
       accessLevel:
