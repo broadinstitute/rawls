@@ -1524,7 +1524,7 @@ paths:
           name: attributeUpdateJson
           required: false
           schema:
-            $ref: '#/definitions/AttributeUpdateOperation'
+            $ref: '#/definitions/AttributeUpdateOperationArray'
       security:
         - authorization:
             - openid
@@ -2850,7 +2850,7 @@ paths:
           name: entityUpdateJson
           required: true
           schema:
-            $ref: '#/definitions/AttributeUpdateOperation'
+            $ref: '#/definitions/AttributeUpdateOperationArray'
       security:
         - authorization:
             - openid
@@ -4004,112 +4004,135 @@ definitions:
         items:
           type: string
 
-  AttributeUpdateOperation:
+  AttributeUpdateOperationArray:
     description: ''
     type: array
     items:
-      - $ref: '#/definitions/AddUpdateAttribute'
-      - $ref: '#/definitions/RemoveAttribute'
-      - $ref: '#/definitions/AddListMember'
-      - $ref: '#/definitions/RemoveListMember'
-      - $ref: '#/definitions/CreateAttributeEntityReferenceList'
-      - $ref: '#/definitions/CreateAttributeValueList'
+      - $ref: '#/definitions/AtttributeUpdateOperation'
+    example: >
+      [
+        {
+          "op": "AddUpdateAttribute",
+          "attributeName": "string",
+          "addUpdateAttribute": "string"
+        },
+        {
+          "op": "RemoveAttribute",
+          "attributeName": "string"
+        },
+        {
+          "op": "AddListMember",
+          "attributeListName": "string",
+          "newMember": "string"
+        },
+        {
+          "op": "RemoveListMember",
+          "attributeListName": "string",
+          "removeMember": "string"
+        },
+        {
+          "op": "CreateAttributeEntityReferenceList",
+          "attributeListName": "string"
+        },
+        {
+          "op": "CreateAttributeValueList",
+          "attributeName": "string"
+        }
+      ]
+
+  AtttributeUpdateOperation:
+    discriminator: op
+    required:
+      - op
+    properties:
+        op:
+          type: string
+          description: The operation to perform on the attribute
+          enum:
+            - AddUpdateAttribute
+            - RemoveAttribute
+            - AddListMember
+            - RemoveListMember
+            - CreateAttributeEntityReferenceList
+            - CreateAttributeValueList
 
   AddUpdateAttribute:
-    description: ''
+    allOf:
+      - $ref: '#/definitions/AtttributeUpdateOperation'
+      - properties:
+          attributeName:
+            type: string
+            description: The name of the attribute
+          addUpdateAttribute:
+            type: string
+            description: The update attribute
     required:
       - op
       - attributeName
       - addUpdateAttribute
-    properties:
-      op:
-        type: string
-        description: The operation to perform on the attribute
-        default: AddUpdateAttribute
-      attributeName:
-        type: string
-        description: The name of the attribute
-      addUpdateAttribute:
-        type: string
-        description: The update attribute
 
   RemoveAttribute:
-    description: ''
+    allOf:
+      - $ref: '#/definitions/AtttributeUpdateOperation'
+      - properties:
+          attributeName:
+            type: string
+            description: The name of the attribute
     required:
       - op
       - attributeName
-    properties:
-      op:
-        type: string
-        description: The operation to perform on the attribute
-        default: RemoveAttribute
-      attributeName:
-        type: string
-        description: The name of the attribute
 
   AddListMember:
-    description: ''
+    allOf:
+      - $ref: '#/definitions/AtttributeUpdateOperation'
+      - properties:
+          attributeListName:
+            type: string
+            description: The name of the attribute list
+          newMember:
+            type: string
+            description: The attribute to add
     required:
       - op
       - attributeListName
       - newMember
-    properties:
-      op:
-        type: string
-        description: The operation to perform on the attribute. The attribute type must match the list type, reference or value
-        default: AddListMember
-      attributeListName:
-        type: string
-        description: The name of the attribute list
-      newMember:
-        type: string
-        description: The attribute to add
 
   RemoveListMember:
-    description: ''
+    allOf:
+      - $ref: '#/definitions/AtttributeUpdateOperation'
+      - properties:
+          attributeListName:
+            type: string
+            description: The name of the attribute list
+          removeMember:
+            type: string
+            description: The attribute to remove
     required:
       - op
       - attributeListName
       - removeMember
-    properties:
-      op:
-        type: string
-        description: The operation to perform on the attribute
-        default: RemoveListMember
-      attributeListName:
-        type: string
-        description: The name of the attribute list
-      removeMember:
-        type: string
-        description: The attribute to remove
 
   CreateAttributeEntityReferenceList:
-    description: ''
+    allOf:
+      - $ref: '#/definitions/AtttributeUpdateOperation'
+      - properties:
+          attributeListName:
+            type: string
+            description: The name of the empty attribute entity reference list to create. This is a non-destructive operation.
     required:
       - op
       - attributeListName
-    properties:
-      op:
-        type: string
-        description: The operation to perform on the attribute
-        default: CreateAttributeEntityReferenceList
-      attributeListName:
-        type: string
-        description: The name of the empty attribute entity reference list to create. This is a non-destructive operation.
 
   CreateAttributeValueList:
-    description: ''
+    allOf:
+      - $ref: '#/definitions/AtttributeUpdateOperation'
+      - properties:
+          attributeName:
+            type: string
+            description: The name of the empty attribute value list to create. This is a non-destructive operation.
     required:
       - op
       - attributeName
-    properties:
-      op:
-        type: string
-        description: The operation to perform on the attribute
-        default: CreateAttributeValueList
-      attributeName:
-        type: string
-        description: The name of the empty attribute value list to create. This is a non-destructive operation.
 
   EntityUpdateDefinition:
     description: ''
@@ -4125,7 +4148,7 @@ definitions:
         type: string
         description: The type of the entity
       operations:
-        $ref: '#/definitions/AttributeUpdateOperation'
+        $ref: '#/definitions/AttributeUpdateOperationArray'
 
   MethodConfiguration:
     description: ''
