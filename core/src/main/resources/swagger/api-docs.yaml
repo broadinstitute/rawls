@@ -2850,9 +2850,7 @@ paths:
           name: entityUpdateJson
           required: true
           schema:
-            type: array
-            items:
-              $ref: '#/definitions/AttributeUpdateOperation'
+            $ref: '#/definitions/AttributeUpdateOperation'
       security:
         - authorization:
             - openid
@@ -4008,19 +4006,14 @@ definitions:
 
   AttributeUpdateOperation:
     description: ''
-    properties:
-      Example payload for AddUpdateAttribute:
-        $ref: '#/definitions/AddUpdateAttribute'
-      Example payload for RemoveAttribute:
-        $ref: '#/definitions/RemoveAttribute'
-      Example payload for AddListMember:
-        $ref: '#/definitions/AddListMember'
-      Example payload for RemoveListMember:
-        $ref: '#/definitions/RemoveListMember'
-      Example payload for CreateAttributeEntityReferenceList:
-        $ref: '#/definitions/CreateAttributeEntityReferenceList'
-      Example payload for CreateAttributeValueList:
-        $ref: '#/definitions/CreateAttributeValueList'
+    type: array
+    items:
+      - $ref: '#/definitions/AddUpdateAttribute'
+      - $ref: '#/definitions/RemoveAttribute'
+      - $ref: '#/definitions/AddListMember'
+      - $ref: '#/definitions/RemoveListMember'
+      - $ref: '#/definitions/CreateAttributeEntityReferenceList'
+      - $ref: '#/definitions/CreateAttributeValueList'
 
   AddUpdateAttribute:
     description: ''
@@ -4032,6 +4025,7 @@ definitions:
       op:
         type: string
         description: The operation to perform on the attribute
+        default: AddUpdateAttribute
       attributeName:
         type: string
         description: The name of the attribute
@@ -4048,6 +4042,7 @@ definitions:
       op:
         type: string
         description: The operation to perform on the attribute
+        default: RemoveAttribute
       attributeName:
         type: string
         description: The name of the attribute
@@ -4062,6 +4057,7 @@ definitions:
       op:
         type: string
         description: The operation to perform on the attribute. The attribute type must match the list type, reference or value
+        default: AddListMember
       attributeListName:
         type: string
         description: The name of the attribute list
@@ -4079,6 +4075,7 @@ definitions:
       op:
         type: string
         description: The operation to perform on the attribute
+        default: RemoveListMember
       attributeListName:
         type: string
         description: The name of the attribute list
@@ -4095,6 +4092,7 @@ definitions:
       op:
         type: string
         description: The operation to perform on the attribute
+        default: CreateAttributeEntityReferenceList
       attributeListName:
         type: string
         description: The name of the empty attribute entity reference list to create. This is a non-destructive operation.
@@ -4103,12 +4101,13 @@ definitions:
     description: ''
     required:
       - op
-      - attributeListName
+      - attributeName
     properties:
       op:
         type: string
         description: The operation to perform on the attribute
-      attributeListName:
+        default: CreateAttributeValueList
+      attributeName:
         type: string
         description: The name of the empty attribute value list to create. This is a non-destructive operation.
 
