@@ -4008,7 +4008,7 @@ definitions:
     description: ''
     type: array
     items:
-      - $ref: '#/definitions/AtttributeUpdateOperation'
+      $ref: '#/definitions/AtttributeUpdateOperation'
     example: >
       [
         {
