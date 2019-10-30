@@ -492,11 +492,11 @@ trait EntityComponent {
       if (upserts.isEmpty && deletes.isEmpty) {
         DBIO.successful(()) //no-op
       } else if (deleteIntersectUpsert.nonEmpty) {
-        DBIO.failed(new RawlsException(s"Can't saveEntityPatch on $entityRef because upserts and deletes share attributes $deleteIntersectUpsert"))
+        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(message = s"Can't saveEntityPatch on $entityRef because upserts and deletes share attributes $deleteIntersectUpsert", statusCode = StatusCodes.BadRequest)))
       } else {
         getEntityRecords(workspaceContext.workspaceId, Set(entityRef)) flatMap { entityRecs =>
           if (entityRecs.length != 1) {
-            throw new RawlsException(s"saveEntityPatch looked up $entityRef expecting 1 record, got ${entityRecs.length} instead")
+            throw new RawlsExceptionWithErrorReport(ErrorReport(message = s"saveEntityPatch looked up $entityRef expecting 1 record, got ${entityRecs.length} instead", statusCode = StatusCodes.BadRequest))
           }
 
           val entityRecord = entityRecs.head
