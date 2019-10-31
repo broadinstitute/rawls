@@ -4013,30 +4013,30 @@ definitions:
       [
         {
           "op": "AddUpdateAttribute",
-          "attributeName": "string",
-          "addUpdateAttribute": "string"
+          "attributeName": "name of attribute to add/update",
+          "addUpdateAttribute": "value to add/update"
         },
         {
           "op": "RemoveAttribute",
-          "attributeName": "string"
+          "attributeName": "name of attribute to remove"
         },
         {
           "op": "AddListMember",
-          "attributeListName": "string",
-          "newMember": "string"
+          "attributeListName": "name of list attribute",
+          "newMember": "value to add to list"
         },
         {
           "op": "RemoveListMember",
-          "attributeListName": "string",
-          "removeMember": "string"
+          "attributeListName": "name of list attribute",
+          "removeMember": "value to remove from list"
         },
         {
           "op": "CreateAttributeEntityReferenceList",
-          "attributeListName": "string"
+          "attributeListName": "name of entity-reference list attribute to create"
         },
         {
           "op": "CreateAttributeValueList",
-          "attributeName": "string"
+          "attributeName": "name of value-list attribute to create"
         }
       ]
 
@@ -4062,10 +4062,10 @@ definitions:
       - properties:
           attributeName:
             type: string
-            description: The name of the attribute
+            description: Name of attribute to add/update
           addUpdateAttribute:
             type: string
-            description: The update attribute
+            description: Value to add/update. Accepts strings, numbers, booleans.
     required:
       - op
       - attributeName
@@ -4077,7 +4077,7 @@ definitions:
       - properties:
           attributeName:
             type: string
-            description: The name of the attribute
+            description: The name of attribute to remove
     required:
       - op
       - attributeName
@@ -4091,7 +4091,7 @@ definitions:
             description: The name of the attribute list
           newMember:
             type: string
-            description: The attribute to add
+            description: The attribute to add to the list
     required:
       - op
       - attributeListName
@@ -4106,7 +4106,7 @@ definitions:
             description: The name of the attribute list
           removeMember:
             type: string
-            description: The attribute to remove
+            description: The attribute to remove from the list
     required:
       - op
       - attributeListName
@@ -4118,7 +4118,7 @@ definitions:
       - properties:
           attributeListName:
             type: string
-            description: The name of the empty attribute entity reference list to create. This is a non-destructive operation.
+            description: The name of the empty attribute entity-reference list to create. This is a non-destructive operation.
     required:
       - op
       - attributeListName
@@ -4129,7 +4129,7 @@ definitions:
       - properties:
           attributeName:
             type: string
-            description: The name of the empty attribute value list to create. This is a non-destructive operation.
+            description: The name of the empty attribute value-list to create. This is a non-destructive operation.
     required:
       - op
       - attributeName
