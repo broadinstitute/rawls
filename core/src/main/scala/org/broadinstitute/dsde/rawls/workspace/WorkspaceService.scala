@@ -82,11 +82,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   import dataSource.dataAccess.driver.api._
 
   def CreateWorkspace(workspace: WorkspaceRequest, parentSpan: Span = null) = createWorkspace(workspace, parentSpan)
-  def GetWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs, parentSpan: Span = null) = getWorkspace(workspaceName, params, parentSpan)
+  def GetWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs, parentSpan: Span) = getWorkspace(workspaceName, params, parentSpan)
   def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
   def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)
   def UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateLibraryAttributes(workspaceName, operations)
-  def ListWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span = null) = traceWithParent("listWorkspaces", parentSpan)(span => listWorkspaces(params, span))
+  def ListWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span) = listWorkspaces(params, parentSpan)
   def ListAllWorkspaces = listAllWorkspaces()
   def GetTags(query: Option[String]) = getTags(query)
   def AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) = asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) }
@@ -212,7 +212,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               Future.successful(WorkspaceAccessLevels.NoAccess)
             }
 
-          traceDBIOWithParent("accessLevelFuture", s2)(_ => DBIO.from(accessLevelFuture())) flatMap { accessLevel =>
+          traceDBIOWithParent("accessLevelFuture", s2)(s3 => DBIO.from(accessLevelFuture())) flatMap { accessLevel =>
             // we may have calculated accessLevel because canShare/canCompute needs it;
             // but if the user didn't ask for it, don't return it
             val optionalAccessLevelForResponse = if (options.contains("accessLevel")) { Option(accessLevel) } else { None }
