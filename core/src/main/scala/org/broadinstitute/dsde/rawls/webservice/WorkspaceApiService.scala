@@ -43,8 +43,10 @@ trait WorkspaceApiService extends UserInfoDirectives {
       } ~
         get {
           parameterSeq { allParams =>
-            complete {
-              workspaceServiceConstructor(userInfo).ListWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"))
+            traceRequest { span =>
+              complete {
+                workspaceServiceConstructor(userInfo).ListWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
+              }
             }
           }
         }
@@ -57,8 +59,12 @@ trait WorkspaceApiService extends UserInfoDirectives {
         } ~
           get {
             parameterSeq { allParams =>
-              complete { workspaceServiceConstructor(userInfo).GetWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
-                WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")) }
+              traceRequest { span =>
+                complete {
+                  workspaceServiceConstructor(userInfo).GetWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
+                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
+                }
+              }
             }
           } ~
           delete {
