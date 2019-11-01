@@ -42,6 +42,8 @@ import io.opencensus.trace.Span
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
+import io.opencensus.trace.{Span, Status}
+
 
 
 /**
@@ -80,11 +82,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   import dataSource.dataAccess.driver.api._
 
   def CreateWorkspace(workspace: WorkspaceRequest, parentSpan: Span = null) = createWorkspace(workspace, parentSpan)
-  def GetWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs) = getWorkspace(workspaceName, params)
+  def GetWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs, parentSpan: Span) = getWorkspace(workspaceName, params, parentSpan)
   def DeleteWorkspace(workspaceName: WorkspaceName) = deleteWorkspace(workspaceName)
   def UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateWorkspace(workspaceName, operations)
   def UpdateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) = updateLibraryAttributes(workspaceName, operations)
-  def ListWorkspaces(params: WorkspaceFieldSpecs) = listWorkspaces(params)
+  def ListWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span) = listWorkspaces(params, parentSpan)
   def ListAllWorkspaces = listAllWorkspaces()
   def GetTags(query: Option[String]) = getTags(query)
   def AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) = asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) }
@@ -176,7 +178,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     args
   }
 
-  def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs): Future[PerRequestMessage] = {
+  def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs, parentSpan: Span = null): Future[PerRequestMessage] = {
+    val span = startSpanWithParent("optionsProcessing", parentSpan)
+
     // validate the inbound parameters
     val options = Try(validateParams(params, WorkspaceFieldNames.workspaceResponseFieldNames)) match {
       case Success(opts) => opts
@@ -192,10 +196,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       options.filter(_.startsWith("workspace.attributes."))
         .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.",""))).toList
     )
+    span.setStatus(Status.OK)
+    span.end()
 
     dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess, Option(attrSpecs)) { workspaceContext =>
-        requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
+      traceDBIOWithParent("withWorkspaceContext", parentSpan)(s1 => withWorkspaceContext(workspaceName, dataAccess, Option(attrSpecs)) { workspaceContext =>
+        traceDBIOWithParent("requireAccess", s1)(s2 => requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
 
           // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
           // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -206,42 +212,42 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               Future.successful(WorkspaceAccessLevels.NoAccess)
             }
 
-          DBIO.from(accessLevelFuture()) flatMap { accessLevel =>
+          traceDBIOWithParent("accessLevelFuture", s2)(s3 => DBIO.from(accessLevelFuture())) flatMap { accessLevel =>
             // we may have calculated accessLevel because canShare/canCompute needs it;
             // but if the user didn't ask for it, don't return it
             val optionalAccessLevelForResponse = if (options.contains("accessLevel")) { Option(accessLevel) } else { None }
 
             // determine which functions to use for the various part of the response
             def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
-              gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace)).map(Option(_))
+              traceWithParent("getBucketDetails",s2)(_ =>  gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace)).map(Option(_)))
             } else {
               noFuture
             }
             def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
-              getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel).map(Option(_))
+              traceWithParent("getUserComputePermissions",s2)(_ =>  getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel).map(Option(_)))
             } else {
               noFuture
             }
             def canShareFuture(): Future[Option[Boolean]] = if (options.contains("canShare")) {
               //convoluted but accessLevel for both params because user could at most share with their own access level
-              getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel).map(Option(_))
+              traceWithParent("getUserSharePermissions",s2)(_ =>  getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel).map(Option(_)))
             } else {
               noFuture
             }
             def catalogFuture(): Future[Option[Boolean]] = if (options.contains("catalog")) {
-              getUserCatalogPermissions(workspaceContext.workspaceId.toString).map(Option(_))
+              traceWithParent("getUserCatalogPermissions",s2)(_ =>  getUserCatalogPermissions(workspaceContext.workspaceId.toString).map(Option(_)))
             } else {
               noFuture
             }
 
             def ownersFuture(): Future[Option[Set[String]]] = if (options.contains("owners")) {
-              getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_))
+              traceWithParent("getWorkspaceOwners",s2)(_ =>  getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_)))
             } else {
               noFuture
             }
 
             def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] = if (options.contains("workspace.authorizationDomain")) {
-              loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo).map(Option(_))
+              traceWithParent("loadResourceAuthDomain",s2)(_ =>  loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo).map(Option(_)))
             } else {
               noFuture
             }
@@ -264,7 +270,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             for {
               (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
-              stats <- workspaceSubmissionStatsFuture()
+              stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", s2)( _ => workspaceSubmissionStatsFuture())
             } yield {
               // post-process JSON to remove calculated-but-undesired keys
               val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, attrSpecs.all || attrSpecs.attrsToSelect.nonEmpty), stats, bucketDetails, owners)
@@ -272,8 +278,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               RequestComplete(StatusCodes.OK, filteredJson)
             }
           }
-        }
-      }
+        })
+      })
     }
   }
 
@@ -453,7 +459,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def listWorkspaces(params: WorkspaceFieldSpecs): Future[PerRequestMessage] = {
+  def listWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span): Future[PerRequestMessage] = {
+
+    val s = startSpanWithParent("optionHandling", parentSpan)
 
     // validate the inbound parameters
     val options = Try(validateParams(params, WorkspaceFieldNames.workspaceListResponseFieldNames)) match {
@@ -474,8 +482,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val submissionStatsEnabled = options.contains("workspaceSubmissionStats")
     val attributesEnabled = attributeSpecs.all || attributeSpecs.attrsToSelect.nonEmpty
 
+    s.setStatus(Status.OK)
+    s.end()
+
     for {
-      workspacePolicies <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
+      workspacePolicies <- traceWithParent("getPolicies", parentSpan)(_ => samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
       // filter out the policies that are not related to access levels, if a user has only those ignore the workspace
       accessLevelWorkspacePolicies = workspacePolicies.filter(p => WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty)
       result <- dataSource.inTransaction({ dataAccess =>
@@ -487,11 +498,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
 
         val query = for {
-          submissionSummaryStats <- workspaceSubmissionStatsFuture()
-          workspaces <- dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq, Option(attributeSpecs))
+          submissionSummaryStats <- traceDBIOWithParent("submissionStats", parentSpan)(_ => workspaceSubmissionStatsFuture())
+          workspaces <- traceDBIOWithParent("listByIds", parentSpan)(_ => dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq, Option(attributeSpecs)))
         } yield (submissionSummaryStats, workspaces)
 
-        val results = query.map { case (submissionSummaryStats, workspaces) =>
+        val results = traceDBIOWithParent("finalResults", parentSpan)(_ => query.map { case (submissionSummaryStats, workspaces) =>
           val policiesByWorkspaceId = accessLevelWorkspacePolicies.groupBy(_.resourceId).map { case (workspaceId, policies) =>
             workspaceId -> policies.reduce { (p1, p2) =>
               val betterAccessPolicyName = (WorkspaceAccessLevels.withPolicyName(p1.accessPolicyName.value), WorkspaceAccessLevels.withPolicyName(p2.accessPolicyName.value)) match {
@@ -523,7 +534,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public)
           }
-        }
+        })
 
         results.map { responses =>
           if (!optionsExist) {
