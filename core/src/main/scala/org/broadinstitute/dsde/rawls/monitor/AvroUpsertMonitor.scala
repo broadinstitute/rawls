@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
@@ -26,6 +27,7 @@ import spray.json.DefaultJsonProtocol._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.{FiniteDuration, _}
 import scala.language.postfixOps
+import scala.util.{Failure, Success}
 
 /**
   * Created by mbemis on 10/17/19.
@@ -165,7 +167,10 @@ class AvroUpsertMonitorActor(
       file match {
         case "upsert.json" =>
           logger.info(s"processing $file message for job $jobId with ackId ${message.ackId} in message: $message")
-          initAvroUpsert(jobId, message.ackId).map(_ => ImportComplete) pipeTo self
+          toFutureTry(initAvroUpsert(jobId, message.ackId)) map {
+            case Success(_) => writeResult(s"$jobId/success.json", resultString("import successful")).map(_ => ImportComplete) pipeTo self
+            case Failure(t) =>  writeResult(s"$jobId/error.json", resultString(t.getMessage)).map(_ => ImportComplete) pipeTo self
+          }
         case _ =>
           logger.info(s"found ignorable file $file message for job $jobId with ackId ${message.ackId} in message: $message")
           acknowledgeMessage(message.ackId).map(_ => ImportComplete) pipeTo self //some other file (i.e. success/failure log, metadata.json)
@@ -190,7 +195,7 @@ class AvroUpsertMonitorActor(
       self ! None
   }
 
-  private def initAvroUpsert(jobId: String, ackId: String): Future[Unit] = {
+  private def initAvroUpsert(jobId: String, ackId: String): Future[List[PerRequestMessage]] = {
     for {
       avroMetadataJson <- readMetadataObject(s"$jobId/metadata.json")
       //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the uspert is lost
@@ -205,9 +210,16 @@ class AvroUpsertMonitorActor(
         }.unsafeToFuture
     } yield {
       logger.info(s"completed Avro upsert job ${avroMetadataJson.jobId} for user: ${avroMetadataJson.userEmail} with ${avroUpsertJson.size} entities")
-      ()
+      upsertResults
     }
   }
+
+  private def writeResult(path: String, message: String): Future[Unit] = {
+    logger.info(s"writing import result to $path")
+    googleStorage.createBlob(GcsBucketName(avroUpsertBucketName), GcsBlobName(path), message.getBytes).compile.drain.unsafeToFuture()
+  }
+
+  private def resultString(message: String) = s"""{\"message\":\"${message}\"}"""
 
   private def acknowledgeMessage(ackId: String) = {
     logger.info(s"acking message with ackId $ackId")
