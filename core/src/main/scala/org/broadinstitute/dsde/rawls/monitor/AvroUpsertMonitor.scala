@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
