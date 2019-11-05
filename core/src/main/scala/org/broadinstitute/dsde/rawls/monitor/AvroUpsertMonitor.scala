@@ -195,7 +195,7 @@ class AvroUpsertMonitorActor(
       self ! None
   }
 
-  private def initAvroUpsert(jobId: String, ackId: String): Future[List[PerRequestMessage]] = {
+  private def initAvroUpsert(jobId: String, ackId: String): Future[Unit] = {
     for {
       avroMetadataJson <- readMetadataObject(s"$jobId/metadata.json")
       //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the uspert is lost
@@ -210,7 +210,7 @@ class AvroUpsertMonitorActor(
         }.unsafeToFuture
     } yield {
       logger.info(s"completed Avro upsert job ${avroMetadataJson.jobId} for user: ${avroMetadataJson.userEmail} with ${avroUpsertJson.size} entities")
-      upsertResults
+      ()
     }
   }
 
