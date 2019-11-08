@@ -66,7 +66,6 @@ import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
 import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
-import io.chrisdavenport.linebacker.Linebacker
 import io.chrisdavenport.log4cats.Logger
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
@@ -216,21 +215,7 @@ class HttpGoogleServicesDAO(
   }
 
   override def setupWorkspace(userInfo: UserInfo, projectName: RawlsBillingProjectName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], bucketName: String, labels: Map[String, String], parentSpan: Span = null): Future[GoogleWorkspaceInfo] = {
-
-    def setBucketLogging(bucketName: String): Future[String] = {
-      implicit val service = GoogleInstrumentedService.Storage
-
-      val logging = new Logging().setLogBucket(getStorageLogsBucketName(projectName))
-      val bucket = new Bucket().setName(bucketName).setLogging(logging)
-
-      val updater = getStorage(getBucketServiceAccountCredential).buckets.update(bucketName, bucket)
-
-      retryWhen500orGoogleError { () =>
-        executeGoogleRequest(updater)
-      }.map(_.getName)
-    }
-
-    def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail], traceId: TraceId): Stream[IO, Unit] = {
+    def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Stream[IO, Unit] = {
       //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
       //do not have separate permissions that deviate from the bucket-level permissions.
       //
@@ -248,13 +233,9 @@ class HttpGoogleServicesDAO(
         policyGroupsByAccessLevel.map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) } +
           (Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
 
-      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect { case (role,identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)}
+      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect { case (role, identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList) }
 
-      //The calls to setBucketPolicyOnly and setIamPolicy are coupled because in this case, we only want to use these specific
-      //storage roles _if_ bucket policy only is enabled. See above comment for a more in-depth explanation.
       for {
-        _ <- googleStorageService.setBucketPolicyOnly(GcsBucketName(bucketName), true)
-
         // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
         // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
         _ <- googleStorageService.setIamPolicy(GcsBucketName(bucketName), roleToIdentities,
@@ -269,8 +250,8 @@ class HttpGoogleServicesDAO(
           // manually insert an initial storage log
           val stream: InputStreamContent = new InputStreamContent("text/plain", new ByteArrayInputStream(
             s""""bucket","storage_byte_hours"
-                |"$bucketName","0"
-                |""".stripMargin.getBytes))
+               |"$bucketName","0"
+               |""".stripMargin.getBytes))
           // use an object name that will always be superseded by a real storage log
           val storageObject = new StorageObject().setName(s"${bucketName}_storage_00_initial_log")
           val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(getStorageLogsBucketName(projectName), storageObject, stream)
@@ -279,15 +260,19 @@ class HttpGoogleServicesDAO(
       }
     }
 
+    def bucketSetUp() = {
+      updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
+    }
+
     // setupWorkspace main logic
     val traceId = TraceId(UUID.randomUUID())
 
     for {
-      _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(GoogleProject(projectName.value), GcsBucketName(bucketName), None, Map.empty, Option(traceId)).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
-      _ <- traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel, traceId).compile.drain.unsafeToFuture())
-      _ <- traceWithParent("setBucketLogging", parentSpan)(_ => setBucketLogging(bucketName))
-      _ <- traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
-      _ <- traceWithParent("setBucketLabels", parentSpan)(_ => googleStorageService.setBucketLabels(GcsBucketName(bucketName), labels).compile.drain.unsafeToFuture())
+      _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(GoogleProject(projectName.value), GcsBucketName(bucketName), None, labels, Option(traceId), true, Option(getStorageLogsBucketName(projectName))).compile.drain.unsafeToFuture()) //ACL = None because bucket IAM will be set separately in updateBucketIam
+      updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture())
+      insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
+      _ <- updateBucketIamFuture
+      _ <- insertInitialStorageLogFuture
     } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
   }
 
