@@ -1988,7 +1988,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       )
 
       traceDBIOWithParent("save", parentSpan)(_ => dataAccess.workspaceQuery.save(workspace)).flatMap { _ =>
-        for {
+        DBIO.from(for {
           resource <- {
             val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(projectOwnerPolicyEmail), Set.empty, Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.projectOwner))
             val ownerPolicy = SamWorkspacePolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set(SamWorkspaceRoles.owner))
@@ -2001,15 +2001,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
             val defaultPolicies = Map(projectOwnerPolicy, ownerPolicy, writerPolicy, readerPolicy, shareReaderPolicy, shareWriterPolicy, canComputePolicy, canCatalogPolicy)
 
-            traceDBIOWithParent("createResourceFull", parentSpan)(_ => DBIO.from(samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo)))
+            traceWithParent("createResourceFull", parentSpan)(_ => samDAO.createResourceFull(SamResourceTypeNames.workspace, workspaceId, defaultPolicies, workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value), userInfo))
           }
 
           // policyMap has policyName -> policyEmail
           policyMap: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies.map( x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
 
-          _ <- traceDBIOWithParent("createWorkflowCollectionForWorkspace", parentSpan)( s1 => DBIO.from(createWorkflowCollectionForWorkspace(workspaceId, policyMap, s1)))
+          // declare these next two Futures so they start in parallel
+          createWorkflowCollectionFuture = traceWithParent("createWorkflowCollectionForWorkspace", parentSpan)( s1 => createWorkflowCollectionForWorkspace(workspaceId, policyMap, s1))
 
-          _ <- traceDBIOWithParent("traversePolicies", parentSpan)( s1 => DBIO.from(
+          traversePolicies = traceWithParent("traversePolicies", parentSpan)( s1 =>
             Future.traverse(policyMap) { x =>
               val policyName = x._1
               if (policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain.getOrElse(Set.empty).isEmpty) {
@@ -2025,8 +2026,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 Future.successful(())
               }
             }
-          ))
-        } yield (workspace, policyMap)
+          )
+
+          _ <- createWorkflowCollectionFuture
+
+          _ <- traversePolicies
+
+        } yield (workspace, policyMap))
       }
     }
 
