@@ -260,10 +260,6 @@ class HttpGoogleServicesDAO(
       }
     }
 
-    def bucketSetUp() = {
-      updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
-    }
-
     // setupWorkspace main logic
     val traceId = TraceId(UUID.randomUUID())
 
