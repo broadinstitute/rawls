@@ -99,18 +99,31 @@ function make_jar()
 
     # Get the last commit hash of the model directory and set it as an environment variable
     GIT_MODEL_HASH=$(git log -n 1 --pretty=format:%h model)
+    echo "got git model hash"
+    echo "$GIT_MODEL_HASH"
 
     # make jar.  cache sbt dependencies. capture output and stop db before returning.
     DOCKER_RUN="docker run --rm"
     if [ "$SKIP_TESTS" != "skip-tests" ]; then
         DOCKER_RUN="$DOCKER_RUN --link mysql:mysql"
     fi
+    echo "docker run set to $DOCKER_RUN"
+
     DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e GIT_MODEL_HASH=$GIT_MODEL_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working"
+
+    echo "docker run set to $DOCKER_RUN"
+
     JAR_CMD=$($DOCKER_RUN)
+
+    echo "jar cmd $JAR_CMD"
+
     EXIT_CODE=$?
+
+    echo "uh do we get here"
 
     if [ "$SKIP_TESTS" != "skip-tests" ]; then
         # stop mysql
+        echo "Stopping mysql"
         bash ./docker/run-mysql.sh stop
     fi
 
