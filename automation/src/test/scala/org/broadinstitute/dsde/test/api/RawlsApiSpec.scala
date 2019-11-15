@@ -369,33 +369,36 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
 
       withCleanBillingProject(studentA) { projectName =>
         withWorkspace(projectName, "test-copy-files", Set.empty) { workspaceName =>
-          val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
+          withCleanUp {
+            val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
 
-          val fileToCopy = GcsObjectName("/pleasecopythis/foo.txt")
-          val fileToLeave = GcsObjectName("/dontcopythis/bar.txt")
+            val fileToCopy = GcsObjectName("/pleasecopythis/foo.txt")
+            val fileToLeave = GcsObjectName("/dontcopythis/bar.txt")
 
-          googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToCopy, "foo", "text/plain").futureValue
-          googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToLeave, "bar", "text/plain").futureValue
+            googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToCopy, "foo", "text/plain").futureValue
+            googleStorageDAO.storeObject(GcsBucketName(bucketName), fileToLeave, "bar", "text/plain").futureValue
 
-          val initialFiles = googleStorageDAO.listObjectsWithPrefix(GcsBucketName(bucketName), "").futureValue.map(_.value)
+            val initialFiles = googleStorageDAO.listObjectsWithPrefix(GcsBucketName(bucketName), "").futureValue.map(_.value)
 
-          initialFiles.size shouldBe 2
-          initialFiles should contain(fileToCopy.value)
-          initialFiles should contain(fileToLeave.value)
+            initialFiles.size shouldBe 2
+            initialFiles should contain(fileToCopy.value)
+            initialFiles should contain(fileToLeave.value)
 
-          val destWorkspaceName = workspaceName + "_clone"
-          Rawls.workspaces.clone(projectName, workspaceName, projectName, destWorkspaceName, Set.empty, Some("/pleasecopythis"))
-          val cloneBucketName = Rawls.workspaces.getBucketName(projectName, destWorkspaceName)
+            val destWorkspaceName = workspaceName + "_clone"
+            Rawls.workspaces.clone(projectName, workspaceName, projectName, destWorkspaceName, Set.empty, Some("/pleasecopythis"))
+            register cleanUp Rawls.workspaces.delete(projectName, destWorkspaceName)
+            val cloneBucketName = Rawls.workspaces.getBucketName(projectName, destWorkspaceName)
 
-          val start = System.currentTimeMillis()
-          eventually {
-            googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.size shouldBe 1
+            val start = System.currentTimeMillis()
+            eventually {
+              googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.size shouldBe 1
+            }
+            val finish = System.currentTimeMillis()
+
+            googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.map(_.value) should contain only fileToCopy.value
+
+            logger.info(s"Copied bucket files visible after ${finish - start} milliseconds")
           }
-          val finish = System.currentTimeMillis()
-
-          googleStorageDAO.listObjectsWithPrefix(GcsBucketName(cloneBucketName), "").futureValue.map(_.value) should contain only fileToCopy.value
-
-          logger.info(s"Copied bucket files visible after ${finish-start} milliseconds")
         }
       }
     }
