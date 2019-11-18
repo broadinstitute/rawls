@@ -5,6 +5,7 @@ object Merging {
     case x if x.endsWith("io.netty.versions.properties") => MergeStrategy.discard
     case PathList("org", "apache", xs @ _*) => MergeStrategy.last
     case PathList("com", "typesafe", xs @ _*) => MergeStrategy.last
+    case PathList("com", "google", "auto", "value", xs @ _*) => MergeStrategy.last
     case "application.conf" => MergeStrategy.first
     case "version.conf" => MergeStrategy.concat
     case "logback.xml" => MergeStrategy.first
