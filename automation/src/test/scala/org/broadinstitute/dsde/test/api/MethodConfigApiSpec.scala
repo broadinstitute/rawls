@@ -31,49 +31,50 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
       implicit val authToken: AuthToken = user.makeAuthToken()
 
       withCleanBillingProject(user) { billingProject =>
+        withCleanUp {
+          val copyFromWorkspaceSource = uuidWithPrefix("MethodConfigApiSpec_copyMethodConfigFromWorkspaceSource")
+          Rawls.workspaces.create(billingProject, copyFromWorkspaceSource);
+          register cleanUp Orchestration.workspaces.delete(billingProject, copyFromWorkspaceSource)
 
-        val copyFromWorkspaceSource = uuidWithPrefix("MethodConfigApiSpec_copyMethodConfigFromWorkspaceSource")
-        Rawls.workspaces.create(billingProject, copyFromWorkspaceSource);
-        register cleanUp Orchestration.workspaces.delete(billingProject, copyFromWorkspaceSource)
+          val copyToWorkspaceDestination = uuidWithPrefix("MethodConfigApiSpec_copyMethodConfigToWorkspaceDestination")
+          Rawls.workspaces.create(billingProject, copyToWorkspaceDestination);
+          register cleanUp Orchestration.workspaces.delete(billingProject, copyToWorkspaceDestination)
 
-        val copyToWorkspaceDestination = uuidWithPrefix("MethodConfigApiSpec_copyMethodConfigToWorkspaceDestination")
-        Rawls.workspaces.create(billingProject, copyToWorkspaceDestination);
-        register cleanUp Orchestration.workspaces.delete(billingProject, copyToWorkspaceDestination)
+          withMethod("MethodConfigApiSpec_from_workspace", MethodData.SimpleMethod, 1) { methodName =>
+            val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
-        withMethod("MethodConfigApiSpec_from_workspace", MethodData.SimpleMethod, 1) { methodName =>
-          val method = MethodData.SimpleMethod.copy(methodName = methodName)
+            Rawls.methodConfigs.createMethodConfigInWorkspace(
+              billingProject, copyFromWorkspaceSource, method, method.methodNamespace, method.methodName, 1,
+              Map.empty, Map.empty, method.rootEntityType)
 
-          Rawls.methodConfigs.createMethodConfigInWorkspace(
-            billingProject, copyFromWorkspaceSource, method, method.methodNamespace, method.methodName, 1,
-            Map.empty, Map.empty, method.rootEntityType)
+            Orchestration.workspaces.waitForBucketReadAccess(billingProject, copyToWorkspaceDestination)
 
-          Orchestration.workspaces.waitForBucketReadAccess(billingProject, copyToWorkspaceDestination)
+            val sourceMethodConfig = Map(
+              "name" -> method.methodName,
+              "namespace" -> method.methodNamespace,
+              "workspaceName" -> Map(
+                "namespace" -> billingProject,
+                "name" -> copyFromWorkspaceSource))
 
-          val sourceMethodConfig = Map(
-            "name" -> method.methodName,
-            "namespace" -> method.methodNamespace,
-            "workspaceName" -> Map(
-              "namespace" -> billingProject,
-              "name" -> copyFromWorkspaceSource))
+            val destMethodName: String = uuidWithPrefix(method.methodName)
+            val destMethodNamespace: String = uuidWithPrefix(method.methodNamespace)
 
-          val destMethodName: String = uuidWithPrefix(method.methodName)
-          val destMethodNamespace: String = uuidWithPrefix(method.methodNamespace)
+            val destMethodConfig = Map(
+              "name" -> destMethodName,
+              "namespace" -> destMethodNamespace,
+              "workspaceName" -> Map(
+                "namespace" -> billingProject,
+                "name" -> copyToWorkspaceDestination)
+            )
 
-          val destMethodConfig = Map(
-            "name" -> destMethodName,
-            "namespace" -> destMethodNamespace,
-            "workspaceName" -> Map(
-              "namespace" -> billingProject,
-              "name" -> copyToWorkspaceDestination)
-          )
+            // copy method config from source workspace to destination workspace
+            Rawls.methodConfigs.copyMethodConfigFromWorkspace(sourceMethodConfig, destMethodConfig)
 
-          // copy method config from source workspace to destination workspace
-          Rawls.methodConfigs.copyMethodConfigFromWorkspace(sourceMethodConfig, destMethodConfig)
+            // verify method config in destination workspace
+            assertMethodConfigInWorkspace(billingProject, copyToWorkspaceDestination,
+              destMethodNamespace, destMethodName)
 
-          // verify method config in destination workspace
-          assertMethodConfigInWorkspace(billingProject, copyToWorkspaceDestination,
-            destMethodNamespace, destMethodName)
-
+          }
         }
       }
     }
@@ -94,36 +95,38 @@ class MethodConfigApiSpec extends FreeSpec with WorkspaceFixtures with LazyLoggi
       implicit val authToken: AuthToken = user.makeAuthToken()
 
       withCleanBillingProject(user) { billingProject =>
+        withCleanUp {
 
-        val workspaceName = uuidWithPrefix("MethodConfigApiSpec_importMethodConfigFromMethodRepoWorkspace")
-        Rawls.workspaces.create(billingProject, workspaceName);
-        register cleanUp Orchestration.workspaces.delete(billingProject, workspaceName)
+          val workspaceName = uuidWithPrefix("MethodConfigApiSpec_importMethodConfigFromMethodRepoWorkspace")
+          Rawls.workspaces.create(billingProject, workspaceName);
+          register cleanUp Orchestration.workspaces.delete(billingProject, workspaceName)
 
-        val name = uuidWithPrefix("MethodConfigApiSpec_method")
-        val namespace = MethodData.SimpleMethod.creationAttributes.get("namespace").head + randomUuid
-        val attributes = MethodData.SimpleMethod.creationAttributes ++ Map("name" -> name, "namespace" -> namespace)
+          val name = uuidWithPrefix("MethodConfigApiSpec_method")
+          val namespace = MethodData.SimpleMethod.creationAttributes.get("namespace").head + randomUuid
+          val attributes = MethodData.SimpleMethod.creationAttributes ++ Map("name" -> name, "namespace" -> namespace)
 
-        Orchestration.methods.createMethod(attributes)
-        register cleanUp Orchestration.methods.redact(namespace, name, SimpleMethodConfig.snapshotId)
+          Orchestration.methods.createMethod(attributes)
+          register cleanUp Orchestration.methods.redact(namespace, name, SimpleMethodConfig.snapshotId)
 
-        val request = Map(
-          "methodRepoNamespace" -> SimpleMethodConfig.configNamespace,
-          "methodRepoName" -> SimpleMethodConfig.configName,
-          "methodRepoSnapshotId" -> SimpleMethodConfig.snapshotId,
-          "destination" -> Map(
-            "name" -> name,
-            "namespace" -> namespace,
-            "workspaceName" -> Map(
-              "namespace" -> billingProject,
-              "name" -> workspaceName
+          val request = Map(
+            "methodRepoNamespace" -> SimpleMethodConfig.configNamespace,
+            "methodRepoName" -> SimpleMethodConfig.configName,
+            "methodRepoSnapshotId" -> SimpleMethodConfig.snapshotId,
+            "destination" -> Map(
+              "name" -> name,
+              "namespace" -> namespace,
+              "workspaceName" -> Map(
+                "namespace" -> billingProject,
+                "name" -> workspaceName
+              )
             )
           )
-        )
 
-        Rawls.methodConfigs.copyMethodConfigFromMethodRepo(request)
+          Rawls.methodConfigs.copyMethodConfigFromMethodRepo(request)
 
-        // verify copied method config is in workspace
-        assertMethodConfigInWorkspace(billingProject, workspaceName, namespace, name)
+          // verify copied method config is in workspace
+          assertMethodConfigInWorkspace(billingProject, workspaceName, namespace, name)
+        }
       }
     }
 
