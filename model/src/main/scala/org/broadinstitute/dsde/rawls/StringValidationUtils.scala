@@ -15,6 +15,14 @@ trait StringValidationUtils {
     }
   }
 
+  private lazy val entityNameRegex = "[A-z0-9\\._-]+".r
+  def validateEntityName(s: String): Unit = {
+    if(! entityNameRegex.pattern.matcher(s).matches) {
+      val msg = s"Invalid input: $s. Input may only contain alphanumeric characters, underscores, dashes, and periods."
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
+    }
+  }
+
   private lazy val workspaceNameRegex = "[A-z0-9 _-]+".r
   def validateWorkspaceName(s: String): Unit = {
     if(! workspaceNameRegex.pattern.matcher(s).matches) {

@@ -593,6 +593,7 @@ trait EntityComponent {
     }
 
     def rename(workspaceContext: SlickWorkspaceContext, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
+      validateEntityName(newName)
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
         findEntityByName(workspaceContext.workspaceId, entityType, oldName).map(_.name).update(newName)
     }
@@ -758,7 +759,7 @@ trait EntityComponent {
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Entity type ${Attributable.workspaceEntityType} is reserved", statusCode = StatusCodes.BadRequest))
       }
       validateUserDefinedString(entity.entityType)
-      validateUserDefinedString(entity.name)
+      validateEntityName(entity.name)
       entity.attributes.keys.foreach { attrName =>
         validateUserDefinedString(attrName.name)
         validateAttributeName(attrName, entity.entityType)

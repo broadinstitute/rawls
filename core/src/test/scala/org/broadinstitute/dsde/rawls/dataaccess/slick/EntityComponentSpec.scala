@@ -747,13 +747,12 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   }
 
   it should "fail when putting dots in user-specified strings" in withDefaultTestDatabase {
-    val dottyName = Entity("dotty.name", "Sample", Map.empty)
+    // NB: entity names allow dots, so entity names are not included in this test
     val dottyType = Entity("dottyType", "Sam.ple", Map.empty)
     val dottyAttr = Entity("dottyAttr", "Sample", Map(AttributeName.withDefaultNS("foo.bar") -> AttributeBoolean(true)))
     val dottyAttr2 = Entity("dottyAttr", "Sample", Map(AttributeName("library", "foo.bar") -> AttributeBoolean(true)))
 
       withWorkspaceContext(testData.workspace) { context =>
-        intercept[RawlsException] { runAndWait(entityQuery.save(context, dottyName)) }
         intercept[RawlsException] { runAndWait(entityQuery.save(context, dottyType)) }
         intercept[RawlsException] { runAndWait(entityQuery.save(context, dottyAttr)) }
         intercept[RawlsException] { runAndWait(entityQuery.save(context, dottyAttr2)) }
