@@ -251,6 +251,66 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 201 on create entity if entity name contains a dot" in withTestDataApiServices { services =>
+    val newSample = Entity("sample.new", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
+
+    Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+
+        assertResult(newSample) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), newSample.entityType, newSample.name)).get
+        }
+        assertResult(newSample) {
+          responseAs[Entity]
+        }
+
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newSample.path(testData.workspace)))))) {
+          header("Location")
+        }
+      }
+  }
+
+  it should "return 400 on create entity if entity name is the empty string" in withTestDataApiServices { services =>
+    val newSample = Entity("", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
+
+    Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 on create entity if entity name is whitespace-only" in withTestDataApiServices { services =>
+    val newSample = Entity("   ", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
+
+    Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 on create entity if entity name has illegal characters" in withTestDataApiServices { services =>
+    val newSample = Entity("*!$!*", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
+
+    Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
   it should "return 409 conflict on create entity when entity exists" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.path}/entities", httpJson(testData.sample2)) ~>
       sealRoute(services.entityRoutes) ~>
@@ -1402,6 +1462,73 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "return 204 on entity rename if new name contains a dot" in withTestDataApiServices { services =>
+    withStatsD {
+      Post(s"${testData.sample2.path(testData.workspace)}/rename", httpJson(EntityName("s2.changed"))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+          assertResult(true) {
+            runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, "s2.changed")).isDefined
+          }
+        }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted.entities.${testData.sample2.entityType}.redacted"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.rename", StatusCodes.NoContent.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
+  }
+
+  it should "return 400 on entity rename if new name is empty string" in withTestDataApiServices { services =>
+    withStatsD {
+      Post(s"${testData.sample2.path(testData.workspace)}/rename", httpJson(EntityName(""))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted.entities.${testData.sample2.entityType}.redacted"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.rename", StatusCodes.BadRequest.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
+  }
+
+  it should "return 400 on entity rename if new name is whitespace-only" in withTestDataApiServices { services =>
+    withStatsD {
+      Post(s"${testData.sample2.path(testData.workspace)}/rename", httpJson(EntityName("   "))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted.entities.${testData.sample2.entityType}.redacted"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.rename", StatusCodes.BadRequest.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
+  }
+
+  it should "return 400 on entity rename if new name has illegal characters" in withTestDataApiServices { services =>
+    withStatsD {
+      Post(s"${testData.sample2.path(testData.workspace)}/rename", httpJson(EntityName("*!$!*"))) ~>
+        services.sealedInstrumentedRoutes ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+    } {capturedMetrics =>
+      val wsPathForRequestMetrics = s"workspaces.redacted.redacted.entities.${testData.sample2.entityType}.redacted"
+      val expected = expectedHttpRequestMetrics("post", s"$wsPathForRequestMetrics.rename", StatusCodes.BadRequest.intValue, 1)
+      assertSubsetOf(expected, capturedMetrics)
+    }
+  }
+
   it should "return 404 on entity rename, entity does not exist" in withTestDataApiServices { services =>
     Post(s"${testData.sample2.copy(name = "foox").path(testData.workspace)}/rename", httpJson(EntityName("s2_changed"))) ~>
       sealRoute(services.entityRoutes) ~>
@@ -1806,7 +1933,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow dots in user-defined strings" in withTestDataApiServices { services =>
-    val dotSample = Entity("sample.with.dots.in.name", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
+    // entity names are validated by validateEntityName, which allows dots;
+    // entity types are valaidated by validateUserDefinedString, which does not.
+    val dotSample = Entity("sample.with.dots.in.name", "entity.type.with.dots", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
     Post(s"${testData.workspace.path}/entities", httpJson(dotSample)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
