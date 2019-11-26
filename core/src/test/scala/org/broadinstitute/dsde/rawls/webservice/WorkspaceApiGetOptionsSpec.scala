@@ -291,9 +291,12 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
       }
   }
 
-  List("attributes", "authorizationDomain", "bucketName", "createdBy", "createdDate", "isLocked", "lastModified",
-       "name", "namespace", "workflowCollectionName", "workspaceId") foreach { workspaceKey =>
-
+  // find all the members of the WorkspaceDetails case class; check that each of them is returned inside the workspace object
+  import scala.reflect.runtime.universe._
+  val workspaceDetailsMembers:List[String] = typeOf[WorkspaceDetails].members.collect {
+    case m: MethodSymbol if m.isCaseAccessor => m.name.toString
+  }.toList
+  workspaceDetailsMembers.foreach { workspaceKey =>
     it should s"include $workspaceKey subkey of workspace when specifying the top-level key" in withTestWorkspacesApiServices { services =>
       Get(testWorkspaces.workspace.path + "?fields=workspace") ~>
         sealRoute(services.workspaceRoutes) ~>
@@ -304,7 +307,6 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
           assert(workspaceFields.contains(workspaceKey))
         }
     }
-
   }
 
   it should "include multiple keys simultaneously when asked to" in withTestWorkspacesApiServices { services =>
