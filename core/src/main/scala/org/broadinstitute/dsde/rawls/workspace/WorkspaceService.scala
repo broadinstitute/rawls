@@ -99,6 +99,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def LockWorkspace(workspaceName: WorkspaceName) = lockWorkspace(workspaceName)
   def UnlockWorkspace(workspaceName: WorkspaceName) = unlockWorkspace(workspaceName)
   def CheckBucketReadAccess(workspaceName: WorkspaceName) = checkBucketReadAccess(workspaceName)
+  def CheckSamActionWithLock(workspaceName: WorkspaceName, requiredAction: SamResourceAction) = checkSamActionWithLock(workspaceName, requiredAction)
   def GetBucketUsage(workspaceName: WorkspaceName) = getBucketUsage(workspaceName)
   def GetBucketOptions(workspaceName: WorkspaceName) = getBucketOptions(workspaceName)
   //def UpdateBucketOptions(workspaceName: WorkspaceName, bucketOptions: WorkspaceBucketOptions) = updateBucketOptions(workspaceName, bucketOptions)
@@ -1828,6 +1829,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case Some(report) => RequestComplete(report)
       }
     }
+  }
+
+  def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[PerRequestMessage] = {
+    val testFuture = dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all=false))) { workspaceContext =>
+        requireAccess(workspaceContext.workspace, samAction) {
+          DBIO.successful(RequestComplete(StatusCodes.NoContent)) //if we get here, we passed all the hoops
+        }
+      }
+    }
+    //if we failed for any reason, the user can't do that thing on the workspace
+    testFuture.recover { case _ => RequestComplete(StatusCodes.Unauthorized) }
   }
 
   def listAllActiveSubmissions() = {

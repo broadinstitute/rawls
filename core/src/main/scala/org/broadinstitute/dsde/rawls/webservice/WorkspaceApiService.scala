@@ -126,6 +126,11 @@ trait WorkspaceApiService extends UserInfoDirectives {
           complete { workspaceServiceConstructor(userInfo).CheckBucketReadAccess(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
       } ~
+      path("workspaces" / Segment / Segment / "checkSamActionWithLock" / Segment) { (workspaceNamespace, workspaceName, requiredAction) =>
+        get {
+          complete { workspaceServiceConstructor(userInfo).CheckSamActionWithLock(WorkspaceName(workspaceNamespace, workspaceName), SamResourceAction(requiredAction)) }
+        }
+      } ~
       path("workspaces" / Segment / Segment / "lock") { (workspaceNamespace, workspaceName) =>
         put {
           complete { workspaceServiceConstructor(userInfo).LockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)) }

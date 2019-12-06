@@ -158,10 +158,14 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  def withTestDataServicesCustomSam[T](testCode: TestApiServiceWithCustomSamDAO => T): T = {
+  def withTestDataServicesCustomSamAndUser[T](user: RawlsUser)(testCode: TestApiServiceWithCustomSamDAO => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
-      withServicesCustomSam(dataSource, testData.userOwner)(testCode)
+      withServicesCustomSam(dataSource, user)(testCode)
     }
+  }
+
+  def withTestDataServicesCustomSam[T](testCode: TestApiServiceWithCustomSamDAO => T): T = {
+    withTestDataServicesCustomSamAndUser(testData.userOwner)(testCode)
   }
 
   private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
@@ -503,6 +507,63 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     assertResult((StatusCodes.OK, responseFromUpdate), "Add ACL shouldn't error") {
       vComplete.response
+    }
+  }
+
+  it should "pass sam read action check for a user with read access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.read), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
+    assertResult(StatusCodes.NoContent) {
+      rqComplete.response
+    }
+  }
+
+  it should "pass sam read action check for a user with read access in a locked workspace" in {
+    //first lock the workspace as the owner
+    withTestDataServicesCustomSam { services =>
+      populateWorkspacePolicies(services)
+      services.workspaceService.lockWorkspace(testData.workspace.toWorkspaceName)
+    }
+
+    //now as a reader, ask if we can read it
+    withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+      val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.read), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
+      assertResult(StatusCodes.NoContent) {
+        rqComplete.response
+      }
+    }
+  }
+
+  it should "fail sam write action check for a user with read access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
+    assertResult(StatusCodes.Unauthorized) {
+      rqComplete.response
+    }
+  }
+
+  it should "pass sam write action check for a user with write access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(testData.userWriter) { services =>
+    populateWorkspacePolicies(services)
+    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
+    assertResult(StatusCodes.NoContent) {
+      rqComplete.response
+    }
+  }
+
+  //this is the important test!
+  it should "fail sam write action check for a user with write access in a locked workspace" in {
+    //first lock the workspace as the owner
+    withTestDataServicesCustomSam { services =>
+      populateWorkspacePolicies(services)
+      Await.result(services.workspaceService.lockWorkspace(testData.workspace.toWorkspaceName), Duration.Inf)
+    }
+
+    //now as a reader, ask if we can write it
+    withTestDataServicesCustomSamAndUser(testData.userWriter) { services =>
+      val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
+      assertResult(StatusCodes.Unauthorized) {
+        rqComplete.response
+      }
     }
   }
 
