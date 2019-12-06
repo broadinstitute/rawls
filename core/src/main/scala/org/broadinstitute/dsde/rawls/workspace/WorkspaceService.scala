@@ -1841,7 +1841,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
     //if we failed for any reason, the user can't do that thing on the workspace
     testFuture.recover { case _ =>
-      println("huh")
       RequestComplete(StatusCodes.Unauthorized) }
   }
 
