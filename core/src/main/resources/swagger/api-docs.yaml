@@ -2418,7 +2418,7 @@ paths:
             - openid
             - email
             - profile
-  '/api/workspaces/{workspaceNamespace}/{workspaceName}/checkSamActionWithLock/{samActionName}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/checkIamActionWithLock/{samActionName}':
     get:
       responses:
         '204':
@@ -2427,11 +2427,11 @@ paths:
           description: User may not perform the given action on the workspace (including if it doesn't exist)
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: Check to see if the user has the given action on a workspace. Takes into account if the workspace is locked too.
+      description: Check to see if the user has the given action on a workspace in Sam. Takes into account if the workspace is locked too.
       tags:
         - workspaces
-      summary: Check sam action with lock
-      operationId: checkSamActionWithLock
+      summary: Check IAM action with lock
+      operationId: checkIamActionWithLock
       parameters:
         - in: path
           description: Workspace Namespace

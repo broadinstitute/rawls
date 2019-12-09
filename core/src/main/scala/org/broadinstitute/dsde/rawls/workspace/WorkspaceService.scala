@@ -1832,15 +1832,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[PerRequestMessage] = {
-    val testFuture = dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all=false))) { workspaceContext =>
-        requireAccess(workspaceContext.workspace, samAction) {
-          DBIO.successful(RequestComplete(StatusCodes.NoContent)) //if we get here, we passed all the hoops
-        }
+    val wsCtxFuture = dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all = false))) { workspaceContext =>
+        DBIO.successful(workspaceContext)
       }
     }
+
+    //don't do the sam REST call inside the db transaction.
+    val access: Future[PerRequestMessage] = wsCtxFuture flatMap { workspaceContext =>
+      requireAccessF(workspaceContext.workspace, samAction) {
+        Future.successful(RequestComplete(StatusCodes.NoContent)) //if we get here, we passed all the hoops
+      }
+    }
+
     //if we failed for any reason, the user can't do that thing on the workspace
-    testFuture.recover { case _ =>
+    access.recover { case _ =>
       RequestComplete(StatusCodes.Unauthorized) }
   }
 
@@ -2140,6 +2146,26 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           }
           else {
             DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+          }
+        }
+      }
+    }
+  }
+
+  //future-y version
+  private def requireAccessF[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => Future[T]): Future[T] = {
+    samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo) flatMap { hasRequiredLevel =>
+      if (hasRequiredLevel) {
+        if (Set(SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(requiredAction) && workspace.isLocked)
+          Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
+        else codeBlock
+      } else {
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, userInfo) flatMap { canRead =>
+          if (canRead) {
+            Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+          }
+          else {
+            Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
           }
         }
       }
