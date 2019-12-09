@@ -535,7 +535,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   it should "fail sam write action check for a user with read access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
     populateWorkspacePolicies(services)
     val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
-    assertResult(StatusCodes.Unauthorized) {
+    assertResult(StatusCodes.Forbidden) {
       rqComplete.response
     }
   }
@@ -557,7 +557,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //now as a writer, ask if we can write it. but it's locked!
     val readerWorkspaceService = services.workspaceServiceConstructor(UserInfo(testData.userWriter.userEmail, OAuth2BearerToken("token"), 0, testData.userWriter.userSubjectId))
     val rqComplete = Await.result(readerWorkspaceService.checkSamActionWithLock(testData.workspaceNoSubmissions.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
-    assertResult(StatusCodes.Unauthorized) {
+    assertResult(StatusCodes.Forbidden) {
       rqComplete.response
     }
   }

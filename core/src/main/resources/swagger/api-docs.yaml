@@ -2423,7 +2423,7 @@ paths:
       responses:
         '204':
           description: User can perform the given action on the workspace
-        '401':
+        '403':
           description: User may not perform the given action on the workspace (including if it doesn't exist)
           schema:
             $ref: '#/definitions/ErrorReport'
