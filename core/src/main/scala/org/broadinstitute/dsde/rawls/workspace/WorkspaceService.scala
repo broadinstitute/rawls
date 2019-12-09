@@ -1847,7 +1847,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     //if we failed for any reason, the user can't do that thing on the workspace
     access.recover { case _ =>
-      RequestComplete(StatusCodes.Unauthorized) }
+      RequestComplete(StatusCodes.Forbidden) }
   }
 
   def listAllActiveSubmissions() = {
@@ -2133,32 +2133,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def requireAccess[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo)) flatMap { hasRequiredLevel =>
-      if (hasRequiredLevel) {
-        if (Set(SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(requiredAction) && workspace.isLocked)
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
-        else codeBlock
-      } else {
-        DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, userInfo)) flatMap { canRead =>
-          if (canRead) {
-            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
-          }
-          else {
-            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
-          }
-        }
-      }
-    }
-  }
-
-  //future-y version
-  private def requireAccessF[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => Future[T]): Future[T] = {
+  private def accessCheck(workspace: Workspace, requiredAction: SamResourceAction): Future[Unit] = {
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo) flatMap { hasRequiredLevel =>
       if (hasRequiredLevel) {
         if (Set(SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(requiredAction) && workspace.isLocked)
           Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
-        else codeBlock
+        else
+          Future.successful(())
       } else {
         samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, userInfo) flatMap { canRead =>
           if (canRead) {
@@ -2170,6 +2151,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
+  }
+
+  private def requireAccess[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
+    DBIO.from(accessCheck(workspace, requiredAction)) flatMap { _ => codeBlock }
+  }
+
+  private def requireAccessF[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => Future[T]): Future[T] = {
+    accessCheck(workspace, requiredAction) flatMap { _ => codeBlock }
   }
 
   private def requireAccessIgnoreLock[T](workspace: Workspace, requiredAction: SamResourceAction)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
