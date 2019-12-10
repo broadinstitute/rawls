@@ -213,6 +213,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               Future.successful(WorkspaceAccessLevels.NoAccess)
             }
 
+          // determine whether or not to retrieve attributes
+          val useAttributes = options.contains("workspace") || attrSpecs.all || attrSpecs.attrsToSelect.nonEmpty
+
           traceDBIOWithParent("accessLevelFuture", s2)(s3 => DBIO.from(accessLevelFuture())) flatMap { accessLevel =>
             // we may have calculated accessLevel because canShare/canCompute needs it;
             // but if the user didn't ask for it, don't return it
@@ -247,7 +250,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               noFuture
             }
 
-            def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] = if (options.contains("workspace.authorizationDomain")) {
+            def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] = if (options.contains("workspace.authorizationDomain") || options.contains("workspace")) {
               traceWithParent("loadResourceAuthDomain",s2)(_ =>  loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo).map(Option(_)))
             } else {
               noFuture
@@ -274,7 +277,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", s2)( _ => workspaceSubmissionStatsFuture())
             } yield {
               // post-process JSON to remove calculated-but-undesired keys
-              val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, attrSpecs.all || attrSpecs.attrsToSelect.nonEmpty), stats, bucketDetails, owners)
+              val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, useAttributes), stats, bucketDetails, owners)
               val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
               RequestComplete(StatusCodes.OK, filteredJson)
             }
