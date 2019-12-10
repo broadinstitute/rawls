@@ -2418,6 +2418,43 @@ paths:
             - openid
             - email
             - profile
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/checkIamActionWithLock/{samActionName}':
+    get:
+      responses:
+        '204':
+          description: User can perform the given action on the workspace
+        '403':
+          description: User may not perform the given action on the workspace (including if it doesn't exist)
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Check to see if the user has the given action on a workspace in Sam. Takes into account if the workspace is locked too.
+      tags:
+        - workspaces
+      summary: Check IAM action with lock
+      operationId: checkIamActionWithLock
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Sam action
+          name: samActionName
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/lock':
     put:
       responses:

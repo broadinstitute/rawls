@@ -99,6 +99,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def LockWorkspace(workspaceName: WorkspaceName) = lockWorkspace(workspaceName)
   def UnlockWorkspace(workspaceName: WorkspaceName) = unlockWorkspace(workspaceName)
   def CheckBucketReadAccess(workspaceName: WorkspaceName) = checkBucketReadAccess(workspaceName)
+  def CheckSamActionWithLock(workspaceName: WorkspaceName, requiredAction: SamResourceAction) = checkSamActionWithLock(workspaceName, requiredAction)
   def GetBucketUsage(workspaceName: WorkspaceName) = getBucketUsage(workspaceName)
   def GetBucketOptions(workspaceName: WorkspaceName) = getBucketOptions(workspaceName)
   //def UpdateBucketOptions(workspaceName: WorkspaceName, bucketOptions: WorkspaceBucketOptions) = updateBucketOptions(workspaceName, bucketOptions)
@@ -1830,6 +1831,25 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[PerRequestMessage] = {
+    val wsCtxFuture = dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all = false))) { workspaceContext =>
+        DBIO.successful(workspaceContext)
+      }
+    }
+
+    //don't do the sam REST call inside the db transaction.
+    val access: Future[PerRequestMessage] = wsCtxFuture flatMap { workspaceContext =>
+      requireAccessF(workspaceContext.workspace, samAction) {
+        Future.successful(RequestComplete(StatusCodes.NoContent)) //if we get here, we passed all the hoops
+      }
+    }
+
+    //if we failed for any reason, the user can't do that thing on the workspace
+    access.recover { case _ =>
+      RequestComplete(StatusCodes.Forbidden) }
+  }
+
   def listAllActiveSubmissions() = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.submissionQuery.listAllActiveSubmissions().map(RequestComplete(StatusCodes.OK, _))
@@ -2113,23 +2133,32 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def requireAccess[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo)) flatMap { hasRequiredLevel =>
+  private def accessCheck(workspace: Workspace, requiredAction: SamResourceAction): Future[Unit] = {
+    samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo) flatMap { hasRequiredLevel =>
       if (hasRequiredLevel) {
         if (Set(SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(requiredAction) && workspace.isLocked)
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
-        else codeBlock
+          Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
+        else
+          Future.successful(())
       } else {
-        DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, userInfo)) flatMap { canRead =>
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, userInfo) flatMap { canRead =>
           if (canRead) {
-            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+            Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
           }
           else {
-            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+            Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
           }
         }
       }
     }
+  }
+
+  private def requireAccess[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
+    DBIO.from(accessCheck(workspace, requiredAction)) flatMap { _ => codeBlock }
+  }
+
+  private def requireAccessF[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => Future[T]): Future[T] = {
+    accessCheck(workspace, requiredAction) flatMap { _ => codeBlock }
   }
 
   private def requireAccessIgnoreLock[T](workspace: Workspace, requiredAction: SamResourceAction)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {

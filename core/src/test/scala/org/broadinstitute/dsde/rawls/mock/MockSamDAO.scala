@@ -160,6 +160,14 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     Future.successful(())
   }
 
+  override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
+    val pol = policies((resourceTypeName, resourceId))
+    //iterate through map and find a value that contains the action and the user
+    Future.successful(pol.exists(p =>
+      p._2.policy.actions.contains(action) &&
+        p._2.policy.memberEmails.contains(WorkbenchEmail(userInfo.userEmail.value))) )
+  }
+
   override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
     val policiesForType = for {
       ((typeName, resourceId), resourcePolicies) <- policies if typeName == resourceTypeName

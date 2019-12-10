@@ -158,10 +158,14 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  def withTestDataServicesCustomSam[T](testCode: TestApiServiceWithCustomSamDAO => T): T = {
+  def withTestDataServicesCustomSamAndUser[T](user: RawlsUser)(testCode: TestApiServiceWithCustomSamDAO => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
-      withServicesCustomSam(dataSource, testData.userOwner)(testCode)
+      withServicesCustomSam(dataSource, user)(testCode)
     }
+  }
+
+  def withTestDataServicesCustomSam[T](testCode: TestApiServiceWithCustomSamDAO => T): T = {
+    withTestDataServicesCustomSamAndUser(testData.userOwner)(testCode)
   }
 
   private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
@@ -391,30 +395,30 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   private def toUserInfo(user: RawlsUser) = UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId)
-  private def populateWorkspacePolicies(services: TestApiService) = {
+  private def populateWorkspacePolicies(services: TestApiService, workspace: Workspace = testData.workspace) = {
     val populateAcl = for {
       _ <- services.samDAO.registerUser(toUserInfo(testData.userOwner))
       _ <- services.samDAO.registerUser(toUserInfo(testData.userWriter))
       _ <- services.samDAO.registerUser(toUserInfo(testData.userReader))
 
-      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.owner,
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.owner,
         SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set(SamWorkspaceActions.own, SamWorkspaceActions.write, SamWorkspaceActions.read), Set(SamWorkspaceRoles.owner)), userInfo)
 
-      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.writer,
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.writer,
         SamPolicy(Set(WorkbenchEmail(testData.userWriter.userEmail.value)), Set(SamWorkspaceActions.write, SamWorkspaceActions.read), Set(SamWorkspaceRoles.writer)), userInfo)
 
-      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.reader,
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.reader,
         SamPolicy(Set(WorkbenchEmail(testData.userReader.userEmail.value)), Set(SamWorkspaceActions.read), Set(SamWorkspaceRoles.reader)), userInfo)
 
-      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCatalog,
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.canCatalog,
         SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set(SamWorkspaceActions.catalog), Set.empty), userInfo)
-      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.shareReader,
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.shareReader,
         SamPolicy(Set.empty, Set.empty, Set.empty), userInfo)
-      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.shareWriter,
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.shareWriter,
         SamPolicy(Set.empty, Set.empty, Set.empty), userInfo)
-      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.canCompute,
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.canCompute,
         SamPolicy(Set(WorkbenchEmail(testData.userWriter.userEmail.value)), Set.empty, Set.empty), userInfo)
-      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.projectOwner,
+      _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspacePolicyNames.projectOwner,
         SamPolicy(Set.empty, Set.empty, Set.empty), userInfo)
     } yield ()
 
@@ -503,6 +507,58 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     assertResult((StatusCodes.OK, responseFromUpdate), "Add ACL shouldn't error") {
       vComplete.response
+    }
+  }
+
+  it should "pass sam read action check for a user with read access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.read), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
+    assertResult(StatusCodes.NoContent) {
+      rqComplete.response
+    }
+  }
+
+  it should "pass sam read action check for a user with read access in a locked workspace" in {
+    withTestDataServicesCustomSam { services =>
+      populateWorkspacePolicies(services, testData.workspaceNoSubmissions) //can't lock a workspace with running submissions, which the default workspace has
+      Await.result(services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName), Duration.Inf)
+
+      //generate a new workspace service with a reader user info so we can ask if a reader can access it
+      val readerWorkspaceService = services.workspaceServiceConstructor(UserInfo(testData.userReader.userEmail, OAuth2BearerToken("token"), 0, testData.userReader.userSubjectId))
+      val rqComplete = Await.result(readerWorkspaceService.checkSamActionWithLock(testData.workspaceNoSubmissions.toWorkspaceName, SamWorkspaceActions.read), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
+      assertResult(StatusCodes.NoContent) {
+        rqComplete.response
+      }
+    }
+  }
+
+  it should "fail sam write action check for a user with read access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
+    assertResult(StatusCodes.Forbidden) {
+      rqComplete.response
+    }
+  }
+
+  it should "pass sam write action check for a user with write access in an unlocked workspace" in withTestDataServicesCustomSamAndUser(testData.userWriter) { services =>
+    populateWorkspacePolicies(services)
+    val rqComplete = Await.result(services.workspaceService.checkSamActionWithLock(testData.workspace.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
+    assertResult(StatusCodes.NoContent) {
+      rqComplete.response
+    }
+  }
+
+  //this is the important test!
+  it should "fail sam write action check for a user with write access in a locked workspace" in withTestDataServicesCustomSam { services =>
+    //first lock the workspace as the owner
+    populateWorkspacePolicies(services, testData.workspaceNoSubmissions) //can't lock a workspace with running submissions, which default workspace has
+    Await.result(services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName), Duration.Inf)
+
+    //now as a writer, ask if we can write it. but it's locked!
+    val readerWorkspaceService = services.workspaceServiceConstructor(UserInfo(testData.userWriter.userEmail, OAuth2BearerToken("token"), 0, testData.userWriter.userSubjectId))
+    val rqComplete = Await.result(readerWorkspaceService.checkSamActionWithLock(testData.workspaceNoSubmissions.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
+    assertResult(StatusCodes.Forbidden) {
+      rqComplete.response
     }
   }
 
