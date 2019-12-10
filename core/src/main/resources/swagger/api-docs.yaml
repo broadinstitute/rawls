@@ -2425,6 +2425,8 @@ paths:
           description: User can perform the given action on the workspace
         '403':
           description: User may not perform the given action on the workspace (including if it doesn't exist)
+        '500':
+          description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
       description: Check to see if the user has the given action on a workspace in Sam. Takes into account if the workspace is locked too.
