@@ -78,7 +78,7 @@ object Dependencies {
   
   val workbenchModelV  = "0.13-58c913d"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
-  val workbenchGoogleV = "0.18-4c7acd5"
+  val workbenchGoogleV = "0.21-890a74f"
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
   val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.6-4df42ca" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
