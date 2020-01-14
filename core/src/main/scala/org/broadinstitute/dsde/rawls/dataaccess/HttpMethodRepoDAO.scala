@@ -62,7 +62,8 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
           response match {
             case Some(tool) =>
               // TODO: re-using AgoraEntity feels sketchy to me. It seems to work without any changes, but should we create a DockstoreEntity?
-              Future(Some(AgoraEntity(payload = Some(tool.descriptor), entityType = Some(AgoraEntityType.Workflow))))
+              // AEN 2020-01-14 we can use the Github URL returned by the tool descriptor as the relative import root for Cromwell
+              Future(Option(AgoraEntity(payload = Option(tool.descriptor), entityType = Option(AgoraEntityType.Workflow), url = Option(tool.url))))
             case None => Future(None)
           }
         }

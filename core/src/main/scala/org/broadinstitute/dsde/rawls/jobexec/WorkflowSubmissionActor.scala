@@ -205,11 +205,11 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     )
   }
 
-  def getWdl(methodConfig: MethodConfiguration, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[String] = {
+  def getWdl(methodConfig: MethodConfiguration, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[(String, String)] = {
     dataSource.inTransaction { dataAccess => //this is a transaction that makes no database calls, but the sprawling stack of withFoos was too hard to unpick :(
-      withMethod(methodConfig.methodRepoMethod, userInfo) { method =>
+      withMethod(methodConfig.methodRepoMethod, userInfo) { method: AgoraEntity =>
         withWdl(method) { wdl =>
-          DBIO.successful(wdl)
+          DBIO.successful((wdl, method.url))
         }
       }
     }
@@ -306,7 +306,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(billingProject.projectName.value, RawlsUserEmail(submissionRec.submitterEmail))
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
 
-      wdl <- getWdl(methodConfig, petUserInfo)
+      (wdlSource, wdlImportRoot) <- getWdl(methodConfig, petUserInfo) // figure out where to stick wdlImportRoot
     } yield {
 
       val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, RawlsUserEmail(submissionRec.submitterEmail), petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
@@ -328,7 +328,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       //yield the things we're going to submit to Cromwell
       val dosUris = collectDosUris(workflowBatch)
       logger.debug(s"collectDosUris found ${dosUris.size} DOS URIs in batch of size ${workflowBatch.size} for submission ${submissionRec.id}. First 20 are: ${dosUris.take(20)}")
-      (wdl, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo)
+      (wdlSource, wfRecs, wfInputsBatch, wfOpts, wfLabels, wfCollection, dosUris, petUserInfo)
     }
 
 
