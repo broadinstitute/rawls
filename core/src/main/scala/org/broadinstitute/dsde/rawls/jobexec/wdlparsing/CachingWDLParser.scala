@@ -95,6 +95,7 @@ class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient:
     * @return
     */
   private def generateCacheKey(wdl: WDL): String = {
+    // TODO we have to be very careful with this and `generateHash`, is this right?
     wdl.source
   }
 
