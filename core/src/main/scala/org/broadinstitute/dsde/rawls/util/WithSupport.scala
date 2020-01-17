@@ -47,7 +47,7 @@ trait MethodWiths {
     // TODO add Method to model instead of exposing AgoraEntity?
     withMethod(methodConfig.methodRepoMethod, userInfo) { method =>
       withWdl(method) { wdl =>
-        methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl.source) match {
+        methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl) match {
           case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
           case Success(gatherInputsResult: GatherInputsResult) =>
             op(wdl.source, gatherInputsResult)

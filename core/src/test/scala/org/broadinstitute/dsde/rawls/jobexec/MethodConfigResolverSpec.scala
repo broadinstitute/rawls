@@ -18,121 +18,127 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   import driver.api._
 
   val littleWdl =
-    """
-      |task t1 {
-      |  Int int_arg
-      |  Int? int_opt
-      |  command {
-      |    echo ${int_arg}
-      |    echo ${int_opt}
-      |  }
-      |}
-      |
-      |workflow w1 {
-      |  call t1
-      |}
-    """.stripMargin
+    WDL(
+      """
+        |task t1 {
+        |  Int int_arg
+        |  Int? int_opt
+        |  command {
+        |    echo ${int_arg}
+        |    echo ${int_opt}
+        |  }
+        |}
+        |
+        |workflow w1 {
+        |  call t1
+        |}
+      """.stripMargin, None)
 
   val arrayWdl =
-    """
-      |task t1 {
-      |  Int int_arg
-      |  command {
-      |    echo ${int_arg}
-      |  }
-      |}
-      |
-      |workflow w1 {
-      |  Array[Int] int_array
-      |  scatter(i in int_array) {
-      |    call t1 { input: int_arg = i }
-      |  }
-      |}
-    """.stripMargin
+    WDL(
+      """
+        |task t1 {
+        |  Int int_arg
+        |  command {
+        |    echo ${int_arg}
+        |  }
+        |}
+        |
+        |workflow w1 {
+        |  Array[Int] int_array
+        |  scatter(i in int_array) {
+        |    call t1 { input: int_arg = i }
+        |  }
+        |}
+      """.stripMargin, None)
 
   val doubleArrayWdl =
-    """
-      |task t1 {
-      |  Array[Int] aint_arg
-      |  command {
-      |    echo ${aint_arg}
-      |  }
-      |}
-      |
-      |workflow w1 {
-      |  Array[Array[Int]] aint_array
-      |  scatter(ai in aint_array) {
-      |    call t1 { input: aint_arg = ai }
-      |  }
-      |}
-    """.stripMargin
+    WDL(
+      """
+        |task t1 {
+        |  Array[Int] aint_arg
+        |  command {
+        |    echo ${aint_arg}
+        |  }
+        |}
+        |
+        |workflow w1 {
+        |  Array[Array[Int]] aint_array
+        |  scatter(ai in aint_array) {
+        |    call t1 { input: aint_arg = ai }
+        |  }
+        |}
+      """.stripMargin, None)
 
 
   val optionalDoubleArrayWdl =
-    """
-      |task t1 {
-      |  Array[Int] aint_arg
-      |  command {
-      |    echo ${aint_arg}
-      |  }
-      |}
-      |
-      |workflow w1 {
-      |  Array[Array[Int]]? aint_array
-      |  scatter(ai in aint_array) {
-      |    call t1 { input: aint_arg = ai }
-      |  }
-      |}
-    """.stripMargin
+    WDL(
+      """
+        |task t1 {
+        |  Array[Int] aint_arg
+        |  command {
+        |    echo ${aint_arg}
+        |  }
+        |}
+        |
+        |workflow w1 {
+        |  Array[Array[Int]]? aint_array
+        |  scatter(ai in aint_array) {
+        |    call t1 { input: aint_arg = ai }
+        |  }
+        |}
+      """.stripMargin, None)
 
 
   val tripleArrayWdl =
-    """
-      |task t1 {
-      |  Array[Array[Int]] aint_arg
-      |  command {
-      |    echo ${aint_arg}
-      |  }
-      |}
-      |
-      |workflow w1 {
-      |  Array[Array[Array[Int]]] aaint_array
-      |  scatter(ai in aaint_array) {
-      |    call t1 { input: aint_arg = ai }
-      |  }
-      |}
-    """.stripMargin
+    WDL(
+      """
+        |task t1 {
+        |  Array[Array[Int]] aint_arg
+        |  command {
+        |    echo ${aint_arg}
+        |  }
+        |}
+        |
+        |workflow w1 {
+        |  Array[Array[Array[Int]]] aaint_array
+        |  scatter(ai in aaint_array) {
+        |    call t1 { input: aint_arg = ai }
+        |  }
+        |}
+      """.stripMargin, None)
 
   val wdlVersionOneWdl =
-    """
-      |version 1.0
-      |
-      |task use_this_name {
-      |
-      |  input {
-      |    String s
-      |    File f
-      |  }
-      |
-      |  command {}
-      |
-      |  meta {
-      |    email: "skroob@spaceballs.gov"
-      |    author: "President Skroob"
-      |    description: "Spaceballs: The Unit Test"
-      |  }
-      |
-      |  output {
-      |    File f2 = "a"
-      |  }
-      |
-      |  runtime {
-      |    docker: "docker image"
-      |  }
-      |}
-    """.stripMargin
+    WDL(
+      """
+        |version 1.0
+        |
+        |task use_this_name {
+        |
+        |  input {
+        |    String s
+        |    File f
+        |  }
+        |
+        |  command {}
+        |
+        |  meta {
+        |    email: "skroob@spaceballs.gov"
+        |    author: "President Skroob"
+        |    description: "Spaceballs: The Unit Test"
+        |  }
+        |
+        |  output {
+        |    File f2 = "a"
+        |  }
+        |
+        |  runtime {
+        |    docker: "docker image"
+        |  }
+        |}
+      """.stripMargin, None)
 
-  val badWdl = littleWdl.replace("workflow", "not-a-workflow")
+  val badWdl = WDL(littleWdl.source.replace("workflow", "not-a-workflow"), None)
 
   val littleWdlName = "w1"
   val intArgName = "t1.int_arg"
@@ -174,13 +180,13 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val wdlVersionOneWdlFileOutput  = makeToolOutputParameter(wdlVersionOneFileOutputName, makeValueType("File"), "File")
   val wdlVersionOneWdlWorkflowDescription = makeWorkflowDescription(wdlVersionOneWdlName, List(wdlVersionOneWdlStringInput, wdlVersionOneWdlFileInput), List(wdlVersionOneWdlFileOutput))
 
-  mockCromwellSwaggerClient.workflowDescriptions += (littleWdl -> littleWdlWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (arrayWdl  -> requiredArrayWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl -> requiredDoubleArrayWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (optionalDoubleArrayWdl -> optionalDoubleArrayWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (tripleArrayWdl -> requiredTripleArrayWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (badWdl -> badWdlWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (wdlVersionOneWdl -> wdlVersionOneWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (littleWdl.source -> littleWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (arrayWdl.source  -> requiredArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl.source -> requiredDoubleArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (optionalDoubleArrayWdl.source -> optionalDoubleArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (tripleArrayWdl.source -> requiredTripleArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (badWdl.source -> badWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (wdlVersionOneWdl.source -> wdlVersionOneWdlWorkflowDescription)
 
 
   val workspace = Workspace("workspaces", "test_workspace", UUID.randomUUID().toString(), "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
@@ -266,7 +272,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   }
 
   //Test harness to call resolveInputsForEntities without having to go via the WorkspaceService
-  def testResolveInputs(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, dataAccess: DataAccess)
+  def testResolveInputs(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: WDL, dataAccess: DataAccess)
                        (implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceId, entity.entityType, entity.name).result flatMap { entityRecs =>
       methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl) match {

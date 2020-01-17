@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import cromwell.client.model.WorkflowDescription
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import org.broadinstitute.dsde.rawls.dataaccess.CromwellSwaggerClient
-import org.broadinstitute.dsde.rawls.model.UserInfo
+import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL}
 import scalacache.{Cache, Entry, get, put}
 import scalacache.caffeine.CaffeineCache
 
@@ -28,7 +28,7 @@ class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient:
   implicit val customisedCaffeineCache: Cache[Try[WorkflowDescription]] = CaffeineCache(underlyingCaffeineCache)
 
 
-  override def parse(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
+  override def parse(userInfo: UserInfo, wdl: WDL)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
     val tick = System.currentTimeMillis()
     val key = generateCacheKey(wdl)
     //wdlhash is for logging purposes as we don't want to log full wdls
@@ -47,7 +47,7 @@ class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient:
     }
   }
 
-  private def parseAndCache(userInfo: UserInfo, wdl: String, key: String, wdlHash: String, tick: Long)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
+  private def parseAndCache(userInfo: UserInfo, wdl: WDL, key: String, wdlHash: String, tick: Long)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
     val parseResult: Try[WorkflowDescription] = inContextParse(userInfo, wdl) map { wfDescription =>
       WDLParser.appendWorkflowNameToInputsAndOutputs(wfDescription)
     }
@@ -71,7 +71,7 @@ class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient:
 
 
 
-  private def inContextParse(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
+  private def inContextParse(userInfo: UserInfo, wdl: WDL)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
    cromwellSwaggerClient.describe(userInfo, wdl)
   }
 
@@ -81,8 +81,8 @@ class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient:
     * @param wdl
     * @return
     */
-  private def generateHash(wdl: String) = {
-    MurmurHash3.stringHash(wdl).toString
+  private def generateHash(wdl: WDL) = {
+    MurmurHash3.stringHash(wdl.source).toString
   }
 
 
@@ -94,8 +94,8 @@ class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient:
     * @param wdl
     * @return
     */
-  private def generateCacheKey(wdl: String): String = {
-    wdl
+  private def generateCacheKey(wdl: WDL): String = {
+    wdl.source
   }
 
 }
