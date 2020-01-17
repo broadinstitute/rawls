@@ -227,7 +227,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     ) map {
       case (seed, expectedInstanceId) => {
         val batch = batchTestWorkflows(seed)
-        val submissionResult = Await.result(cluster.submitWorkflows(batch, "wdl", Seq.fill(batch.size)("inputs"), None, None, None, userInfo), Duration.Inf)
+        val submissionResult = Await.result(cluster.submitWorkflows(batch, WDL("wdl", None), Seq.fill(batch.size)("inputs"), None, None, None, userInfo), Duration.Inf)
         assertResult(batch.size, s"size for seed $seed") { submissionResult._2.size }
         assertResult(ExecutionServiceId(expectedInstanceId), expectedInstanceId) {submissionResult._1}
 

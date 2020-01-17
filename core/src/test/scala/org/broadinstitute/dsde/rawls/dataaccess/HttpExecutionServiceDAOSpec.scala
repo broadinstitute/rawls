@@ -7,7 +7,7 @@ import akka.testkit.TestKit
 import cats.implicits._
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{MetadataParams, RawlsUserEmail, RawlsUserSubjectId, Subsystems, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{MetadataParams, RawlsUserEmail, RawlsUserSubjectId, WDL, Subsystems, UserInfo}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.time.{Seconds, Span}
@@ -44,7 +44,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
 
   "HttpExecutionServiceDAO" should "submit workflows" in {
     withStatsD {
-      val submitResult = test.submitWorkflows("wdl", Seq("input1", "input2"), None, None, None, userInfo).futureValue
+      val submitResult = test.submitWorkflows(WDL("wdl", None), Seq("input1", "input2"), None, None, None, userInfo).futureValue
 
       // results are hard-coded in RemoteServicesMockServer
       submitResult.size shouldBe 3

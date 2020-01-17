@@ -36,22 +36,21 @@ trait MethodWiths {
     }
   }
 
-  def withWdl[T](method: AgoraEntity)(op: (String) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def withWdl[T](method: AgoraEntity)(op: WDL => ReadWriteAction[T]): ReadWriteAction[T] = {
     method.payload match {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
-      case Some(wdl) => op(wdl)
+      case Some(wdl) => op(WDL(wdl, method.url))
     }
   }
 
   def withMethodInputs[T](methodConfig: MethodConfiguration, userInfo: UserInfo)(op: (String, GatherInputsResult) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
     // TODO add Method to model instead of exposing AgoraEntity?
     withMethod(methodConfig.methodRepoMethod, userInfo) { method =>
-
       withWdl(method) { wdl =>
-        methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl) match {
+        methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl.source) match {
           case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
           case Success(gatherInputsResult: GatherInputsResult) =>
-            op(wdl, gatherInputsResult)
+            op(wdl.source, gatherInputsResult)
         }
       }
     }

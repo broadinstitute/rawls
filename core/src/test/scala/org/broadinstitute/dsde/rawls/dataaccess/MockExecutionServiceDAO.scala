@@ -10,15 +10,15 @@ import scala.concurrent.Future
 import scala.util.Success
 
 class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "") extends ExecutionServiceDAO {
-  var submitWdl: String = null
+  var submitWdlSource: String = null
   var submitInput: Seq[String] = null
   var submitOptions: Option[String] = None
   var labels: Map[String, String] = Map.empty   // could make this more sophisticated: map of workflow to map[s,s]
   var collection: Option[String] = None
 
-  override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo)= {
+  override def submitWorkflows(wdl: WDL, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo)= {
     this.submitInput = inputs
-    this.submitWdl = wdl
+    this.submitWdlSource = wdl.source
     this.submitOptions = options
     this.labels = labels.getOrElse(Map.empty)
     this.collection = workflowCollection

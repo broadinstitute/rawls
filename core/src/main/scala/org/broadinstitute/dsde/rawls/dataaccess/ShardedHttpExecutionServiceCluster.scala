@@ -33,7 +33,7 @@ class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submi
   // by nature, this is only called for workflows that have not yet been submitted.
   // therefore, we want to send the workflows to the cromwell instance chosen
   // by the routing algorithm defined in this class.
-  def submitWorkflows(workflowRecs: Seq[WorkflowRecord], wdl: String, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo): Future[(ExecutionServiceId, Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]])] = {
+  def submitWorkflows(workflowRecs: Seq[WorkflowRecord], wdl: WDL, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo): Future[(ExecutionServiceId, Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]])] = {
     val targetMember = targetMemberForSubmission(workflowRecs)
     targetMember.dao.submitWorkflows(wdl, inputs, options, labels, workflowCollection, userInfo) map {results =>
       (targetMember.key, results)
