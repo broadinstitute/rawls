@@ -82,7 +82,7 @@ class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient:
     * @return
     */
   private def generateHash(wdl: WDL) = {
-    MurmurHash3.stringHash(wdl.source).toString
+    MurmurHash3.stringHash(wdl.cacheKey).toString
   }
 
 
@@ -95,8 +95,7 @@ class CachingWDLParser(wdlParsingConfig: WDLParserConfig, cromwellSwaggerClient:
     * @return
     */
   private def generateCacheKey(wdl: WDL): String = {
-    // TODO we have to be very careful with this and `generateHash`, is this right?
-    wdl.source
+    wdl.cacheKey
   }
 
 }
