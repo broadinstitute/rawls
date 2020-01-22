@@ -1268,7 +1268,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   //validates the expressions in the method configuration, taking into account optional inputs
   private def validateMethodConfiguration(methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
-    withMethodInputs(methodConfiguration, userInfo) { (_, gatherInputsResult) =>
+    withMethodInputs(methodConfiguration, userInfo) { gatherInputsResult =>
       val vmc = ExpressionValidator.validateAndParseMCExpressions(methodConfiguration, gatherInputsResult, allowRootEntity = methodConfiguration.rootEntityType.isDefined, dataAccess)
       DBIO.successful(vmc)
     }
@@ -1559,7 +1559,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] = {
     withSubmissionParameters(workspaceName, submissionRequest) {
-      (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode]) =>
+      (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode]) =>
         requireComputePermission(workspaceContext.workspace) {
           val submissionId: UUID = UUID.randomUUID()
           val submissionEntityOpt = if(header.entityType.isEmpty) { None } else { Some(AttributeEntityReference(entityType = submissionRequest.entityType.get, entityName = submissionRequest.entityName.get)) }
@@ -1611,8 +1611,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] =
-    withSubmissionParameters(workspaceName,submissionRequest) {
-      (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, succeeded: Seq[SubmissionValidationEntityInputs], failed: Seq[SubmissionValidationEntityInputs], _) =>
+    withSubmissionParameters(workspaceName, submissionRequest) {
+      (_: DataAccess, _: SlickWorkspaceContext, header: SubmissionValidationHeader, succeeded: Seq[SubmissionValidationEntityInputs], failed: Seq[SubmissionValidationEntityInputs], _) =>
         DBIO.successful(RequestComplete(StatusCodes.OK, SubmissionValidationReport(submissionRequest, header, succeeded, failed)))
     }
 
@@ -2328,11 +2328,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
 
   private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
-    (op: (DataAccess, SlickWorkspaceContext, String, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs], Option[WorkflowFailureMode]) => ReadWriteAction[PerRequestMessage]): Future[PerRequestMessage] = {
+    (op: (DataAccess, SlickWorkspaceContext, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs], Option[WorkflowFailureMode]) => ReadWriteAction[PerRequestMessage]): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, dataAccess) { methodConfig =>
-          withMethodInputs(methodConfig, userInfo) { (wdl, gatherInputsResult) =>
+          withMethodInputs(methodConfig, userInfo) { gatherInputsResult =>
 
             //either both entityName and entityType must be defined, or neither. Error otherwise
             if(submissionRequest.entityName.isDefined != submissionRequest.entityType.isDefined) {
@@ -2361,7 +2361,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                       case (succeeded, failed) =>
                         val methodConfigInputs = gatherInputsResult.processableInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.getName, methodInput.expression) }
                         val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
-                        op(dataAccess, workspaceContext, wdl, header, succeeded.toSeq, failed.toSeq, workflowFailureMode)
+                        op(dataAccess, workspaceContext, header, succeeded.toSeq, failed.toSeq, workflowFailureMode)
                     }
                   }
                 }
