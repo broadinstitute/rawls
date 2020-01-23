@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor
 
 import java.io.ByteArrayInputStream
+import java.util.UUID
 import java.util.zip.GZIPInputStream
 
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
@@ -9,11 +10,12 @@ import akka.pattern._
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.ImportStatuses.ImportStatus
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, ImportServiceDAO, ImportStatuses, SamDAO}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
@@ -23,10 +25,13 @@ import org.broadinstitute.dsde.workbench.util.FutureSupport
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.{FiniteDuration, _}
 import scala.language.postfixOps
 import scala.util.{Failure, Success}
+import org.broadinstitute.dsde.rawls.model.UserInfo
+import org.joda.time.DateTime
+
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Created by mbemis on 10/17/19.
@@ -39,8 +44,10 @@ object AvroUpsertMonitorSupervisor {
   final case class AvroUpsertMonitorConfig(pollInterval: FiniteDuration,
                                            pollIntervalJitter: FiniteDuration,
                                            pubSubProject: GoogleProject,
-                                           pubSubTopic: String,
-                                           pubSubSubscription: String,
+                                           importRequestPubSubTopic: String,
+                                           importRequestPubSubSubscription: String,
+                                           importStatusPubSubTopic: String,
+                                           importStatusPubSubSubscription: String,
                                            bucketName: String,
                                            batchSize: Int,
                                            workerCount: Int)
@@ -50,6 +57,7 @@ object AvroUpsertMonitorSupervisor {
              samDAO: SamDAO,
              googleStorage: GoogleStorageService[IO],
              pubSubDao: GooglePubSubDAO,
+             importServiceDAO: ImportServiceDAO,
              avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
     Props(
       new AvroUpsertMonitorSupervisor(
@@ -58,6 +66,7 @@ object AvroUpsertMonitorSupervisor {
         samDAO,
         googleStorage,
         pubSubDao,
+        importServiceDAO,
         avroUpsertMonitorConfig))
 }
 
@@ -66,6 +75,7 @@ class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService
                                   samDAO: SamDAO,
                                   googleStorage: GoogleStorageService[IO],
                                   pubSubDao: GooglePubSubDAO,
+                                  importServiceDAO: ImportServiceDAO,
                                   avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO])
   extends Actor
     with LazyLogging {
@@ -80,16 +90,17 @@ class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService
     case Status.Failure(t) => logger.error("error initializing avro upsert monitor", t)
   }
 
-  def topicToFullPath(topicName: String) = s"projects/${avroUpsertMonitorConfig.pubSubProject.value}/topics/${avroUpsertMonitorConfig.pubSubTopic}"
+//  def topicToFullPath(topicName: String) = s"projects/${avroUpsertMonitorConfig.pubSubProject.value}/topics/${avroUpsertMonitorConfig.importRequestPubSubTopic}"
 
   def init =
     for {
-      _ <- pubSubDao.createSubscription(avroUpsertMonitorConfig.pubSubTopic, avroUpsertMonitorConfig.pubSubSubscription, Some(600)) //TODO: read from config
+      _ <- pubSubDao.createSubscription(avroUpsertMonitorConfig.importRequestPubSubTopic, avroUpsertMonitorConfig.importRequestPubSubSubscription, Some(600)) //TODO: read from config
+      _ <- pubSubDao.createSubscription(avroUpsertMonitorConfig.importStatusPubSubTopic, avroUpsertMonitorConfig.importStatusPubSubSubscription, Some(600)) //TODO: read from config
     } yield Start
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, avroUpsertMonitorConfig.pubSubSubscription, avroUpsertMonitorConfig.bucketName, avroUpsertMonitorConfig.batchSize))
+    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.importStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.bucketName, avroUpsertMonitorConfig.batchSize))
   }
 
   override val supervisorStrategy =
@@ -118,9 +129,11 @@ object AvroUpsertMonitor {
              googleStorage: GoogleStorageService[IO],
              pubSubDao: GooglePubSubDAO,
              pubSubSubscriptionName: String,
+             importServicePubSubTopic: String,
+             importServiceDAO: ImportServiceDAO,
              avroUpsertBucketName: String,
              batchSize: Int)(implicit cs: ContextShift[IO]): Props =
-    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, avroUpsertBucketName, batchSize))
+    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, importServicePubSubTopic, importServiceDAO, avroUpsertBucketName, batchSize))
 }
 
 class AvroUpsertMonitorActor(
@@ -132,6 +145,8 @@ class AvroUpsertMonitorActor(
                                   googleStorage: GoogleStorageService[IO],
                                   pubSubDao: GooglePubSubDAO,
                                   pubSubSubscriptionName: String,
+                                  importServicePubSubTopic: String,
+                                  importServiceDAO: ImportServiceDAO,
                                   avroUpsertBucketName: String,
                                   batchSize: Int)(implicit cs: ContextShift[IO])
   extends Actor
@@ -160,20 +175,25 @@ class AvroUpsertMonitorActor(
 
     case Some(message: PubSubMessage) =>
       //we received a message, so we will parse it and try to upsert it
-      logger.info(s"received avro upsert message: $message")
-      val (jobId, file) = parseMessage(message)
+      logger.info(s"received async upsert message: $message")
+      //post to import service pubsub topic
+      val (workspaceName, userEmail, importId, upsertFile) = parseMessage(message)
 
-      file match {
-        case "upsert.json" =>
-          logger.info(s"processing $file message for job $jobId with ackId ${message.ackId} in message: $message")
-          toFutureTry(initAvroUpsert(jobId, message.ackId)) map {
-            case Success(_) => writeResult(s"$jobId/success.json", resultString("import successful")).map(_ => ImportComplete) pipeTo self
-            case Failure(t) =>  writeResult(s"$jobId/error.json", resultString(t.getMessage)).map(_ => ImportComplete) pipeTo self
+      for {
+        petUserInfo <- getPetServiceAccountUserInfo(workspaceName, userEmail)
+        importStatus <- importServiceDAO.getImportStatus(importId, workspaceName, petUserInfo)
+        _ <- importStatus match {
+            case Some(ImportStatuses.ReadyForUpsert) => {
+              publishMessageToUpdateImportStatus(ImportStatuses.Upserting)
+              toFutureTry(initUpsert(upsertFile, importId, message.ackId, workspaceName, petUserInfo)) map {
+                case Success(_) => markImportAsDone(importId, workspaceName, petUserInfo)
+                case Failure(t) => publishMessageToUpdateImportStatus(ImportStatuses.Error(t.getMessage))
+              }
+            }
+            case None => publishMessageToUpdateImportStatus(ImportStatuses.Error("Status Not Found")) // !!!
+            case _ => publishMessageToUpdateImportStatus(ImportStatuses.Error("Status Was Wrong")) // !!!
           }
-        case _ =>
-          logger.info(s"found ignorable file $file message for job $jobId with ackId ${message.ackId} in message: $message")
-          acknowledgeMessage(message.ackId).map(_ => ImportComplete) pipeTo self //some other file (i.e. success/failure log, metadata.json)
-      }
+        } yield ()
 
     case None =>
       // there was no message so wait and try again
@@ -194,31 +214,59 @@ class AvroUpsertMonitorActor(
       self ! None
   }
 
-  private def initAvroUpsert(jobId: String, ackId: String): Future[Unit] = {
+  private def getPetServiceAccountUserInfo(workspaceName: WorkspaceName, userEmail: RawlsUserEmail) = {
     for {
-      avroMetadataJson <- readMetadataObject(s"$jobId/metadata.json")
-      //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the uspert is lost
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(avroMetadataJson.namespace, RawlsUserEmail(avroMetadataJson.userEmail))
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(workspaceName.namespace, userEmail)
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-      avroUpsertJson <- readUpsertObject(s"$jobId/upsert.json")
+    } yield {
+      petUserInfo
+    }
+  }
+
+  private def markImportAsDone(importId: UUID, workspaceName: WorkspaceName, userInfo: UserInfo) = {
+    for {
+      importStatus <- importServiceDAO.getImportStatus(importId, workspaceName, userInfo)
+      _ <- importStatus match {
+        case Some(ImportStatuses.Upserting) => publishMessageToUpdateImportStatus(ImportStatuses.Done)
+        case None => publishMessageToUpdateImportStatus(ImportStatuses.Error("Status Not Found"))
+        case _ => publishMessageToUpdateImportStatus(ImportStatuses.Error("Status Was Wrong"))
+      }
+    } yield ()
+  }
+
+  private def publishMessageToUpdateImportStatus(importStatus: ImportStatus) = {
+    val now = DateTime.now
+    val requiredAttributes = Map("updateStatus" -> ImportStatuses.Done.toString, "updatedDate" -> now.toString)
+    val message = requiredAttributes ++ {importStatus match {
+      case error: ImportStatuses.Error => Map("errorMessage" -> error.message)
+      case _ => Map()
+    }}
+    pubSubDao.publishMessages(importServicePubSubTopic, Seq(message.toJson.compactPrint))
+  }
+
+
+  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Unit] = {
+    for {
+      //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
+      upsertJson <- readUpsertObject(upsertFile)
       ackResponse <- acknowledgeMessage(ackId)
       upsertResults <-
-        avroUpsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
+        upsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
           logger.info(s"starting upsert for $jobId with ${upsertBatch.size} entities ...")
-          IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), upsertBatch, true)))
+          IO.fromFuture(IO(workspaceService.apply(userInfo).batchUpdateEntities(WorkspaceName(workspaceName.namespace, workspaceName.name), upsertBatch, true)))
         }.unsafeToFuture
     } yield {
-      logger.info(s"completed Avro upsert job ${avroMetadataJson.jobId} for user: ${avroMetadataJson.userEmail} with ${avroUpsertJson.size} entities")
+      logger.info(s"completed async upsert job ${jobId} for user: ${userInfo.userEmail} with ${upsertJson.size} entities")
       ()
     }
   }
 
-  private def writeResult(path: String, message: String): Future[Unit] = {
-    logger.info(s"writing import result to $path")
-    googleStorage.createBlob(GcsBucketName(avroUpsertBucketName), GcsBlobName(path), message.getBytes).compile.drain.unsafeToFuture()
-  }
+//  private def writeResult(path: String, message: String): Future[Unit] = {
+//    logger.info(s"writing import result to $path")
+//    googleStorage.createBlob(GcsBucketName(avroUpsertBucketName), GcsBlobName(path), message.getBytes).compile.drain.unsafeToFuture()
+//  }
 
-  private def resultString(message: String) = s"""{\"message\":\"${message}\"}"""
+//  private def resultString(message: String) = s"""{\"message\":\"${message}\"}"""
 
   private def acknowledgeMessage(ackId: String) = {
     logger.info(s"acking message with ackId $ackId")
@@ -226,18 +274,21 @@ class AvroUpsertMonitorActor(
   }
 
   private def parseMessage(message: PubSubMessage) = {
-    message.contents.parseJson.asJsObject.getFields("name").head.compactPrint match {
-      case objectIdPattern(jobId, file) => (jobId, file)
-      case m => throw new Exception(s"unable to parse message $m")
+    val attributes = List("workspaceNamespace", "workspaceName", "userEmail", "jobId", "upsertFile")
+    val extractedAttributes = attributes.map(att => att -> message.attributes.get(att)).toMap
+    if (extractedAttributes.values.toList.contains(None)) {
+      publishMessageToUpdateImportStatus(ImportStatuses.Error("Attributes were wrong")) // !!!
+      throw new Exception(s"unable to parse message $message")
     }
+    else
+      extractedAttributes.map(att => att._2.get) match {
+        case List(workspaceNamespace, workspaceName, userEmail, jobId, upsertFile) =>
+          (WorkspaceName(workspaceNamespace, workspaceName), RawlsUserEmail(userEmail), UUID.fromString(jobId), upsertFile)
+      }
   }
 
   private def readUpsertObject(path: String): Future[Seq[EntityUpdateDefinition]] = {
     readObject[Seq[EntityUpdateDefinition]](path, decompress = true)
-  }
-
-  private def readMetadataObject(path: String): Future[AvroMetadataJson] = {
-    readObject[AvroMetadataJson](path)
   }
 
   private def readObject[T](path: String, decompress: Boolean = false)(implicit reader: JsonReader[T]): Future[T] = {
