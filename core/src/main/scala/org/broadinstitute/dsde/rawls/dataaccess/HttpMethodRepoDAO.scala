@@ -56,7 +56,7 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
   override def getMethod( method: MethodRepoMethod, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
     method match {
       case agoraMethod: AgoraMethod =>
-        getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo)
+        getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo).map(_.map(_.copy(url = None)))
       case dockstoreMethod: DockstoreMethod =>
         getDockstoreMethod(dockstoreMethod) flatMap { response: Option[GA4GHTool] =>
           response match {
