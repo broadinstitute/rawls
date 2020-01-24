@@ -25,9 +25,12 @@ class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
   def describe(userInfo: UserInfo, wdl: WDL): Try[WorkflowDescription] =
     wdl.url match {
       case Some(url) =>
-        logger.error(">>> wdl.url is ${wdl.url}")
+        logger.error(s">>> wdl.url is ${wdl.url}")
+        throw new Exception(s">>> wdl.url is ${wdl.url}")
         Retry.retry(5.seconds, 30.seconds) { Try { getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", null, url, null, null, null) } }
       case None =>
+        logger.error(s">>> wdl.source is ${wdl.source}")
+        throw new Exception(s">>> wdl.source is ${wdl.source}")
         Retry.retry(5.seconds, 30.seconds) { Try { getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl.source, null, null, null, null) } }
     }
 
