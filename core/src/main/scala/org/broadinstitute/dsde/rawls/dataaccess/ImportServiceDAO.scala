@@ -4,9 +4,7 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.client.RequestBuilding.Post
-import akka.http.scaladsl.marshalling.Marshal
-import akka.http.scaladsl.model.RequestEntity
+import akka.http.scaladsl.client.RequestBuilding.Get
 import akka.stream.Materializer
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{RawlsEnumeration, UserInfo, WorkspaceName}
@@ -30,11 +28,9 @@ class ImportServiceDAO(url: String)(implicit val system: ActorSystem, val materi
     import spray.json.DefaultJsonProtocol._
     import ImportServiceJsonSupport._
 
-    val content = Map("importId" -> importId.toString)
-    val importStatusResponse: Future[ImportServiceResponse] = Marshal(content).to[RequestEntity] flatMap { entity =>
-      retry[ImportServiceResponse](when500) { () =>
-        executeRequestWithToken[ImportServiceResponse](userInfo.accessToken)(Post(url, entity))
-      }
+    val requestUrl = s"$url/iservice/${workspaceName.namespace}/${workspaceName.name}/imports/$importId"
+    val importStatusResponse: Future[ImportServiceResponse] =  retry[ImportServiceResponse](when500) { () =>
+        executeRequestWithToken[ImportServiceResponse](userInfo.accessToken)(Get(requestUrl))
     }
 
     importStatusResponse.map { response =>
