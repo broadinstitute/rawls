@@ -45,9 +45,9 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
     val labelsBodyPart = labels.map(labelsMap => Multipart.FormData.BodyPart("labels",labelsMap.toJson.compactPrint))
     val wfc = workflowCollection.map(Multipart.FormData.BodyPart("collectionName", _))
 
-    val wdlSourceOrUrl = wdl.url match {
-      case Some(url) => Multipart.FormData.BodyPart("workflowUrl", url)
-      case None => Multipart.FormData.BodyPart("workflowSource", wdl.source)
+    val wdlSourceOrUrl = wdl match {
+      case wdl: WdlUrl => Multipart.FormData.BodyPart("workflowUrl", wdl.url)
+      case wdl: WdlSource => Multipart.FormData.BodyPart("workflowSource", wdl.source)
     }
 
     val bodyParts = Seq(

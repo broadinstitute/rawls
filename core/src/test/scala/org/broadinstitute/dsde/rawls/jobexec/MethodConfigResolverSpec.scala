@@ -18,7 +18,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   import driver.api._
 
   val littleWdl =
-    WDL(
+    WdlSource(
       """
         |task t1 {
         |  Int int_arg
@@ -32,10 +32,10 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         |workflow w1 {
         |  call t1
         |}
-      """.stripMargin, None)
+      """.stripMargin)
 
   val arrayWdl =
-    WDL(
+    WdlSource(
       """
         |task t1 {
         |  Int int_arg
@@ -50,10 +50,10 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         |    call t1 { input: int_arg = i }
         |  }
         |}
-      """.stripMargin, None)
+      """.stripMargin)
 
   val doubleArrayWdl =
-    WDL(
+    WdlSource(
       """
         |task t1 {
         |  Array[Int] aint_arg
@@ -68,11 +68,11 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         |    call t1 { input: aint_arg = ai }
         |  }
         |}
-      """.stripMargin, None)
+      """.stripMargin)
 
 
   val optionalDoubleArrayWdl =
-    WDL(
+    WdlSource(
       """
         |task t1 {
         |  Array[Int] aint_arg
@@ -87,11 +87,11 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         |    call t1 { input: aint_arg = ai }
         |  }
         |}
-      """.stripMargin, None)
+      """.stripMargin)
 
 
   val tripleArrayWdl =
-    WDL(
+    WdlSource(
       """
         |task t1 {
         |  Array[Array[Int]] aint_arg
@@ -106,10 +106,10 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         |    call t1 { input: aint_arg = ai }
         |  }
         |}
-      """.stripMargin, None)
+      """.stripMargin)
 
   val wdlVersionOneWdl =
-    WDL(
+    WdlSource(
       """
         |version 1.0
         |
@@ -136,9 +136,9 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         |    docker: "docker image"
         |  }
         |}
-      """.stripMargin, None)
+      """.stripMargin)
 
-  val badWdl = WDL(littleWdl.source.replace("workflow", "not-a-workflow"), None)
+  val badWdl = WdlSource(littleWdl.source.replace("workflow", "not-a-workflow"))
 
   val littleWdlName = "w1"
   val intArgName = "t1.int_arg"

@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model.{ToolInputParameter, ToolOutputParameter, ValueType, WorkflowDescription}
-import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL}
+import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL, WdlSource}
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -14,7 +14,7 @@ class MockCromwellSwaggerClient extends CromwellSwaggerClient("fake/path") {
   val workflowDescriptions: mutable.Map[String, WorkflowDescription] =  new TrieMap()
 
   override def describe(userInfo: UserInfo, wdl: WDL): Try[WorkflowDescription] = {
-    Try { MockCromwellSwaggerClient.returnCopy(workflowDescriptions(wdl.source)) }
+    Try { MockCromwellSwaggerClient.returnCopy(workflowDescriptions(wdl.asInstanceOf[WdlSource].source)) }
   }
 
 }
