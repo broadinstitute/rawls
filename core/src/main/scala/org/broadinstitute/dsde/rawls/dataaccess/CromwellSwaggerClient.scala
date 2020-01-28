@@ -22,12 +22,15 @@ class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
   }
 
   def describe(userInfo: UserInfo, wdl: WDL): Try[WorkflowDescription] =
-    wdl match {
-      case wdl: WdlUrl =>
-        Retry.retry(5.seconds, 30.seconds) { Try { getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", null, wdl.url, null, null, null) } }
-      case wdl: WdlSource =>
-        Retry.retry(5.seconds, 30.seconds) { Try { getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl.source, null, null, null, null) } }
+    Retry.retry(5.seconds, 30.seconds) {
+      Try {
+        wdl match {
+          case wdl: WdlUrl =>
+            getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", null, wdl.url, null, null, null)
+          case wdl: WdlSource =>
+            getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl.source, null, null, null, null)
+        }
+      }
     }
-
 
 }
