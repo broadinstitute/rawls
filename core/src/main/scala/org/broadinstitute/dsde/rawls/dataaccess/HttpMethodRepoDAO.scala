@@ -58,15 +58,15 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
       case agoraMethod: AgoraMethod =>
         getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo) map { maybeEntity =>
           for {
-            entity <- maybeEntity
+            entity: AgoraEntity <- maybeEntity
             payload <- entity.payload
           } yield WdlSource(payload)
         }
       case dockstoreMethod: DockstoreMethod =>
         getDockstoreMethod(dockstoreMethod) map { maybeTool =>
           for {
-            tool <- maybeTool
-          } yield WdlUrl(tool.url)
+            tool: GA4GHTool <- maybeTool
+          } yield WdlUrl(tool.url) // We submit the Github URL to Cromwell so that relative imports work.
         }
     }
   }
