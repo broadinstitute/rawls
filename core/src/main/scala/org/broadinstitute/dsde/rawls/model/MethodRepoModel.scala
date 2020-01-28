@@ -11,11 +11,6 @@ object AgoraEntityType extends Enumeration {
   val Configuration = Value("Configuration")
 }
 
-trait MethodRepoEntity {
-  def toWdl: WDL
-  def repo: MethodRepository
-}
-
 case class AgoraEntity(
                         namespace: Option[String] = None,
                         name: Option[String] = None,
@@ -26,24 +21,7 @@ case class AgoraEntity(
                         createDate: Option[DateTime] = None,
                         payload: Option[String] = None,
                         url: Option[String] = None,
-                        entityType: Option[AgoraEntityType.EntityType] = None) extends MethodRepoEntity {
-
-  override def toWdl: WDL =
-    WdlSource(
-      payload.getOrElse(
-        throw new IllegalStateException("Expected WDL in Agora payload, found None")
-      )
-    )
-
-  override def repo: MethodRepository = Agora
-}
-
-case class DockstoreEntity(tool: GA4GHTool) extends MethodRepoEntity {
-
-  override def toWdl: WDL = WdlUrl(tool.url)
-
-  override def repo: MethodRepository = Dockstore
-}
+                        entityType: Option[AgoraEntityType.EntityType] = None)
 
 class MethodRepoJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
