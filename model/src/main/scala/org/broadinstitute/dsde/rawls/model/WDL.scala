@@ -7,6 +7,7 @@ trait WDL {
 case class WdlSource(source: String) extends WDL {
   override def cacheKey: String = source
 }
+
 case class WdlUrl(url: String) extends WDL {
   override def cacheKey: String = url
 }
