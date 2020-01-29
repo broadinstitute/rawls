@@ -10,7 +10,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
-import org.broadinstitute.dsde.workbench.fixture.{MethodData, SimpleMethodConfig, _}
+import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GoogleProject, ServiceAccount}
@@ -124,9 +124,16 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
 
             val submissionId = Rawls.submissions.launchWorkflow(
-              projectName, workspaceName,
-              topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
-              "participant", SingleParticipant.entityId, "this", useCallCache = false)
+              projectName,
+              workspaceName,
+              topLevelMethodConfiguration.configNamespace,
+              topLevelMethodConfiguration.configName,
+              "participant",
+              SingleParticipant.entityId,
+              "this",
+              useCallCache = false,
+              deleteIntermediateOutputFiles = false
+            )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
@@ -432,9 +439,16 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
 
             val submissionId = Rawls.submissions.launchWorkflow(
-              projectName, workspaceName,
-              SimpleMethodConfig.configNamespace, SimpleMethodConfig.configName,
-              "participant", SingleParticipant.entityId, "this", useCallCache = false)
+              projectName,
+              workspaceName,
+              SimpleMethodConfig.configNamespace,
+              SimpleMethodConfig.configName,
+              "participant",
+              SingleParticipant.entityId,
+              "this",
+              useCallCache = false,
+              deleteIntermediateOutputFiles = false
+            )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
