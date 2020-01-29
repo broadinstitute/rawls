@@ -898,9 +898,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     for {
-      workspaceContext <- dataSource.inTransaction { dataAccess =>
-        withWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own, dataAccess) { ctx => DBIO.successful(ctx) }
-      }
+      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
 
       userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo)
 
@@ -938,9 +936,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, SamWorkspaceActions.write, dataAccess) { destWorkspaceContext =>
-        withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,SamWorkspaceActions.read, dataAccess) { sourceWorkspaceContext =>
+
+    withWorkspaceContextAndPermissionsF(entityCopyDef.destinationWorkspace, SamWorkspaceActions.write) { destWorkspaceContext =>
+      withWorkspaceContextAndPermissionsF(entityCopyDef.sourceWorkspace,SamWorkspaceActions.read) { sourceWorkspaceContext =>
+        dataSource.inTransaction { dataAccess =>
           for {
             sourceAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspace.workspaceId, userInfo))
             destAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWorkspaceContext.workspace.workspaceId, userInfo))
@@ -971,8 +970,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
     withAttributeNamespaceCheck(entity) {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, dataAccess) { workspaceContext =>
+      withWorkspaceContextAndPermissionsF(workspaceName, SamWorkspaceActions.write) { workspaceContext =>
+        dataSource.inTransaction { dataAccess =>
           dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
             case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceName}")))
             case None => dataAccess.entityQuery.save(workspaceContext, entity)
@@ -988,8 +987,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield operation.name
 
     withAttributeNamespaceCheck(namesToCheck) {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, dataAccess) { workspaceContext =>
+      withWorkspaceContextAndPermissionsF(workspaceName, SamWorkspaceActions.write) { workspaceContext =>
+        dataSource.inTransaction { dataAccess =>
           val updateTrialsAction = dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
             val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
             entityUpdates.map { entityUpdate =>
