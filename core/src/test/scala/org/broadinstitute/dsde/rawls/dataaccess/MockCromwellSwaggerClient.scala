@@ -14,8 +14,10 @@ class MockCromwellSwaggerClient extends CromwellSwaggerClient("fake/path") {
   val workflowDescriptions: mutable.Map[WDL, WorkflowDescription] =  new TrieMap()
 
   override def describe(userInfo: UserInfo, wdl: WDL): Try[WorkflowDescription] = {
-    println(s">>> About to describe WDL $wdl")
-    println(s"workflow descriptions are ${workflowDescriptions.keys.mkString("\n\n")}")
+    if (!workflowDescriptions.contains(wdl)) {
+      println(s">>> Target WDL is $wdl")
+      println(s">>> Available WDLs are ${workflowDescriptions.keys.mkString("\n")}")
+    }
     Try { MockCromwellSwaggerClient.returnCopy(workflowDescriptions(wdl)) }
   }
 
