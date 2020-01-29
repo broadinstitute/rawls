@@ -55,6 +55,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   def this() = this(ActorSystem("AvroUpsertMonitorSpec"))
 
   override def beforeAll(): Unit = {
+
     super.beforeAll()
   }
 
@@ -83,36 +84,25 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     "jobId" -> importId.toString
   )
 
-  "AvroUpsertMonitor" should "upsert entities" in withTestDataApiServices { services =>
+  // Create the monitor supervisor config
+  val config = AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig(
+    FiniteDuration.apply(1, TimeUnit.SECONDS),
+    FiniteDuration.apply(1, TimeUnit.SECONDS),
+    importRequestPubSubTopic,
+    importRequestSubscriptionName,
+    importStatusPubSubTopic,
+    importStatusSubscriptionName,
+    bucketName,
+    1000,
+    1
+  )
 
-    val importId1 = UUID.randomUUID()
-    val importId2 = UUID.randomUUID()
-    val importId3 = UUID.randomUUID()
-    val importId4 = UUID.randomUUID()
-
-    // add the imports and their statuses to the mock importserviceDAO
-    val mockImportServiceDAO =  new MockImportServiceDAO()
-    mockImportServiceDAO.groups += (importId1 -> ImportStatuses.ReadyForUpsert)
-    mockImportServiceDAO.groups += (importId2 -> ImportStatuses.Upserting)
-    mockImportServiceDAO.groups += (importId3 -> ImportStatuses.Done)
-    mockImportServiceDAO.groups += (importId4 -> ImportStatuses.Error("Some error"))
-
+  def setUp(services: TestApiService) = {
     // create the two topics
     services.gpsDAO.createTopic(importRequestPubSubTopic)
     services.gpsDAO.createTopic(importStatusPubSubTopic)
 
-    // Create the monitor supervisor config
-    val config = AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig(
-      FiniteDuration.apply(1, TimeUnit.SECONDS),
-      FiniteDuration.apply(1, TimeUnit.SECONDS),
-      importRequestPubSubTopic,
-      importRequestSubscriptionName,
-      importStatusPubSubTopic,
-      importStatusSubscriptionName,
-      bucketName,
-      1000,
-      1
-    )
+    val mockImportServiceDAO =  new MockImportServiceDAO()
 
     // Start the monitor
     system.actorOf(AvroUpsertMonitorSupervisor.props(
@@ -124,6 +114,18 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       mockImportServiceDAO,
       config
     ))
+
+    mockImportServiceDAO
+  }
+
+
+  "AvroUpsertMonitor" should "upsert entities" in withTestDataApiServices { services =>
+
+    val importId1 = UUID.randomUUID()
+
+    // add the imports and their statuses to the mock importserviceDAO
+    val mockImportServiceDAO =  setUp(services)
+    mockImportServiceDAO.groups += (importId1 -> ImportStatuses.ReadyForUpsert)
 
     // create compressed file
     val contents = """[{"name": "avro-entity", "entityType": "test-type", "operations": [{"op": "AddUpdateAttribute", "attributeName": "avro-attribute", "addUpdateAttribute": "foo"}]}]"""
@@ -139,36 +141,37 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // Publish message on the request topic
     services.gpsDAO.publishMessages(importRequestPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId1))))
-    services.gpsDAO.publishMessages(importRequestPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId2))))
-    services.gpsDAO.publishMessages(importRequestPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId3))))
-    services.gpsDAO.publishMessages(importRequestPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId4))))
-
-    logger.info("TOPICS " + services.gpsDAO.topics)
-    logger.info("MESSAGE LOG " + services.gpsDAO.messageLog)
 
     // check if correct message was posted on request topic
-    assert(services.gpsDAO.receivedMessage(importRequestPubSubTopic, sampleMessage, 4))
+    assert(services.gpsDAO.receivedMessage(importRequestPubSubTopic, sampleMessage, 1))
 
-    Thread.sleep(10000)
-
+    Thread.sleep(1000)
 
     // Check in db if entities are there
     withWorkspaceContext(testData.workspace) { context =>
       val entity = Entity(entityName, entityType, Map(AttributeName("default", "avro-attribute") -> AttributeString("foo")))
-
-      val entityResult1 = Await.result(services.workspaceServiceConstructor.apply(userInfo).listEntities(workspaceName, entityType), Duration.apply(10, TimeUnit.SECONDS))
-
-      logger.info("ENTITIES " + entityResult1)
-
-     // val entityResult = Await.result(services.workspaceServiceConstructor.apply(userInfo).getEntity(workspaceName, entityType, entityName), Duration.apply(10, TimeUnit.SECONDS))
-
-      //assertResult(Some(entity)) { runAndWait(entityQuery.get(context, entityType, entityName)) }
+      assertResult(Some(entity)) { runAndWait(entityQuery.get(context, entityType, entityName)) }
     }
-
-    logger.info("TOPICS " + services.gpsDAO.topics)
-    logger.info("MESSAGE LOG " + services.gpsDAO.messageLog)
+  }
 
 
+  "AvroUpsertMonitor" should "return error for imports with the wrong status" in withTestDataApiServices { services =>
+    val importId2 = UUID.randomUUID()
+    val importId3 = UUID.randomUUID()
+    val importId4 = UUID.randomUUID()
+
+    val mockImportServiceDAO =  setUp(services)
+    mockImportServiceDAO.groups += (importId2 -> ImportStatuses.Upserting)
+    mockImportServiceDAO.groups += (importId3 -> ImportStatuses.Done)
+    mockImportServiceDAO.groups += (importId4 -> ImportStatuses.Error("Some error"))
+
+    services.gpsDAO.publishMessages(importRequestPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId2))))
+    services.gpsDAO.publishMessages(importRequestPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId3))))
+    services.gpsDAO.publishMessages(importRequestPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId4))))
+
+    Thread.sleep(1000)
+
+    assert(services.gpsDAO.receivedMessage(importRequestPubSubTopic, sampleMessage, 3))
 
   }
 }
