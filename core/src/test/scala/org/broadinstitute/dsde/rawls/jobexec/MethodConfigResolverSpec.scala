@@ -180,13 +180,13 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val wdlVersionOneWdlFileOutput  = makeToolOutputParameter(wdlVersionOneFileOutputName, makeValueType("File"), "File")
   val wdlVersionOneWdlWorkflowDescription = makeWorkflowDescription(wdlVersionOneWdlName, List(wdlVersionOneWdlStringInput, wdlVersionOneWdlFileInput), List(wdlVersionOneWdlFileOutput))
 
-  mockCromwellSwaggerClient.workflowDescriptions += (littleWdl.source -> littleWdlWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (arrayWdl.source  -> requiredArrayWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl.source -> requiredDoubleArrayWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (optionalDoubleArrayWdl.source -> optionalDoubleArrayWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (tripleArrayWdl.source -> requiredTripleArrayWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (badWdl.source -> badWdlWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (wdlVersionOneWdl.source -> wdlVersionOneWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (littleWdl -> littleWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (arrayWdl  -> requiredArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl -> requiredDoubleArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (optionalDoubleArrayWdl -> optionalDoubleArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (tripleArrayWdl -> requiredTripleArrayWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (badWdl -> badWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (wdlVersionOneWdl -> wdlVersionOneWdlWorkflowDescription)
 
 
   val workspace = Workspace("workspaces", "test_workspace", UUID.randomUUID().toString(), "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)

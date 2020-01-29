@@ -18,7 +18,7 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
 
   override def submitWorkflows(wdl: WDL, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo)= {
     this.submitInput = inputs
-    this.submitWdlSource = throw new Exception(s">>> $wdl")//.asInstanceOf[WdlSource].source
+    this.submitWdlSource = wdl.asInstanceOf[WdlSource].source
     this.submitOptions = options
     this.labels = labels.getOrElse(Map.empty)
     this.collection = workflowCollection

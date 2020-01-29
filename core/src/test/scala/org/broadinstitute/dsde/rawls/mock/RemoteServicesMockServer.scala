@@ -122,9 +122,9 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     val methodPath = "/methods"
 
-    val goodAndBadMethod = AgoraEntity(Some("dsde"),Some("good_and_bad"),Some(1),None,None,None,None,Some(goodAndBadInputsWDL),None,Some(AgoraEntityType.Workflow))
+    val goodAndBadMethod = AgoraEntity(Some("dsde"),Some("good_and_bad"),Some(1),None,None,None,None,Option(goodAndBadInputsWDL.source),None,Some(AgoraEntityType.Workflow))
 
-    val meth1Method = AgoraEntity(Some("dsde"),Some("meth1"),Some(1),None,None,None,None,Some(meth1WDL),None,Some(AgoraEntityType.Workflow))
+    val meth1Method = AgoraEntity(Some("dsde"),Some("meth1"),Some(1),None,None,None,None,Option(meth1WDL.source),None,Some(AgoraEntityType.Workflow))
 
     mockServer.when(
       request()
@@ -170,7 +170,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
     val dockstoreResponse =
-      s"""{"type":"WDL","descriptor":"${threeStepWDL.replace("three_step", "three_step_dockstore").replace("\n","\\n")}","url":"bogus"}"""
+      s"""{"type":"WDL","descriptor":"${threeStepWDL.source.replace("three_step", "three_step_dockstore").replace("\n","\\n")}","url":"bogus"}"""
 
     mockServer.when(
       request()
@@ -185,7 +185,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     // Saving invalid WDL as a Method Repo Method is allowed
 
-    val badSyntaxWDL = threeStepWDL.replace("workflow", "not-a-workflow")
+    val badSyntaxWDL = threeStepWDL.source.replace("workflow", "not-a-workflow")
     val badWDLMethod = AgoraEntity(Some("dsde"),Some("bad_wdl"),Some(1),None,None,None,None,Some(badSyntaxWDL),None,Some(AgoraEntityType.Workflow))
 
     mockServer.when(
