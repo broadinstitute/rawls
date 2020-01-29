@@ -20,7 +20,7 @@ import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUps
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsPath, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.util.FutureSupport
 import spray.json._
 import spray.json.DefaultJsonProtocol._
@@ -89,12 +89,10 @@ class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService
     case Status.Failure(t) => logger.error("error initializing avro upsert monitor", t)
   }
 
-//  def topicToFullPath(topicName: String) = s"projects/${avroUpsertMonitorConfig.pubSubProject.value}/topics/${avroUpsertMonitorConfig.importRequestPubSubTopic}"
-
   def init =
     for {
-      _ <- pubSubDao.createSubscription(avroUpsertMonitorConfig.importRequestPubSubTopic, avroUpsertMonitorConfig.importRequestPubSubSubscription, Some(600)) //TODO: read from config
-      _ <- pubSubDao.createSubscription(avroUpsertMonitorConfig.importStatusPubSubTopic, avroUpsertMonitorConfig.importStatusPubSubSubscription, Some(600)) //TODO: read from config
+      _ <- pubSubDao.createSubscription(avroUpsertMonitorConfig.importRequestPubSubTopic, avroUpsertMonitorConfig.importRequestPubSubSubscription, Some(600))
+      _ <- pubSubDao.createSubscription(avroUpsertMonitorConfig.importStatusPubSubTopic, avroUpsertMonitorConfig.importStatusPubSubSubscription, Some(600))
     } yield Start
 
   def startOne(): Unit = {

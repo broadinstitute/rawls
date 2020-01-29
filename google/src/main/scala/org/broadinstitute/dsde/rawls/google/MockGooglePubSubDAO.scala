@@ -26,8 +26,6 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
   val messageLog = new ConcurrentLinkedQueue[String]
   val acks = new ConcurrentLinkedQueue[String]
 
-//  def logMessage(topic: String, message: String, attributes: String) = messageLog.add(s"$topic|$message|$attributes")
-//  def receivedMessage(topic: String, message: String, attributes: Map[String, String], count: Int = 1) = messageLog.toArray.filter(_ == s"$topic|$message|${attributes.toString}").size == count
   def logMessage(topic: String, message: String) = messageLog.add(s"$topic|$message")
   def receivedMessage(topic: String, message: String, count: Int = 1) = messageLog.toArray.filter(_ == s"$topic|$message").size == count
 
