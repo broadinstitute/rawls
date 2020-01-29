@@ -346,11 +346,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getWorkspaceContextAndPermissions(workspaceName: WorkspaceName, requiredAction: SamResourceAction): Future[SlickWorkspaceContext] = {
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, requiredAction, dataAccess) { workspaceContext =>
-        DBIO.successful(workspaceContext)
-      }
-    }
+    withWorkspaceContextAndPermissionsF(workspaceName, requiredAction) { Future(_) }
   }
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =  {
@@ -431,14 +427,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
     withAttributeNamespaceCheck(operations.map(_.name)) {
       for {
-        workspace <- dataSource.inTransaction({ dataAccess =>
-          withWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, dataAccess) {
-            updateWorkspace(operations, dataAccess)
-          }
+        workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+        updatedWorkspace <- dataSource.inTransaction({ dataAccess =>
+            updateWorkspace(operations, dataAccess)(workspaceContext)
         }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
-        authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)
+        authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, updatedWorkspace.workspaceId, userInfo)
       } yield {
-        RequestComplete(StatusCodes.OK, WorkspaceDetails(workspace, authDomain))
+        RequestComplete(StatusCodes.OK, WorkspaceDetails(updatedWorkspace, authDomain))
       }
     }
   }
@@ -565,8 +560,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
     withAttributeNamespaceCheck(workspaceAttributeNames) {
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
-        dataSource.inTransaction({ dataAccess =>
-          withWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read, dataAccess) { sourceWorkspaceContext =>
+        withWorkspaceContextAndPermissionsF(sourceWorkspaceName, SamWorkspaceActions.read) { sourceWorkspaceContext =>
+          dataSource.inTransaction({ dataAccess =>
             DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspace.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
               withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
 
@@ -588,9 +583,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 }
               }
             }
-          }
+          }, TransactionIsolation.ReadCommitted)
           // read committed to avoid deadlocks on workspace attr scratch table
-        }, TransactionIsolation.ReadCommitted).map { case (sourceWorkspaceContext, destWorkspaceContext) =>
+        }.map { case (sourceWorkspaceContext, destWorkspaceContext) =>
           //we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
           //in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
           //we also don't want to block returning a response on this call because it's already a slow endpoint
@@ -2128,6 +2123,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       requireAccess(workspaceContext.workspace, requiredAction) { op(workspaceContext) }
     }
   }
+
+  private def withWorkspaceContextAndPermissionsF[T](workspaceName: WorkspaceName, requiredAction: SamResourceAction)(op: (SlickWorkspaceContext) => Future[T]): Future[T] = {
+    for {
+      workspaceContext <- dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { ctx => DBIO.successful(ctx) }
+      }
+      opResult <- requireAccessF(workspaceContext.workspace, requiredAction) { op(workspaceContext) }
+    } yield opResult
+  }
+  // TODO: once everything is switched over to the Future-ified version, look for remaining calls to requireAccess and remove those too
 
   private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess, attributeSpecs: Option[WorkspaceAttributeSpecs] = None)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
     dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs) flatMap {
