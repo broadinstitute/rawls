@@ -15,6 +15,7 @@ class MockCromwellSwaggerClient extends CromwellSwaggerClient("fake/path") {
 
   override def describe(userInfo: UserInfo, wdl: WDL): Try[WorkflowDescription] = {
     println(s">>> About to describe WDL $wdl")
+    println(s"workflow descriptions are ${workflowDescriptions.keys.mkString("\n\n")}")
     Try { MockCromwellSwaggerClient.returnCopy(workflowDescriptions(wdl)) }
   }
 
