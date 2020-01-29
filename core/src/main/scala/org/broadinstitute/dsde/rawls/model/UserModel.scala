@@ -1,8 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.joda.time.DateTime
-import UserAuthJsonSupport._
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 
 /**
  * Created by dvoet on 10/27/15.

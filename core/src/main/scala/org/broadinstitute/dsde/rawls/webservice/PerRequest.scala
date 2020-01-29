@@ -2,9 +2,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import scala.language.postfixOps
 import akka.http.scaladsl.marshalling.{Marshaller, ToResponseMarshaller}
-import akka.http.scaladsl.model.{HttpHeader, StatusCodes, Uri}
-import akka.http.scaladsl.model.headers.Location
-import org.broadinstitute.dsde.rawls.RawlsException
+import akka.http.scaladsl.model.{HttpHeader, StatusCodes}
 import org.broadinstitute.dsde.rawls.model.ErrorReport
 
 import scala.concurrent.ExecutionContext

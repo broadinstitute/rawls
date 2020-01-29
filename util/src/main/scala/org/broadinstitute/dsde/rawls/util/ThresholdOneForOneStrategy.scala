@@ -2,8 +2,6 @@ package org.broadinstitute.dsde.rawls.util
 
 import akka.actor.{ActorContext, ActorRef, ChildRestartStats, SupervisorStrategy}
 
-import scala.concurrent.duration.Duration
-
 //Retries up to maxNrOfRetries regardless of time range.
 //Once the number of retries is above thresholdLimit, call thresholdFunc before restarting child.
 class ThresholdOneForOneStrategy(thresholdLimit: Int,

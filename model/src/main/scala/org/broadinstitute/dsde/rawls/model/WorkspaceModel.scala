@@ -14,7 +14,7 @@ import akka.http.scaladsl.model.StatusCodes.BadRequest
 import spray.json._
 import UserModelJsonSupport.ManagedGroupRefFormat
 
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
@@ -597,7 +597,6 @@ case class WorkspaceTag(tag: String, count: Int)
 
 class WorkspaceJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
-  import UserModelJsonSupport.RawlsGroupRefFormat
   import WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {

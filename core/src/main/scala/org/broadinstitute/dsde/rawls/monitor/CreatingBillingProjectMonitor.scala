@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.workbench.util.FutureSupport
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.collection.JavaConverters._
+import scala.language.postfixOps
 import scala.util.{Success, Try}
 
 /**

@@ -9,11 +9,11 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.Retry
 import spray.json.JsObject
 
-import scala.collection.immutable.Iterable
+import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
+import scala.language.postfixOps
 import scala.util.{Random, Try}
-import scala.concurrent.duration._
 
 
 class ShardedHttpExecutionServiceCluster (readMembers: Set[ClusterMember], submitMembers: Set[ClusterMember], dataSource: SlickDataSource)(implicit val system: ActorSystem) extends ExecutionServiceCluster with Retry with LazyLogging {

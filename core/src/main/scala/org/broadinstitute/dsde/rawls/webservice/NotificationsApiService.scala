@@ -6,7 +6,6 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
-import akka.http.scaladsl.model.StatusCodes
 
 /**
  * Created by dvoet on 3/28/17.

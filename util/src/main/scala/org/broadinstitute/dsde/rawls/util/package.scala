@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 /**
  * Created by dvoet on 2/24/17.

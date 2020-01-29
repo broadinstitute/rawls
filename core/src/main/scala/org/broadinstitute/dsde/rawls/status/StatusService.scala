@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.status
 
-import akka.actor.{Actor, ActorRef, Props}
+import akka.actor.ActorRef
 import akka.pattern._
 import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
@@ -12,6 +12,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 
 /**
   * Created by rtitle on 5/20/17.

@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 /**

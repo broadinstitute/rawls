@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.google
 import java.io.{ByteArrayOutputStream, IOException, InputStream}
 import java.util.concurrent.TimeUnit
 
-import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
@@ -14,7 +13,6 @@ import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, InstrumentedRe
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, JsonSupport, WorkspaceJsonSupport}
 import spray.json.JsValue
 
-import scala.collection.JavaConversions._
 import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 

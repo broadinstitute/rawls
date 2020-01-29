@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{RawlsUser, RawlsUserEmail, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId}
 
 import scala.concurrent.{ExecutionContext, Future}
 

@@ -13,6 +13,7 @@ import spray.json._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
+import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 class MethodConfigResolver(wdlParser: WDLParser) {

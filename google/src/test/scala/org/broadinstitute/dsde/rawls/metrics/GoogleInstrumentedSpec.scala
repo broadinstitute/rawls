@@ -12,6 +12,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.{FlatSpecLike, Matchers}
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 /**
   * Created by rtitle on 8/14/17.

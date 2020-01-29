@@ -7,9 +7,8 @@ import java.util.UUID
 import akka.util.ByteString
 import org.apache.commons.codec.binary.Base64
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
+import org.broadinstitute.dsde.rawls.{RawlsException, StringValidationUtils}
 import slick.jdbc.{GetResult, JdbcProfile, PositionedParameters, SQLActionBuilder, SetParameter}
-import akka.http.scaladsl.model.StatusCodes
 
 import scala.concurrent.ExecutionContext
 

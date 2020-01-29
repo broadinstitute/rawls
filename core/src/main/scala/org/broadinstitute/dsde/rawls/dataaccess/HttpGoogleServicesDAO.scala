@@ -792,7 +792,6 @@ class HttpGoogleServicesDAO(
   def getDMConfigYamlString(projectName: RawlsBillingProjectName, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
     import DeploymentManagerJsonSupport._
     import cats.syntax.either._
-    import io.circe.yaml._
     import io.circe.yaml.syntax._
 
     val configContents = ConfigContents(Seq(Resources(projectName.value, dmTemplatePath, properties)))
