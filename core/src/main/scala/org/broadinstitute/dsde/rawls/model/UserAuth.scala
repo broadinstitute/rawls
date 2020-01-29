@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.model
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
+import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
 import spray.json._
 
 import scala.language.implicitConversions

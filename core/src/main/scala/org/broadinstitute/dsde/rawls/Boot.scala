@@ -18,14 +18,13 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, _}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
+import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
@@ -38,7 +37,7 @@ import org.broadinstitute.dsde.rawls.workspace.{WorkspaceService, WorkspaceServi
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.HttpGoogleBigQueryDAO
 import org.broadinstitute.dsde.workbench.google2._
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.util.ExecutionContexts
 import org.http4s.Uri
 import org.http4s.client.blaze.BlazeClientBuilder
@@ -47,6 +46,8 @@ import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.language.higherKinds
+import scala.language.postfixOps
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}

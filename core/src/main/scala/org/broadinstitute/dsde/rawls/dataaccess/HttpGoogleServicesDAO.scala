@@ -10,7 +10,7 @@ import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.Materializer
-import cats.effect.{Async, ContextShift, IO, Resource, Timer}
+import cats.effect.{ContextShift, IO, Timer}
 import cats.data.NonEmptyList
 import cats.syntax.functor._
 import cats.instances.future._
@@ -26,14 +26,12 @@ import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo, TestIamPermissionsRequest}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
-import com.google.api.services.compute.model.UsageExportLocation
 import com.google.api.services.compute.{Compute, ComputeScopes}
-import com.google.api.services.deploymentmanager.model.{ConfigFile, Deployment, ImportFile, TargetConfiguration}
+import com.google.api.services.deploymentmanager.model.{ConfigFile, Deployment, TargetConfiguration}
 import com.google.api.services.deploymentmanager.DeploymentManagerV2Beta
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.google.api.services.servicemanagement.ServiceManagement
-import com.google.api.services.servicemanagement.model.EnableServiceRequest
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
@@ -43,10 +41,9 @@ import com.google.cloud.Identity
 import com.google.cloud.storage.BucketInfo.LifecycleRule
 import com.google.cloud.storage.BucketInfo.LifecycleRule.LifecycleAction
 import fs2.Stream
-import io.grpc.Status.Code
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
-import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities, HttpGoogleAccessContextManagerDAO}
+import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities}
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -54,23 +51,18 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2._
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time
 import spray.json._
 import _root_.io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes, model}
-import com.google.cloud.storage.BucketInfo
+import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
-import com.google.api.services.accesscontextmanager.v1beta.{AccessContextManager, AccessContextManagerScopes}
-import io.chrisdavenport.log4cats.Logger
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
-import org.broadinstitute.dsde.workbench.util.ExecutionContexts
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, _}
@@ -78,7 +70,6 @@ import scala.io.Source
 import scala.util.matching.Regex
 
 import io.opencensus.scala.Tracing._
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
 
 case class Resources (
                        name: String,

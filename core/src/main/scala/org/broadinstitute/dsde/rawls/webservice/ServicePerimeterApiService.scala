@@ -11,7 +11,6 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
 
 /**
   * Created with dvoet on 6/12/19.

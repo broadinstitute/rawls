@@ -7,7 +7,7 @@ import akka.testkit.TestKit
 import com.google.api.client.googleapis.json.GoogleJsonError.ErrorInfo
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http._
-import org.broadinstitute.dsde.rawls.metrics.{StatsDTestUtils, WorkbenchInstrumented}
+import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
@@ -17,6 +17,7 @@ import spray.json._
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtilities with FlatSpecLike with BeforeAndAfterAll with Matchers with ScalaFutures with Eventually with MockitoTestUtils with StatsDTestUtils {
   implicit val executionContext = ExecutionContext.global
