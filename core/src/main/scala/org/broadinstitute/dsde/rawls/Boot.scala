@@ -189,7 +189,7 @@ object Boot extends IOApp with LazyLogging {
         conf.getString("avroUpsertMonitor.pubSubProject"),
         workbenchMetricBaseName = metricsPrefix
       )
-      val importServiceDAO = new ImportServiceDAO(conf.getString("avroUpsertMonitor.server"))
+      val importServiceDAO = new HttpImportServiceDAO(conf.getString("avroUpsertMonitor.server"))
 
       val bigQueryDAO = new HttpGoogleBigQueryDAO(
         appName,

@@ -82,16 +82,28 @@ class HttpGooglePubSubDAO(clientEmail: String,
     }
   }
 
-  override def publishMessages(topicName: String, messages: Seq[String]) = {
+  override def publishMessages(topicName: String, messages: Seq[MessageRequest]) = {
     logger.debug(s"publishing to google pubsub topic $topicName, messages [${messages.mkString(", ")}]")
     Future.traverse(messages.grouped(1000)) { messageBatch =>
       retryWhen500orGoogleError(() => {
-        val pubsubMessages = messageBatch.map(text => new PubsubMessage().encodeData(text.getBytes(characterEncoding)))
+        val pubsubMessages = messageBatch.map(messageRequest => new PubsubMessage().encodeData(messageRequest.text.getBytes(characterEncoding)).setAttributes(messageRequest.attributes.asJava))
         val pubsubRequest = new PublishRequest().setMessages(pubsubMessages.asJava)
         executeGoogleRequest(getPubSubDirectory.projects().topics().publish(topicToFullPath(topicName), pubsubRequest))
       })
     }.map(_ => ())
   }
+
+
+//  override def publishMessages(topicName: String, messages: Seq[String]) = {
+//    logger.debug(s"publishing to google pubsub topic $topicName, messages [${messages.mkString(", ")}]")
+//    Future.traverse(messages.grouped(1000)) { messageBatch =>
+//      retryWhen500orGoogleError(() => {
+//        val pubsubMessages = messageBatch.map(text => new PubsubMessage().encodeData(text.getBytes(characterEncoding)))
+//        val pubsubRequest = new PublishRequest().setMessages(pubsubMessages.asJava)
+//        executeGoogleRequest(getPubSubDirectory.projects().topics().publish(topicToFullPath(topicName), pubsubRequest))
+//      })
+//    }.map(_ => ())
+//  }
 
   override def acknowledgeMessages(subscriptionName: String, messages: Seq[PubSubMessage]) = {
     acknowledgeMessagesById(subscriptionName, messages.map(_.ackId))

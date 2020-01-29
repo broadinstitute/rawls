@@ -8,7 +8,7 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.pubsub.model.Topic
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.{MessageRequest, PubSubMessage}
 
 import scala.collection.JavaConverters._
 import scala.collection.{mutable, _}
@@ -26,8 +26,11 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
   val messageLog = new ConcurrentLinkedQueue[String]
   val acks = new ConcurrentLinkedQueue[String]
 
+//  def logMessage(topic: String, message: String, attributes: String) = messageLog.add(s"$topic|$message|$attributes")
+//  def receivedMessage(topic: String, message: String, attributes: Map[String, String], count: Int = 1) = messageLog.toArray.filter(_ == s"$topic|$message|${attributes.toString}").size == count
   def logMessage(topic: String, message: String) = messageLog.add(s"$topic|$message")
   def receivedMessage(topic: String, message: String, count: Int = 1) = messageLog.toArray.filter(_ == s"$topic|$message").size == count
+
 
   override def createTopic(topicName: String): Future[Boolean] = {
     val initialCount = topics.size
@@ -38,7 +41,7 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
   override def pullMessages(subscriptionName: String, maxMessages: Int): Future[Seq[PubSubMessage]] = Future {
     val subscription = subscriptionsByName.getOrElse(subscriptionName, throw new RawlsException(s"no subscription named $subscriptionName"))
     (0 until maxMessages).map(_ => Option(subscription.queue.poll())).collect {
-      case Some(message) => PubSubMessage(UUID.randomUUID().toString, message)
+      case Some(message) => PubSubMessage(UUID.randomUUID().toString, message.text, message.attributes)
     }
   }
 
@@ -46,9 +49,9 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
 
   override def acknowledgeMessagesById(subscriptionName: String, ackIds: Seq[String]): Future[Unit] = Future.successful(ackIds.foreach(acks.add))
 
-  override def publishMessages(topicName: String, messages: Seq[String]): Future[Unit] = Future {
+  override def publishMessages(topicName: String, messages: Seq[MessageRequest]): Future[Unit] = Future {
     val subscriptions = topics.getOrElse(topicName, throw new RawlsException(s"no topic named $topicName"))
-    messages.foreach(logMessage(topicName, _))
+    messages.foreach(message => logMessage(topicName, message.text))
     for {
       sub <- subscriptions
       message <- messages
@@ -82,7 +85,7 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
     if (subscriptionsByName.contains(subscriptionName)) {
       false
     } else {
-      val subscription = Subscription(subscriptionName, topicName, new ConcurrentLinkedQueue[String]())
+      val subscription = Subscription(subscriptionName, topicName, new ConcurrentLinkedQueue[MessageRequest]())
       topics(topicName) += subscription
       subscriptionsByName += subscriptionName -> subscription
       true
@@ -105,5 +108,5 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
     } else None
   }
 
-  case class Subscription(name: String, topic: String, queue: ConcurrentLinkedQueue[String])
+  case class Subscription(name: String, topic: String, queue: ConcurrentLinkedQueue[MessageRequest])
 }
