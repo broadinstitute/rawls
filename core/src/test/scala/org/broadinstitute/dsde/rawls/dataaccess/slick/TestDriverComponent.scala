@@ -926,14 +926,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
   val threeStepDockstoreWDL = WdlSource(threeStepWDL.source.replace(threeStepWDLName, threeStepDockstoreWDLName))
   val dockstoreResponse =
-    s"""{"type":"WDL","descriptor":"${threeStepDockstoreWDL.source.replace("\n","\\n")}","url":"bogus"}"""
+    s"""{"type":"WDL","descriptor":"${threeStepDockstoreWDL.source.replace("\n","\\n")}","url":"/url-to-github/from/ga4gh-url-field/three-step-dockstore"}"""
 
   val patternInputDockstore = makeToolInputParameter("cgrep.pattern", false, makeValueType("String"), "String")
   val cgrepcountOutputDockstore = makeToolOutputParameter("cgrep.count", makeValueType("Int"), "Int")
   val wccountOutputDockstore = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
   val psprocsOutputDockstore = makeToolOutputParameter("ps.procs", makeValueType("File"), "File")
   val threeStepDockStoreWDLWorkflowDescription = makeWorkflowDescription(threeStepDockstoreWDLName, List(patternInputDockstore), List(cgrepcountOutputDockstore, wccountOutputDockstore, psprocsOutputDockstore))
-  mockCromwellSwaggerClient.workflowDescriptions += WdlUrl("/url-to-github/from/ga4gh-url-field") -> threeStepDockStoreWDLWorkflowDescription
+  mockCromwellSwaggerClient.workflowDescriptions += WdlUrl("/url-to-github/from/ga4gh-url-field/three-step-dockstore") -> threeStepDockStoreWDLWorkflowDescription
 
   val noInputWdl =
     WdlSource("""
@@ -951,10 +951,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val noInputWdlWorkflowDescription = makeWorkflowDescription("w1", List(), List())
   mockCromwellSwaggerClient.workflowDescriptions += (noInputWdl -> noInputWdlWorkflowDescription)
 
+  val noInputMethodDockstoreWDLSource =
+    noInputWdl.source.replace("t1", "t1_dockstore")
   val noInputMethodDockstoreResponse =
-    s"""{"type":"WDL","descriptor":"${noInputWdl.source.replace("t1", "t1_dockstore").replace("\"", "\\\"").replace("\n","\\n")}","url":"bogus"}"""
+    s"""{"type":"WDL","descriptor":"${noInputMethodDockstoreWDLSource.replace("\"", "\\\"").replace("\n","\\n")}","url":"/url-to-github/from/ga4gh-url-field/no-input-dockstore"}"""
   val noInputMethodDockstoreWorkflowDescription = makeWorkflowDescription("w1", List(), List())
-  mockCromwellSwaggerClient.workflowDescriptions += (WdlSource(noInputWdl.source.replace("t1", "t1_dockstore")) -> noInputWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += WdlUrl("/url-to-github/from/ga4gh-url-field/no-input-dockstore") -> noInputWdlWorkflowDescription
 
 
   val noInputMethod = AgoraEntity(Some("dsde"), Some("no_input"), Some(1), None, None, None, None, Option(noInputWdl.source), None, Some(AgoraEntityType.Workflow))

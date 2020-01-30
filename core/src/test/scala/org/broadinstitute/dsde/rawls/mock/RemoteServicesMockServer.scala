@@ -173,8 +173,8 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     val threeStepDockstoreWdlSource =
       threeStepWDL.source.replace("three_step", "three_step_dockstore")
 
-    val dockstoreResponse =
-      s"""{"type":"WDL","descriptor":"${threeStepDockstoreWdlSource.replace("\n","\\n")}","url":"/url-to-github/from/ga4gh-url-field"}"""
+    val threeStepDockstoreResponse =
+      s"""{"type":"WDL","descriptor":"${threeStepDockstoreWdlSource.replace("\n","\\n")}","url":"/url-to-github/from/ga4gh-url-field/three-step-dockstore"}"""
 
     // "Dockstore" returns the tool descriptor
     mockServer.when(
@@ -184,7 +184,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     ).respond(
       response()
         .withHeaders(jsonHeader)
-        .withBody(dockstoreResponse)
+        .withBody(threeStepDockstoreResponse)
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
@@ -192,7 +192,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath("/url-to-github/from/ga4gh-url-field")
+        .withPath("/url-to-github/from/ga4gh-url-field/three-step-dockstore")
     ).respond(
       response()
         .withHeaders(jsonHeader)
@@ -235,6 +235,18 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       response()
         .withHeaders(jsonHeader)
         .withBody(noInputMethodDockstoreResponse)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    // "Github" returning WDL source
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/url-to-github/from/ga4gh-url-field/no-input-dockstore")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(noInputMethodDockstoreWDLSource)
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
