@@ -185,7 +185,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl -> requiredDoubleArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (optionalDoubleArrayWdl -> optionalDoubleArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (tripleArrayWdl -> requiredTripleArrayWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (badWdl -> badWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (WdlSource("Bad syntax workflow returned from Agora mock server") -> badWdlWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (wdlVersionOneWdl -> wdlVersionOneWdlWorkflowDescription)
 
   println(s"### finished creating workflowDescriptions: ${mockCromwellSwaggerClient.workflowDescriptions.keys.mkString(",")}")
