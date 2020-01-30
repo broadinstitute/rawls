@@ -168,10 +168,15 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
           .withStatusCode(StatusCodes.NotFound.intValue)
       )
 
-    // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
-    val dockstoreResponse =
-      s"""{"type":"WDL","descriptor":"${threeStepWDL.source.replace("three_step", "three_step_dockstore").replace("\n","\\n")}","url":"bogus"}"""
+    /*** Test requesting a GA4GH tool from Dockstore, then calling the Github URL in the tool ***/
 
+    val threeStepDockstoreWdlSource =
+      threeStepWDL.source.replace("three_step", "three_step_dockstore")
+
+    val dockstoreResponse =
+      s"""{"type":"WDL","descriptor":"${threeStepDockstoreWdlSource.replace("\n","\\n")}","url":"/url-to-github/from/ga4gh-url-field"}"""
+
+    // "Dockstore" returns the tool descriptor
     mockServer.when(
       request()
         .withMethod("GET")
@@ -180,6 +185,18 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       response()
         .withHeaders(jsonHeader)
         .withBody(dockstoreResponse)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    // "Github" returns the WDL source
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/url-to-github/from/ga4gh-url-field")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(threeStepDockstoreWdlSource)
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
