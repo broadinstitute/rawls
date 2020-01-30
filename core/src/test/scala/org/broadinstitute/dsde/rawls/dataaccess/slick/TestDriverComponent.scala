@@ -923,11 +923,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val threeStepMethod = AgoraEntity(Some("dsde"),Some(threeStepWDLName),Some(1),None,None,None,None,Option(threeStepWDL.source),None,Some(AgoraEntityType.Workflow))
 
   val threeStepDockstoreWDLName = threeStepWDLName + "_dockstore"
-  // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
-  val threeStepDockstoreWDL = WdlSource(threeStepWDL.source.replace(threeStepWDLName, threeStepDockstoreWDLName))
-  val dockstoreResponse =
-    s"""{"type":"WDL","descriptor":"${threeStepDockstoreWDL.source.replace("\n","\\n")}","url":"/url-to-github/from/ga4gh-url-field/three-step-dockstore"}"""
-
   val patternInputDockstore = makeToolInputParameter("cgrep.pattern", false, makeValueType("String"), "String")
   val cgrepcountOutputDockstore = makeToolOutputParameter("cgrep.count", makeValueType("Int"), "Int")
   val wccountOutputDockstore = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
