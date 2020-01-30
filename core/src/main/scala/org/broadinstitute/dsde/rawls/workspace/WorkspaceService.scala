@@ -2117,10 +2117,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield response
   }
 
-  private def withWorkspaceContextAndPermissionsF[T](workspaceName: WorkspaceName, requiredAction: SamResourceAction)(op: (SlickWorkspaceContext) => Future[T]): Future[T] = {
+  private def withWorkspaceContextAndPermissionsF[T](workspaceName: WorkspaceName, requiredAction: SamResourceAction, attributeSpecs: Option[WorkspaceAttributeSpecs] = None)(op: (SlickWorkspaceContext) => Future[T]): Future[T] = {
     for {
       workspaceContext <- dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { ctx => DBIO.successful(ctx) }
+        withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { ctx => DBIO.successful(ctx) }
       }
       opResult <- requireAccessF(workspaceContext.workspace, requiredAction) { op(workspaceContext) }
     } yield opResult
