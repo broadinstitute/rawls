@@ -200,100 +200,96 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     span.setStatus(Status.OK)
     span.end()
 
-    dataSource.inTransaction { dataAccess =>
-      traceDBIOWithParent("withWorkspaceContext", parentSpan)(s1 => withWorkspaceContext(workspaceName, dataAccess, Option(attrSpecs)) { workspaceContext =>
-        traceDBIOWithParent("requireAccess", s1)(s2 => requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
+    traceDBIOWithParent("withWorkspaceContextAndPermissionsF", parentSpan)(s1 => withWorkspaceContextAndPermissionsF(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
 
-          // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
-          // accessLevel, canCompute, canShare is specified, we have to get it.
-          def accessLevelFuture(): Future[WorkspaceAccessLevels.WorkspaceAccessLevel] =
-            if (options.contains("accessLevel") || options.contains("canCompute") || options.contains("canShare")) {
-              getMaximumAccessLevel(workspaceContext.workspaceId.toString)
-            } else {
-              Future.successful(WorkspaceAccessLevels.NoAccess)
-            }
+        // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
+        // accessLevel, canCompute, canShare is specified, we have to get it.
+        def accessLevelFuture(): Future[WorkspaceAccessLevels.WorkspaceAccessLevel] =
+          if (options.contains("accessLevel") || options.contains("canCompute") || options.contains("canShare")) {
+            getMaximumAccessLevel(workspaceContext.workspaceId.toString)
+          } else {
+            Future.successful(WorkspaceAccessLevels.NoAccess)
+          }
 
-          // determine whether or not to retrieve attributes
-          val useAttributes = options.contains("workspace") || attrSpecs.all || attrSpecs.attrsToSelect.nonEmpty
+        // determine whether or not to retrieve attributes
+        val useAttributes = options.contains("workspace") || attrSpecs.all || attrSpecs.attrsToSelect.nonEmpty
 
-          traceDBIOWithParent("accessLevelFuture", s2)(s3 => DBIO.from(accessLevelFuture())) flatMap { accessLevel =>
-            // we may have calculated accessLevel because canShare/canCompute needs it;
-            // but if the user didn't ask for it, don't return it
-            val optionalAccessLevelForResponse = if (options.contains("accessLevel")) { Option(accessLevel) } else { None }
+        traceDBIOWithParent("accessLevelFuture", s2)(s3 => DBIO.from(accessLevelFuture())) flatMap { accessLevel =>
+          // we may have calculated accessLevel because canShare/canCompute needs it;
+          // but if the user didn't ask for it, don't return it
+          val optionalAccessLevelForResponse = if (options.contains("accessLevel")) { Option(accessLevel) } else { None }
 
-            // determine which functions to use for the various part of the response
-            def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
-              traceWithParent("getBucketDetails",s2)(_ =>  gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace)).map(Option(_)))
-            } else {
-              noFuture
-            }
-            def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
-              traceWithParent("getUserComputePermissions",s2)(_ =>  getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel).map(Option(_)))
-            } else {
-              noFuture
-            }
-            def canShareFuture(): Future[Option[Boolean]] = if (options.contains("canShare")) {
-              //convoluted but accessLevel for both params because user could at most share with their own access level
-              traceWithParent("getUserSharePermissions",s2)(_ =>  getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel).map(Option(_)))
-            } else {
-              noFuture
-            }
-            def catalogFuture(): Future[Option[Boolean]] = if (options.contains("catalog")) {
-              traceWithParent("getUserCatalogPermissions",s2)(_ =>  getUserCatalogPermissions(workspaceContext.workspaceId.toString).map(Option(_)))
-            } else {
-              noFuture
-            }
+          // determine which functions to use for the various part of the response
+          def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
+            traceWithParent("getBucketDetails",s2)(_ =>  gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace)).map(Option(_)))
+          } else {
+            noFuture
+          }
+          def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
+            traceWithParent("getUserComputePermissions",s2)(_ =>  getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel).map(Option(_)))
+          } else {
+            noFuture
+          }
+          def canShareFuture(): Future[Option[Boolean]] = if (options.contains("canShare")) {
+            //convoluted but accessLevel for both params because user could at most share with their own access level
+            traceWithParent("getUserSharePermissions",s2)(_ =>  getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel).map(Option(_)))
+          } else {
+            noFuture
+          }
+          def catalogFuture(): Future[Option[Boolean]] = if (options.contains("catalog")) {
+            traceWithParent("getUserCatalogPermissions",s2)(_ =>  getUserCatalogPermissions(workspaceContext.workspaceId.toString).map(Option(_)))
+          } else {
+            noFuture
+          }
 
-            def ownersFuture(): Future[Option[Set[String]]] = if (options.contains("owners")) {
-              traceWithParent("getWorkspaceOwners",s2)(_ =>  getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_)))
-            } else {
-              noFuture
-            }
+          def ownersFuture(): Future[Option[Set[String]]] = if (options.contains("owners")) {
+            traceWithParent("getWorkspaceOwners",s2)(_ =>  getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_)))
+          } else {
+            noFuture
+          }
 
-            def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] = if (options.contains("workspace.authorizationDomain") || options.contains("workspace")) {
-              traceWithParent("loadResourceAuthDomain",s2)(_ =>  loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo).map(Option(_)))
-            } else {
-              noFuture
-            }
+          def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] = if (options.contains("workspace.authorizationDomain") || options.contains("workspace")) {
+            traceWithParent("loadResourceAuthDomain",s2)(_ =>  loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo).map(Option(_)))
+          } else {
+            noFuture
+          }
 
-            def workspaceSubmissionStatsFuture(): slick.ReadAction[Option[WorkspaceSubmissionStats]] = if (options.contains("workspaceSubmissionStats")) {
-              getWorkspaceSubmissionStats(workspaceContext, dataAccess).map(Option(_))
-            } else {
-              DBIO.from(noFuture)
-            }
+          def workspaceSubmissionStatsFuture(): slick.ReadAction[Option[WorkspaceSubmissionStats]] = if (options.contains("workspaceSubmissionStats")) {
+            getWorkspaceSubmissionStats(workspaceContext, dataAccess).map(Option(_))
+          } else {
+            DBIO.from(noFuture)
+          }
 
-            //run these futures in parallel. this is equivalent to running the for-comp with the futures already defined and running
-            val futuresInParallel = (
-              catalogFuture(),
-              canShareFuture(),
-              canComputeFuture(),
-              ownersFuture(),
-              workspaceAuthorizationDomainFuture(),
-              bucketOptionsFuture()
-            ).tupled
+          //run these futures in parallel. this is equivalent to running the for-comp with the futures already defined and running
+          val futuresInParallel = (
+            catalogFuture(),
+            canShareFuture(),
+            canComputeFuture(),
+            ownersFuture(),
+            workspaceAuthorizationDomainFuture(),
+            bucketOptionsFuture()
+          ).tupled
 
-            for {
-              (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
-              stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", s2)( _ => workspaceSubmissionStatsFuture())
-            } yield {
-              // post-process JSON to remove calculated-but-undesired keys
-              val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, useAttributes), stats, bucketDetails, owners)
-              val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
-              RequestComplete(StatusCodes.OK, filteredJson)
-            }
+          for {
+            (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
+            stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", s2)( _ => workspaceSubmissionStatsFuture())
+          } yield {
+            // post-process JSON to remove calculated-but-undesired keys
+            val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, useAttributes), stats, bucketDetails, owners)
+            val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
+            RequestComplete(StatusCodes.OK, filteredJson)
           }
         })
-      })
+      }
     }
   }
 
   def getBucketOptions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccess(workspaceContext.workspace, SamWorkspaceActions.read) {
-          DBIO.from(gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace))) map { details =>
-            RequestComplete(StatusCodes.OK, details)
-          }
+    withWorkspaceContextAndPermissionsF(workspaceName, dataAccess, SamWorkspaceActions.read) { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        DBIO.from(gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace))) map { details =>
+          RequestComplete(StatusCodes.OK, details)
         }
       }
     }
