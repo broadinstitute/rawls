@@ -138,7 +138,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         |}
       """.stripMargin)
 
-  val badWdl = WdlSource(littleWdl.source.replace("workflow", "not-a-workflow"))
+  val badWdl = WdlSource(littleWdl.source.replace("workflow", "i-am-not-a-workflow"))
 
   val littleWdlName = "w1"
   val intArgName = "t1.int_arg"
@@ -173,7 +173,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val requiredTripleArrayInput  = makeToolInputParameter(tripleIntArrayName, true, makeArrayValueType(makeArrayValueType(makeArrayValueType(makeValueType("Int")))), "Array[Array[Array[Int]]]")
   val requiredTripleArrayWorkflowDescription =  makeWorkflowDescription("w1", List(requiredTripleArrayInput), List.empty)
 
-  val badWdlWorkflowDescription = makeBadWorkflowDescription("badwdl", List("ERROR: Finished parsing without consuming all tokens.\\n\\nnot-a-workflow w1 {\\n^\\n    "))
+  val badWdlWorkflowDescription = makeBadWorkflowDescription("badwdl", List("ERROR: Finished parsing without consuming all tokens.\\n\\nthis-is-not-a-workflow w1 {\\n^\\n    "))
 
   val wdlVersionOneWdlStringInput = makeToolInputParameter(wdlVersionOneStringInputName, false, makeValueType("String"), "String")
   val wdlVersionOneWdlFileInput   = makeToolInputParameter(wdlVersionOneFileInputName, false, makeValueType("File"), "File")

@@ -185,7 +185,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     // Saving invalid WDL as a Method Repo Method is allowed
 
-    val badSyntaxWDL = threeStepWDL.source.replace("workflow", "not-a-workflow")
+    val badSyntaxWDL = threeStepWDL.source.replace("workflow", "this-is-not-a-workflow")
     val badWDLMethod = AgoraEntity(Some("dsde"),Some("bad_wdl"),Some(1),None,None,None,None,Some(badSyntaxWDL),None,Some(AgoraEntityType.Workflow))
 
     mockServer.when(

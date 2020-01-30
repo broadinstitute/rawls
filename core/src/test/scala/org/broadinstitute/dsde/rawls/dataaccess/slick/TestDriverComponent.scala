@@ -1013,6 +1013,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   mockCromwellSwaggerClient.workflowDescriptions += (meth1WDL -> meth1WDLWorkflowDescription)
   val testComponentThing = "Uhhh...can we get stuff from this class???"
 
+  println(s"%%% finished creating workflowDescriptions: ${mockCromwellSwaggerClient.workflowDescriptions.keys.mkString(",")}")
 
 
 }
