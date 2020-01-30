@@ -200,7 +200,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     span.setStatus(Status.OK)
     span.end()
 
-    traceDBIOWithParent("withWorkspaceContextAndPermissionsF", parentSpan)(s1 => withWorkspaceContextAndPermissionsF(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) { workspaceContext =>
+    traceWithParent("withWorkspaceContextAndPermissionsF", parentSpan)(s1 => withWorkspaceContextAndPermissionsF(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
 
         // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
@@ -215,42 +215,42 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         // determine whether or not to retrieve attributes
         val useAttributes = options.contains("workspace") || attrSpecs.all || attrSpecs.attrsToSelect.nonEmpty
 
-        traceDBIOWithParent("accessLevelFuture", s2)(s3 => DBIO.from(accessLevelFuture())) flatMap { accessLevel =>
+        traceDBIOWithParent("accessLevelFuture", s1)(s2 => DBIO.from(accessLevelFuture())) flatMap { accessLevel =>
           // we may have calculated accessLevel because canShare/canCompute needs it;
           // but if the user didn't ask for it, don't return it
           val optionalAccessLevelForResponse = if (options.contains("accessLevel")) { Option(accessLevel) } else { None }
 
           // determine which functions to use for the various part of the response
           def bucketOptionsFuture(): Future[Option[WorkspaceBucketOptions]] = if (options.contains("bucketOptions")) {
-            traceWithParent("getBucketDetails",s2)(_ =>  gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace)).map(Option(_)))
+            traceWithParent("getBucketDetails",s1)(_ =>  gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace)).map(Option(_)))
           } else {
             noFuture
           }
           def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
-            traceWithParent("getUserComputePermissions",s2)(_ =>  getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel).map(Option(_)))
+            traceWithParent("getUserComputePermissions",s1)(_ =>  getUserComputePermissions(workspaceContext.workspaceId.toString, accessLevel).map(Option(_)))
           } else {
             noFuture
           }
           def canShareFuture(): Future[Option[Boolean]] = if (options.contains("canShare")) {
             //convoluted but accessLevel for both params because user could at most share with their own access level
-            traceWithParent("getUserSharePermissions",s2)(_ =>  getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel).map(Option(_)))
+            traceWithParent("getUserSharePermissions",s1)(_ =>  getUserSharePermissions(workspaceContext.workspaceId.toString, accessLevel, accessLevel).map(Option(_)))
           } else {
             noFuture
           }
           def catalogFuture(): Future[Option[Boolean]] = if (options.contains("catalog")) {
-            traceWithParent("getUserCatalogPermissions",s2)(_ =>  getUserCatalogPermissions(workspaceContext.workspaceId.toString).map(Option(_)))
+            traceWithParent("getUserCatalogPermissions",s1)(_ =>  getUserCatalogPermissions(workspaceContext.workspaceId.toString).map(Option(_)))
           } else {
             noFuture
           }
 
           def ownersFuture(): Future[Option[Set[String]]] = if (options.contains("owners")) {
-            traceWithParent("getWorkspaceOwners",s2)(_ =>  getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_)))
+            traceWithParent("getWorkspaceOwners",s1)(_ =>  getWorkspaceOwners(workspaceContext.workspaceId.toString).map(_.map(_.value)).map(Option(_)))
           } else {
             noFuture
           }
 
           def workspaceAuthorizationDomainFuture(): Future[Option[Set[ManagedGroupRef]]] = if (options.contains("workspace.authorizationDomain") || options.contains("workspace")) {
-            traceWithParent("loadResourceAuthDomain",s2)(_ =>  loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo).map(Option(_)))
+            traceWithParent("loadResourceAuthDomain",s1)(_ =>  loadResourceAuthDomain(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, userInfo).map(Option(_)))
           } else {
             noFuture
           }
@@ -273,20 +273,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
           for {
             (canCatalog, canShare, canCompute, owners, authDomain, bucketDetails) <- DBIO.from(futuresInParallel)
-            stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", s2)( _ => workspaceSubmissionStatsFuture())
+            stats <- traceDBIOWithParent("workspaceSubmissionStatsFuture", s1)(_ => workspaceSubmissionStatsFuture())
           } yield {
             // post-process JSON to remove calculated-but-undesired keys
             val workspaceResponse = WorkspaceResponse(optionalAccessLevelForResponse, canShare, canCompute, canCatalog, WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext.workspace, authDomain, useAttributes), stats, bucketDetails, owners)
             val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
             RequestComplete(StatusCodes.OK, filteredJson)
           }
-        })
+        }
       }
-    }
+    })
   }
 
   def getBucketOptions(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    withWorkspaceContextAndPermissionsF(workspaceName, dataAccess, SamWorkspaceActions.read) { workspaceContext =>
+    withWorkspaceContextAndPermissionsF(workspaceName, SamWorkspaceActions.read) { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         DBIO.from(gcsDAO.getBucketDetails(workspaceContext.workspace.bucketName, RawlsBillingProjectName(workspaceContext.workspace.namespace))) map { details =>
           RequestComplete(StatusCodes.OK, details)
@@ -1976,6 +1976,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes external REST calls.
   private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span = null)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
 
@@ -2089,6 +2090,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
   private def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 
+  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
   private def requireCreateWorkspaceAccess[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
     val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
     for {
@@ -2121,7 +2123,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       opResult <- requireAccessF(workspaceContext.workspace, requiredAction) { op(workspaceContext) }
     } yield opResult
   }
-  // TODO: once everything is switched over to the Future-ified version, look for remaining calls to requireAccess and remove those too
 
   private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess, attributeSpecs: Option[WorkspaceAttributeSpecs] = None)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
     dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs) flatMap {
@@ -2150,6 +2151,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
   private def requireAccess[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
     DBIO.from(accessCheck(workspace, requiredAction)) flatMap { _ => codeBlock }
   }
@@ -2158,10 +2160,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     accessCheck(workspace, requiredAction) flatMap { _ => codeBlock }
   }
 
+  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
   private def requireAccessIgnoreLock[T](workspace: Workspace, requiredAction: SamResourceAction)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
     requireAccess(workspace.copy(isLocked = false), requiredAction)(op)
   }
 
+  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
   private def requireComputePermission[T](workspace: Workspace)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
     DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamBillingProjectActions.launchBatchCompute, userInfo)) flatMap { projectCanCompute =>
       if (!projectCanCompute) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
