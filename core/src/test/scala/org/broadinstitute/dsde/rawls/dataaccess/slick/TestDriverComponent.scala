@@ -933,7 +933,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val wccountOutputDockstore = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
   val psprocsOutputDockstore = makeToolOutputParameter("ps.procs", makeValueType("File"), "File")
   val threeStepDockStoreWDLWorkflowDescription = makeWorkflowDescription(threeStepDockstoreWDLName, List(patternInputDockstore), List(cgrepcountOutputDockstore, wccountOutputDockstore, psprocsOutputDockstore))
-  mockCromwellSwaggerClient.workflowDescriptions += (threeStepDockstoreWDL -> threeStepDockStoreWDLWorkflowDescription )
+  mockCromwellSwaggerClient.workflowDescriptions += WdlUrl("/url-to-github/from/ga4gh-url-field") -> threeStepDockStoreWDLWorkflowDescription
 
   val noInputWdl =
     WdlSource("""
