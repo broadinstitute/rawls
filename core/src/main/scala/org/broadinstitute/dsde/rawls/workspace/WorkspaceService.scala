@@ -427,13 +427,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = {
     withAttributeNamespaceCheck(operations.map(_.name)) {
       for {
-        workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
-        updatedWorkspace <- dataSource.inTransaction({ dataAccess =>
-            updateWorkspace(operations, dataAccess)(workspaceContext)
+        ctx <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+        workspace <- dataSource.inTransaction({ dataAccess =>
+            updateWorkspace(operations, dataAccess)(ctx)
         }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
-        authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, updatedWorkspace.workspaceId, userInfo)
+        authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)
       } yield {
-        RequestComplete(StatusCodes.OK, WorkspaceDetails(updatedWorkspace, authDomain))
+        RequestComplete(StatusCodes.OK, WorkspaceDetails(workspace, authDomain))
       }
     }
   }
