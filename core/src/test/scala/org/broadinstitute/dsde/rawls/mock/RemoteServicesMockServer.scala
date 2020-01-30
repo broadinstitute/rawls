@@ -4,7 +4,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, StatusCheckResponse}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, StatusCheckResponse, WdlSource}
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
@@ -185,8 +185,8 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     // Saving invalid WDL as a Method Repo Method is allowed
 
-    val badSyntaxWDL = threeStepWDL.source.replace("workflow", "this-is-not-a-workflow")
-    val badWDLMethod = AgoraEntity(Some("dsde"),Some("bad_wdl"),Some(1),None,None,None,None,Some(badSyntaxWDL),None,Some(AgoraEntityType.Workflow))
+    val badSyntaxWDL = WdlSource("Bad syntax workflow returned from Agora mock server")
+    val badWDLMethod = AgoraEntity(Some("dsde"),Some("bad_wdl"),Some(1),None,None,None,None,Some(badSyntaxWDL.source),None,Some(AgoraEntityType.Workflow))
 
     mockServer.when(
       request()

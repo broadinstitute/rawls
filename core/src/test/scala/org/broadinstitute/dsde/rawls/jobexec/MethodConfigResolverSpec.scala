@@ -173,7 +173,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val requiredTripleArrayInput  = makeToolInputParameter(tripleIntArrayName, true, makeArrayValueType(makeArrayValueType(makeArrayValueType(makeValueType("Int")))), "Array[Array[Array[Int]]]")
   val requiredTripleArrayWorkflowDescription =  makeWorkflowDescription("w1", List(requiredTripleArrayInput), List.empty)
 
-  val badWdlWorkflowDescription = makeBadWorkflowDescription("badwdl", List("ERROR: Finished parsing without consuming all tokens.\\n\\nthis-is-not-a-workflow w1 {\\n^\\n    "))
+  val badWdlWorkflowDescription = makeBadWorkflowDescription("badwdl", List("ERROR: Finished parsing without consuming all tokens.\n\nBad syntax workflow returned from Agora mock server\n^\n     "))
 
   val wdlVersionOneWdlStringInput = makeToolInputParameter(wdlVersionOneStringInputName, false, makeValueType("String"), "String")
   val wdlVersionOneWdlFileInput   = makeToolInputParameter(wdlVersionOneFileInputName, false, makeValueType("File"), "File")
