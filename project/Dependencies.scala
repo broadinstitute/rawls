@@ -59,7 +59,7 @@ object Dependencies {
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.4"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.3.0"
-  val ravenLogback: ModuleID =    "com.getsentry.raven"           % "raven-logback"         % "7.8.6"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.27"
   val swaggerUI: ModuleID =       "org.webjars"                   % "swagger-ui"            % "2.2.5"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
@@ -75,7 +75,7 @@ object Dependencies {
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.4.0"
   val scalaCache: ModuleID =      "com.github.cb372"              %% "scalacache-caffeine"  % "0.24.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
-  
+
   val workbenchModelV  = "0.13-58c913d"
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogleV = "0.21-890a74f"
@@ -168,7 +168,7 @@ object Dependencies {
   val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ metricsDependencies ++ openCensusDependencies ++ Seq(
     typesafeConfig,
     parserCombinators,
-    ravenLogback,
+    sentryLogback,
     slick,
     slickHikariCP,
     akkaHttp,
