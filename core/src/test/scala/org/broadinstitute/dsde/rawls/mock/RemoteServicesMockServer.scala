@@ -29,7 +29,7 @@ object RemoteServicesMockServer {
   }
 }
 
-class RemoteServicesMockServer(port:Int) extends RawlsTestUtils with TestDriverComponent {
+class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
   val mockServerBaseUrl = "http://localhost:" + port
 
   val jsonHeader = new Header("Content-Type", "application/json")
@@ -205,10 +205,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils with TestDriverC
     // Saving invalid WDL as a Method Repo Method is allowed
 
     val badSyntaxWDL = WdlSource("Bad syntax workflow returned from Agora mock server")
-    val badSyntaxWDLDescription = MockCromwellSwaggerClient.makeBadWorkflowDescription("bad_wdl", List("ERROR: Finished parsing without consuming all tokens.\n\nBad syntax workflow returned from Agora mock server\n^\n     "))
     val badWDLMethod = AgoraEntity(Some("dsde"),Some("bad_wdl"),Some(1),None,None,None,None,Some(badSyntaxWDL.source),None,Some(AgoraEntityType.Workflow))
-
-    mockCromwellSwaggerClient.workflowDescriptions += badSyntaxWDL -> badSyntaxWDLDescription
 
     mockServer.when(
       request()
