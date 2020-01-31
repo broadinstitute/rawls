@@ -127,7 +127,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   // matches some_attr_namespace:attr_name or attr_name
   private val attributeIdent: Parser[AttributeName] = opt(ident ~ ":") ~ ident ^^ {
     case Some(namespace ~ ":") ~ name => AttributeName(namespace, name)
-    case None ~ name => AttributeName.withDefaultNS(name)
+    case _ ~ name => AttributeName.withDefaultNS(name)
   }
 
   // workspace.attribute, note that this is a FinalFunc - because workspaces are not entities they can be piped the same way

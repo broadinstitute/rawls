@@ -16,9 +16,10 @@ import org.broadinstitute.dsde.rawls.mock.CustomizableMockSamDAO
 import org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.{ArgumentMatcher, ArgumentMatchers}
+import org.mockito.ArgumentMatchers
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 import org.mockito.Mockito._
 import org.mockito.ArgumentMatchers._
 

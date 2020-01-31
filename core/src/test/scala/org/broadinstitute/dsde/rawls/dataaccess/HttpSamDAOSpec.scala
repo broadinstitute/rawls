@@ -8,8 +8,7 @@ import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.workbench.model.WorkbenchGroupName
-import org.scalatest.tools.Durations
-import org.scalatest.{BeforeAndAfterAll, FlatSpec, FlatSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration

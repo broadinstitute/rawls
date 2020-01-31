@@ -27,7 +27,6 @@ object Settings {
     "-feature",
     "-encoding", "utf8",
     "-Xmax-classfile-name", "100",
-    "-Xfatal-warnings",
     "-Ywarn-unused:imports"
   )
 

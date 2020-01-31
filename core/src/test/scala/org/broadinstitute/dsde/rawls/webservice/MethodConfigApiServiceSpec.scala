@@ -6,12 +6,10 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.HttpMethods
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.testkit.RouteTestTimeout
 import akka.http.scaladsl.model.headers.Location
 import akka.http.scaladsl.server.Route.{seal => sealRoute}

@@ -13,8 +13,8 @@ trait NotificationDAO extends LazyLogging {
   def fireAndForgetNotification(notification: Notification)(implicit executionContext: ExecutionContext): Unit = fireAndForgetNotifications(Seq(notification))
 
   def fireAndForgetNotifications[T <: Notification](notifications: Traversable[T])(implicit executionContext: ExecutionContext): Unit = {
-    sendNotifications(notifications.map(NotificationFormat.write(_).compactPrint)).onFailure {
-      case t: Throwable => logger.error("failure sending notifications: " + notifications, t)
+    sendNotifications(notifications.map(NotificationFormat.write(_).compactPrint)).failed.foreach {
+      t: Throwable => logger.error("failure sending notifications: " + notifications, t)
     }
   }
 

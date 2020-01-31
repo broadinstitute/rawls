@@ -403,8 +403,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- workspaceContext.workspace.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
       _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, userInfo)
     } yield {
-      aborts.onFailure {
-        case t: Throwable => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
+      aborts.failed.foreach {
+        t: Throwable => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
       }
       RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.workspace.bucketName} will be deleted within 24h.")
     }

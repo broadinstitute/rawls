@@ -11,16 +11,16 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{RefreshGlobalJobExecGauges, SaveCurrentWorkflowStatusCounts, SubmissionStarted}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import org.scalatest.concurrent.Eventually
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 class SubmissionSupervisorSpec extends TestKit(ActorSystem("SubmissionSupervisorSpec")) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with RawlsTestUtils with MockitoTestUtils with RawlsStatsDTestUtils {
 
-  import driver.api._
   implicit val materializer = ActorMaterializer()
 
   val testDbName = "SubmissionSupervisorSpec"

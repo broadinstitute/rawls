@@ -8,7 +8,8 @@ import org.scalatest.FlatSpec
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Await
+import scala.language.postfixOps
 
 class SubmissionCostServiceSpec extends FlatSpec with RawlsTestUtils {
   implicit val actorSystem = ActorSystem("SubmissionCostServiceSpec")

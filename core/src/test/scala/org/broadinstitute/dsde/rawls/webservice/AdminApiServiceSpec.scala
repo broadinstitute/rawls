@@ -1,27 +1,19 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{RawlsBillingProjectTransferFormat, RawlsGroupMemberListFormat, SyncReportFormat, UserInfoFormat}
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserListFormat}
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsGroupRefFormat
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceListResponseFormat, WorkspaceStatusFormat, WorkspaceDetailsFormat}
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectTransferFormat
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceDetailsFormat}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.user.UserService
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import spray.json.DefaultJsonProtocol._
-import spray.json._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.ExecutionContext
 
 /**
  * Created by tsharpe on 9/28/15.

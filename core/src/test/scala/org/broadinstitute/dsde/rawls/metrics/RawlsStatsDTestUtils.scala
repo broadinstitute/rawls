@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.metrics
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.Subsystems.Subsystem
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus

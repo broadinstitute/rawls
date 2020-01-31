@@ -233,7 +233,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
 
         val submittedRecordsQuery = dataSource.inTransaction { dataAccess => workflowQuery.findWorkflowByIds(batch map (_.id)).result}
         val submittedRecords = Await.result(submittedRecordsQuery, Duration.Inf)
-        assert(submittedRecords.forall(_.executionServiceKey == expectedInstanceId))
+        assert(submittedRecords.forall(_.executionServiceKey == Option(expectedInstanceId)))
       }
     }
   }

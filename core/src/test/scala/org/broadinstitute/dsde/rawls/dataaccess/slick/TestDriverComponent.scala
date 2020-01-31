@@ -5,7 +5,7 @@ import java.util.UUID
 import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import nl.grons.metrics.scala.{Counter, DefaultInstrumented, MetricName}
-import org.broadinstitute.dsde.rawls.{TestExecutionContext, model}
+import org.broadinstitute.dsde.rawls.TestExecutionContext
 import slick.basic.DatabaseConfig
 import slick.jdbc.MySQLProfile.api._
 import slick.jdbc.JdbcProfile
@@ -22,11 +22,13 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
-import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser}
+import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.language.implicitConversions
+import scala.language.postfixOps
 
 // initialize database tables and connection pool only once
 object DbResource {
@@ -57,7 +59,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   implicit def wfStatusCounter(wfStatus: WorkflowStatus): Option[Counter] = Option(metrics.counter(s"${wfStatus.toString}"))
   implicit def subStatusCounter(subStatus: SubmissionStatus): Counter = metrics.counter(s"${subStatus.toString}")
 
-  override val driver: JdbcProfile = DbResource.dataConfig.driver
+  override val driver: JdbcProfile = DbResource.dataConfig.profile
   override val batchSize: Int = DbResource.dataConfig.config.getInt("batchSize")
   val slickDataSource = DbResource.dataSource
 

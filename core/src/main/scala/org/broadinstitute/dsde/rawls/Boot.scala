@@ -443,10 +443,10 @@ object Boot extends IOApp with LazyLogging {
 
     val registerServiceAccountFuture = samDAO.registerUser(serviceAccountUserInfo)
 
-    registerServiceAccountFuture.onFailure {
+    registerServiceAccountFuture.failed.foreach {
       // this is logged as a warning because almost always the service account is already enabled
       // so this is a problem only the first time rawls is started with a new service account
-      case t: Throwable => logger.warn("error enabling service account", t)
+      t: Throwable => logger.warn("error enabling service account", t)
     }
   }
 
