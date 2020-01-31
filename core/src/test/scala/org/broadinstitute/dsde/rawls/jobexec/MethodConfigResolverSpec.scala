@@ -138,7 +138,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         |}
       """.stripMargin)
 
-  val badWdl = WdlSource(littleWdl.source.replace("workflow", "i-am-not-a-workflow"))
+  val badWdl = WdlSource("This is not a valid workflow [MethodConfigResolverSpec]")
 
   val littleWdlName = "w1"
   val intArgName = "t1.int_arg"
@@ -173,7 +173,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val requiredTripleArrayInput  = makeToolInputParameter(tripleIntArrayName, true, makeArrayValueType(makeArrayValueType(makeArrayValueType(makeValueType("Int")))), "Array[Array[Array[Int]]]")
   val requiredTripleArrayWorkflowDescription =  makeWorkflowDescription("w1", List(requiredTripleArrayInput), List.empty)
 
-  val badWdlWorkflowDescription = makeBadWorkflowDescription("badwdl", List("ERROR: Finished parsing without consuming all tokens.\n\nBad syntax workflow returned from Agora mock server\n^\n     "))
+  val badWdlWorkflowDescription = makeBadWorkflowDescription("badwdl", List("ERROR: Finished parsing without consuming all tokens.\n\nThis is not a valid workflow [MethodConfigResolverSpec]\n^\n     "))
 
   val wdlVersionOneWdlStringInput = makeToolInputParameter(wdlVersionOneStringInputName, false, makeValueType("String"), "String")
   val wdlVersionOneWdlFileInput   = makeToolInputParameter(wdlVersionOneFileInputName, false, makeValueType("File"), "File")
@@ -185,7 +185,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl -> requiredDoubleArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (optionalDoubleArrayWdl -> optionalDoubleArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (tripleArrayWdl -> requiredTripleArrayWorkflowDescription)
-  mockCromwellSwaggerClient.workflowDescriptions += (WdlSource("Bad syntax workflow returned from Agora mock server") -> badWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (badWdl -> badWdlWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (wdlVersionOneWdl -> wdlVersionOneWdlWorkflowDescription)
 
   println(s"### finished creating workflowDescriptions: ${mockCromwellSwaggerClient.workflowDescriptions.keys.mkString(",")}")
