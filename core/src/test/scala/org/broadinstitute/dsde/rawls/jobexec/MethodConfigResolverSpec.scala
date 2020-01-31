@@ -188,8 +188,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   mockCromwellSwaggerClient.workflowDescriptions += (badWdl -> badWdlWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (wdlVersionOneWdl -> wdlVersionOneWdlWorkflowDescription)
 
-  println(s"### finished creating workflowDescriptions: ${mockCromwellSwaggerClient.workflowDescriptions.keys.mkString(",")}")
-
   val workspace = Workspace("workspaces", "test_workspace", UUID.randomUUID().toString(), "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
   import spray.json._
