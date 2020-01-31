@@ -962,6 +962,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
+        assert(response.entity.toString.contains(
+            "ERROR: Finished parsing without consuming all tokens.\n\nBad syntax workflow returned from Agora mock server\n^\n     "
+        ))
       }
   }
 
@@ -970,6 +973,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
+        assert(response.entity.toString.contains(
+          "ERROR: Finished parsing without consuming all tokens.\n\nBad syntax workflow returned from Agora mock server\n^\n     "
+        ))
       }
   }
 
