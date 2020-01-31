@@ -15,8 +15,6 @@ import akka.http.scaladsl.model.StatusCodes
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceStatusFormat
 import DefaultJsonProtocol._
-import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 /**
  * Mock server interface for the methods repo and execution service.
