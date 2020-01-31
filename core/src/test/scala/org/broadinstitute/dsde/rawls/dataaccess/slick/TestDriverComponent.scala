@@ -1008,10 +1008,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val o1Output = makeToolOutputParameter("method1.o1", makeValueType("String"), "String")
   val meth1WDLWorkflowDescription = makeWorkflowDescription(meth1WDLName, List(i1Input), List(o1Output))
   mockCromwellSwaggerClient.workflowDescriptions += (meth1WDL -> meth1WDLWorkflowDescription)
-  val testComponentThing = "Uhhh...can we get stuff from this class???"
-
-  println(s"%%% finished creating workflowDescriptions: ${mockCromwellSwaggerClient.workflowDescriptions.keys.mkString(",")}")
-
 
 }
 

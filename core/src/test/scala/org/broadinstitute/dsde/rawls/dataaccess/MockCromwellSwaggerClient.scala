@@ -15,8 +15,12 @@ class MockCromwellSwaggerClient extends CromwellSwaggerClient("fake/path") {
 
   override def describe(userInfo: UserInfo, wdl: WDL): Try[WorkflowDescription] = {
     if (!workflowDescriptions.contains(wdl)) {
-      println(s">>> Target WDL is $wdl")
-      println(s">>> Available WDLs are ${workflowDescriptions.keys.mkString("\n")}")
+      throw new Exception(
+        "Danger! Possible misconfigured test: the MockCromwellSwaggerClient received a request for a WDL it doesn't have and will return an error. " +
+        "This may cause a test that asserts a bad request to pass for the wrong reason." +
+        s">>> Target WDL is $wdl" +
+        s">>> Available WDLs are ${workflowDescriptions.keys.mkString("\n")}"
+      )
     }
     Try { MockCromwellSwaggerClient.returnCopy(workflowDescriptions(wdl)) }
   }

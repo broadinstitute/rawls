@@ -970,7 +970,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       check {
         assertResult(StatusCodes.BadRequest) { status }
         assert(response.entity.toString.contains(
-            "ERROR: Finished parsing without consuming all tokens.\n\nBad syntax workflow returned from Agora mock server\n^\n     "
+          "ERROR: Finished parsing without consuming all tokens."
+        ))
+        assert(response.entity.toString.contains(
+          "Bad syntax workflow returned from Agora mock server"
         ))
       }
   }
@@ -981,7 +984,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       check {
         assertResult(StatusCodes.BadRequest) { status }
         assert(response.entity.toString.contains(
-          "ERROR: Finished parsing without consuming all tokens.\n\nBad syntax workflow returned from Agora mock server\n^\n     "
+          "ERROR: Finished parsing without consuming all tokens."
+        ))
+        assert(response.entity.toString.contains(
+          "Bad syntax workflow returned from Agora mock server"
         ))
       }
   }
