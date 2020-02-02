@@ -10,13 +10,13 @@ import akka.pattern._
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.ImportStatuses.ImportStatus
+import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, WorkspaceName}
-import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
+import org.broadinstitute.dsde.rawls.model.{ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, updateImportStatusFormat}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
@@ -28,7 +28,6 @@ import spray.json.DefaultJsonProtocol._
 import scala.concurrent.duration.{FiniteDuration, _}
 import scala.language.postfixOps
 import scala.util.{Failure, Success}
-import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.joda.time.DateTime
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -45,8 +44,8 @@ object AvroUpsertMonitorSupervisor {
                                            pollIntervalJitter: FiniteDuration,
                                            importRequestPubSubTopic: String,
                                            importRequestPubSubSubscription: String,
-                                           importStatusPubSubTopic: String,
-                                           importStatusPubSubSubscription: String,
+                                           updateImportStatusPubSubTopic: String,
+                                           updateImportStatusPubSubSubscription: String,
                                            bucketName: GcsBucketName,
                                            batchSize: Int,
                                            workerCount: Int)
@@ -67,7 +66,14 @@ object AvroUpsertMonitorSupervisor {
         pubSubDao,
         importServiceDAO,
         avroUpsertMonitorConfig))
+
+
+  import spray.json.DefaultJsonProtocol._
+  implicit val updateImportStatusFormat = jsonFormat4(UpdateImportStatus)
 }
+
+case class UpdateImportStatus(importId: String, updateStatus: String, updatedDate: String, errorMessage: Option[String] = None)
+
 
 class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService,
                                   googleServicesDAO: GoogleServicesDAO,
@@ -92,12 +98,11 @@ class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService
   def init =
     for {
       _ <- pubSubDao.createSubscription(avroUpsertMonitorConfig.importRequestPubSubTopic, avroUpsertMonitorConfig.importRequestPubSubSubscription, Some(600))
-      _ <- pubSubDao.createSubscription(avroUpsertMonitorConfig.importStatusPubSubTopic, avroUpsertMonitorConfig.importStatusPubSubSubscription, Some(600))
     } yield Start
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.importStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.bucketName, avroUpsertMonitorConfig.batchSize))
+    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.bucketName, avroUpsertMonitorConfig.batchSize))
   }
 
   override val supervisorStrategy =
@@ -179,15 +184,18 @@ class AvroUpsertMonitorActor(
         petUserInfo <- getPetServiceAccountUserInfo(attributes.workspace, attributes.userEmail)
         importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
         _ <- importStatus match {
+            // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
+            // end up with a race condition where multiple threads are attempting the same import / updating the status
+            // of the same import.
             case Some(ImportStatuses.ReadyForUpsert) => {
-              publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Upserting)
+              publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Upserting, None)
               toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, attributes.workspace, petUserInfo)) map {
                 case Success(_) => markImportAsDone(attributes.importId, attributes.workspace, petUserInfo)
-                case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Error(t.getMessage))
+                case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Error, Option(t.getMessage))
               }
             }
-            case None => publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Error("Import status not found"))
-            case _ => publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Error("Import was not ready for upsert"))
+            case None => publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Error, Option("Import status not found"))
+            case _ => publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Error, Option("Import was not ready for upsert"))
           }
         } yield ()
 
@@ -223,22 +231,17 @@ class AvroUpsertMonitorActor(
     for {
       importStatus <- importServiceDAO.getImportStatus(importId, workspaceName, userInfo)
       _ <- importStatus match {
-        case Some(ImportStatuses.Upserting) => publishMessageToUpdateImportStatus(importId, ImportStatuses.Done)
-        case None => publishMessageToUpdateImportStatus(importId, ImportStatuses.Error("Import status not found"))
-        case _ => publishMessageToUpdateImportStatus(importId, ImportStatuses.Error("Upsert finished, but import status was not correct."))
+        case Some(ImportStatuses.Upserting) => publishMessageToUpdateImportStatus(importId, ImportStatuses.Done, None)
+        case None => publishMessageToUpdateImportStatus(importId, ImportStatuses.Error, Option("Import status not found"))
+        case _ => publishMessageToUpdateImportStatus(importId, ImportStatuses.Error, Option("Upsert finished, but import status was not correct."))
       }
     } yield ()
   }
 
-  private def publishMessageToUpdateImportStatus(importId: UUID, importStatus: ImportStatus) = {
-    val now = DateTime.now
-    val requiredAttributes = Map("importId" -> importId.toString, "updateStatus" -> importStatus.toString, "updatedDate" -> now.toString)
-    val attributes = requiredAttributes ++ {importStatus match {
-      case error: ImportStatuses.Error => Map("errorMessage" -> error.message)
-      case _ => Map()
-    }}
-    val message = GooglePubSubDAO.MessageRequest("", attributes)
-    pubSubDao.publishMessages(importStatusPubSubTopic, Seq(message))
+  private def publishMessageToUpdateImportStatus(importId: UUID, importStatus: ImportStatus, errorMessage: Option[String]) = {
+    val updateImportStatus = UpdateImportStatus(importId.toString, importStatus.toString, DateTime.now.toString, errorMessage)
+    val attributes = updateImportStatus.toJson.asJsObject.fields.map { case (attName, attValue) => (attName, attValue.toString) }
+    pubSubDao.publishMessages(importStatusPubSubTopic, Seq(GooglePubSubDAO.MessageRequest("", attributes)))
   }
 
 

@@ -11,7 +11,7 @@ import cats.effect.IO
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, Entity}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, Entity, ImportStatuses}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.ApiServiceSpec
 import org.broadinstitute.dsde.workbench.google2.mock.FakeGoogleStorageInterpreter
@@ -66,10 +66,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
   val workspaceName =  testData.workspace.toWorkspaceName
   val googleStorage = FakeGoogleStorageInterpreter
-  val importRequestPubSubTopic = "request-topic"
-  val importRequestSubscriptionName = "request-sub"
-  val importStatusPubSubTopic = "status-topic"
-  val importStatusSubscriptionName = "status-sub"
+  val importReadPubSubTopic = "request-topic"
+  val importReadSubscriptionName = "request-sub"
+  val importWritePubSubTopic = "status-topic"
+  val importWriteSubscriptionName = "status-sub"
   val bucketName = GcsBucketName("fake-bucket")
   val blobName = GcsBlobName("fake-file")
   val entityName = "avro-entity"
@@ -88,10 +88,10 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   val config = AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig(
     FiniteDuration.apply(1, TimeUnit.SECONDS),
     FiniteDuration.apply(1, TimeUnit.SECONDS),
-    importRequestPubSubTopic,
-    importRequestSubscriptionName,
-    importStatusPubSubTopic,
-    importStatusSubscriptionName,
+    importReadPubSubTopic,
+    importReadSubscriptionName,
+    importWritePubSubTopic,
+    importWriteSubscriptionName,
     bucketName,
     1000,
     1
@@ -99,8 +99,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
   def setUp(services: TestApiService) = {
     // create the two topics
-    services.gpsDAO.createTopic(importRequestPubSubTopic)
-    services.gpsDAO.createTopic(importStatusPubSubTopic)
+    services.gpsDAO.createTopic(importReadPubSubTopic)
+    services.gpsDAO.createTopic(importWritePubSubTopic)
 
     val mockImportServiceDAO =  new MockImportServiceDAO()
 
@@ -125,7 +125,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // add the imports and their statuses to the mock importserviceDAO
     val mockImportServiceDAO =  setUp(services)
-    mockImportServiceDAO.groups += (importId1 -> ImportStatuses.ReadyForUpsert)
+    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
 
     // create compressed file
     val contents = """[{"name": "avro-entity", "entityType": "test-type", "operations": [{"op": "AddUpdateAttribute", "attributeName": "avro-attribute", "addUpdateAttribute": "foo"}]}]"""
@@ -140,12 +140,12 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     Await.result(googleStorage.createBlob(bucketName, blobName, compressed).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
     // Publish message on the request topic
-    services.gpsDAO.publishMessages(importRequestPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId1))))
+    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId1))))
 
     // check if correct message was posted on request topic
-    assert(services.gpsDAO.receivedMessage(importRequestPubSubTopic, sampleMessage, 1))
+    assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, sampleMessage, 1))
 
-    Thread.sleep(1000)
+    Thread.sleep(5000)
 
     // Check in db if entities are there
     withWorkspaceContext(testData.workspace) { context =>
@@ -161,17 +161,17 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     val importId4 = UUID.randomUUID()
 
     val mockImportServiceDAO =  setUp(services)
-    mockImportServiceDAO.groups += (importId2 -> ImportStatuses.Upserting)
-    mockImportServiceDAO.groups += (importId3 -> ImportStatuses.Done)
-    mockImportServiceDAO.groups += (importId4 -> ImportStatuses.Error("Some error"))
+    mockImportServiceDAO.imports += (importId2 -> ImportStatuses.Upserting)
+    mockImportServiceDAO.imports += (importId3 -> ImportStatuses.Done)
+    mockImportServiceDAO.imports += (importId4 -> ImportStatuses.Error)
 
-    services.gpsDAO.publishMessages(importRequestPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId2))))
-    services.gpsDAO.publishMessages(importRequestPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId3))))
-    services.gpsDAO.publishMessages(importRequestPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId4))))
+    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId2))))
+    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId3))))
+    services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId4))))
 
     Thread.sleep(1000)
 
-    assert(services.gpsDAO.receivedMessage(importRequestPubSubTopic, sampleMessage, 3))
+    assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, sampleMessage, 3))
 
   }
 }
