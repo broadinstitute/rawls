@@ -40,12 +40,18 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
     Seq((Slash ~ "api").? / "workflows" / "v1" / Segment / Neutral)
   )
 
-  override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]] = {
+  override def submitWorkflows(wdl: WDL, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]] = {
     val url = executionServiceURL+"/api/workflows/v1/batch"
     val labelsBodyPart = labels.map(labelsMap => Multipart.FormData.BodyPart("labels",labelsMap.toJson.compactPrint))
     val wfc = workflowCollection.map(Multipart.FormData.BodyPart("collectionName", _))
 
-    val bodyParts = Seq(Multipart.FormData.BodyPart("workflowSource", wdl),
+    val wdlSourceOrUrl = wdl match {
+      case wdl: WdlUrl => Multipart.FormData.BodyPart("workflowUrl", wdl.url)
+      case wdl: WdlSource => Multipart.FormData.BodyPart("workflowSource", wdl.source)
+    }
+
+    val bodyParts = Seq(
+      wdlSourceOrUrl,
       Multipart.FormData.BodyPart("workflowInputs", inputs.mkString("[", ",", "]"))
     ) ++ options.map(Multipart.FormData.BodyPart("workflowOptions", _)) ++ labelsBodyPart ++ wfc
 

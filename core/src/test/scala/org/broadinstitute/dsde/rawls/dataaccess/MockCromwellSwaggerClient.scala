@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model.{ToolInputParameter, ToolOutputParameter, ValueType, WorkflowDescription}
-import org.broadinstitute.dsde.rawls.model.UserInfo
+import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL, WdlSource}
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -11,9 +11,17 @@ import scala.util.Try
 
 class MockCromwellSwaggerClient extends CromwellSwaggerClient("fake/path") {
 
-  val workflowDescriptions: mutable.Map[String, WorkflowDescription] =  new TrieMap()
+  val workflowDescriptions: mutable.Map[WDL, WorkflowDescription] =  new TrieMap()
 
-  override def describe(userInfo: UserInfo, wdl: String): Try[WorkflowDescription] = {
+  override def describe(userInfo: UserInfo, wdl: WDL): Try[WorkflowDescription] = {
+    if (!workflowDescriptions.contains(wdl)) {
+      throw new Exception(
+        "Danger! Possible misconfigured test: the MockCromwellSwaggerClient received a request for a WDL it doesn't have and will return an error. " +
+        "This may cause a test that asserts a bad request to pass for the wrong reason." +
+        s">>> Target WDL is $wdl" +
+        s">>> Available WDLs are ${workflowDescriptions.keys.mkString("\n")}"
+      )
+    }
     Try { MockCromwellSwaggerClient.returnCopy(workflowDescriptions(wdl)) }
   }
 

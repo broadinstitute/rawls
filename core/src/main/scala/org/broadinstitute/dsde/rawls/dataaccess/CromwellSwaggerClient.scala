@@ -5,10 +5,10 @@ import com.typesafe.scalalogging.LazyLogging
 import cromwell.client.ApiClient
 import cromwell.client.api.WomtoolApi
 import cromwell.client.model.WorkflowDescription
-import org.broadinstitute.dsde.rawls.model.UserInfo
+import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL, WdlSource, WdlUrl}
 import org.broadinstitute.dsde.rawls.util.Retry
-import scala.util.Try
 
+import scala.util.Try
 import scala.concurrent.duration._
 
 class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
@@ -21,9 +21,16 @@ class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
     new WomtoolApi(apiClient)
   }
 
-
-  def describe(userInfo: UserInfo, wdl: String): Try[WorkflowDescription] = {
-    Retry.retry(5.seconds, 30.seconds) { Try { getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl, null, null, null, null) } }
-  }
+  def describe(userInfo: UserInfo, wdl: WDL): Try[WorkflowDescription] =
+    Retry.retry(5.seconds, 30.seconds) {
+      Try {
+        wdl match {
+          case wdl: WdlUrl =>
+            getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", null, wdl.url, null, null, null)
+          case wdl: WdlSource =>
+            getCromwellWomtoolApi(userInfo.accessToken.token).describe("v1", wdl.source, null, null, null, null)
+        }
+      }
+    }
 
 }
