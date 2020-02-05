@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.model.{UserInfo, WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.util.Retry.retry
-import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, Sam, SamModel}
+import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, Sam}
 import org.broadinstitute.dsde.workbench.service.SamModel._
 
 import scala.concurrent.duration.DurationLong
@@ -21,7 +21,7 @@ import org.scalatest.{FreeSpec, Matchers}
 
 import scala.util.Try
 
-
+//noinspection NoTailRecursionAnnotation,RedundantBlock,ScalaUnusedSymbol
 class BillingApiSpec extends FreeSpec with BillingFixtures with MethodFixtures with Matchers with Eventually
   with TestReporterFixture with LazyLogging {
 
