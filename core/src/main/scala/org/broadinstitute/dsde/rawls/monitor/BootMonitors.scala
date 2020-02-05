@@ -69,11 +69,9 @@ object BootMonitors extends LazyLogging {
     val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollJitter")),
-      //GoogleProject(conf.getString("avroUpsertMonitor.pubSubProject")),
       conf.getString("avroUpsertMonitor.importRequestPubSubTopic"),
       conf.getString("avroUpsertMonitor.importRequestPubSubSubscription"),
-      conf.getString("avroUpsertMonitor.importStatusPubSubTopic"),
-      conf.getString("avroUpsertMonitor.importStatusPubSubSubscription"),
+      conf.getString("avroUpsertMonitor.updateImportStatusPubSubTopic"),
       GcsBucketName(conf.getString("avroUpsertMonitor.bucketName")),
       conf.getInt("avroUpsertMonitor.batchSize"),
       conf.getInt("avroUpsertMonitor.workerCount")

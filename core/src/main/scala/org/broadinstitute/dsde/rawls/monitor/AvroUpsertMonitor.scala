@@ -45,7 +45,6 @@ object AvroUpsertMonitorSupervisor {
                                            importRequestPubSubTopic: String,
                                            importRequestPubSubSubscription: String,
                                            updateImportStatusPubSubTopic: String,
-                                           updateImportStatusPubSubSubscription: String,
                                            bucketName: GcsBucketName,
                                            batchSize: Int,
                                            workerCount: Int)

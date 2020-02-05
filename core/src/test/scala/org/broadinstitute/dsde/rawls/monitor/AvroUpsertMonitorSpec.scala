@@ -91,7 +91,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     importReadPubSubTopic,
     importReadSubscriptionName,
     importWritePubSubTopic,
-    importWriteSubscriptionName,
     bucketName,
     1000,
     1
@@ -141,6 +140,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // Publish message on the request topic
     services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId1))))
+
+    Thread.sleep(1000)
 
     // check if correct message was posted on request topic
     assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, sampleMessage, 1))
