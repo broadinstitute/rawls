@@ -21,6 +21,7 @@ import org.scalatest.time.{Minutes, Seconds, Span}
 import spray.json._
 import DefaultJsonProtocol._
 
+//noinspection JavaAccessorEmptyParenCall,TypeAnnotation
 class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
   with CleanUp with RandomUtil with Retry
   with BillingFixtures with WorkspaceFixtures with MethodFixtures {
@@ -330,7 +331,17 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
 
               eventually {
                 val submissionException = intercept[RestException] {
-                  Rawls.submissions.launchWorkflow(projectName, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(studentAToken)
+                  Rawls.submissions.launchWorkflow(
+                    billingProject = projectName,
+                    workspaceName = workspaceName,
+                    methodConfigurationNamespace = method.methodNamespace,
+                    methodConfigurationName = method.methodName,
+                    entityType = method.rootEntityType,
+                    entityName = "participant1",
+                    expression = "this",
+                    useCallCache = false,
+                    deleteIntermediateOutputFiles = false
+                  )(studentAToken)
                 }
                 assertExceptionStatusCode(submissionException, 403)
               }
@@ -361,7 +372,17 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
                 "OWNER"
               )(ownerAuthToken)
 
-              val submissionId = Rawls.submissions.launchWorkflow(projectName, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(studentAToken)
+              val submissionId = Rawls.submissions.launchWorkflow(
+                billingProject = projectName,
+                workspaceName = workspaceName,
+                methodConfigurationNamespace = method.methodNamespace,
+                methodConfigurationName = method.methodName,
+                entityType = method.rootEntityType,
+                entityName = "participant1",
+                expression = "this",
+                useCallCache = false,
+                deleteIntermediateOutputFiles = false
+              )(studentAToken)
               // make sure the submission has not errored out
               eventually {
                 val submissionStatus = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)(studentAToken)._1
@@ -395,7 +416,17 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
               )(ownerAuthToken)
 
               val submissionException = intercept[RestException] {
-                Rawls.submissions.launchWorkflow(projectName, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(studentAToken)
+                Rawls.submissions.launchWorkflow(
+                  billingProject = projectName,
+                  workspaceName = workspaceName,
+                  methodConfigurationNamespace = method.methodNamespace,
+                  methodConfigurationName = method.methodName,
+                  entityType = method.rootEntityType,
+                  entityName = "participant1",
+                  expression = "this",
+                  useCallCache = false,
+                  deleteIntermediateOutputFiles = false
+                )(studentAToken)
               }
               assertExceptionStatusCode(submissionException, 403)
             }(ownerAuthToken)
