@@ -341,6 +341,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  // function name may be misleading. This returns the workspace context and checks the user's permission,
+  // but does not return the permissions.
   def getWorkspaceContextAndPermissions(workspaceName: WorkspaceName, requiredAction: SamResourceAction, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[SlickWorkspaceContext] = {
     for {
       workspaceContext <- getWorkspaceContext(workspaceName, attributeSpecs)
@@ -559,7 +561,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
     withAttributeNamespaceCheck(workspaceAttributeNames) {
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
-        withWorkspaceContextAndPermissionsF(sourceWorkspaceName, SamWorkspaceActions.read) { sourceWorkspaceContext =>
+        getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { sourceWorkspaceContext =>
           dataSource.inTransaction({ dataAccess =>
             DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspace.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
               withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
@@ -2116,15 +2118,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
       }
     } yield response
-  }
-
-  private def withWorkspaceContextAndPermissionsF[T](workspaceName: WorkspaceName, requiredAction: SamResourceAction, attributeSpecs: Option[WorkspaceAttributeSpecs] = None)(op: (SlickWorkspaceContext) => Future[T]): Future[T] = {
-    for {
-      workspaceContext <- dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { ctx => DBIO.successful(ctx) }
-      }
-      opResult <- requireAccessF(workspaceContext.workspace, requiredAction) { op(workspaceContext) }
-    } yield opResult
   }
 
   private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess, attributeSpecs: Option[WorkspaceAttributeSpecs] = None)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
