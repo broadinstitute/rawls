@@ -205,12 +205,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     )
   }
 
-  def getWdl(methodConfig: MethodConfiguration, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[String] = {
-    dataSource.inTransaction { dataAccess => //this is a transaction that makes no database calls, but the sprawling stack of withFoos was too hard to unpick :(
-      withMethod(methodConfig.methodRepoMethod, userInfo) { method =>
-        withWdl(method) { wdl =>
-          DBIO.successful(wdl)
-        }
+  def getWdl(methodConfig: MethodConfiguration, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[WDL] = {
+    dataSource.inTransaction { _ => //this is a transaction that makes no database calls, but the sprawling stack of withFoos was too hard to unpick :(
+      withMethod(methodConfig.methodRepoMethod, userInfo) { wdl: WDL =>
+        DBIO.successful(wdl)
       }
     }
   }

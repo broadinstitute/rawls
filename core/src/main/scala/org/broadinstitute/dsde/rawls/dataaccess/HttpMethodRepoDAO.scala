@@ -53,18 +53,20 @@ class HttpMethodRepoDAO(agoraConfig: MethodRepoConfig[Agora.type], dockstoreConf
     getAgoraEntity(s"$agoraServiceURL/configurations/$namespace/$name/$version",userInfo)
   }
 
-  override def getMethod( method: MethodRepoMethod, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
+  override def getMethod( method: MethodRepoMethod, userInfo: UserInfo ): Future[Option[WDL]] = {
     method match {
       case agoraMethod: AgoraMethod =>
-        getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo)
+        getAgoraEntity(s"$agoraServiceURL/methods/${agoraMethod.methodNamespace}/${agoraMethod.methodName}/${agoraMethod.methodVersion}", userInfo) map { maybeEntity =>
+          for {
+            entity: AgoraEntity <- maybeEntity
+            payload <- entity.payload
+          } yield WdlSource(payload)
+        }
       case dockstoreMethod: DockstoreMethod =>
-        getDockstoreMethod(dockstoreMethod) flatMap { response: Option[GA4GHTool] =>
-          response match {
-            case Some(tool) =>
-              // TODO: re-using AgoraEntity feels sketchy to me. It seems to work without any changes, but should we create a DockstoreEntity?
-              Future(Some(AgoraEntity(payload = Some(tool.descriptor), entityType = Some(AgoraEntityType.Workflow))))
-            case None => Future(None)
-          }
+        getDockstoreMethod(dockstoreMethod) map { maybeTool =>
+          for {
+            tool: GA4GHTool <- maybeTool
+          } yield WdlUrl(tool.url) // We submit the Github URL to Cromwell so that relative imports work.
         }
     }
   }

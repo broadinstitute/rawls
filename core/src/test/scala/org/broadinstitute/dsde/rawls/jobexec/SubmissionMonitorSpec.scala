@@ -764,7 +764,7 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
   val abortedMap: scala.collection.concurrent.TrieMap[String, String] = new scala.collection.concurrent.TrieMap[String, String]()
   var labels: Map[String, String] = Map.empty   // could make this more sophisticated: map of workflow to map[s,s]
 
-  override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo) = Future.successful(Seq(Left(ExecutionServiceStatus("test_id", workflowStatus))))
+  override def submitWorkflows(wdl: WDL, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo) = Future.successful(Seq(Left(ExecutionServiceStatus("test_id", workflowStatus))))
 
   override def outputs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceOutputs(id, Map("o1" -> Left(AttributeString("foo")))))
   override def logs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceLogs(id, Option(Map("task1" -> Seq(ExecutionServiceCallLogs(stdout = "foo", stderr = "bar"))))))
