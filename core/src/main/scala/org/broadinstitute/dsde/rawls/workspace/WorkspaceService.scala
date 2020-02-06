@@ -414,7 +414,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         workspace <- getWorkspaceContext(workspaceName) flatMap { ctx =>
           withLibraryPermissions(ctx, operations, userInfo, isCurator) {
             dataSource.inTransaction ({ dataAccess =>
-              updateWorkspace(operations, dataAccess)(ctx)
+              updateWorkspace(operations, dataAccess)(ctx.workspace.toWorkspaceName)
             }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
           }
         }
@@ -430,7 +430,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       for {
         ctx <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
         workspace <- dataSource.inTransaction({ dataAccess =>
-            updateWorkspace(operations, dataAccess)(ctx)
+            updateWorkspace(operations, dataAccess)(ctx.workspace.toWorkspaceName)
         }, TransactionIsolation.ReadCommitted) // read committed to avoid deadlocks on workspace attr scratch table
         authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo)
       } yield {
@@ -439,16 +439,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def updateWorkspace(operations: Seq[AttributeUpdateOperation], dataAccess: DataAccess)(workspaceContext: SlickWorkspaceContext): ReadWriteAction[Workspace] = {
-    val workspace = workspaceContext.workspace
-    Try {
-      val updatedWorkspace = applyOperationsToWorkspace(workspace, operations)
-      dataAccess.workspaceQuery.save(updatedWorkspace)
-    } match {
-      case Success(result) => result
-      case Failure(e: AttributeUpdateOperationException) =>
-        DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspace.name}", ErrorReport(e))))
-      case Failure(regrets) => DBIO.failed(regrets)
+  private def updateWorkspace(operations: Seq[AttributeUpdateOperation], dataAccess: DataAccess)(workspaceName: WorkspaceName): ReadWriteAction[Workspace] = {
+    // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
+    withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+      val workspace = workspaceContext.workspace
+      Try {
+        val updatedWorkspace = applyOperationsToWorkspace(workspace, operations)
+        dataAccess.workspaceQuery.save(updatedWorkspace)
+      } match {
+        case Success(result) => result
+        case Failure(e: AttributeUpdateOperationException) =>
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspace.name}", ErrorReport(e))))
+        case Failure(regrets) => DBIO.failed(regrets)
+      }
     }
   }
 
@@ -561,25 +564,28 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
     withAttributeNamespaceCheck(workspaceAttributeNames) {
       withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
-        getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { sourceWorkspaceContext =>
+        getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read).flatMap { permCtx =>
           dataSource.inTransaction({ dataAccess =>
-            DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspace.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
-              withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
+            // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
+            withWorkspaceContext(permCtx.workspace.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
+              DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspace.workspaceId, userInfo)).flatMap { sourceAuthDomains =>
+                withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet, destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)) { newAuthDomain =>
 
-                // add to or replace current attributes, on an individual basis
-                val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
+                  // add to or replace current attributes, on an individual basis
+                  val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
 
-                withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), dataAccess) { destWorkspaceContext =>
-                  dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-                    dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
-                      val inserts = methodConfigShorts.map { methodConfigShort =>
-                        dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
-                          dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                  withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), dataAccess) { destWorkspaceContext =>
+                    dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+                      dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                        val inserts = methodConfigShorts.map { methodConfigShort =>
+                          dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                            dataAccess.methodConfigurationQuery.create(destWorkspaceContext, methodConfig.get)
+                          }
                         }
-                      }
-                      DBIO.seq(inserts: _*)
-                    } andThen {
-                    DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                        DBIO.seq(inserts: _*)
+                      } andThen {
+                      DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                    }
                   }
                 }
               }
