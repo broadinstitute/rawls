@@ -39,7 +39,7 @@ object Settings {
   //common settings for all sbt subprojects
   val commonSettings =
     commonBuildSettings ++ testSettings ++ List(
-    organization  := "org.broadinstitute.d sde.firecloud",
+    organization  := "org.broadinstitute.dsde.firecloud",
     scalaVersion  := "2.12.6",
     resolvers ++= commonResolvers,
     scalacOptions ++= commonCompilerSettings
