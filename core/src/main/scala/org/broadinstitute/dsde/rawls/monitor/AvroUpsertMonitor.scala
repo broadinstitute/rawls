@@ -17,6 +17,7 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, updateImportStatusFormat}
+import org.broadinstitute.dsde.rawls.util.AuthUtil
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
@@ -28,7 +29,6 @@ import spray.json.DefaultJsonProtocol._
 import scala.concurrent.duration.{FiniteDuration, _}
 import scala.language.postfixOps
 import scala.util.{Failure, Success}
-
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -142,8 +142,8 @@ class AvroUpsertMonitorActor(
                               val pollInterval: FiniteDuration,
                               pollIntervalJitter: FiniteDuration,
                               workspaceService: UserInfo => WorkspaceService,
-                              googleServicesDAO: GoogleServicesDAO,
-                              samDAO: SamDAO,
+                              val googleServicesDAO: GoogleServicesDAO,
+                              val samDAO: SamDAO,
                               googleStorage: GoogleStorageService[IO],
                               pubSubDao: GooglePubSubDAO,
                               pubSubSubscriptionName: String,
@@ -152,7 +152,8 @@ class AvroUpsertMonitorActor(
                               batchSize: Int)(implicit cs: ContextShift[IO])
   extends Actor
     with LazyLogging
-    with FutureSupport {
+    with FutureSupport
+    with AuthUtil {
   import AvroUpsertMonitor._
   import context._
 
@@ -180,7 +181,7 @@ class AvroUpsertMonitorActor(
       //post to import service pubsub topic
       val attributes = parseMessage(message)
       for {
-        petUserInfo <- getPetServiceAccountUserInfo(attributes.workspace, attributes.userEmail)
+        petUserInfo <- getPetServiceAccountUserInfo(attributes.workspace.namespace, attributes.userEmail)
         importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
         _ <- importStatus match {
             // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
@@ -217,14 +218,6 @@ class AvroUpsertMonitorActor(
       self ! None
   }
 
-  private def getPetServiceAccountUserInfo(workspaceName: WorkspaceName, userEmail: RawlsUserEmail) = {
-    for {
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(workspaceName.namespace, userEmail)
-      petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-    } yield {
-      petUserInfo
-    }
-  }
 
   private def markImportAsDone(importId: UUID, workspaceName: WorkspaceName, userInfo: UserInfo) = {
     for {

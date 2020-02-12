@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import spray.json._
 
 import scala.concurrent.Await
