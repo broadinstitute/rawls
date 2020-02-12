@@ -18,6 +18,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
 
+//noinspection TypeAnnotation,RedundantBlock,ScalaUnnecessaryParentheses,ScalaUnusedSymbol
 class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike
   with Matchers with PrivateMethodTester with ScalaFutures
   with TestDriverComponent with RawlsTestUtils {
@@ -61,8 +62,25 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
 
     val sample1 = Entity("sample1", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
 
-    val submissionWithExecutionKeys = Submission(subWithExecutionKeys.toString, testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
-      Seq(Workflow(Some(workflowExternalIdWithExecutionKey.toString), WorkflowStatuses.Submitted, testDate, Some(sample1.toReference), testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+    val submissionWithExecutionKeys = Submission(
+      submissionId = subWithExecutionKeys.toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(testData.userOwner.userEmail.value),
+      methodConfigurationNamespace = "std",
+      methodConfigurationName = "someMethod",
+      submissionEntity = Option(sample1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option(workflowExternalIdWithExecutionKey.toString),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = testData.inputResolutions)
+      ),
+      status = SubmissionStatuses.Submitted,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
     override def save() = {
       DBIO.seq(
@@ -233,7 +251,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
 
         val submittedRecordsQuery = dataSource.inTransaction { dataAccess => workflowQuery.findWorkflowByIds(batch map (_.id)).result}
         val submittedRecords = Await.result(submittedRecordsQuery, Duration.Inf)
-        assert(submittedRecords.forall(_.executionServiceKey == expectedInstanceId))
+        assert(submittedRecords.forall(_.executionServiceKey == Option(expectedInstanceId)))
       }
     }
   }

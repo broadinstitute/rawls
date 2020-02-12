@@ -38,7 +38,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import cats.implicits._
-import io.opencensus.trace.Span
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
@@ -49,7 +48,7 @@ import io.opencensus.trace.{Span, Status}
 /**
  * Created by dvoet on 4/27/15.
  */
-
+//noinspection TypeAnnotation
 object WorkspaceService {
   def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) = {
     new WorkspaceService(userInfo, dataSource, methodRepoDAO, cromiamDAO, executionServiceCluster, execServiceBatchSize, methodConfigResolver, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService, config)
@@ -76,6 +75,7 @@ object WorkspaceService {
 
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
+//noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
 class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(implicit protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils {
 
@@ -400,8 +400,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- workspaceContext.workspace.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
       _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, userInfo)
     } yield {
-      aborts.onFailure {
-        case t: Throwable => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
+      aborts.onComplete {
+        case Failure(t) => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
+        case _ => /* ok */
       }
       RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.workspace.bucketName} will be deleted within 24h.")
     }
@@ -1595,6 +1596,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             workflows = workflows ++ workflowFailures,
             status = SubmissionStatuses.Submitted,
             useCallCache = submissionRequest.useCallCache,
+            deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
             workflowFailureMode = workflowFailureMode
           )
 

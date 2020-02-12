@@ -25,10 +25,12 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 /**
  * Created by dvoet on 4/24/15.
  */
+//noinspection TypeAnnotation,NameBooleanParameters,ScalaUnnecessaryParentheses,RedundantNewCaseClass,RedundantBlock,ScalaUnusedSymbol
 class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
@@ -117,7 +119,17 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   "SubmissionApi" should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde","not there",Some("Pattern"),Some("pattern1"), None, false))) ~>
+    Post(s"${testData.wsName.path}/submissions", httpJson(
+      SubmissionRequest(
+        methodConfigurationNamespace = "dsde",
+        methodConfigurationName = "not there",
+        entityType = Option("Pattern"),
+        entityName = Option("pattern1"),
+        expression = None,
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false
+      )
+    )) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -128,7 +140,17 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
-    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest(mcName.namespace, mcName.name,Some("Pattern"),Some("pattern1"), None, false))) ~>
+    Post(s"${testData.wsName.path}/submissions", httpJson(
+      SubmissionRequest(
+        methodConfigurationNamespace = mcName.namespace,
+        methodConfigurationName = mcName.name,
+        entityType = Option("Pattern"),
+        entityName = Option("pattern1"),
+        expression = None,
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false
+      )
+    )) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -156,7 +178,16 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       }
 
     withStatsD {
-      val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, Some(submissionEntity.entityType), Some(submissionEntity.name), submissionExpression, false, workflowFailureMode)
+      val submissionRq = SubmissionRequest(
+        methodConfigurationNamespace = methodConf.namespace,
+        methodConfigurationName = methodConf.name,
+        entityType = Option(submissionEntity.entityType),
+        entityName = Option(submissionEntity.name),
+        expression = submissionExpression,
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false,
+        workflowFailureMode = workflowFailureMode
+      )
       Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
         sealRoute(services.submissionRoutes) ~>
         check {
@@ -377,7 +408,16 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
 
-    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, Some(testData.sample1.entityType), Some(testData.sample1.name), None, false, Some(WorkflowFailureModes.ContinueWhilePossible.toString))
+    val submissionRq = SubmissionRequest(
+      methodConfigurationNamespace = methodConf.namespace,
+      methodConfigurationName = methodConf.name,
+      entityType = Option(testData.sample1.entityType),
+      entityName = Option(testData.sample1.name),
+      expression = None,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false,
+      workflowFailureMode = Option(WorkflowFailureModes.ContinueWhilePossible.toString)
+    )
     val jsonStr = submissionRq.toJson.toString.replace("ContinueWhilePossible", "Bogus")
 
     Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
@@ -619,7 +659,18 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, Some(testData.indiv1.toReference), Seq.empty)
     )
 
-    val testSubmission = Submission(UUID.randomUUID.toString, testDate, WorkbenchEmail(testData.userOwner.userEmail.value), testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some(testData.indiv1.toReference), workflows, SubmissionStatuses.Done, false)
+    val testSubmission = Submission(
+      submissionId = UUID.randomUUID.toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(testData.userOwner.userEmail.value),
+      methodConfigurationNamespace = testData.agoraMethodConfig.namespace,
+      methodConfigurationName = testData.agoraMethodConfig.name,
+      submissionEntity = Option(testData.indiv1.toReference),
+      workflows = workflows,
+      status = SubmissionStatuses.Done,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
     runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))
