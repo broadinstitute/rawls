@@ -72,7 +72,6 @@ object BootMonitors extends LazyLogging {
       conf.getString("avroUpsertMonitor.importRequestPubSubTopic"),
       conf.getString("avroUpsertMonitor.importRequestPubSubSubscription"),
       conf.getString("avroUpsertMonitor.updateImportStatusPubSubTopic"),
-      GcsBucketName(conf.getString("avroUpsertMonitor.bucketName")),
       conf.getInt("avroUpsertMonitor.batchSize"),
       conf.getInt("avroUpsertMonitor.workerCount")
     )

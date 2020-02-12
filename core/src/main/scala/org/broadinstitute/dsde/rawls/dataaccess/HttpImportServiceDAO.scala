@@ -5,9 +5,10 @@ import java.util.UUID
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding.Get
+import akka.http.scaladsl.marshalling.Marshal
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.Materializer
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.ImportStatuses
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
 import org.broadinstitute.dsde.rawls.model.{UserInfo, WorkspaceName}
@@ -32,11 +33,13 @@ class HttpImportServiceDAO(url: String)(implicit val system: ActorSystem, val ma
     import ImportServiceJsonSupport._
 
     val requestUrl = s"$url/${workspaceName.namespace}/${workspaceName.name}/imports/$importId"
+
     val importStatusResponse: Future[Option[ImportServiceResponse]] =  retry[Option[ImportServiceResponse]](when500) { () =>
         executeRequestWithToken[Option[ImportServiceResponse]](userInfo.accessToken)(Get(requestUrl)) recover {
           case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
         }
     }
+
     importStatusResponse.map { response =>
       response.map( statusString => ImportStatuses.withName(statusString.status))
     }

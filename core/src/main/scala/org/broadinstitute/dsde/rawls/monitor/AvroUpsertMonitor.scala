@@ -28,7 +28,6 @@ import spray.json.DefaultJsonProtocol._
 import scala.concurrent.duration.{FiniteDuration, _}
 import scala.language.postfixOps
 import scala.util.{Failure, Success}
-import org.joda.time.DateTime
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -45,7 +44,6 @@ object AvroUpsertMonitorSupervisor {
                                            importRequestPubSubTopic: String,
                                            importRequestPubSubSubscription: String,
                                            updateImportStatusPubSubTopic: String,
-                                           bucketName: GcsBucketName,
                                            batchSize: Int,
                                            workerCount: Int)
 
@@ -68,10 +66,14 @@ object AvroUpsertMonitorSupervisor {
 
 
   import spray.json.DefaultJsonProtocol._
-  implicit val updateImportStatusFormat = jsonFormat4(UpdateImportStatus)
+  implicit val updateImportStatusFormat = jsonFormat5(UpdateImportStatus)
 }
 
-case class UpdateImportStatus(importId: String, updateStatus: String, updatedDate: String, errorMessage: Option[String] = None)
+case class UpdateImportStatus(importId: String,
+                              newStatus: String,
+                              currentStatus: Option[String] = None,
+                              errorMessage: Option[String] = None,
+                              action: String = "status")
 
 
 class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService,
@@ -101,7 +103,7 @@ class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.bucketName, avroUpsertMonitorConfig.batchSize))
+    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize))
   }
 
   override val supervisorStrategy =
@@ -132,9 +134,8 @@ object AvroUpsertMonitor {
              pubSubSubscriptionName: String,
              importStatusPubSubTopic: String,
              importServiceDAO: ImportServiceDAO,
-             avroUpsertBucketName: GcsBucketName,
              batchSize: Int)(implicit cs: ContextShift[IO]): Props =
-    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, importStatusPubSubTopic, importServiceDAO, avroUpsertBucketName, batchSize))
+    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, pubSubSubscriptionName, importStatusPubSubTopic, importServiceDAO, batchSize))
 }
 
 class AvroUpsertMonitorActor(
@@ -148,7 +149,6 @@ class AvroUpsertMonitorActor(
                               pubSubSubscriptionName: String,
                               importStatusPubSubTopic: String,
                               importServiceDAO: ImportServiceDAO,
-                              avroUpsertBucketName: GcsBucketName,
                               batchSize: Int)(implicit cs: ContextShift[IO])
   extends Actor
     with LazyLogging
@@ -186,15 +186,15 @@ class AvroUpsertMonitorActor(
             // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
             // end up with a race condition where multiple threads are attempting the same import / updating the status
             // of the same import.
-            case Some(ImportStatuses.ReadyForUpsert) => {
-              publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Upserting, None)
+            case Some(status) if status == ImportStatuses.ReadyForUpsert => {
+              publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
               toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, attributes.workspace, petUserInfo)) map {
                 case Success(_) => markImportAsDone(attributes.importId, attributes.workspace, petUserInfo)
-                case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Error, Option(t.getMessage))
+                case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
               }
             }
-            case None => publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Error, Option("Import status not found"))
-            case _ => publishMessageToUpdateImportStatus(attributes.importId, ImportStatuses.Error, Option("Import was not ready for upsert"))
+            case Some(status) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option("Import was not ready for upsert"))
+            case None => publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option("Import status not found"))
           }
         } yield ()
 
@@ -230,16 +230,18 @@ class AvroUpsertMonitorActor(
     for {
       importStatus <- importServiceDAO.getImportStatus(importId, workspaceName, userInfo)
       _ <- importStatus match {
-        case Some(ImportStatuses.Upserting) => publishMessageToUpdateImportStatus(importId, ImportStatuses.Done, None)
-        case None => publishMessageToUpdateImportStatus(importId, ImportStatuses.Error, Option("Import status not found"))
-        case _ => publishMessageToUpdateImportStatus(importId, ImportStatuses.Error, Option("Upsert finished, but import status was not correct."))
+        case Some(status) if status == ImportStatuses.Upserting => publishMessageToUpdateImportStatus(importId, Option(status), ImportStatuses.Done, None)
+        case Some(status) => publishMessageToUpdateImportStatus(importId, Option(status), ImportStatuses.Error, Option("Upsert finished, but import status was not correct."))
+        case None => publishMessageToUpdateImportStatus(importId, None, ImportStatuses.Error, Option("Import status not found"))
       }
     } yield ()
   }
 
-  private def publishMessageToUpdateImportStatus(importId: UUID, importStatus: ImportStatus, errorMessage: Option[String]) = {
-    val updateImportStatus = UpdateImportStatus(importId.toString, importStatus.toString, DateTime.now.toString, errorMessage)
-    val attributes = updateImportStatus.toJson.asJsObject.fields.map { case (attName, attValue) => (attName, attValue.toString) }
+  private def publishMessageToUpdateImportStatus(importId: UUID, currentImportStatus: Option[ImportStatus], newImportStatus: ImportStatus, errorMessage: Option[String]) = {
+    val updateImportStatus = UpdateImportStatus(importId.toString, newImportStatus.toString, currentImportStatus.map(_.toString), errorMessage)
+    val attributes = updateImportStatus.toJson.asJsObject.fields.map { case (attName, attValue) =>
+      // JsValue -> String, adds extra quotes for some reason
+      (attName, attValue.compactPrint.replace("\"","")) }
     pubSubDao.publishMessages(importStatusPubSubTopic, Seq(GooglePubSubDAO.MessageRequest("", attributes)))
   }
 
@@ -288,12 +290,18 @@ class AvroUpsertMonitorActor(
   }
 
   private def readUpsertObject(path: String): Future[Seq[EntityUpdateDefinition]] = {
-    readObject[Seq[EntityUpdateDefinition]](path, decompress = true)
+    readObject[Seq[EntityUpdateDefinition]](path)
   }
 
   private def readObject[T](path: String, decompress: Boolean = false)(implicit reader: JsonReader[T]): Future[T] = {
     logger.info(s"reading ${if (decompress) "compressed " else ""}object $path ...")
-    googleStorage.getBlobBody(avroUpsertBucketName, GcsBlobName(path)).compile.to[Array].unsafeToFuture().map { byteArray =>
+    val pathArray = path.split("/")
+    val bucketName = GcsBucketName(pathArray(0))
+    val blobName = GcsBlobName(pathArray(1))
+
+    val compiled = googleStorage.getBlobBody(bucketName, blobName).compile
+
+    compiled.to[Array].unsafeToFuture().map { byteArray =>
       val bytes = if (decompress) decompressGzip(byteArray) else byteArray
       logger.info(s"successfully read $path; parsing ...")
       val obj = bytes.map(_.toChar).mkString.parseJson.convertTo[T]

@@ -110,9 +110,13 @@ class HttpGooglePubSubDAO(clientEmail: String,
       val messages = executeGoogleRequest(getPubSubDirectory.projects().subscriptions().pull(subscriptionToFullPath(subscriptionName), pullRequest)).getReceivedMessages
       if(messages == null)
         Seq.empty
-      else messages.asScala.map(message => PubSubMessage(message.getAckId,
-                                                         new String(message.getMessage.decodeData(), characterEncoding),
-                                                         message.getMessage.getAttributes.asScala.toMap))
+      else messages.asScala.map { message =>
+        val messageArray = message.getMessage.decodeData
+        val messageBody = if (messageArray == null) "" else new String(message.getMessage.decodeData(), characterEncoding)
+        PubSubMessage(message.getAckId,
+          messageBody,
+          message.getMessage.getAttributes.asScala.toMap)
+      }
     })
   }
 
