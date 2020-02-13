@@ -170,7 +170,7 @@ case class SubmissionListResponse(
   submitter: String,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  methodConfigDeleted: Boolean,
+  methodConfigurationDeleted: Boolean,
   submissionEntity: Option[AttributeEntityReference],
   status: SubmissionStatus,
   workflowStatuses: StatusCounts,
@@ -181,14 +181,14 @@ case class SubmissionListResponse(
   cost: Option[Float] = None
 )
 object SubmissionListResponse {
-  def apply(submission: Submission, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts, methodConfigDeleted: Boolean): SubmissionListResponse =
+  def apply(submission: Submission, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts, methodConfigurationDeleted: Boolean): SubmissionListResponse =
     SubmissionListResponse(
       submissionId = submission.submissionId,
       submissionDate = submission.submissionDate,
       submitter = submission.submitter.value,
       methodConfigurationNamespace = submission.methodConfigurationNamespace,
       methodConfigurationName = submission.methodConfigurationName,
-      methodConfigDeleted = methodConfigDeleted,
+      methodConfigurationDeleted = methodConfigurationDeleted,
       submissionEntity = submission.submissionEntity,
       status = submission.status,
       workflowStatuses = workflowStatuses,
