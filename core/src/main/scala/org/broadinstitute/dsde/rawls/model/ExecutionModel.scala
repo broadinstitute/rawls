@@ -333,7 +333,57 @@ class ExecutionJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val SubmissionRequestFormat = jsonFormat8(SubmissionRequest)
+  /*
+  Copied from:
+  - https://www.codersbistro.com/blog/default-values-with-spray-json-marshalling/
+  - https://gist.github.com/agemooij/f2e4075a193d166355f8
+  If you find a better way of implementing this (*cough* circe?) please add a link
+
+  NOTE:
+  - Until REST API endpoint versioning across the many repositories / consumers is figured out, DO NOT DELETE ANY FIELDS
+      IN THE REQUEST, only deprecate and/or default!
+  - We are operating under an assumption for clients: even if the API version doesn't change, clients will hopefully
+      consume-and-discard any additional fields that appear in the returned json. Therefore response classes do not
+      require this custom spray-json treatment, at the moment.
+   */
+  implicit object SubmissionRequestFormat extends RootJsonFormat[SubmissionRequest] {
+
+    override def write(obj: SubmissionRequest): JsValue = {
+      JsObject(
+        List(
+          Option("methodConfigurationNamespace" -> obj.methodConfigurationNamespace.toJson),
+          Option("methodConfigurationName" -> obj.methodConfigurationName.toJson),
+          obj.entityType.map("entityType" -> _.toJson),
+          obj.entityName.map("entityName" -> _.toJson),
+          obj.expression.map("expression" -> _.toJson),
+          Option("useCallCache" -> obj.useCallCache.toJson),
+          Option("deleteIntermediateOutputFiles" -> obj.deleteIntermediateOutputFiles.toJson),
+          obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson)
+        ).flatten: _*
+      )
+    }
+
+    override def read(json: JsValue): SubmissionRequest = {
+      val fields = json.asJsObject.fields
+
+      SubmissionRequest(
+        // All new fields below this line MUST have defaults or be wrapped in Option[]!
+        // https://broadworkbench.atlassian.net/browse/QA-1031
+        // NOTE: All fields are optional in firecloud-orchestration's copy of this class,
+        // so in that project one can just adjust the function call to jsonFormat*N*.
+        methodConfigurationNamespace = fields("methodConfigurationNamespace").convertTo[String],
+        methodConfigurationName = fields("methodConfigurationName").convertTo[String],
+        entityType = fields.get("entityType").map(_.convertTo[String]),
+        entityName = fields.get("entityName").map(_.convertTo[String]),
+        expression = fields.get("expression").map(_.convertTo[String]),
+        useCallCache = fields("useCallCache").convertTo[Boolean],
+        deleteIntermediateOutputFiles = fields.get("deleteIntermediateOutputFiles").fold(false)(_.convertTo[Boolean]),
+        workflowFailureMode = fields.get("workflowFailureMode").map(_.convertTo[String])
+        // All new fields above this line MUST have defaults or be wrapped in Option[]!
+      )
+    }
+  }
+
 
   implicit val ExecutionEventFormat = jsonFormat3(ExecutionEvent)
 
