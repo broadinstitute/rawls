@@ -182,7 +182,7 @@ object Boot extends IOApp with LazyLogging {
       )
 
       // Avro upsert uses a different project for its pubsub topics
-      // remove when cut over to import service
+      // remove when cutting over to import service
       val arrowPubSubDAO = new HttpGooglePubSubDAO(
         clientEmail,
         pathToPem,
@@ -400,7 +400,7 @@ object Boot extends IOApp with LazyLogging {
           gcsDAO,
           samDAO,
           pubSubDAO,
-          arrowPubSubDAO, // remove when cut over to import service
+          arrowPubSubDAO, // remove when cutting over to import service
           importServiceDAO,
           appDependencies.googleStorageService,
           methodRepoDAO,

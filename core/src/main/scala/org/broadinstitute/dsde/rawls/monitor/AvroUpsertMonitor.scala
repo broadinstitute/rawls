@@ -41,9 +41,9 @@ object AvroUpsertMonitorSupervisor {
 
   final case class AvroUpsertMonitorConfig(pollInterval: FiniteDuration,
                                            pollIntervalJitter: FiniteDuration,
-                                           arrowPubSubTopic: String,        // remove when cut over to import service
-                                           arrowPubSubSubscription: String, // remove when cut over to import service
-                                           arrowBucketName: String,         // remove when cut over to import service
+                                           arrowPubSubTopic: String,        // remove when cutting over to import service
+                                           arrowPubSubSubscription: String, // remove when cutting over to import service
+                                           arrowBucketName: String,         // remove when cutting over to import service
                                            importRequestPubSubTopic: String,
                                            importRequestPubSubSubscription: String,
                                            updateImportStatusPubSubTopic: String,
@@ -56,7 +56,7 @@ object AvroUpsertMonitorSupervisor {
             samDAO: SamDAO,
             googleStorage: GoogleStorageService[IO],
             pubSubDAO: GooglePubSubDAO,
-            arrowPubSubDAO: GooglePubSubDAO, // remove when cut over to import service
+            arrowPubSubDAO: GooglePubSubDAO, // remove when cutting over to import service
             importServiceDAO: ImportServiceDAO,
             avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
     Props(
@@ -66,7 +66,7 @@ object AvroUpsertMonitorSupervisor {
         samDAO,
         googleStorage,
         pubSubDAO,
-        arrowPubSubDAO, // remove when cut over to import service
+        arrowPubSubDAO, // remove when cutting over to import service
         importServiceDAO,
         avroUpsertMonitorConfig))
 
@@ -87,7 +87,7 @@ class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService
                                   samDAO: SamDAO,
                                   googleStorage: GoogleStorageService[IO],
                                   pubSubDAO: GooglePubSubDAO,
-                                  arrowPubSubDAO: GooglePubSubDAO, // remove when cut over to import service
+                                  arrowPubSubDAO: GooglePubSubDAO, // remove when cutting over to import service
                                   importServiceDAO: ImportServiceDAO,
                                   avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO])
   extends Actor
@@ -105,7 +105,7 @@ class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService
 
   def init =
     for {
-      _ <- arrowPubSubDAO.createSubscription(avroUpsertMonitorConfig.arrowPubSubTopic, avroUpsertMonitorConfig.arrowPubSubSubscription, Some(avroUpsertMonitorConfig.ackDeadlineSeconds)) // remove when cut over to import service
+      _ <- arrowPubSubDAO.createSubscription(avroUpsertMonitorConfig.arrowPubSubTopic, avroUpsertMonitorConfig.arrowPubSubSubscription, Some(avroUpsertMonitorConfig.ackDeadlineSeconds)) // remove when cutting over to import service
       _ <- pubSubDAO.createSubscription(avroUpsertMonitorConfig.importRequestPubSubTopic, avroUpsertMonitorConfig.importRequestPubSubSubscription, Some(avroUpsertMonitorConfig.ackDeadlineSeconds))
     } yield Start
 
@@ -139,9 +139,9 @@ object AvroUpsertMonitor {
              samDAO: SamDAO,
              googleStorage: GoogleStorageService[IO],
              pubSubDao: GooglePubSubDAO,
-             arrowPubSubDAO: GooglePubSubDAO,     // remove when cut over to import service
-             arrowPubSubSubscriptionName: String, // remove when cut over to import service
-             arrowUpsertBucketName: String,       // remove when cut over to import service
+             arrowPubSubDAO: GooglePubSubDAO,     // remove when cutting over to import service
+             arrowPubSubSubscriptionName: String, // remove when cutting over to import service
+             arrowUpsertBucketName: String,       // remove when cutting over to import service
              pubSubSubscriptionName: String,
              importStatusPubSubTopic: String,
              importServiceDAO: ImportServiceDAO,
@@ -158,9 +158,9 @@ class AvroUpsertMonitorActor(
                               val samDAO: SamDAO,
                               googleStorage: GoogleStorageService[IO],
                               pubSubDao: GooglePubSubDAO,
-                              arrowPubSubDAO: GooglePubSubDAO,     // remove when cut over to import service
-                              arrowPubSubSubscriptionName: String, // remove when cut over to import service
-                              arrowUpsertBucketName: String,       // remove when cut over to import service
+                              arrowPubSubDAO: GooglePubSubDAO,     // remove when cutting over to import service
+                              arrowPubSubSubscriptionName: String, // remove when cutting over to import service
+                              arrowUpsertBucketName: String,       // remove when cutting over to import service
                               pubSubSubscriptionName: String,
                               importStatusPubSubTopic: String,
                               importServiceDAO: ImportServiceDAO,
@@ -197,7 +197,7 @@ class AvroUpsertMonitorActor(
       if (message.attributes.contains("jobId")) {
         importEntities(message)
       } else {
-        arrowImportEntities(message)  // remove when cut over to import service
+        arrowImportEntities(message)  // remove when cutting over to import service
       }
 
     case None =>
@@ -346,7 +346,7 @@ class AvroUpsertMonitorActor(
     }
 
 
-  //----------------------------  remove when cut over to import service ---------------------------
+  //----------------------------  remove when cutting over to import service ---------------------------
 
   private def arrowImportEntities(message: PubSubMessage) = {
     val (jobId, file) = arrowParseMessage(message)

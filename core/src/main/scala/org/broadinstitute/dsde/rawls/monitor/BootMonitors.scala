@@ -31,7 +31,7 @@ object BootMonitors extends LazyLogging {
                    gcsDAO: GoogleServicesDAO,
                    samDAO: SamDAO,
                    pubSubDAO: GooglePubSubDAO,
-                   arrowPubSubDAO: GooglePubSubDAO,  // remove when cut over to import service
+                   arrowPubSubDAO: GooglePubSubDAO,  // remove when cutting over to import service
                    importServiceDAO: HttpImportServiceDAO,
                    googleStorage: GoogleStorageService[IO],
                    methodRepoDAO: MethodRepoDAO,
@@ -68,9 +68,9 @@ object BootMonitors extends LazyLogging {
     val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
       util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollJitter")),
-      conf.getString("avroUpsertMonitor.arrowPubSubTopic"), // remove when cut over to import service
-      conf.getString("avroUpsertMonitor.arrowPubSubSubscription"), // remove when cut over to import service
-      conf.getString("avroUpsertMonitor.arrowBucketName"), // remove when cut over to import service
+      conf.getString("avroUpsertMonitor.arrowPubSubTopic"), // remove when cutting over to import service
+      conf.getString("avroUpsertMonitor.arrowPubSubSubscription"), // remove when cutting over to import service
+      conf.getString("avroUpsertMonitor.arrowBucketName"), // remove when cutting over to import service
       conf.getString("avroUpsertMonitor.importRequestPubSubTopic"),
       conf.getString("avroUpsertMonitor.importRequestPubSubSubscription"),
       conf.getString("avroUpsertMonitor.updateImportStatusPubSubTopic"),

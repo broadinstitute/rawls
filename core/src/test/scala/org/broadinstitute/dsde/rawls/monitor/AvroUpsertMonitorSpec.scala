@@ -83,7 +83,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     "workspaceName" -> workspaceName.name,
     "workspaceNamespace" -> workspaceName.namespace,
     "userEmail" -> userInfo.userEmail.toString,
-    "upsertFile" -> blobName.value,
+    "upsertFile" ->  s"$bucketName/${blobName.value}",
     "jobId" -> importId.toString
   )
 
@@ -106,6 +106,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     // create the two topics
     services.gpsDAO.createTopic(importReadPubSubTopic)
     services.gpsDAO.createTopic(importWritePubSubTopic)
+    services.gpsDAO.createTopic(arrowPubSubTopic)      // remove when cutting over to import service
 
     val mockImportServiceDAO =  new MockImportServiceDAO()
 
@@ -143,7 +144,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     bos.close()
 
     // Store compressed file
-    Await.result(googleStorage.createBlob(bucketName, blobName, compressed).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+    Await.result(googleStorage.createBlob(bucketName, blobName, contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    val blob = Await.result(googleStorage.unsafeGetBlobBody(bucketName, blobName).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
     // Publish message on the request topic
     services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId1))))
