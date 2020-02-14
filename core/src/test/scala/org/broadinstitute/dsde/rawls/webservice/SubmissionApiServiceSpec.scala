@@ -324,10 +324,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     lazy val failedSubmission = getSubmission(submissionResponseWithFailureMode.submissionId)
     lazy val submission = getSubmission(submissionResponseWithoutFailureMode.submissionId)
     val submissionListResponseWithFailureMode =
-      SubmissionListResponse(failedSubmission, None, Map("Queued" -> 1)).copy(cost = None)
+      SubmissionListResponse(failedSubmission, None, Map("Queued" -> 1), false).copy(cost = None)
     val submissionListResponseWithoutFailureMode =
       SubmissionListResponse(
-        getSubmission(submissionResponseWithoutFailureMode.submissionId), None, Map("Queued" -> 1)).copy(cost = None)
+        getSubmission(submissionResponseWithoutFailureMode.submissionId), None, Map("Queued" -> 1), false).copy(cost = None)
 
     // Sanity check the workflow failure modes in the expected SubmissionListResponse objects
     submissionListResponseWithFailureMode.workflowFailureMode should equal (Some(WorkflowFailureModes.ContinueWhilePossible))
@@ -476,7 +476,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       // val runCost = if (wfCount == 0) None else Some(wfCount * 1.23f)  // mockSubmissionCostService.fixedCost
       val runCost = None
 
-      SubmissionListResponse(sub, None, statuses).copy(cost = runCost)
+      SubmissionListResponse(sub, None, statuses, false).copy(cost = runCost)
     }
 
 
