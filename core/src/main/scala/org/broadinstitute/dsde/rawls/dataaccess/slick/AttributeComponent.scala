@@ -189,7 +189,8 @@ trait AttributeComponent {
 
     def batchInsertAttributes(attributes: Seq[RECORD], transactionId: String) = {
       insertInBatches(this, attributes.map { case rec =>
-        createRecord(rec.id, rec.ownerId, rec.namespace, rec.name, rec.valueString, rec.valueNumber, rec.valueBoolean, rec.valueJson, rec.valueEntityRef, rec.listIndex, rec.listLength, rec.deleted, rec.deletedDate, transactionId)
+        { val a = createRecord(rec.id, rec.ownerId, rec.namespace, rec.name, rec.valueString, rec.valueNumber, rec.valueBoolean, rec.valueJson, rec.valueEntityRef, rec.listIndex, rec.listLength, rec.deleted, rec.deletedDate, transactionId)
+        a }
       })
     }
   }

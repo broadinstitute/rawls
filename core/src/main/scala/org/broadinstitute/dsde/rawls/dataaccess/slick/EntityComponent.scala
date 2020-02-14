@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import slick.jdbc.{GetResult, JdbcProfile}
 import akka.http.scaladsl.model.StatusCodes
+import com.typesafe.scalalogging.LazyLogging
 
 import scala.annotation.tailrec
 
@@ -144,7 +145,7 @@ trait EntityComponent {
     }
   }
 
-  object entityQuery extends TableQuery(new EntityTable(_)) {
+  object entityQuery extends TableQuery(new EntityTable(_)) with LazyLogging {
 
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
@@ -486,6 +487,26 @@ trait EntityComponent {
           val deleteIds = (for {
             attributeName <- deletes
           } yield existingAttrsToRecordIds.get(attributeName)).flatten
+
+          def displayRec(e: EntityAttributeRecord) = {
+            s"id-${e.id} \t name-${e.name} \t namespace-${e.namespace} \t ownerId-${e.ownerId} \t listLength-${e.listLength} \t listIndex-${e.listIndex} \t valueString-${e.valueString}\n"
+          }
+
+          logger.debug(
+            s"*********************** FIND ME ***********************\n" +
+            s"WORKSPACE DETAILS: workspace_id-${workspaceContext.workspaceId} \t name-${workspaceContext.workspace.name} \t namespace-${workspaceContext.workspace.namespace}\n" +
+            s"ENTITY DETAILS: entityId-${entityRecord.id} \t name-${entityRecord.name}\n" +
+              "---------------------\n" +
+            s"UPSERTS DETAILS: ${upserts.map(x => {
+              s"Attribute name-${x._1} \t Attribute-${x._2} \n"
+            })} \n" +
+              "---------------------\n" +
+            s"INSERT RECORDS: ${insertRecs.map(displayRec)}" +
+              "---------------------\n" +
+            s"UPDATE RECORDS: ${updateRecs.map(displayRec)}" +
+              "---------------------\n" +
+            "********************************************************"
+          )
 
           entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, deleteIds.flatten, entityAttributeScratchQuery.insertScratchAttributes)
         }
