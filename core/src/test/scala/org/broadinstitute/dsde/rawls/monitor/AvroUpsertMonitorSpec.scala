@@ -66,6 +66,9 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
   val workspaceName =  testData.workspace.toWorkspaceName
   val googleStorage = FakeGoogleStorageInterpreter
+  val arrowPubSubTopic = "fake-arrow-pub-sub-topic"          // remove when cutting over to import service
+  val arrowPubSubSubscription = "arrow-pub-sub-subscription" // remove when cutting over to import service
+  val arrowBucketName = "arrow-bucket-name"                  // remove when cutting over to import service
   val importReadPubSubTopic = "request-topic"
   val importReadSubscriptionName = "request-sub"
   val importWritePubSubTopic = "status-topic"
@@ -88,10 +91,13 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   val config = AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig(
     FiniteDuration.apply(1, TimeUnit.SECONDS),
     FiniteDuration.apply(1, TimeUnit.SECONDS),
+    arrowPubSubTopic,        // remove when cutting over to import service
+    arrowPubSubSubscription, // remove when cutting over to import service
+    arrowBucketName,         // remove when cutting over to import service
     importReadPubSubTopic,
     importReadSubscriptionName,
     importWritePubSubTopic,
-    bucketName,
+    600,
     1000,
     1
   )
@@ -110,6 +116,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       services.samDAO,
       googleStorage,
       services.gpsDAO,
+      services.gpsDAO, // remove when cutting over to import service
       mockImportServiceDAO,
       config
     ))
