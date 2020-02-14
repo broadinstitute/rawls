@@ -1633,7 +1633,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
         toFutureTry(submissionCostService.getSubmissionCosts(submissionId, allWorkflowIds, workspaceName.namespace, Option(submission.submissionDate))) map {
           case Failure(ex) =>
-            logger.error("Unable to get workflow costs for this submission. ", ex)
+            logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
             RequestComplete((StatusCodes.OK, SubmissionStatusResponse(submission)))
           case Success(costMap) =>
             val costedWorkflows = submission.workflows.map { workflow =>
