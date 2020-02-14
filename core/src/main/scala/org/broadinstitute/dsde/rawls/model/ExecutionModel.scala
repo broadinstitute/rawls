@@ -170,6 +170,7 @@ case class SubmissionListResponse(
   submitter: String,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
+  methodConfigurationDeleted: Boolean,
   submissionEntity: Option[AttributeEntityReference],
   status: SubmissionStatus,
   workflowStatuses: StatusCounts,
@@ -180,13 +181,14 @@ case class SubmissionListResponse(
   cost: Option[Float] = None
 )
 object SubmissionListResponse {
-  def apply(submission: Submission, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts): SubmissionListResponse =
+  def apply(submission: Submission, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts, methodConfigurationDeleted: Boolean): SubmissionListResponse =
     SubmissionListResponse(
       submissionId = submission.submissionId,
       submissionDate = submission.submissionDate,
       submitter = submission.submitter.value,
       methodConfigurationNamespace = submission.methodConfigurationNamespace,
       methodConfigurationName = submission.methodConfigurationName,
+      methodConfigurationDeleted = methodConfigurationDeleted,
       submissionEntity = submission.submissionEntity,
       status = submission.status,
       workflowStatuses = workflowStatuses,
@@ -429,7 +431,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionStatusResponseFormat = jsonFormat12(SubmissionStatusResponse.apply)
 
-  implicit val SubmissionListResponseFormat = jsonFormat13(SubmissionListResponse.apply)
+  implicit val SubmissionListResponseFormat = jsonFormat14(SubmissionListResponse.apply)
 
   implicit val MetadataParamsFormat = jsonFormat3(MetadataParams)
 

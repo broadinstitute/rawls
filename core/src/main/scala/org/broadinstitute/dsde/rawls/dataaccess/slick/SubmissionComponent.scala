@@ -143,7 +143,7 @@ trait SubmissionComponent {
           val statusCounts = states.getOrElse(submissionRec.id, Seq.empty).map(x => Map(x.workflowStatus -> x.count)).foldLeft(Map.empty[String, Int])(_|+|_)
           val maybeWorkflowIds = states.getOrElse(submissionRec.id, Seq.empty).flatMap(_.workflowId).sorted
           val workflowIds = if (maybeWorkflowIds.nonEmpty) Some(maybeWorkflowIds) else None
-          SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), workflowIds, statusCounts)
+          SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), workflowIds, statusCounts, config.deleted)
         }
       }
     }
