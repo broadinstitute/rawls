@@ -211,7 +211,6 @@ object ImportStatuses {
   case object ReadyForUpsert extends ImportStatus
   case object Upserting extends ImportStatus
   case object Done extends ImportStatus
-  //case class Error(message: String = "") extends ImportStatus
   case object Error extends ImportStatus
 }
 

@@ -112,7 +112,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
         Seq.empty
       else messages.asScala.map { message =>
         val messageArray = message.getMessage.decodeData
-        val messageBody = if (messageArray == null) "" else new String(message.getMessage.decodeData(), characterEncoding)
+        val messageBody =  Option(message.getMessage.decodeData()).map(new String(_, characterEncoding)).getOrElse("")
         PubSubMessage(message.getAckId,
           messageBody,
           message.getMessage.getAttributes.asScala.toMap)

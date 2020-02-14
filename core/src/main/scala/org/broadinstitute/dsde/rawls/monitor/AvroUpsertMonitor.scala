@@ -194,6 +194,9 @@ class AvroUpsertMonitorActor(
     case Some(message: PubSubMessage) =>
       // we received a message, so we will parse it and try to upsert it
       logger.info(s"received async upsert message: $message")
+
+      // We decide whether to go down the CF path or the import service path based on whether the attributes contain a jobId.
+      // The CF solution has the metadata in the message body, while the import service has the metadata as attributes on the message
       if (message.attributes.contains("jobId")) {
         importEntities(message)
       } else {
@@ -267,11 +270,10 @@ class AvroUpsertMonitorActor(
       //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
       upsertJson <- readUpsertObject(upsertFile)
       ackResponse <- acknowledgeMessage(ackId)
-      ws = workspaceService.apply(userInfo)
       upsertResults <- {
         upsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
           logger.info(s"starting upsert for $jobId with ${upsertBatch.size} entities ...")
-          IO.fromFuture(IO(ws.batchUpdateEntities(workspaceName, upsertBatch, true)))
+          IO.fromFuture(IO(workspaceService.apply(userInfo).batchUpdateEntities(workspaceName, upsertBatch, true)))
         }.unsafeToFuture}
     } yield {
       logger.info(s"completed async upsert job ${jobId} for user: ${userInfo.userEmail} with ${upsertJson.size} entities")

@@ -21,6 +21,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
+import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 
 import scala.concurrent.ExecutionContext.global
 import scala.concurrent.{Await, ExecutionContext}
@@ -127,7 +128,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
 
   "AvroUpsertMonitor" should "upsert entities" in withTestDataApiServices { services =>
-
+    val timeout = 5000 milliseconds
+    val interval = 250 milliseconds
     val importId1 = UUID.randomUUID()
 
     // add the imports and their statuses to the mock importserviceDAO
@@ -136,12 +138,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // create compressed file
     val contents = """[{"name": "avro-entity", "entityType": "test-type", "operations": [{"op": "AddUpdateAttribute", "attributeName": "avro-attribute", "addUpdateAttribute": "foo"}]}]"""
-    val bos = new ByteArrayOutputStream(contents.length)
-    val gzip = new GZIPOutputStream(bos)
-    gzip.write(contents.getBytes())
-    gzip.close()
-    val compressed = bos.toByteArray
-    bos.close()
 
     // Store compressed file
     Await.result(googleStorage.createBlob(bucketName, blobName, contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
@@ -151,17 +147,17 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     // Publish message on the request topic
     services.gpsDAO.publishMessages(importReadPubSubTopic, Seq(MessageRequest(sampleMessage, testAttributes(importId1))))
 
-    Thread.sleep(1000)
-
     // check if correct message was posted on request topic
-    assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, sampleMessage, 1))
-
-    Thread.sleep(5000)
-
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, sampleMessage, 1))
+    }
     // Check in db if entities are there
     withWorkspaceContext(testData.workspace) { context =>
       val entity = Entity(entityName, entityType, Map(AttributeName("default", "avro-attribute") -> AttributeString("foo")))
-      assertResult(Some(entity)) { runAndWait(entityQuery.get(context, entityType, entityName)) }
+
+      eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+        assertResult(Some(entity)) { runAndWait(entityQuery.get(context, entityType, entityName)) }
+      }
     }
   }
 
