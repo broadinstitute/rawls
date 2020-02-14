@@ -1013,7 +1013,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             }
           }
 
-
           val saveAction = updateTrialsAction flatMap { updateTrials =>
             val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
               ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
