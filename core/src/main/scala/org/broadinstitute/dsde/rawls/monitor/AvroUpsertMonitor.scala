@@ -238,7 +238,7 @@ class AvroUpsertMonitorActor(
             case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
           }
         }
-        case Some(status) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option("Import was not ready for upsert"))
+        case Some(status) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(s"Import status was $status, not ${ImportStatuses.ReadyForUpsert}. "))
         case None => publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option("Import status not found"))
       }
     } yield ()
@@ -250,17 +250,18 @@ class AvroUpsertMonitorActor(
       importStatus <- importServiceDAO.getImportStatus(importId, workspaceName, userInfo)
       _ <- importStatus match {
         case Some(status) if status == ImportStatuses.Upserting => publishMessageToUpdateImportStatus(importId, Option(status), ImportStatuses.Done, None)
-        case Some(status) => publishMessageToUpdateImportStatus(importId, Option(status), ImportStatuses.Error, Option("Upsert finished, but import status was not correct."))
+        case Some(status) => publishMessageToUpdateImportStatus(importId, Option(status), ImportStatuses.Error, Option(s"Upsert finished, but import status was $status and not ${ImportStatuses.Upserting}."))
         case None => publishMessageToUpdateImportStatus(importId, None, ImportStatuses.Error, Option("Import status not found"))
       }
     } yield ()
   }
 
   private def publishMessageToUpdateImportStatus(importId: UUID, currentImportStatus: Option[ImportStatus], newImportStatus: ImportStatus, errorMessage: Option[String]) = {
+    logger.info(s"asking to change import job $importId from $currentImportStatus to $newImportStatus ${errorMessage.getOrElse("")}")
     val updateImportStatus = UpdateImportStatus(importId.toString, newImportStatus.toString, currentImportStatus.map(_.toString), errorMessage)
-    val attributes = updateImportStatus.toJson.asJsObject.fields.map { case (attName, attValue) =>
-      // JsValue -> String, adds extra quotes for some reason
-      (attName, attValue.compactPrint.replace("\"","")) }
+    val attributes: Map[String, String] = updateImportStatus.toJson.asJsObject.fields.collect {
+     case (attName:String, attValue:JsString) => (attName, attValue.value)
+   }
     pubSubDao.publishMessages(importStatusPubSubTopic, Seq(GooglePubSubDAO.MessageRequest("", attributes)))
   }
 
@@ -268,15 +269,19 @@ class AvroUpsertMonitorActor(
   private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Unit] = {
     for {
       //ack the response after we load the json into memory. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
-      upsertJson <- readUpsertObject(upsertFile)
+      upsertEntityUpdates <- readUpsertObject(upsertFile)
       ackResponse <- acknowledgeMessage(ackId)
       upsertResults <- {
-        upsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
-          logger.info(s"starting upsert for $jobId with ${upsertBatch.size} entities ...")
-          IO.fromFuture(IO(workspaceService.apply(userInfo).batchUpdateEntities(workspaceName, upsertBatch, true)))
-        }.unsafeToFuture}
+        val batches = upsertEntityUpdates.grouped(batchSize).zipWithIndex.toList
+        val numBatches = batches.size
+        batches.traverse {
+          case (upsertBatch, idx) =>
+            logger.info(s"starting upsert $idx of $batchSize for $jobId with ${upsertBatch.size} entities ...")
+            IO.fromFuture(IO(workspaceService.apply(userInfo).batchUpdateEntities(workspaceName, upsertBatch, true)))
+        }.unsafeToFuture
+      }
     } yield {
-      logger.info(s"completed async upsert job ${jobId} for user: ${userInfo.userEmail} with ${upsertJson.size} entities")
+      logger.info(s"completed async upsert job ${jobId} for user: ${userInfo.userEmail} with ${upsertEntityUpdates.size} entities")
       ()
     }
   }
