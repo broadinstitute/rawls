@@ -306,7 +306,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       // failure cases
       assertResult(true, "Missing values should return an error") {
         runAndWait(testResolveInputs(context, configGood, sampleMissingValue, littleWdl, this)).get("sampleMissingValue").get match {
-          case List(SubmissionValidationValue(None, Some(_), intArg)) if intArg == intArgNameWithWfName => true
+          case Seq(SubmissionValidationValue(None, Some(_), intArg)) if intArg == intArgNameWithWfName => true
         }
       }
 
