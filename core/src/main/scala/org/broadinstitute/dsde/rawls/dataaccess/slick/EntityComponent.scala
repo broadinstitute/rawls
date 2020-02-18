@@ -492,20 +492,20 @@ trait EntityComponent {
             s"id-${e.id} \t name-${e.name} \t namespace-${e.namespace} \t ownerId-${e.ownerId} \t listLength-${e.listLength} \t listIndex-${e.listIndex} \t valueString-${e.valueString}\n"
           }
 
-          logger.debug(
+          println(
             s"*********************** FIND ME ***********************\n" +
-            s"WORKSPACE DETAILS: workspace_id-${workspaceContext.workspaceId} \t name-${workspaceContext.workspace.name} \t namespace-${workspaceContext.workspace.namespace}\n" +
-            s"ENTITY DETAILS: entityId-${entityRecord.id} \t name-${entityRecord.name}\n" +
+              s"WORKSPACE DETAILS: workspace_id-${workspaceContext.workspaceId} \t name-${workspaceContext.workspace.name} \t namespace-${workspaceContext.workspace.namespace}\n" +
+              s"ENTITY DETAILS: entityId-${entityRecord.id} \t name-${entityRecord.name}\n" +
               "---------------------\n" +
-            s"UPSERTS DETAILS: ${upserts.map(x => {
-              s"Attribute name-${x._1} \t Attribute-${x._2} \n"
-            })} \n" +
+              s"UPSERTS DETAILS: ${upserts.map(x => {
+                s"Attribute name-${x._1} \t Attribute-${x._2} \n"
+              })} \n" +
               "---------------------\n" +
-            s"INSERT RECORDS: ${insertRecs.map(displayRec)}" +
+              s"INSERT RECORDS: ${insertRecs.map(displayRec)}" +
               "---------------------\n" +
-            s"UPDATE RECORDS: ${updateRecs.map(displayRec)}" +
+              s"UPDATE RECORDS: ${updateRecs.map(displayRec)}" +
               "---------------------\n" +
-            "********************************************************"
+              "********************************************************"
           )
 
           entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, deleteIds.flatten, entityAttributeScratchQuery.insertScratchAttributes)
