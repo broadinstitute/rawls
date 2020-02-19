@@ -513,6 +513,7 @@ trait EntityComponent {
               "********************************************************"
           )
 
+          // TODO: Saloni- clean up
           updateAttrs.foreach {
             case (n, a: AttributeValueList) => {
               val updateAttrSize = a.list.size
@@ -532,6 +533,7 @@ trait EntityComponent {
                 }.map(_.id) ++ deleteIds
               }
             }
+            case _ => //do nothing
           }
 
           println(
