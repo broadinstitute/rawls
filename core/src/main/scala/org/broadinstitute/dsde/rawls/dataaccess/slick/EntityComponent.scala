@@ -482,33 +482,69 @@ trait EntityComponent {
           }
 
           //actually build the records we're going to send to the db
-          val insertRecs = attributeMapToRecs(insertAttrs)
+          var insertRecs = attributeMapToRecs(insertAttrs)
           val updateRecs = attributeMapToRecs(updateAttrs)
-          val deleteIds = (for {
+          var deleteIds = (for {
             attributeName <- deletes
-          } yield existingAttrsToRecordIds.get(attributeName)).flatten
+          } yield existingAttrsToRecordIds.get(attributeName)).flatten.flatten
 
           def displayRec(e: EntityAttributeRecord) = {
             s"id-${e.id} \t name-${e.name} \t namespace-${e.namespace} \t ownerId-${e.ownerId} \t listLength-${e.listLength} \t listIndex-${e.listIndex} \t valueString-${e.valueString}\n"
           }
 
           println(
-            s"*********************** FIND ME ***********************\n" +
+            s"*********************** FIND ME (ORIGINAL!!!) ***********************\n" +
               s"WORKSPACE DETAILS: workspace_id-${workspaceContext.workspaceId} \t name-${workspaceContext.workspace.name} \t namespace-${workspaceContext.workspace.namespace}\n" +
               s"ENTITY DETAILS: entityId-${entityRecord.id} \t name-${entityRecord.name}\n" +
-              "---------------------\n" +
+              "\n---------------------\n" +
               s"UPSERTS DETAILS: ${upserts.map(x => {
                 s"Attribute name-${x._1} \t Attribute-${x._2} \n"
               })} \n" +
-              "---------------------\n" +
+              "\n---------------------\n" +
+              s"DELETES DETAILS: ${deletes.map(x => {
+                s"Attribute name-${x.name} \t Namespace-${x.namespace}\n"
+              })}\n" +
+              "\n---------------------\n" +
               s"INSERT RECORDS: ${insertRecs.map(displayRec)}" +
-              "---------------------\n" +
+              "\n---------------------\n" +
               s"UPDATE RECORDS: ${updateRecs.map(displayRec)}" +
-              "---------------------\n" +
+              "\n---------------------\n" +
+              s"DELETE RECORDS: ${deleteIds.mkString(",")}" +
               "********************************************************"
           )
 
-          entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, deleteIds.flatten, entityAttributeScratchQuery.insertScratchAttributes)
+          updateAttrs.foreach {
+            case (n, a: AttributeValueList) => {
+              val updateAttrSize = a.list.size
+              val existingAttrSize = existingAttrsToRecordIds(n).size
+
+              if (updateAttrSize > existingAttrSize) {
+                // we need additional insert
+
+                insertRecs = updateRecs.filter{x =>
+                  n.name.equals(x.name) && n.namespace.equals(x.namespace) && (x.listIndex.get > (existingAttrSize - 1))
+                } ++ insertRecs
+              } else if (updateAttrSize < existingAttrSize) {
+                // we need additional delete
+
+                deleteIds = updateRecs.filter { x =>
+                  n.name.equals(x.name) && n.namespace.equals(x.namespace) && (x.listIndex.get > (updateAttrSize - 1))
+                }.map(_.id) ++ deleteIds
+              }
+            }
+          }
+
+          println(
+            s"*********************** FIND ME (AFTER NEW LOGIC!!!) ***********************\n" +
+              s"INSERT RECORDS: ${insertRecs.map(displayRec)}" +
+              "\n---------------------\n" +
+              s"UPDATE RECORDS: ${updateRecs.map(displayRec)}" +
+              "\n---------------------\n" +
+              s"DELETE RECORDS: ${deleteIds.mkString(",")}" +
+              "********************************************************"
+          )
+
+          entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, deleteIds, entityAttributeScratchQuery.insertScratchAttributes)
         }
       }
     }
