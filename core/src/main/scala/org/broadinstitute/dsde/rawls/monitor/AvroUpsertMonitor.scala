@@ -185,11 +185,16 @@ class AvroUpsertMonitorActor(
     durations.max
   }
 
+  var pullArrow = true
+
   override def receive = {
     case StartMonitorPass =>
+      pullArrow = !pullArrow
       // start the process by pulling a message and sending it back to self
-      pubSubDao.pullMessages(pubSubSubscriptionName, 1).map(_.headOption) pipeTo self
-      arrowPubSubDAO.pullMessages(arrowPubSubSubscriptionName, 1).map(_.headOption) pipeTo self
+      if (pullArrow)
+        arrowPubSubDAO.pullMessages(arrowPubSubSubscriptionName, 1).map(_.headOption) pipeTo self
+      else
+        pubSubDao.pullMessages(pubSubSubscriptionName, 1).map(_.headOption) pipeTo self
 
     case Some(message: PubSubMessage) =>
       // we received a message, so we will parse it and try to upsert it
