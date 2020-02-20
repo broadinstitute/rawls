@@ -14,7 +14,7 @@ class RawlsSentryEventFilter extends ShouldSendEventCallback {
   override def shouldSend(event: Event): Boolean = {
     // earlier versions of sentry-logback could pass nulls, so we wrap everything in a Try to be defensive.
     // by default this will run in a separate async thread so failures aren't a problem, but still.
-    Try(event.getMessage.contains("requirement failed: count cannot be decreased")) match {
+    Try(!event.getMessage.contains("requirement failed: count cannot be decreased")) match {
       case Success(send) => send
       case Failure(_) => true
     }
