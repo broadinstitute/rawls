@@ -509,7 +509,7 @@ trait EntityComponent {
               "\n---------------------\n" +
               s"UPDATE RECORDS: ${updateRecs.map(displayRec)}" +
               "\n---------------------\n" +
-              s"DELETE RECORDS: ${deleteIds.mkString(",")}" +
+              s"DELETE RECORDS: ${deleteIds.mkString(",")}\n" +
               "********************************************************"
           )
 
@@ -528,9 +528,11 @@ trait EntityComponent {
               } else if (updateAttrSize < existingAttrSize) {
                 // we need additional delete
 
-                deleteIds = updateRecs.filter { x =>
-                  n.name.equals(x.name) && n.namespace.equals(x.namespace) && (x.listIndex.get > (updateAttrSize - 1))
-                }.map(_.id) ++ deleteIds
+//                deleteIds = updateRecs.filter { x =>
+//                  n.name.equals(x.name) && n.namespace.equals(x.namespace) && (x.listIndex.get > (updateAttrSize - 1))
+//                }.map(_.id) ++ deleteIds
+
+                deleteIds = existingAttrsToRecordIds(n).takeRight(existingAttrSize - updateAttrSize) ++ deleteIds
               }
             }
             case _ => //do nothing
@@ -542,7 +544,7 @@ trait EntityComponent {
               "\n---------------------\n" +
               s"UPDATE RECORDS: ${updateRecs.map(displayRec)}" +
               "\n---------------------\n" +
-              s"DELETE RECORDS: ${deleteIds.mkString(",")}" +
+              s"DELETE RECORDS: ${deleteIds.mkString(",")}\n" +
               "********************************************************"
           )
 
