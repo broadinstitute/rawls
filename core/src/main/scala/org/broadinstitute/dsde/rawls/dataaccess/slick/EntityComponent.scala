@@ -483,7 +483,7 @@ trait EntityComponent {
 
           //actually build the records we're going to send to the db
           var insertRecs = attributeMapToRecs(insertAttrs)
-          val updateRecs = attributeMapToRecs(updateAttrs)
+          var updateRecs = attributeMapToRecs(updateAttrs)
           var deleteIds = (for {
             attributeName <- deletes
           } yield existingAttrsToRecordIds.get(attributeName)).flatten.flatten
@@ -513,27 +513,30 @@ trait EntityComponent {
               "********************************************************"
           )
 
+          def checkAndUpdateRecsForListAttr(existingAttrListSize: Int, updateAttrListSize: Int, updateAttr: AttributeName): Unit = {
+            if (updateAttrListSize > existingAttrListSize) {
+              // we need additional insert
+
+              val (newInsertRecs, newUpdateRecs) = updateRecs.partition {x =>
+                updateAttr.name.equals(x.name) && updateAttr.namespace.equals(x.namespace) && (x.listIndex.get > (existingAttrListSize - 1))
+              }
+
+              insertRecs = insertRecs ++ newInsertRecs
+              updateRecs = newUpdateRecs
+            } else if (updateAttrListSize < existingAttrListSize) {
+              // we need additional delete
+
+              deleteIds = existingAttrsToRecordIds(updateAttr).takeRight(existingAttrListSize - updateAttrListSize) ++ deleteIds
+            }
+          }
+
           // TODO: Saloni- clean up
           updateAttrs.foreach {
             case (n, a: AttributeValueList) => {
               val updateAttrSize = a.list.size
               val existingAttrSize = existingAttrsToRecordIds(n).size
 
-              if (updateAttrSize > existingAttrSize) {
-                // we need additional insert
-
-                insertRecs = updateRecs.filter{x =>
-                  n.name.equals(x.name) && n.namespace.equals(x.namespace) && (x.listIndex.get > (existingAttrSize - 1))
-                } ++ insertRecs
-              } else if (updateAttrSize < existingAttrSize) {
-                // we need additional delete
-
-//                deleteIds = updateRecs.filter { x =>
-//                  n.name.equals(x.name) && n.namespace.equals(x.namespace) && (x.listIndex.get > (updateAttrSize - 1))
-//                }.map(_.id) ++ deleteIds
-
-                deleteIds = existingAttrsToRecordIds(n).takeRight(existingAttrSize - updateAttrSize) ++ deleteIds
-              }
+              checkAndUpdateRecsForListAttr(existingAttrSize, updateAttrSize, n)
             }
             case _ => //do nothing
           }
