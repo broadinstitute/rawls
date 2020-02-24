@@ -488,35 +488,10 @@ trait EntityComponent {
             attributeName <- deletes
           } yield existingAttrsToRecordIds.get(attributeName)).flatten.flatten
 
-          def displayRec(e: EntityAttributeRecord) = {
-            s"id-${e.id} \t name-${e.name} \t namespace-${e.namespace} \t ownerId-${e.ownerId} \t listLength-${e.listLength} \t listIndex-${e.listIndex} \t valueString-${e.valueString}\n"
-          }
-
-          println(
-            s"*********************** FIND ME (ORIGINAL!!!) ***********************\n" +
-              s"WORKSPACE DETAILS: workspace_id-${workspaceContext.workspaceId} \t name-${workspaceContext.workspace.name} \t namespace-${workspaceContext.workspace.namespace}\n" +
-              s"ENTITY DETAILS: entityId-${entityRecord.id} \t name-${entityRecord.name}\n" +
-              "\n---------------------\n" +
-              s"UPSERTS DETAILS: ${upserts.map(x => {
-                s"Attribute name-${x._1} \t Attribute-${x._2} \n"
-              })} \n" +
-              "\n---------------------\n" +
-              s"DELETES DETAILS: ${deletes.map(x => {
-                s"Attribute name-${x.name} \t Namespace-${x.namespace}\n"
-              })}\n" +
-              "\n---------------------\n" +
-              s"INSERT RECORDS: ${insertRecs.map(displayRec)}" +
-              "\n---------------------\n" +
-              s"UPDATE RECORDS: ${updateRecs.map(displayRec)}" +
-              "\n---------------------\n" +
-              s"DELETE RECORDS: ${deleteIds.mkString(",")}\n" +
-              "********************************************************"
-          )
 
           def checkAndUpdateRecsForListAttr(existingAttrListSize: Int, updateAttrListSize: Int, updateAttr: AttributeName): Unit = {
             if (updateAttrListSize > existingAttrListSize) {
-              // we need additional insert
-
+              // since the size of the list has increased, move these new records to insertRecs
               val (newInsertRecs, newUpdateRecs) = updateRecs.partition {x =>
                 updateAttr.name.equals(x.name) && updateAttr.namespace.equals(x.namespace) && (x.listIndex.get > (existingAttrListSize - 1))
               }
@@ -524,32 +499,28 @@ trait EntityComponent {
               insertRecs = insertRecs ++ newInsertRecs
               updateRecs = newUpdateRecs
             } else if (updateAttrListSize < existingAttrListSize) {
-              // we need additional delete
-
+              // since the size of the list has decreased, delete the extra rows from table
               deleteIds = existingAttrsToRecordIds(updateAttr).takeRight(existingAttrListSize - updateAttrListSize) ++ deleteIds
             }
           }
 
-          // TODO: Saloni- clean up
+          /*
+            Additional check for entities whose Attribute value type is AttributeValueList in response to bug mentioned in WA-32
+            (https://broadworkbench.atlassian.net/browse/WA-32). Currently the update query is such that it matches the
+            listIndex of each attribute value and updates it. Hence if the size of the list changes, those changes are
+            not reflected in the table resulting in the behavior mentioned in the ticket.
+            Hence, for any attribute in the update list with value type as AttributeValueList, check if the size of the
+            list has changed. If yes, based on increase or decrease of the list size, add those extra records into insertRecs
+            or delete extra records from the entity table respectively.
+           */
           updateAttrs.foreach {
-            case (n, a: AttributeValueList) => {
-              val updateAttrSize = a.list.size
-              val existingAttrSize = existingAttrsToRecordIds(n).size
-
-              checkAndUpdateRecsForListAttr(existingAttrSize, updateAttrSize, n)
+            case (attr, list: AttributeValueList) => {
+              val updateAttrSize = list.list.size
+              val existingAttrSize = existingAttrsToRecordIds(attr).size
+              checkAndUpdateRecsForListAttr(existingAttrSize, updateAttrSize, attr)
             }
             case _ => //do nothing
           }
-
-          println(
-            s"*********************** FIND ME (AFTER NEW LOGIC!!!) ***********************\n" +
-              s"INSERT RECORDS: ${insertRecs.map(displayRec)}" +
-              "\n---------------------\n" +
-              s"UPDATE RECORDS: ${updateRecs.map(displayRec)}" +
-              "\n---------------------\n" +
-              s"DELETE RECORDS: ${deleteIds.mkString(",")}\n" +
-              "********************************************************"
-          )
 
           entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, deleteIds, entityAttributeScratchQuery.insertScratchAttributes)
         }

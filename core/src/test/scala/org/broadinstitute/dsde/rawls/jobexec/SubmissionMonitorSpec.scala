@@ -405,6 +405,64 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   }
 
+  it should "handle outputs for array output" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)))
+
+    runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeValueList(Vector(AttributeString("abc"), AttributeString("def")))))))), this))
+
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeValueList(Seq(AttributeString("abc"), AttributeString("def"))))))) {
+      testData.submissionUpdateEntity.workflows.map { wf =>
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+      }
+    }
+  }
+
+  it should "handle outputs for array output when it increases in size" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)))
+
+    runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeValueList(Vector(AttributeString("abc"), AttributeString("def")))))))), this))
+
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeValueList(Seq(AttributeString("abc"), AttributeString("def"))))))) {
+      testData.submissionUpdateEntity.workflows.map { wf =>
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+      }
+    }
+
+    // update 'o1' to contain 3 elements
+    val newOutputs = Map("o1" -> Left(AttributeValueList(Vector(AttributeString("123"), AttributeString("456"), AttributeString("789")))))
+    runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, newOutputs))), this))
+
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeValueList(Seq(AttributeString("123"), AttributeString("456"), AttributeString("789"))))))) {
+      testData.submissionUpdateEntity.workflows.map { wf =>
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+      }
+    }
+  }
+
+  it should "handle outputs for array output when it decreases in size" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionUpdateEntity, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+    val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)))
+
+    runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeValueList(Vector(AttributeString("abc"), AttributeString("def"), AttributeString("xyz")))))))), this))
+
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeValueList(Seq(AttributeString("abc"), AttributeString("def"), AttributeString("xyz"))))))) {
+      testData.submissionUpdateEntity.workflows.map { wf =>
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+      }
+    }
+
+    // update 'o1' to contain 1 element
+    runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeValueList(Vector(AttributeString("123")))))))), this))
+
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (AttributeName.withDefaultNS("foo") -> AttributeValueList(Seq(AttributeString("123"))))))) {
+      testData.submissionUpdateEntity.workflows.map { wf =>
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+      }
+    }
+  }
+
   it should "handleStatusResponses with no workflows" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submissionNoWorkflows, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString))
 
