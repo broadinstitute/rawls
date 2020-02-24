@@ -10,7 +10,6 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import slick.jdbc.{GetResult, JdbcProfile}
 import akka.http.scaladsl.model.StatusCodes
-import com.typesafe.scalalogging.LazyLogging
 
 import scala.annotation.tailrec
 
@@ -145,7 +144,7 @@ trait EntityComponent {
     }
   }
 
-  object entityQuery extends TableQuery(new EntityTable(_)) with LazyLogging {
+  object entityQuery extends TableQuery(new EntityTable(_)) {
 
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
