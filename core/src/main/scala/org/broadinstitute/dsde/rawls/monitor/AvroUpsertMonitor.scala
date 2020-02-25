@@ -321,7 +321,7 @@ class AvroUpsertMonitorActor(
   private def readUpsertObject(path: String) = {
     val pathArray = path.split("/")
     val bucketName = GcsBucketName(pathArray(0))
-    val blobName = GcsBlobName(pathArray(1))
+    val blobName = GcsBlobName(pathArray.tail.mkString("/"))
     readObject[Seq[EntityUpdateDefinition]](bucketName, blobName)
   }
 
