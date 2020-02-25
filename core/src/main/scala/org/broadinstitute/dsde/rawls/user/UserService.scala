@@ -244,9 +244,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def adminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
     // unregister then delete actual project in google
-    val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
     for {
-      _ <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
+      _ <- unregisterBillingProjectWithOwnerInfo(projectName, ownerInfo)
       _ <- gcsDAO.deleteProject(projectName)
     } yield RequestComplete(StatusCodes.NoContent)
   }
