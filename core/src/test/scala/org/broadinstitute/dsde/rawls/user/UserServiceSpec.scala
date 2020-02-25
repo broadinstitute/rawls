@@ -166,7 +166,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
   }
 
   // 403 when workspace exists in this billing project to be deleted
-  it should "fail with a 403 when workspace exists in this billing project to be deleted" in {
+  it should "fail with a 400 when workspace exists in this billing project to be deleted" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       runAndWait(rawlsBillingProjectQuery.create(project))
@@ -179,7 +179,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
 
       val actual = userService.DeleteBillingProject(defaultBillingProjectName).failed.futureValue
       assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
-      actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
+      actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.BadRequest)
     }
   }
 

@@ -259,7 +259,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       }
 
      _<- if(!workspaces.isEmpty) {
-       Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "There are workspaces exists in this project.")))
+       Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "There are workspaces exists in this project.")))
      } else {
       Future.successful(())
      }
