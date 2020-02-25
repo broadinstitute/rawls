@@ -203,6 +203,10 @@ trait WorkspaceComponent {
       loadWorkspaces(findByIdsQuery(workspaceIds), attributeSpecs)
     }
 
+    def listByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Seq[Workspace]] = {
+      loadWorkspaces(findByNamespaceQuery(namespaceName))
+    }
+
     def delete(workspaceName: WorkspaceName): ReadWriteAction[Boolean] = {
       uniqueResult[WorkspaceRecord](findByNameQuery(workspaceName)).flatMap {
         case None => DBIO.successful(false)
@@ -355,6 +359,10 @@ trait WorkspaceComponent {
 
     def findByIdsQuery(workspaceIds: Seq[UUID]): WorkspaceQueryType = {
       filter(_.id.inSetBind(workspaceIds))
+    }
+
+    private def findByNamespaceQuery(namespaceName: RawlsBillingProjectName): WorkspaceQueryType = {
+      filter(rec => (rec.namespace === namespaceName.value))
     }
 
     private def loadWorkspace(lookup: WorkspaceQueryType, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Option[Workspace]] = {

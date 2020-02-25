@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.UUID
 
 import akka.http.scaladsl.model.StatusCodes
 import com.google.api.services.cloudresourcemanager.model.Project
@@ -30,6 +31,19 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
   val defaultMockSamDAO: SamDAO = mock[SamDAO]
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val testConf: Config = ConfigFactory.load()
+
+  // A workspace with the which namespaceName equals to defaultBillingProject's billing project name.
+  val workspace = Workspace(
+    defaultBillingProjectName.value,
+    testData.wsName.name,
+    UUID.randomUUID().toString,
+    "aBucket",
+    Some("workflow-collection"),
+    currentTime(),
+    currentTime(),
+    "test",
+    Map.empty
+  )
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second)
 
@@ -71,6 +85,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject.copy(googleProjectNumber = None)
       runAndWait(rawlsBillingProjectQuery.create(project))
+      runAndWait(workspaceQuery.save(workspace))
 
       val mockGcsDAO = mock[GoogleServicesDAO]
       when(mockGcsDAO.getGoogleProject(project.projectName)).thenReturn(Future.successful(new Project().setProjectNumber(42L)))
@@ -147,6 +162,42 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       val actual = userService.AddProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).failed.futureValue
       assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
       actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.NotFound)
+    }
+  }
+
+  // 403 when workspace exists in this billing project to be deleted
+  it should "fail with a 403 when workspace exists in this billing project to be deleted" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val project = defaultBillingProject
+      runAndWait(rawlsBillingProjectQuery.create(project))
+      runAndWait(workspaceQuery.save(workspace))
+
+      val mockSamDAO = mock[SamDAO]
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = userService.DeleteBillingProject(defaultBillingProjectName).failed.futureValue
+      assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
+      actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
+    }
+  }
+
+  // 404 when user doesn't have permission to delete billing project.
+  it should "fail with a 403 when Sam says the user does not have permission to delete billing project" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val project = defaultBillingProject
+      runAndWait(rawlsBillingProjectQuery.create(project))
+
+      val mockSamDAO = mock[SamDAO]
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, defaultBillingProjectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(false))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = userService.DeleteBillingProject(defaultBillingProjectName).failed.futureValue
+
+      assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
+      actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
     }
   }
 }
