@@ -116,51 +116,42 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]]
 
   /**
-   * Lists Google billing accounts using the billing service account.
-   *
-   * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
-   * is because this method is used for health monitoring, and we want health checks to use a
-   * different execution context (thread pool) than user-facing operations.
-   *
-   * @param executionContext the execution context to use for aysnc operations
-   * @return sequence of RawlsBillingAccounts
-   */
+    * Lists Google billing accounts using the billing service account.
+    *
+    * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
+    * is because this method is used for health monitoring, and we want health checks to use a
+    * different execution context (thread pool) than user-facing operations.
+    *
+    * @param executionContext the execution context to use for aysnc operations
+    * @return sequence of RawlsBillingAccounts
+    */
   def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
-
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
-
   def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]
-
   def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[DateTime]]
-
   def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit]
-
   def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit]
 
   def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
 
   /**
-   * Checks that a query can be performed against the genomics api.
-   *
-   * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
-   * is because this method is used for health monitoring, and we want health checks to use a
-   * different execution context (thread pool) than user-facing operations.
-   *
-   * @param executionContext the execution context to use for aysnc operations
-   * @return sequence of Google operations
-   */
+    * Checks that a query can be performed against the genomics api.
+    *
+    * Note: takes an implicit ExecutionContext to override the class-level ExecutionContext. This
+    * is because this method is used for health monitoring, and we want health checks to use a
+    * different execution context (thread pool) than user-facing operations.
+    *
+    * @param executionContext the execution context to use for aysnc operations
+    * @return sequence of Google operations
+    */
   def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean]
 
   def toGoogleGroupName(groupName: RawlsGroupName): String
-
   def toBillingProjectGroupName(billingProjectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = s"PROJECT_${billingProjectName.value}-${role.toString}"
 
   def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]]
-
   def getBucketServiceAccountCredential: Credential
-
   def getServiceAccountRawlsUser(): Future[RawlsUser]
-
   def getServiceAccountUserInfo(): Future[UserInfo]
 
   def getBucketDetails(bucket: String, project: RawlsBillingProjectName): Future[WorkspaceBucketOptions]
@@ -177,38 +168,34 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord]
 
   /**
-   *
-   */
+    *
+    */
   def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   /**
-   * Adds the IAM policies to the project's existing policies
-   *
-   * @return true if the policy was actually changed
-   */
+    * Adds the IAM policies to the project's existing policies
+    * @return true if the policy was actually changed
+    */
   def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, Set[String]]): Future[Boolean]
 
   /**
-   *
-   * @param billingProject
-   * @param bucketName
-   * @param readers emails of users to be granted read access
-   * @return bucket name
-   */
+    *
+    * @param billingProject
+    * @param bucketName
+    * @param readers emails of users to be granted read access
+    * @return bucket name
+    */
   def grantReadAccess(billingProject: RawlsBillingProjectName,
                       bucketName: String,
                       readers: Set[WorkbenchEmail]): Future[String]
 
   def pollOperation(operationId: OperationId): Future[OperationStatus]
-
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean]
-
   def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit]
 
-  def getAccessTokenUsingJson(saKey: String): Future[String]
-
+  def getAccessTokenUsingJson(saKey: String) : Future[String]
   def getUserInfoUsingJson(saKey: String): Future[UserInfo]
 
   def labelSafeString(s: String, prefix: String = "fc-"): String = {
@@ -217,7 +204,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   }
 
   def addProjectToFolder(projectName: RawlsBillingProjectName, folderId: String): Future[Unit]
-
   def getFolderId(folderName: String): Future[Option[String]]
 }
 
@@ -226,7 +212,6 @@ object GoogleApiTypes {
 
   sealed trait GoogleApiType extends RawlsEnumeration[GoogleApiType] {
     override def toString = GoogleApiTypes.toString(this)
-
     override def withName(name: String) = GoogleApiTypes.withName(name)
   }
 
@@ -251,9 +236,7 @@ object GoogleApiTypes {
   }
 
   case object DeploymentManagerApi extends GoogleApiType
-
   case object AccessContextManagerApi extends GoogleApiType
-
 }
 
 object GoogleOperationNames {
@@ -261,7 +244,6 @@ object GoogleOperationNames {
 
   sealed trait GoogleOperationName extends RawlsEnumeration[GoogleOperationName] {
     override def toString = GoogleOperationNames.toString(this)
-
     override def withName(name: String) = GoogleOperationNames.withName(name)
   }
 
@@ -286,19 +268,13 @@ object GoogleOperationNames {
   }
 
   case object DeploymentManagerCreateProject extends GoogleOperationName
-
   case object AddProjectToPerimeter extends GoogleOperationName
-
 }
 
 case class OperationId(apiType: GoogleApiTypes.GoogleApiType, operationId: String)
-
 case class OperationStatus(done: Boolean, errorMessage: Option[String])
-
 case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
-
 case class ProjectTemplate(owners: Seq[String], editors: Seq[String])
-
 final case class HammCromwellMetadata(bucketName: GcsBucketName, topicName: ProjectTopicName)
 
 case object ProjectTemplate {
