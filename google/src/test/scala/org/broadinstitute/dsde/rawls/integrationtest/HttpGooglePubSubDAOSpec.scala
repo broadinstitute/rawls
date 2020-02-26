@@ -11,6 +11,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.util.{MockitoTestUtils, Retry}
@@ -59,7 +60,7 @@ class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfter
 
   "HttpGooglePubSubDAOSpec" should "do all of the things" in {
     //publish a few messages to the topic
-    val messages = Seq("test-1")
+    val messages = Seq(MessageRequest("test-1"))
     Await.result(gpsDAO.publishMessages(defaultTopicName, messages), Duration.Inf)
 
     Await.result(gpsDAO.withMessage(defaultSubscriptionName) { msg =>
@@ -73,7 +74,7 @@ class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfter
   it should "submit more than 1000 messages" in {
     //publish a lot of messages to the topic
     val numMessages = 2877
-    val messages = Seq.fill(numMessages)("foo")
+    val messages = Seq.fill(numMessages)(MessageRequest("foo"))
     Await.result(gpsDAO.publishMessages(defaultTopicName, messages), Duration.Inf)
 
     while (Await.result(gpsDAO.withMessages(defaultSubscriptionName, numMessages) { msgs =>
@@ -92,7 +93,7 @@ class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfter
 
   it should "do all of the things with multiple messages" in {
     //publish a few messages to the topic
-    val messages = Seq("test-1", "test-2", "test-3", "test-4", "test-5")
+    val messages = Seq("test-1", "test-2", "test-3", "test-4", "test-5").map(MessageRequest(_))
     Await.result(gpsDAO.publishMessages(defaultTopicName, messages), Duration.Inf)
 
     Await.result(gpsDAO.withMessages(defaultSubscriptionName, 5) { msg =>

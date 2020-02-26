@@ -5,6 +5,7 @@ import com.google.api.services.pubsub.model.Topic
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
 
+import scala.collection.Map
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -23,6 +24,8 @@ object GooglePubSubDAO {
   case object NoMessage extends HandledStatus
 
   case class PubSubMessage(ackId: String, contents: String, attributes: Map[String, String] = Map.empty)
+  case class MessageRequest(text: String, attributes: Map[String, String] = Map.empty)
+
 }
 
 trait GooglePubSubDAO {
@@ -38,7 +41,7 @@ trait GooglePubSubDAO {
 
   def deleteSubscription(subscriptionName: String): Future[Boolean]
 
-  def publishMessages(topicName: String, messages: Seq[String]): Future[Unit]
+  def publishMessages(topicName: String, messages: Seq[MessageRequest]): Future[Unit]
 
   def acknowledgeMessages(subscriptionName: String, messages: Seq[PubSubMessage]): Future[Unit]
 

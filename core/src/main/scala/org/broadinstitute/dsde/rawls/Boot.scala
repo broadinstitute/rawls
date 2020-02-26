@@ -182,13 +182,15 @@ object Boot extends IOApp with LazyLogging {
       )
 
       // Avro upsert uses a different project for its pubsub topics
-      val avroUpsertPubSubDAO = new HttpGooglePubSubDAO(
+      // remove when cutting over to import service
+      val arrowPubSubDAO = new HttpGooglePubSubDAO(
         clientEmail,
         pathToPem,
         appName,
-        conf.getString("avroUpsertMonitor.pubSubProject"),
+        conf.getString("avroUpsertMonitor.arrowPubSubProject"),
         workbenchMetricBaseName = metricsPrefix
       )
+      val importServiceDAO = new HttpImportServiceDAO(conf.getString("avroUpsertMonitor.server"))
 
       val bigQueryDAO = new HttpGoogleBigQueryDAO(
         appName,
@@ -398,7 +400,8 @@ object Boot extends IOApp with LazyLogging {
           gcsDAO,
           samDAO,
           pubSubDAO,
-          avroUpsertPubSubDAO,
+          arrowPubSubDAO, // remove when cutting over to import service
+          importServiceDAO,
           appDependencies.googleStorageService,
           methodRepoDAO,
           dosResolver,

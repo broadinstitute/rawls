@@ -194,6 +194,27 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
+object ImportStatuses {
+  sealed trait ImportStatus extends RawlsEnumeration[ImportStatus] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String): ImportStatus = ImportStatuses.withName(name)
+  }
+
+  def withName(name: String): ImportStatus = name.toLowerCase match {
+    case "readyforupsert" => ReadyForUpsert
+    case "upserting" => Upserting
+    case "done" => Done
+    case "error" => Error
+    case _ => throw new RawlsException(s"invalid ImportStatus [${name}]")
+  }
+
+  case object ReadyForUpsert extends ImportStatus
+  case object Upserting extends ImportStatus
+  case object Done extends ImportStatus
+  case object Error extends ImportStatus
+}
+
+
 
 sealed trait MethodRepoMethod {
 

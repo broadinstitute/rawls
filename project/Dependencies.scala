@@ -7,6 +7,7 @@ object Dependencies {
 
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
+  val workbenchGoogle2V = "0.6-4df42ca"
 
   val cromwellVersion = "40-2754783"
 
@@ -81,7 +82,10 @@ object Dependencies {
   val workbenchGoogleV = "0.21-890a74f"
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
   val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
-  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.6-4df42ca" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
+  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
+  val workbenchGoogle2Tests: ModuleID =    "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests" excludeAll(excludeWorkbenchUtil, excludeWorkbenchModel)
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.111.0-alpha" % "test"
+
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.5-d4b4838" excludeAll(excludeWorkbenchModel)
   val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
 
@@ -190,6 +194,8 @@ object Dependencies {
     workbenchModel,
     workbenchGoogle,
     workbenchGoogle2,
+    workbenchGoogle2Tests,
+    googleStorageLocal,
     workbenchGoogleMocks,
     workbenchUtil,
     ficus,
