@@ -362,11 +362,7 @@ class HttpGoogleServicesDAO(
       .setCondition(new Condition().setAge(0))
     val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule).asJava)
     val patcher = buckets.patch(bucketName, new Bucket().setLifecycle(lifecycle))
-    retryWhen500orGoogleError(() => { executeGoogleRequest(patcher) }) {
-      // Bucket is already deleted
-      case t: HttpResponseException if t.getStatusCode == 404 =>
-        true
-    }
+    retryWhen500orGoogleError(() => { executeGoogleRequest(patcher) })
 
     // Now attempt to delete the bucket. If there were still objects in the bucket, we expect this to fail as the
     // lifecycle manager has probably not run yet.
