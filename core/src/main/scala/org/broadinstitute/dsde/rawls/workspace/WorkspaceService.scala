@@ -1000,7 +1000,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
-    // TODO: route through EntityResolver
     withAttributeNamespaceCheck(entity) {
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
         entityManager.createEntity(workspaceContext.workspace, entity)
