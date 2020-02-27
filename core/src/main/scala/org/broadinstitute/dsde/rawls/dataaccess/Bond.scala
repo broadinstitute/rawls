@@ -42,7 +42,7 @@ class BondTalker()(implicit val system: ActorSystem, val materializer: Materiali
     import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
     import BondJsonSupport._
 
-    val bondProviderUrl = "http://broad-bond-dev.appspot.com/api/link/v1/providers" //todo: check http / https
+    val bondProviderUrl = "https://broad-bond-dev.appspot.com/api/link/v1/providers"
 
     val providerResponse: Future[Providers] = executeRequest[Providers](Get(bondProviderUrl))
 
@@ -67,8 +67,7 @@ class BondTalker()(implicit val system: ActorSystem, val materializer: Materiali
 
       entity map { provider =>
         // todo: get url from ctmpl?
-        // todo: first get the provider links, then send requests to both.
-        val bondProviderUrl = s"http://broad-bond-dev.appspot.com/api/link/v1/$provider/serviceaccount/key" //todo: check http / https
+        val bondProviderUrl = s"https://broad-bond-dev.appspot.com/api/link/v1/$provider/serviceaccount/key"
         println(bondProviderUrl)
 
         val bondResponse: Future[BondResponseData] = Marshal(bondProviderUrl).to[RequestEntity] flatMap { entity =>
