@@ -33,18 +33,27 @@ class BondSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
 
   // todo: create bond testcases
   // todo: this is an integration test lol
-  it should "connect to Bond to get provider list" in {
-    val bond = new BondTalker()
-    assertResult(Array("fence", "dcf-fence")) {
-      Await.result(bond.getBondProviders(), Duration.Inf)
-    }
-  }
+//  it should "connect to Bond to get provider list" in {
+//    val bond = new BondTalker()
+//    assertResult(Array("fence", "dcf-fence")) {
+//      Await.result(bond.getBondProviders(), Duration.Inf)
+//    }
+//  }
 
+//
+//  it should "connect to Bond to get the user's SA key for a provider" in {
+//    val bond = new BondTalker()
+//    assertResult(Some("email@iam.gserviceaccount.com")) {
+//    val oauthtoken = "tokenhere"
+  //      Await.result(bond.getBondProviderServiceAccountEmails(UserInfo(RawlsUserEmail("b.adm.firec@gmail.com"), OAuth2BearerToken(oauthtoken), 6000000, RawlsUserSubjectId("-1"))), Duration.Inf)
+//    }
+//  }
+//
 
   it should "connect to Bond to get the user's SA key for a provider" in {
     val bond = new BondTalker()
     assertResult(Some("onuikytszok7ckyqgljwlozc-5803@dcf-staging-202214.iam.gserviceaccount.com")) {
-      Await.result(bond.getBondProviderServiceAccountKey(UserInfo(RawlsUserEmail("b.adm.firec@gmail.com"), OAuth2BearerToken("token"), 6000000, RawlsUserSubjectId("-1"))), Duration.Inf)
+      Await.result(bond.getBondProviderServiceAccountKey(UserInfo(RawlsUserEmail("b.adm.firec@gmail.com"), OAuth2BearerToken("ya29.Ima_B3hZ31qBmCfUhy6pPBL2HIgY46AaaAuGRQAf2Z6Mw9DUuPqRjgbdTpt2cincx4Cg-GMVHYDXKAiaRSUuF6YKnnMr377G_fvleAIm8abQHvW-OSGrmvpIllHZzzoqU2RF2jhQx7U"), 6000000, RawlsUserSubjectId("-1"))), Duration.Inf)
     }
   }
 }

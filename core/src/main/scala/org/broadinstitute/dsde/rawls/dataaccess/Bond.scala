@@ -54,45 +54,42 @@ class BondTalker()(implicit val system: ActorSystem, val materializer: Materiali
   }
 
 
-  def getBondProviderServiceAccountKey(userInfo: UserInfo): Future[List[Future[Option[String]]]] = {
+  def getBondProviderServiceAccountEmails(userInfo: UserInfo): Future[List[BondServiceAccountEmail]] = {
     import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
     import spray.json.DefaultJsonProtocol._
     import BondJsonSupport._
 
 
-
-    val bondProviderList = getBondProviders()
-    bondProviderList.map[List[Future[Option[String]]]] { entity =>
-      println("provider list contains: " + entity.mkString(","))
-
-      entity map { provider =>
-        // todo: get url from ctmpl?
+    for {
+      bondProviderList <- getBondProviders()
+      bondResponses <- Future.traverse(bondProviderList) { provider => // todo: is traverse the simplest/best way to do this?
         val bondProviderUrl = s"https://broad-bond-dev.appspot.com/api/link/v1/$provider/serviceaccount/key"
         println(bondProviderUrl)
 
-        val bondResponse: Future[BondResponseData] = Marshal(bondProviderUrl).to[RequestEntity] flatMap { entity =>
+        retryableFutureToFuture(
           retry[BondResponseData](when500) { () =>
             executeRequestWithToken[BondResponseData](userInfo.accessToken)(Get(bondProviderUrl))
           }
-        }
-
-
-        bondResponse.map { resp =>
-          // from martha code but still applicable here:
-          // FIXME: investigate changing the Bond response formats to not contain Option, since Bond should always return an email if provided a bearer token
-          val saEmail = resp.data.map(_.client_email)
-          if(saEmail.isEmpty) {
-            logger.warn(s"Bond.bondServiceAccountEmail returned no SA for bond URL $bondProviderUrl")
-          }
-          saEmail
-        }
-
+        )
       }
-
+    } yield {
+      bondResponses collect {
+        case BondResponseData(Some(email)) => email
+      }
     }
 
-
     // todo: this returns a List(Future(<not completed>), Future(<not completed>))
+
+
+  }
+
+  // todo: is this the right place? or should it go in under workspace somewhere.
+  def addBondProvidersToWorkspace(userInfo: UserInfo) = {
+    val emails = getBondProviderServiceAccountEmails(userInfo)
+    emails.map { emails =>
+      println(emails) // works!
+
+    }
 
 
   }
