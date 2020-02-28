@@ -42,6 +42,7 @@ import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
 import io.opencensus.trace.{Span, Status}
+import org.broadinstitute.dsde.rawls.entities.{RawlsEntityProviderBuilder, EntityManager}
 
 
 
@@ -50,8 +51,30 @@ import io.opencensus.trace.{Span, Status}
  */
 //noinspection TypeAnnotation
 object WorkspaceService {
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) = {
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, cromiamDAO, executionServiceCluster, execServiceBatchSize, methodConfigResolver, gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService, config)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO,
+                  executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int,
+                  methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO,
+                  notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService,
+                  genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
+                  maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
+                  config: WorkspaceServiceConfig)
+                 (userInfo: UserInfo)
+                 (implicit executionContext: ExecutionContext) = {
+
+    // create the EntityManager along with its associated provider-builders. Since entities are only accessed
+    // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
+    // and execution context for the rawls entity provider that the workspace service uses.
+    val defaultEntityProviderBuilder = new RawlsEntityProviderBuilder(dataSource) // implicit executionContext
+    // soon: create a provider-builder for data repo and add it to the entity manager
+    val entityManager = new EntityManager(Set(defaultEntityProviderBuilder))
+
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, cromiamDAO,
+      executionServiceCluster, execServiceBatchSize,
+      methodConfigResolver, gcsDAO, samDAO,
+      notificationDAO, userServiceConstructor,
+      genomicsServiceConstructor, maxActiveWorkflowsTotal,
+      maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
+      config, entityManager)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -76,7 +99,7 @@ object WorkspaceService {
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig)(implicit protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, entityManager: EntityManager)(implicit protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils {
 
   import dataSource.dataAccess.driver.api._
@@ -979,12 +1002,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
     withAttributeNamespaceCheck(entity) {
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
-        dataSource.inTransaction { dataAccess =>
-          dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
-            case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceName}")))
-            case None => dataAccess.entityQuery.save(workspaceContext, entity)
-          }
-        }
+        entityManager.createEntity(workspaceContext.workspace, entity)
       }
     }
 
