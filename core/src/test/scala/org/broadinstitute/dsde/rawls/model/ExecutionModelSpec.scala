@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.scalatest.{FlatSpec, Matchers}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import spray.json._
@@ -8,7 +7,60 @@ import spray.json._
 /**
   * Created by rtitle on 5/7/17.
   */
-class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
+class ExecutionModelSpec extends FlatSpec with Matchers {
+
+  "SubmissionRequest deserialization" should "translate null to None" in {
+    import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionRequestFormat
+
+    // We know `null` is possible for `entityType` and `entityName` because this JSON is derived
+    // from what the FC UI actually generated and came through in the user report [WA-135]
+    val inputJSON = """{
+       |"methodConfigurationNamespace": "asdf",
+       |"methodConfigurationName": "echo",
+       |"entityType": null,
+       |"entityName": null,
+       |"useCallCache": true,
+       |"expression": null,
+       |"workflowFailureMode": null,
+       |"deleteIntermediateOutputFiles": false
+       |}""".stripMargin.parseJson.asJsObject
+
+    SubmissionRequestFormat.read(inputJSON) shouldEqual {
+      SubmissionRequest(
+        methodConfigurationNamespace = "asdf",
+        methodConfigurationName = "echo",
+        useCallCache = true,
+        entityType = None,
+        entityName = None,
+        expression = None,
+        workflowFailureMode = None,
+        deleteIntermediateOutputFiles = false
+      )
+    }
+  }
+
+  "SubmissionRequest deserialization" should "translate missing fields to None" in {
+    import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionRequestFormat
+
+    val inputJSON = """{
+                      |"methodConfigurationNamespace": "asdf",
+                      |"methodConfigurationName": "echo",
+                      |"useCallCache": true
+                      |}""".stripMargin.parseJson.asJsObject
+
+    SubmissionRequestFormat.read(inputJSON) shouldEqual {
+      SubmissionRequest(
+        methodConfigurationNamespace = "asdf",
+        methodConfigurationName = "echo",
+        useCallCache = true,
+        entityType = None,
+        entityName = None,
+        expression = None,
+        workflowFailureMode = None,
+        deleteIntermediateOutputFiles = false
+      )
+    }
+  }
 
   "WorkflowQueueStatusByUserResponse" should "serialize/deserialize to/from JSON" in {
     val testResponse = WorkflowQueueStatusByUserResponse(
