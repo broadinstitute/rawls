@@ -375,12 +375,13 @@ class ExecutionJsonSupport extends JsonSupport {
         // so in that project one can just adjust the function call to jsonFormat*N*.
         methodConfigurationNamespace = fields("methodConfigurationNamespace").convertTo[String],
         methodConfigurationName = fields("methodConfigurationName").convertTo[String],
-        entityType = fields.get("entityType").map(_.convertTo[String]),
-        entityName = fields.get("entityName").map(_.convertTo[String]),
-        expression = fields.get("expression").map(_.convertTo[String]),
+        // We are flatMapping these because `null` is a valid input provided by the UI
+        entityType = fields.get("entityType").flatMap(_.convertTo[Option[String]]),
+        entityName = fields.get("entityName").flatMap(_.convertTo[Option[String]]),
+        expression = fields.get("expression").flatMap(_.convertTo[Option[String]]),
         useCallCache = fields("useCallCache").convertTo[Boolean],
         deleteIntermediateOutputFiles = fields.get("deleteIntermediateOutputFiles").fold(false)(_.convertTo[Boolean]),
-        workflowFailureMode = fields.get("workflowFailureMode").map(_.convertTo[String])
+        workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }
