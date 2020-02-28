@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.scalatest.{FlatSpec, Matchers}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import spray.json._
