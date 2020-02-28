@@ -13,7 +13,7 @@ class ExecutionModelSpec extends FlatSpec with Matchers {
     import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionRequestFormat
 
     // We know `null` is possible for `entityType` and `entityName` because this JSON is
-    // derived from what the UI actually generated and came through in the user report
+    // derived from what the FC UI actually generated and came through in the user report
     val inputJSON = """{
        |"methodConfigurationNamespace": "asdf",
        |"methodConfigurationName": "echo",
