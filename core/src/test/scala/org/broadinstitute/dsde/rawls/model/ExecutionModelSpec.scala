@@ -12,8 +12,8 @@ class ExecutionModelSpec extends FlatSpec with Matchers {
   "SubmissionRequest deserialization" should "translate null to None" in {
     import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionRequestFormat
 
-    // We know `null` is possible for `entityType` and `entityName` because this JSON is
-    // derived from what the FC UI actually generated and came through in the user report
+    // We know `null` is possible for `entityType` and `entityName` because this JSON is derived
+    // from what the FC UI actually generated and came through in the user report [WA-135]
     val inputJSON = """{
        |"methodConfigurationNamespace": "asdf",
        |"methodConfigurationName": "echo",
