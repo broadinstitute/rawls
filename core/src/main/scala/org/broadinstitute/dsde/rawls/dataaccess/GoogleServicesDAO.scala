@@ -39,13 +39,12 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getGoogleProject(projectName: RawlsBillingProjectName): Future[Project]
 
-  /** Deletes a bucket from Google Cloud Storage. If the bucket is not empty, all objects in the bucket will be marked
-    * for deletion (see below).
+  /** Mark all objects in the bucket for deletion, then attempts to delete the bucket from Google Cloud Storage.
     *
-    * If the bucket is not empty, the bucket's lifecycle rule is set to delete any objects older than 0 days. This
+    * The bucket's lifecycle rule is set to delete any objects older than 0 days. This
     * effectively marks all objects in the bucket for deletion the next time GCS inspects the bucket (up to 24 hours
     * later at the time of this writing; see [[https://cloud.google.com/storage/docs/lifecycle#behavior]]).
-    * Rawls will periodically retry the bucket deletion until it succeeds.
+    * Bucket deletion will not Rawls will periodically retry the bucket deletion until it succeeds.
     *
     * This strategy is inspired by [[http://blog.iangsy.com/2014/04/google-cloud-storage-deleting-full.html]].
     *
