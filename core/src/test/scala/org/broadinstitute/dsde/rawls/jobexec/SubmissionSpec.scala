@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverCompo
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -40,7 +40,7 @@ import scala.util.Try
 //noinspection TypeAnnotation,ScalaUnusedSymbol
 class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with MockitoTestUtils with StatsDTestUtils {
   import driver.api._
-  
+
   def this() = this(ActorSystem("SubmissionSpec"))
   implicit val materializer = ActorMaterializer()
 
@@ -309,6 +309,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         trackDetailedSubmissionMetrics = true,
         "fc-"
       )
+
+      val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
+      val requesterPaysSetupService = new RequesterPaysSetupService(gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
         new HttpMethodRepoDAO(
@@ -328,7 +332,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName,
         mockSubmissionCostService,
-        workspaceServiceConfig
+        workspaceServiceConfig,
+        requesterPaysSetupService
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {

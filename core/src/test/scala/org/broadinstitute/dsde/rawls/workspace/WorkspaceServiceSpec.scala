@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockBondApiDAO, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
@@ -124,6 +124,10 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       true,
       "fc-"
     )
+
+    val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
+    val requesterPaysSetupService = new RequesterPaysSetupService(gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
@@ -143,7 +147,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       submissionCostService,
-      workspaceServiceConfig
+      workspaceServiceConfig,
+      requesterPaysSetupService
     )_
 
     def cleanupSupervisor = {
@@ -1191,4 +1196,14 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       "operations/EKCsiP2kLRiu0qj_qdLFq8wBIMPErM6tHSoPcHJvZHVjdGlvblF1ZXVl"
     )
   }
+
+  it should "add Bond service accounts to google project" in withTestDataServices { services =>
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val rqComplete = Await.result(services.workspaceService.enableRequesterPaysForProviderSAs(testData.workspace.toWorkspaceName), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
+      assertResult(StatusCodes.NoContent) {
+        rqComplete.response
+      }
+    }
+  }
+
 }

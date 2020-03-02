@@ -155,6 +155,11 @@ trait WorkspaceApiService extends UserInfoDirectives {
         post {
           complete { workspaceServiceConstructor(userInfo).SendChangeNotifications(WorkspaceName(namespace, name)) }
         }
+      } ~
+      path("workspaces" / Segment / Segment / "enableRequesterPaysForProviderServiceAccounts") { (workspaceNamespace, workspaceName) =>
+        put {
+          complete { workspaceServiceConstructor(userInfo).EnableRequesterPaysForProviderSAs(WorkspaceName(workspaceNamespace, workspaceName)) }
+        }
       }
   }
 }

@@ -1,0 +1,64 @@
+package org.broadinstitute.dsde.rawls.dataaccess
+
+import akka.actor.ActorSystem
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.client.RequestBuilding._
+import akka.http.scaladsl.model.StatusCodes
+import akka.stream.Materializer
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.model.UserInfo
+import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
+
+import scala.concurrent.{ExecutionContext, Future}
+
+case class BondServiceAccountEmail(client_email: String)
+case class BondResponseData(data: BondServiceAccountEmail)
+
+case class Providers(providers: List[String])
+
+
+object BondJsonSupport {
+  import spray.json.DefaultJsonProtocol._
+
+  implicit val BondServiceAccountEmailFormat = jsonFormat1(BondServiceAccountEmail)
+  implicit val BondResponseDataFormat = jsonFormat1(BondResponseData)
+
+  implicit val providersFormat = jsonFormat1(Providers)
+
+}
+
+// future todo: dosresolver and marthadosresolver can be removed after requester pays is fully implemented with submissions
+trait BondApiDAO {
+  def getBondProviders(): Future[List[String]]
+  def getServiceAccountKey(provider: String, userInfo: UserInfo): Future[Option[BondResponseData]]
+}
+
+class HttpBondApiDAO(bondBaseUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends DsdeHttpDAO with Retry with BondApiDAO {
+  val http = Http(system)
+  val httpClientUtils = HttpClientUtilsStandard()
+
+  def getBondProviders(): Future[List[String]] = {
+    import BondJsonSupport._
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+
+    val bondProviderUrl = s"$bondBaseUrl/api/link/v1/providers"
+    val providerResponse: Future[Providers] = executeRequest[Providers](Get(bondProviderUrl))
+    providerResponse.map { resp =>
+      println(resp)
+      resp.providers
+    }
+  }
+
+  def getServiceAccountKey(provider: String, userInfo: UserInfo): Future[Option[BondResponseData]] = {
+    import BondJsonSupport._
+    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+
+    val providerUrl = s"$bondBaseUrl/api/link/v1/$provider/serviceaccount/key"
+      retry(when500) { () =>
+        executeRequestWithToken[BondResponseData](userInfo.accessToken)(Get(providerUrl)).map(Option(_)).recover {
+          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) => None
+        }
+      }
+  }
+
+}

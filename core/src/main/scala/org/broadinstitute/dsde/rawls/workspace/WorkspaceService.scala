@@ -57,7 +57,7 @@ object WorkspaceService {
                   notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService,
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
-                  config: WorkspaceServiceConfig)
+                  config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext) = {
 
@@ -74,7 +74,7 @@ object WorkspaceService {
       notificationDAO, userServiceConstructor,
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
-      config, entityManager)
+      config, entityManager, requesterPaysSetupService)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -99,7 +99,7 @@ object WorkspaceService {
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, entityManager: EntityManager)(implicit protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, entityManager: EntityManager, requesterPaysSetupService: RequesterPaysSetupService)(implicit protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils {
 
   import dataSource.dataAccess.driver.api._
@@ -127,6 +127,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def GetBucketOptions(workspaceName: WorkspaceName) = getBucketOptions(workspaceName)
   //def UpdateBucketOptions(workspaceName: WorkspaceName, bucketOptions: WorkspaceBucketOptions) = updateBucketOptions(workspaceName, bucketOptions)
   def GetAccessInstructions(workspaceName: WorkspaceName) = getAccessInstructions(workspaceName)
+  def EnableRequesterPaysForProviderSAs(workspaceName: WorkspaceName) = enableRequesterPaysForProviderSAs(workspaceName)
 
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
   def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) = getEntity(workspaceName, entityType, entityName)
@@ -1952,6 +1953,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       } else {
         Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"operation id ${operationIdString} not found in workflow $workflowId")))
       }
+    }
+  }
+
+  def enableRequesterPaysForProviderSAs(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    requesterPaysSetupService.addBondProvidersToWorkspace(userInfo, RawlsBillingProjectName(workspaceName.namespace)).map { _ =>
+      RequestComplete(StatusCodes.NoContent)
     }
   }
 

@@ -3107,6 +3107,44 @@ paths:
           - openid
           - email
           - profile
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/enableRequesterPaysForProviderServiceAccounts':
+    put:
+      responses:
+        '204':
+          description: Successful Request
+        '403':
+          description: Insufficient permissions to enable Requester Pays for the provider service accounts.
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Workspace Not Found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        description: Enable Requester Pays for the user's linked Provider service accounts in a workspace
+        tags:
+          - workspaces
+        summary: Enable Requester Pays for Provider SA
+        operationId: enableRequesterPaysForProviderSAs
+        parameters:
+          - in: path
+            description: Workspace Namespace
+            name: workspaceNamespace
+            required: true
+            type: string
+          - in: path
+            description: Workspace Name
+            name: workspaceName
+            required: true
+            type: string
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
   '/api/workflows/{workflowId}/genomics/{operationId}':
     get:
       responses:

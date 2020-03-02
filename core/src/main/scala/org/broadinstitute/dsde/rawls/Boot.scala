@@ -353,6 +353,10 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("groupsPrefix")
       )
 
+      val bondConfig = conf.getConfig("bond")
+      val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
+      val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(gcsDAO, bondApiDAO, requesterPaysRole)
+
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
@@ -369,7 +373,8 @@ object Boot extends IOApp with LazyLogging {
         maxActiveWorkflowsPerUser,
         workbenchMetricBaseName = metricsPrefix,
         submissionCostService,
-        workspaceServiceConfig
+        workspaceServiceConfig,
+        requesterPaysSetupService
       )
 
       val service = new RawlsApiServiceImpl(
