@@ -231,7 +231,7 @@ class AvroUpsertMonitorActor(
 
   private def importEntities(message: PubSubMessage) = {
     val attributes = parseMessage(message)
-    for {
+    val importFuture = for {
       petUserInfo <- getPetServiceAccountUserInfo(attributes.workspace.namespace, attributes.userEmail)
       importStatus <- importServiceDAO.getImportStatus(attributes.importId, attributes.workspace, petUserInfo)
       _ <- importStatus match {
@@ -249,6 +249,7 @@ class AvroUpsertMonitorActor(
         case None => publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option("Import status not found"))
       }
     } yield ()
+    importFuture.map(_ => ImportComplete) pipeTo self
   }
 
 
