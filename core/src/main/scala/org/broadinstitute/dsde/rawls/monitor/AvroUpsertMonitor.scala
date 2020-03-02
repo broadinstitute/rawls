@@ -105,7 +105,9 @@ class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService
 
   def init =
     for {
+      _ <- arrowPubSubDAO.createTopic(avroUpsertMonitorConfig.arrowPubSubTopic)
       _ <- arrowPubSubDAO.createSubscription(avroUpsertMonitorConfig.arrowPubSubTopic, avroUpsertMonitorConfig.arrowPubSubSubscription, Some(avroUpsertMonitorConfig.ackDeadlineSeconds)) // remove when cutting over to import service
+      _ <- pubSubDAO.createTopic(avroUpsertMonitorConfig.importRequestPubSubTopic)
       _ <- pubSubDAO.createSubscription(avroUpsertMonitorConfig.importRequestPubSubTopic, avroUpsertMonitorConfig.importRequestPubSubSubscription, Some(avroUpsertMonitorConfig.ackDeadlineSeconds))
     } yield Start
 
