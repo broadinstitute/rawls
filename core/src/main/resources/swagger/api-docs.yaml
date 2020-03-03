@@ -3305,7 +3305,7 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
         '400':
-          description: Workspace Exists in this billing project
+          description: Project cannot be deleted because it contains workspaces.
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
