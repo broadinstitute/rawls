@@ -203,8 +203,8 @@ trait WorkspaceComponent {
       loadWorkspaces(findByIdsQuery(workspaceIds), attributeSpecs)
     }
 
-    def listByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Seq[Workspace]] = {
-      loadWorkspaces(findByNamespaceQuery(namespaceName))
+    def countByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Int] = {
+      findByNamespaceQuery(namespaceName).size.result
     }
 
     def delete(workspaceName: WorkspaceName): ReadWriteAction[Boolean] = {

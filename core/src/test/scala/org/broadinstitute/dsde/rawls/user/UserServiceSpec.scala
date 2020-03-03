@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.mockito.MockitoSugar
@@ -31,19 +31,6 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
   val defaultMockSamDAO: SamDAO = mock[SamDAO]
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val testConf: Config = ConfigFactory.load()
-
-  // A workspace with the which namespaceName equals to defaultBillingProject's billing project name.
-  val workspace = Workspace(
-    defaultBillingProjectName.value,
-    testData.wsName.name,
-    UUID.randomUUID().toString,
-    "aBucket",
-    Some("workflow-collection"),
-    currentTime(),
-    currentTime(),
-    "test",
-    Map.empty
-  )
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second)
 
@@ -84,8 +71,8 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
   it should "add a service perimeter field and update the status for an existing project when user has correct permissions even if there isn't a project number already" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject.copy(googleProjectNumber = None)
+
       runAndWait(rawlsBillingProjectQuery.create(project))
-      runAndWait(workspaceQuery.save(workspace))
 
       val mockGcsDAO = mock[GoogleServicesDAO]
       when(mockGcsDAO.getGoogleProject(project.projectName)).thenReturn(Future.successful(new Project().setProjectNumber(42L)))
@@ -165,10 +152,50 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
     }
   }
 
+  // 200 when billing project is deleted
+  it should "Successfully to delete a billing project" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val project = defaultBillingProject
+      val userIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
+      val petSAJson = "petJson"
+      runAndWait(rawlsBillingProjectQuery.create(project))
+
+      val mockSamDAO = mock[SamDAO]
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
+      when(mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(userIdInfo)))
+      when(mockSamDAO.getPetServiceAccountKeyForUser(project.projectName.value, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
+      when(mockSamDAO.deleteUserPetServiceAccount(project.projectName.value, userInfo)).thenReturn(Future.successful())
+      when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful())
+
+      val mockGcsDAO = mock[GoogleServicesDAO]
+      when(mockGcsDAO.getUserInfoUsingJson(petSAJson)).thenReturn(Future.successful(userInfo))
+      when(mockGcsDAO.deleteProject(project.projectName)).thenReturn(Future.successful())
+
+      val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
+      val actual = userService.DeleteBillingProject(defaultBillingProjectName).futureValue
+
+      verify(mockGcsDAO).deleteProject(project.projectName)
+      actual shouldEqual RequestComplete(StatusCodes.NoContent)
+    }
+  }
+
   // 403 when workspace exists in this billing project to be deleted
   it should "fail with a 400 when workspace exists in this billing project to be deleted" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
+      // A workspace with the which namespaceName equals to defaultBillingProject's billing project name.
+      val workspace = Workspace(
+        defaultBillingProjectName.value,
+        testData.wsName.name,
+        UUID.randomUUID().toString,
+        "aBucket",
+        Some("workflow-collection"),
+        currentTime(),
+        currentTime(),
+        "test",
+        Map.empty
+      )
+
       runAndWait(rawlsBillingProjectQuery.create(project))
       runAndWait(workspaceQuery.save(workspace))
 
@@ -177,9 +204,10 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
 
       val userService = getUserService(dataSource, mockSamDAO)
 
-      val actual = userService.DeleteBillingProject(defaultBillingProjectName).failed.futureValue
-      assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
-      actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.BadRequest)
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        userService.DeleteBillingProject(defaultBillingProjectName).futureValue
+      }
+      actual.errorReport.statusCode shouldEqual Option(StatusCodes.BadRequest)
     }
   }
 
@@ -194,10 +222,10 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
 
       val userService = getUserService(dataSource, mockSamDAO)
 
-      val actual = userService.DeleteBillingProject(defaultBillingProjectName).failed.futureValue
-
-      assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
-      actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        userService.DeleteBillingProject(defaultBillingProjectName).futureValue
+      }
+      actual.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
     }
   }
 }

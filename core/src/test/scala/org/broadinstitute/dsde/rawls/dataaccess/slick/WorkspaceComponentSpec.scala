@@ -55,8 +55,8 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
     }
 
-    assertWorkspaceResult(Seq(workspace)) {
-      runAndWait(workspaceQuery.listByNamespace(RawlsBillingProjectName(workspace.namespace)))
+    assertResult(1) {
+      runAndWait(workspaceQuery.countByNamespace(RawlsBillingProjectName(workspace.namespace)))
     }
 
     val updatedWorkspace = workspace.copy(

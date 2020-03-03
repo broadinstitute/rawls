@@ -228,7 +228,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
       _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
       _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
-      _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) }
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.delete(projectName)
+      }
     } yield {
       RequestComplete(StatusCodes.NoContent)
     }
@@ -253,16 +255,16 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     for {
       // Check if workspace exists for this project.
-     workspaces <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listByNamespace(projectName)
+      workspaceCount <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.countByNamespace(projectName)
       }
 
-     _<- if(!workspaces.isEmpty) {
-       Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "There are workspaces exists in this project.")))
+      _<- if(workspaceCount > 0) {
+       Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Project cannot be deleted because it contains workspaces.")))
      } else {
       Future.successful(())
      }
-     // unregister then delete actual project in google
+      // unregister then delete actual project in google
       _<- unregisterBillingProjectWithUserInfo(projectName, userInfo)
       _<- gcsDAO.deleteProject(projectName)
     } yield RequestComplete(StatusCodes.NoContent)
