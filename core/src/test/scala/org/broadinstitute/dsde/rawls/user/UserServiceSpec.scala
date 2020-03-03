@@ -18,7 +18,7 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.mockito.MockitoSugar
 import org.mockito.Mockito._
 
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 
 class UserServiceSpec extends FlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalaFutures {
@@ -205,7 +205,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        userService.DeleteBillingProject(defaultBillingProjectName).futureValue
+        Await.result(userService.DeleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.BadRequest)
     }
@@ -223,7 +223,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       val userService = getUserService(dataSource, mockSamDAO)
 
       val actual = intercept[RawlsExceptionWithErrorReport] {
-        userService.DeleteBillingProject(defaultBillingProjectName).futureValue
+        Await.result(userService.DeleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
       }
       actual.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
     }

@@ -106,7 +106,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "get 400 when workspace exists" in withTestDataApiServices { services =>
     // Before test, verify there is a workspace exists for this billing project
-    runAndWait(workspaceQuery.countByNamespace(testData.billingProject.projectName)) shouldEqual(1)
+    runAndWait(workspaceQuery.countByNamespace(testData.billingProject.projectName)) should be > 0
 
     Delete(s"/user/billing/${testData.billingProject.projectName.value}") ~>
       sealRoute(services.userRoutes) ~>
