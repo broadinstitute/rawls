@@ -191,7 +191,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "update attribute list values" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      // insert new attribute 'myNewList' which is a list with 1 element
+      // insert new attribute 'myNewList' which is a list with 3 elements
       val inserts = Map(AttributeName.withDefaultNS("myNewList") -> AttributeValueList(Seq(
         AttributeString("abc"),
         AttributeString("def"),
@@ -235,7 +235,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       // update 'newEntityList' to contain 4 elements
       val updates = Map(
         AttributeName.withDefaultNS("newEntityList") -> AttributeValueList(Seq(
-          AttributeString("abc1"),
+          AttributeString("abc2"),
           AttributeString("def"),
           AttributeString("abc12"),
           AttributeString("xyz")
