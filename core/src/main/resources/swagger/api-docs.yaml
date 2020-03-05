@@ -3323,7 +3323,7 @@ paths:
         - billing
         - users
       summary: delete billing project
-      operationId: deleteBillingProjects
+      operationId: deleteBillingProject
       security:
         - authorization:
             - openid
