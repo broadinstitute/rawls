@@ -10,6 +10,8 @@ import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 
 import scala.concurrent.{ExecutionContext, Future}
+import BondJsonSupport._
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 
 case class BondServiceAccountEmail(client_email: String)
 case class BondResponseData(data: BondServiceAccountEmail)
@@ -27,7 +29,6 @@ object BondJsonSupport {
 
 }
 
-// future todo: dosresolver and marthadosresolver can be removed after requester pays is fully implemented with submissions
 trait BondApiDAO {
   def getBondProviders(): Future[List[String]]
   def getServiceAccountKey(provider: String, userInfo: UserInfo): Future[Option[BondResponseData]]
@@ -38,21 +39,14 @@ class HttpBondApiDAO(bondBaseUrl: String)(implicit val system: ActorSystem, val 
   val httpClientUtils = HttpClientUtilsStandard()
 
   def getBondProviders(): Future[List[String]] = {
-    import BondJsonSupport._
-    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-
     val bondProviderUrl = s"$bondBaseUrl/api/link/v1/providers"
     val providerResponse: Future[Providers] = executeRequest[Providers](Get(bondProviderUrl))
     providerResponse.map { resp =>
-      println(resp)
       resp.providers
     }
   }
 
   def getServiceAccountKey(provider: String, userInfo: UserInfo): Future[Option[BondResponseData]] = {
-    import BondJsonSupport._
-    import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-
     val providerUrl = s"$bondBaseUrl/api/link/v1/$provider/serviceaccount/key"
       retry(when500) { () =>
         executeRequestWithToken[BondResponseData](userInfo.accessToken)(Get(providerUrl)).map(Option(_)).recover {

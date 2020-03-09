@@ -127,7 +127,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def GetBucketOptions(workspaceName: WorkspaceName) = getBucketOptions(workspaceName)
   //def UpdateBucketOptions(workspaceName: WorkspaceName, bucketOptions: WorkspaceBucketOptions) = updateBucketOptions(workspaceName, bucketOptions)
   def GetAccessInstructions(workspaceName: WorkspaceName) = getAccessInstructions(workspaceName)
-  def EnableRequesterPaysForProviderSAs(workspaceName: WorkspaceName) = enableRequesterPaysForProviderSAs(workspaceName)
+  def EnableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName) = enableRequesterPaysForLinkedSAs(workspaceName)
 
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
   def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) = getEntity(workspaceName, entityType, entityName)
@@ -1956,8 +1956,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def enableRequesterPaysForProviderSAs(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    requesterPaysSetupService.addBondProvidersToWorkspace(userInfo, RawlsBillingProjectName(workspaceName.namespace)).map { _ =>
+  def enableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    for {
+      maybeWorkspace <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.findByName(workspaceName) }
+      workspace <- maybeWorkspace match {
+        case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+        case Some(workspace) => Future.successful(workspace)
+      }
+      _ <- accessCheck(workspace, SamWorkspaceActions.compute)
+      _ <- requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, RawlsBillingProjectName(workspaceName.namespace))
+    } yield {
       RequestComplete(StatusCodes.NoContent)
     }
   }

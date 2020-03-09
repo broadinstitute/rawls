@@ -1197,11 +1197,46 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     )
   }
 
-  it should "add Bond service accounts to google project" in withTestDataServices { services =>
+  it should "204 on add linked service accounts to workspace" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
-      val rqComplete = Await.result(services.workspaceService.enableRequesterPaysForProviderSAs(testData.workspace.toWorkspaceName), Duration.Inf).asInstanceOf[RequestComplete[StatusCode]]
-      assertResult(StatusCodes.NoContent) {
-        rqComplete.response
+      val rqComplete = Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      assertResult(RequestComplete(StatusCodes.NoContent)) {
+        rqComplete
+      }
+    }
+  }
+
+  it should "404 on add linked service accounts to workspace which does not exist" in withTestDataServices { services =>
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName.copy(name = "DNE")), Duration.Inf)
+      }
+      assertResult(Some(StatusCodes.NotFound)) {
+        error.errorReport.statusCode
+      }
+    }
+  }
+
+  it should "404 on add linked service accounts to workspace with no access" in withTestDataServicesCustomSamAndUser(RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))) { services =>
+    populateWorkspacePolicies(services)
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      }
+      assertResult(Some(StatusCodes.NotFound)) {
+        error.errorReport.statusCode
+      }
+    }
+  }
+
+  it should "403 on add linked service accounts to workspace with read access" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      }
+      assertResult(Some(StatusCodes.Forbidden)) {
+        error.errorReport.statusCode
       }
     }
   }

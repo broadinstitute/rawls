@@ -3107,7 +3107,7 @@ paths:
           - openid
           - email
           - profile
-  '/api/workspaces/{workspaceNamespace}/{workspaceName}/enableRequesterPaysForProviderServiceAccounts':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/enableRequesterPaysForLinkedServiceAccounts':
     put:
       responses:
         '204':
