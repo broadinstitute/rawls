@@ -3296,7 +3296,39 @@ paths:
             - openid
             - email
             - profile
-
+    delete:
+      responses:
+        '200':
+          description: Successfully delete billing project
+        '403':
+          description: You must be a project owner to delete billing project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '400':
+          description: Project cannot be deleted because it contains workspaces.
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      parameters:
+        - name: projectName
+          description: Name of the billing project
+          required: true
+          type: string
+          in: path
+      description: delete billing project
+      tags:
+        - billing
+        - users
+      summary: delete billing project
+      operationId: deleteBillingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/user/billingAccounts':
     get:
       responses:

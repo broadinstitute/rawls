@@ -68,9 +68,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def GetBillingProjectStatus(projectName: RawlsBillingProjectName) = getBillingProjectStatus(projectName)
   def ListBillingProjects = listBillingProjects
-  def AdminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { deleteBillingProject(projectName, ownerInfo) }
+  def AdminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { adminDeleteBillingProject(projectName, ownerInfo) }
   def AdminRegisterBillingProject(xfer: RawlsBillingProjectTransfer) = asFCAdmin { registerBillingProject(xfer) }
-  def AdminUnregisterBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { unregisterBillingProject(projectName, ownerInfo) }
+  def AdminUnregisterBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]) = asFCAdmin { unregisterBillingProjectWithOwnerInfo(projectName, ownerInfo) }
+  def DeleteBillingProject(projectName: RawlsBillingProjectName) = requireProjectAction(projectName, SamBillingProjectActions.deleteBillingProject) { deleteBillingProject(projectName) }
 
   def AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) = requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) { addUserToBillingProject(projectName, projectAccessUpdate) }
   def RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) = requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) { removeUserFromBillingProject(projectName, projectAccessUpdate) }
@@ -205,13 +206,31 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }.map(RequestComplete(_))
   }
 
-  def unregisterBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
+  /**
+   * Unregisters a billing project with OwnerInfo provided in the request body.
+   *
+   * @param projectName The project name to be unregistered.
+   * @param ownerInfo A map parsed from request body contains the project's owner info.
+   * */
+  def unregisterBillingProjectWithOwnerInfo(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
     val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")), OAuth2BearerToken(ownerInfo("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
+    unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
+  }
+
+  /**
+   * Unregisters a billing project with UserInfo provided in parameter
+   *
+   * @param projectName The project name to be unregistered.
+   * @param ownerUserInfo The project's owner user info with {@code UserInfo} format.
+   * */
+  def unregisterBillingProjectWithUserInfo(projectName: RawlsBillingProjectName, ownerUserInfo: UserInfo): Future[PerRequestMessage] = {
     for {
       projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
       _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
       _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, projectName.value, ownerUserInfo)
-      _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) }
+      _ <- dataSource.inTransaction { dataAccess =>
+        dataAccess.rawlsBillingProjectQuery.delete(projectName)
+      }
     } yield {
       RequestComplete(StatusCodes.NoContent)
     }
@@ -225,11 +244,29 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield ()
   }
 
-  def deleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
+  def adminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[PerRequestMessage] = {
     // unregister then delete actual project in google
     for {
-      _ <- unregisterBillingProject(projectName, ownerInfo)
+      _ <- unregisterBillingProjectWithOwnerInfo(projectName, ownerInfo)
       _ <- gcsDAO.deleteProject(projectName)
+    } yield RequestComplete(StatusCodes.NoContent)
+  }
+
+  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    for {
+      // Check if workspace exists for this project.
+      workspaceCount <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.countByNamespace(projectName)
+      }
+
+      _<- if(workspaceCount > 0) {
+       Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Project cannot be deleted because it contains workspaces.")))
+     } else {
+      Future.successful(())
+     }
+      // unregister then delete actual project in google
+      _<- unregisterBillingProjectWithUserInfo(projectName, userInfo)
+      _<- gcsDAO.deleteProject(projectName)
     } yield RequestComplete(StatusCodes.NoContent)
   }
 
