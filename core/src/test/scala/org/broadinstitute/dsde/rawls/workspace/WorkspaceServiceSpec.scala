@@ -31,6 +31,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration.{Duration, FiniteDuration, _}
 import scala.concurrent.{Await, ExecutionContext}
+import scala.language.postfixOps
 import scala.util.Try
 
 

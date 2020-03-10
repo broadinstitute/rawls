@@ -23,11 +23,12 @@ object Settings {
 
   val commonCompilerSettings = Seq(
     "-unchecked",
-    "-deprecation",
     "-feature",
     "-encoding", "utf8",
     "-Xmax-classfile-name", "100",
-    "-Ywarn-unused:imports"
+    "-Ywarn-unused:imports",
+    "-deprecation:false",
+    "-Xfatal-warnings"
   )
 
   //sbt assembly settings common to rawlsCore and rawlsModel
