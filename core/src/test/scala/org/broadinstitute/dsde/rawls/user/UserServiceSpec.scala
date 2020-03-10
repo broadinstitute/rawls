@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.UUID
 
 import akka.http.scaladsl.model.StatusCodes
 import com.google.api.services.cloudresourcemanager.model.Project
@@ -11,13 +12,13 @@ import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, MockGoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.mockito.MockitoSugar
 import org.mockito.Mockito._
 
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 
 class UserServiceSpec extends FlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalaFutures {
@@ -70,6 +71,7 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
   it should "add a service perimeter field and update the status for an existing project when user has correct permissions even if there isn't a project number already" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject.copy(googleProjectNumber = None)
+
       runAndWait(rawlsBillingProjectQuery.create(project))
 
       val mockGcsDAO = mock[GoogleServicesDAO]
@@ -147,6 +149,85 @@ class UserServiceSpec extends FlatSpecLike with TestDriverComponent with Mockito
       val actual = userService.AddProjectToServicePerimeter(defaultServicePerimeterName, project.projectName).failed.futureValue
       assert(actual.isInstanceOf[RawlsExceptionWithErrorReport])
       actual.asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode shouldEqual Option(StatusCodes.NotFound)
+    }
+  }
+
+  // 200 when billing project is deleted
+  it should "Successfully to delete a billing project" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val project = defaultBillingProject
+      val userIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
+      val petSAJson = "petJson"
+      runAndWait(rawlsBillingProjectQuery.create(project))
+
+      val mockSamDAO = mock[SamDAO]
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
+      when(mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(userIdInfo)))
+      when(mockSamDAO.getPetServiceAccountKeyForUser(project.projectName.value, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
+
+      val mockGcsDAO = mock[GoogleServicesDAO]
+      when(mockGcsDAO.getUserInfoUsingJson(petSAJson)).thenReturn(Future.successful(userInfo))
+      when(mockGcsDAO.deleteProject(project.projectName)).thenReturn(Future.successful())
+      when(mockSamDAO.deleteUserPetServiceAccount(project.projectName.value, userInfo)).thenReturn(Future.successful())
+      when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful())
+
+      val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
+      val actual = userService.DeleteBillingProject(defaultBillingProjectName).futureValue
+
+      verify(mockSamDAO).deleteUserPetServiceAccount(project.projectName.value, userInfo)
+      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
+      verify(mockGcsDAO).deleteProject(project.projectName)
+
+      runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
+      actual shouldEqual RequestComplete(StatusCodes.NoContent)
+    }
+  }
+
+  it should "fail with a 400 when workspace exists in this billing project to be deleted" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val project = defaultBillingProject
+      // A workspace with the which namespaceName equals to defaultBillingProject's billing project name.
+      val workspace = Workspace(
+        defaultBillingProjectName.value,
+        testData.wsName.name,
+        UUID.randomUUID().toString,
+        "aBucket",
+        Some("workflow-collection"),
+        currentTime(),
+        currentTime(),
+        "test",
+        Map.empty
+      )
+
+      runAndWait(rawlsBillingProjectQuery.create(project))
+      runAndWait(workspaceQuery.save(workspace))
+
+      val mockSamDAO = mock[SamDAO]
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.DeleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      }
+      actual.errorReport.statusCode shouldEqual Option(StatusCodes.BadRequest)
+    }
+  }
+
+  it should "fail with a 403 when Sam says the user does not have permission to delete billing project" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val project = defaultBillingProject
+      runAndWait(rawlsBillingProjectQuery.create(project))
+
+      val mockSamDAO = mock[SamDAO]
+      when(mockSamDAO.userHasAction(SamResourceTypeNames.billingProject, defaultBillingProjectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(false))
+
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val actual = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(userService.DeleteBillingProject(defaultBillingProjectName), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      }
+      actual.errorReport.statusCode shouldEqual Option(StatusCodes.Forbidden)
     }
   }
 }

@@ -46,6 +46,11 @@ trait UserApiService extends UserInfoDirectives {
           get {
             complete { userServiceConstructor(userInfo).GetBillingProjectStatus(RawlsBillingProjectName(projectName)) }
           }
+        } ~
+        path(Segment) { projectName =>
+          delete {
+            complete { userServiceConstructor(userInfo).DeleteBillingProject(RawlsBillingProjectName(projectName)) }
+          }
         }
       } ~
       path("user" / "role" / "admin") {

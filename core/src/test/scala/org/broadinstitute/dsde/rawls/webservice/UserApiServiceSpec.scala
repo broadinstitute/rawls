@@ -14,6 +14,7 @@ import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
+import org.mockito.Mockito.verify
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -94,6 +95,29 @@ class UserApiServiceSpec extends ApiServiceSpec {
               RawlsBillingProjectMembership(testData.testProject3.projectName, ProjectRoles.Owner, CreationStatuses.Ready))
         }
     }
+
+  it should "get 400 when workspace exists" in withTestDataApiServices { services =>
+    // Before test, verify there is a workspace exists for this billing project
+    runAndWait(workspaceQuery.countByNamespace(testData.billingProject.projectName)) should be > 0
+
+    Delete(s"/user/billing/${testData.billingProject.projectName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {status}
+      }
+  }
+
+  it should "delete the billing project successfully" in withTestDataApiServices { services =>
+    // No workspace exists for this billing project
+    runAndWait(workspaceQuery.countByNamespace(testData.testProject1.projectName)) shouldEqual(0)
+
+    Delete(s"/user/billing/${testData.testProject1.projectName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+        runAndWait(rawlsBillingProjectQuery.load(testData.testProject1.projectName)) shouldBe empty
+      }
+  }
 
   it should "create a billing project" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>

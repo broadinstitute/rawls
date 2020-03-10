@@ -72,6 +72,7 @@ object SamBillingProjectActions {
   val readPolicies = SamResourceAction("read_policies")
   val alterGoogleRole = SamResourceAction("alter_google_role")
   val addToServicePerimeter = SamResourceAction("add_to_service_perimeter")
+  val deleteBillingProject = SamResourceAction("delete")
   def sharePolicy(policy: String) = SamResourceAction(s"share_policy::$policy")
 }
 

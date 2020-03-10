@@ -54,6 +54,10 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
     }
 
+    assertResult(1) {
+      runAndWait(workspaceQuery.countByNamespace(RawlsBillingProjectName(workspace.namespace)))
+    }
+
     val updatedWorkspace = workspace.copy(
       attributes = Map(
         AttributeName("default", "attributeString") -> AttributeString("value2"),
