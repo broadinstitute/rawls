@@ -14,7 +14,6 @@ import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
-import org.mockito.Mockito.verify
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
