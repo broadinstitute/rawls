@@ -1,9 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import java.io.ByteArrayOutputStream
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import java.util.zip.GZIPOutputStream
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
@@ -26,6 +24,7 @@ import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import scala.concurrent.ExecutionContext.global
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with MockitoSugar with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually {
 

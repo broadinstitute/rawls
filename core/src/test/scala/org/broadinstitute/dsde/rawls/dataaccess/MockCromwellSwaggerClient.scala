@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model.{ToolInputParameter, ToolOutputParameter, ValueType, WorkflowDescription}
-import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL, WdlSource}
+import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL}
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable

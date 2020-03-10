@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.util
 
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.RawlsUserEmail
 
 import scala.concurrent.ExecutionContext
 
