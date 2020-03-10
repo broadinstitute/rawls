@@ -29,12 +29,13 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
-import scala.concurrent.duration.{Duration, FiniteDuration, _}
+import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 import scala.language.postfixOps
 import scala.util.Try
 
 
+//noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
 class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils with BeforeAndAfterAll {
   import driver.api._
 
@@ -68,6 +69,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     super.afterAll()
   }
 
+  //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
     private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
@@ -290,7 +292,15 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "pull entity records for a single entity given no expression" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
-      val subRq = SubmissionRequest(testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some("Sample"), Some("sample1"), None, false)
+      val subRq = SubmissionRequest(
+        methodConfigurationNamespace = testData.agoraMethodConfig.namespace,
+        methodConfigurationName = testData.agoraMethodConfig.name,
+        entityType = Option("Sample"),
+        entityName = Option("sample1"),
+        expression = None,
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false
+      )
 
       //Lookup succeeds
       runAndWait(
@@ -330,7 +340,15 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "pull multiple entity records given an entity expression" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
-      val subRq = SubmissionRequest(testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, Some("SampleSet"), Some("sset1"), Some("this.samples"), false)
+      val subRq = SubmissionRequest(
+        methodConfigurationNamespace = testData.agoraMethodConfig.namespace,
+        methodConfigurationName = testData.agoraMethodConfig.name,
+        entityType = Option("SampleSet"),
+        entityName = Option("sset1"),
+        expression = Option("this.samples"),
+        useCallCache = false,
+        deleteIntermediateOutputFiles = false
+      )
 
       //Lookup succeeds
       runAndWait(

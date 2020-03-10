@@ -4,7 +4,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, StatusCheckResponse}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType, ExecutionServiceStatus, StatusCheckResponse, WdlSource}
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
@@ -122,9 +122,9 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
 
     val methodPath = "/methods"
 
-    val goodAndBadMethod = AgoraEntity(Some("dsde"),Some("good_and_bad"),Some(1),None,None,None,None,Some(goodAndBadInputsWDL),None,Some(AgoraEntityType.Workflow))
+    val goodAndBadMethod = AgoraEntity(Some("dsde"),Some("good_and_bad"),Some(1),None,None,None,None,Option(goodAndBadInputsWDL.source),None,Some(AgoraEntityType.Workflow))
 
-    val meth1Method = AgoraEntity(Some("dsde"),Some("meth1"),Some(1),None,None,None,None,Some(meth1WDL),None,Some(AgoraEntityType.Workflow))
+    val meth1Method = AgoraEntity(Some("dsde"),Some("meth1"),Some(1),None,None,None,None,Option(meth1WDL.source),None,Some(AgoraEntityType.Workflow))
 
     mockServer.when(
       request()
@@ -168,10 +168,15 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
           .withStatusCode(StatusCodes.NotFound.intValue)
       )
 
-    // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
-    val dockstoreResponse =
-      s"""{"type":"WDL","descriptor":"${threeStepWDL.replace("three_step", "three_step_dockstore").replace("\n","\\n")}","url":"bogus"}"""
+    /*** Test requesting a GA4GH tool from Dockstore, then calling the Github URL in the tool ***/
 
+    val threeStepDockstoreWdlSource =
+      threeStepWDL.source.replace("three_step", "three_step_dockstore")
+
+    val threeStepDockstoreResponse =
+      s"""{"type":"WDL","descriptor":"${threeStepDockstoreWdlSource.replace("\n","\\n")}","url":"/url-to-github/from/ga4gh-url-field/three-step-dockstore"}"""
+
+    // "Dockstore" returns the tool descriptor
     mockServer.when(
       request()
         .withMethod("GET")
@@ -179,14 +184,26 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     ).respond(
       response()
         .withHeaders(jsonHeader)
-        .withBody(dockstoreResponse)
+        .withBody(threeStepDockstoreResponse)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    // "Github" returns the WDL source
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/url-to-github/from/ga4gh-url-field/three-step-dockstore")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(threeStepDockstoreWdlSource)
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
     // Saving invalid WDL as a Method Repo Method is allowed
 
-    val badSyntaxWDL = threeStepWDL.replace("workflow", "not-a-workflow")
-    val badWDLMethod = AgoraEntity(Some("dsde"),Some("bad_wdl"),Some(1),None,None,None,None,Some(badSyntaxWDL),None,Some(AgoraEntityType.Workflow))
+    val badSyntaxWDL = WdlSource("Bad syntax workflow returned from Agora mock server")
+    val badWDLMethod = AgoraEntity(Some("dsde"),Some("bad_wdl"),Some(1),None,None,None,None,Some(badSyntaxWDL.source),None,Some(AgoraEntityType.Workflow))
 
     mockServer.when(
       request()
@@ -218,6 +235,18 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       response()
         .withHeaders(jsonHeader)
         .withBody(noInputMethodDockstoreResponse)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    // "Github" returning WDL source
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/url-to-github/from/ga4gh-url-field/no-input-dockstore")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(noInputMethodDockstoreWDLSource)
         .withStatusCode(StatusCodes.OK.intValue)
     )
 

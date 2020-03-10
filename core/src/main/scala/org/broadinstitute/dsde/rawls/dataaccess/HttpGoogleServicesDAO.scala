@@ -341,6 +341,22 @@ class HttpGoogleServicesDAO(
   override def deleteBucket(bucketName: String): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.Storage
     val buckets = getStorage(getBucketServiceAccountCredential).buckets
+    //Google doesn't let you delete buckets that are full.
+    //You can either remove all the objects manually, or you can set up lifecycle management on the bucket.
+    //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
+    //We set the lifecycle before we even try to delete the bucket so that if Google 500s trying to delete a bucket
+    //with too many files, we've still made progress by setting the lifecycle to delete the objects to help us clean up
+    //the bucket on another try. See CA-632.
+    //More info: http://bit.ly/1WCYhhf
+    val deleteEverythingRule = new Lifecycle.Rule()
+      .setAction(new Action().setType("Delete"))
+      .setCondition(new Condition().setAge(0))
+    val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule).asJava)
+    val patcher = buckets.patch(bucketName, new Bucket().setLifecycle(lifecycle))
+    retryWhen500orGoogleError(() => { executeGoogleRequest(patcher) })
+
+    // Now attempt to delete the bucket. If there were still objects in the bucket, we expect this to fail as the
+    // lifecycle manager has probably not run yet.
     val deleter = buckets.delete(bucketName)
     retryWithRecoverWhen500orGoogleError(() => {
       executeGoogleRequest(deleter)
@@ -348,17 +364,6 @@ class HttpGoogleServicesDAO(
     }) {
       //Google returns 409 Conflict if the bucket isn't empty.
       case t: HttpResponseException if t.getStatusCode == 409 =>
-        //Google doesn't let you delete buckets that are full.
-        //You can either remove all the objects manually, or you can set up lifecycle management on the bucket.
-        //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
-        //More info: http://bit.ly/1WCYhhf
-        val deleteEverythingRule = new Lifecycle.Rule()
-          .setAction(new Action().setType("Delete"))
-          .setCondition(new Condition().setAge(0))
-        val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule).asJava)
-        val patcher = buckets.patch(bucketName, new Bucket().setLifecycle(lifecycle))
-        retryWhen500orGoogleError(() => { executeGoogleRequest(patcher) })
-
         false
       // Bucket is already deleted
       case t: HttpResponseException if t.getStatusCode == 404 =>

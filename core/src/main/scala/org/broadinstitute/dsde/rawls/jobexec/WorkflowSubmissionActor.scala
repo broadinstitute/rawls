@@ -58,6 +58,7 @@ object WorkflowSubmissionActor {
 
 }
 
+//noinspection TypeAnnotation
 class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val methodRepoDAO: MethodRepoDAO,
                               val googleServicesDAO: GoogleServicesDAO,
@@ -109,6 +110,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
   }
 }
 
+//noinspection ScalaUnnecessaryParentheses,TypeAnnotation,RedundantBlock,DuplicatedCode,ScalaUnusedSymbol
 trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths with RawlsInstrumented {
   val dataSource: SlickDataSource
   val methodRepoDAO: MethodRepoDAO
@@ -183,7 +185,15 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
   }
 
-  def buildWorkflowOpts(workspace: WorkspaceRecord, submissionId: UUID, userEmail: RawlsUserEmail, petSAJson: String, billingProject: RawlsBillingProject, useCallCache: Boolean, workflowFailureMode: Option[WorkflowFailureMode]) = {
+  def buildWorkflowOpts(workspace: WorkspaceRecord,
+                        submissionId: UUID,
+                        userEmail: RawlsUserEmail,
+                        petSAJson: String,
+                        billingProject: RawlsBillingProject,
+                        useCallCache: Boolean,
+                        deleteIntermediateOutputFiles: Boolean,
+                        workflowFailureMode: Option[WorkflowFailureMode]
+                       ): ExecutionServiceWorkflowOptions = {
     val petSAEmail = petSAJson.parseJson.asJsObject.getFields("client_email").headOption match {
       case Some(JsString(value)) => value
       case Some(x) => throw new RawlsException(s"unexpected json value for client_email [$x] in service account key")
@@ -200,18 +210,17 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       s"gs://${workspace.bucketName}/${submissionId}/workflow.logs",
       runtimeOptions,
       useCallCache,
+      deleteIntermediateOutputFiles,
       billingProject.cromwellBackend.getOrElse(defaultBackend),
       workflowFailureMode,
       google_labels = Map("terra-submission-id" -> s"terra-${submissionId.toString}")
     )
   }
 
-  def getWdl(methodConfig: MethodConfiguration, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[String] = {
-    dataSource.inTransaction { dataAccess => //this is a transaction that makes no database calls, but the sprawling stack of withFoos was too hard to unpick :(
-      withMethod(methodConfig.methodRepoMethod, userInfo) { method =>
-        withWdl(method) { wdl =>
-          DBIO.successful(wdl)
-        }
+  def getWdl(methodConfig: MethodConfiguration, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[WDL] = {
+    dataSource.inTransaction { _ => //this is a transaction that makes no database calls, but the sprawling stack of withFoos was too hard to unpick :(
+      withMethod(methodConfig.methodRepoMethod, userInfo) { wdl: WDL =>
+        DBIO.successful(wdl)
       }
     }
   }
@@ -310,7 +319,16 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       wdl <- getWdl(methodConfig, petUserInfo)
     } yield {
 
-      val wfOpts = buildWorkflowOpts(workspaceRec, submissionRec.id, RawlsUserEmail(submissionRec.submitterEmail), petSAJson, billingProject, submissionRec.useCallCache, WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
+      val wfOpts = buildWorkflowOpts(
+        workspace = workspaceRec,
+        submissionId = submissionRec.id,
+        userEmail = RawlsUserEmail(submissionRec.submitterEmail),
+        petSAJson = petSAJson,
+        billingProject = billingProject,
+        useCallCache = submissionRec.useCallCache,
+        deleteIntermediateOutputFiles = submissionRec.deleteIntermediateOutputFiles,
+        workflowFailureMode = WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode)
+      )
         val submissionAndWorkspaceLabels = Map("submission-id" -> submissionRec.id.toString,  "workspace-id" -> workspaceRec.id.toString)
         val wfLabels = workspaceRec.workflowCollection match {
           case Some(workflowCollection) if useWorkflowCollectionLabel => submissionAndWorkspaceLabels + ("caas-collection-name" -> workflowCollection)

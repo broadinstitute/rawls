@@ -26,12 +26,13 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import scala.concurrent.{Await, Future}
-import scala.concurrent.duration.{FiniteDuration, _}
+import scala.concurrent.duration._
 import scala.language.postfixOps
 
 /**
  * Created by dvoet on 5/17/16.
  */
+//noinspection TypeAnnotation,NameBooleanParameters,ScalaUnnecessaryParentheses,ScalaUnusedSymbol
 class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with BeforeAndAfterEach with RawlsTestUtils with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
   import driver.api._
   implicit val materializer = ActorMaterializer()
@@ -240,16 +241,19 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       assertResult(
         Some(
           ExecutionServiceWorkflowOptions(
-            s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}",
-            testData.wsName.namespace,
-            testData.userOwner.userEmail.value,
-            "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com",
+            jes_gcs_root = s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}",
+            google_project = testData.wsName.namespace,
+            account_name = testData.userOwner.userEmail.value,
+            google_compute_service_account = "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com",
+            user_service_account_json =
             """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}""",
-            testData.billingProject.cromwellAuthBucketUrl,
-            s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
-            Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
-            false,
-            CromwellBackend("PAPIv2"),
+            auth_bucket = testData.billingProject.cromwellAuthBucketUrl,
+            final_workflow_log_dir =
+              s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
+            default_runtime_attributes = Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
+            read_from_cache = false,
+            delete_intermediate_output_files = false,
+            backend = CromwellBackend("PAPIv2"),
             google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}")
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
@@ -448,7 +452,12 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         methodConfigResolver)
       )
 
-      awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).exists(_ == WorkflowStatuses.Submitted.toString), 10 seconds)
+      awaitCond(
+        runAndWait(
+          workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result
+        ).contains(WorkflowStatuses.Submitted.toString),
+        10.seconds
+      )
       workflowSubmissionActor ! PoisonPill
     } { capturedMetrics =>
       // should be 2 submitted, 1 failed per the mock Cromwell server

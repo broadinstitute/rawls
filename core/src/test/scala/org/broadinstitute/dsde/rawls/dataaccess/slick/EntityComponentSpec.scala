@@ -1066,4 +1066,21 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assertResult(expected)(entityStats.toSet)
   }
 
+  it should "delete all values in an attribute list" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { wsctx =>
+      val entityToSave = Entity("testName", "testType", Map(AttributeName.withDefaultNS("attributeListToDelete") -> AttributeValueList(List(
+        AttributeNumber(1), AttributeNumber(2), AttributeNumber(3), AttributeNumber(4), AttributeNumber(5)))))
+
+      runAndWait(entityQuery.save(wsctx, entityToSave))
+
+      val initialResult = runAndWait(entityQuery.get(wsctx, entityToSave.entityType, entityToSave.name))
+      assert(initialResult.get.attributes.nonEmpty)
+
+      runAndWait(entityQuery.saveEntityPatch(wsctx, entityToSave.toReference, Map.empty, List(AttributeName.withDefaultNS("attributeListToDelete"))))
+
+      val updatedResult = runAndWait(entityQuery.get(wsctx, entityToSave.entityType, entityToSave.name))
+      assert(updatedResult.get.attributes.isEmpty)
+    }
+  }
+
 }

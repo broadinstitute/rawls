@@ -27,15 +27,13 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.language.implicitConversions
-import scala.language.postfixOps
+import scala.language.{implicitConversions, postfixOps}
 
 // initialize database tables and connection pool only once
 object DbResource {
   // to override, e.g. to run against mysql:
   // $ sbt -Dtestdb=mysql test
   private val testdb = ConfigFactory.load.getStringOr("testdb", "mysql")
-  private val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
 
   val dataConfig = DatabaseConfig.forConfig[JdbcProfile](testdb)
 
@@ -49,6 +47,7 @@ object DbResource {
 /**
  * Created by dvoet on 2/3/16.
  */
+//noinspection TypeAnnotation,NameBooleanParameters,SqlDialectInspection,JavaMutatorMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,SqlNoDataSourceInspection,RedundantBlock,ScalaUnusedSymbol
 trait TestDriverComponent extends DriverComponent with DataAccess with DefaultInstrumented {
   this: Suite =>
 
@@ -93,19 +92,40 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   import driver.api._
 
-  def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, rawlsUserEmail: WorkbenchEmail,
-                           workflowEntities: Seq[Entity], inputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
-                           failedWorkflowEntities: Seq[Entity], failedInputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
-                           status: WorkflowStatus = WorkflowStatuses.Submitted, useCallCache: Boolean = false,
-                           workflowFailureMode: Option[WorkflowFailureMode] = None, individualWorkflowCost: Option[Float] = None): Submission = {
+  def createTestSubmission(workspace: Workspace,
+                           methodConfig: MethodConfiguration,
+                           submissionEntity: Entity,
+                           rawlsUserEmail: WorkbenchEmail,
+                           workflowEntities: Seq[Entity],
+                           inputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
+                           failedWorkflowEntities: Seq[Entity],
+                           failedInputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
+                           status: WorkflowStatus = WorkflowStatuses.Submitted,
+                           useCallCache: Boolean = false,
+                           deleteIntermediateOutputFiles: Boolean = false,
+                           workflowFailureMode: Option[WorkflowFailureMode] = None,
+                           individualWorkflowCost: Option[Float] = None
+                          ): Submission = {
 
     val workflows = workflowEntities map { ref =>
       val uuid = if(status == WorkflowStatuses.Queued) None else Option(UUID.randomUUID.toString)
       Workflow(uuid, status, testDate, Some(ref.toReference), inputResolutions(ref), cost = individualWorkflowCost)
     }
 
-    Submission(UUID.randomUUID.toString, testDate, rawlsUserEmail, methodConfig.namespace, methodConfig.name, Some(submissionEntity.toReference),
-      workflows, SubmissionStatuses.Submitted, useCallCache, workflowFailureMode, individualWorkflowCost.map (_ * workflows.length))
+    Submission(
+      submissionId = UUID.randomUUID.toString,
+      submissionDate = testDate,
+      submitter = rawlsUserEmail,
+      methodConfigurationNamespace = methodConfig.namespace,
+      methodConfigurationName = methodConfig.name,
+      submissionEntity = Option(submissionEntity.toReference),
+      workflows = workflows,
+      status = SubmissionStatuses.Submitted,
+      useCallCache = useCallCache,
+      deleteIntermediateOutputFiles = deleteIntermediateOutputFiles,
+      workflowFailureMode = workflowFailureMode,
+      cost = individualWorkflowCost.map(_ * workflows.length)
+    )
   }
 
   def billingProjectFromName(name: String) = (RawlsBillingProject(RawlsBillingProjectName(name), "mockBucketUrl", CreationStatuses.Ready, None, None))
@@ -163,6 +183,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     }
   }
 
+  //noinspection TypeAnnotation,ScalaUnnecessaryParentheses,ScalaUnusedSymbol
   class DefaultTestData() extends TestData {
     // setup workspace objects
     val userProjectOwner = RawlsUser(UserInfo(RawlsUserEmail("project-owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543210101")))
@@ -419,63 +440,317 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Seq(indiv1), Map(indiv1 -> missingOutputResolutions), Seq(), Map())
 
     //NOTE: This is deliberately not saved in the list of active submissions!
-    val submissionNoRootEntity = Submission(UUID.randomUUID().toString(),testDate, WorkbenchEmail(userOwner.userEmail.value),methodConfigValid.namespace,methodConfigValid.name,None,
-      Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted, testDate, None, inputResolutions)), SubmissionStatuses.Submitted, false)
+    val submissionNoRootEntity = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = methodConfigValid.namespace,
+      methodConfigurationName = methodConfigValid.name,submissionEntity = None,
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowA"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = None,
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Submitted,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
-    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, WorkbenchEmail(userOwner.userEmail.value),agoraMethodConfig.namespace,agoraMethodConfig.name,Some(indiv1.toReference),
-      Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,Some(sample1.toReference), inputResolutions),
-        Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,Some(sample2.toReference), inputResolutions),
-        Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,Some(sample3.toReference), inputResolutions),
-        Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,Some(sample4.toReference), inputResolutions)), SubmissionStatuses.Submitted, false)
+    val submissionTerminateTest = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name,
+      submissionEntity = Option(indiv1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowA"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        ),
+        Workflow(
+          workflowId = Option("workflowB"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample2.toReference),
+          inputResolutions = inputResolutions
+        ),
+        Workflow(
+          workflowId = Option("workflowC"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample3.toReference),
+          inputResolutions = inputResolutions
+        ),
+        Workflow(
+          workflowId = Option("workflowD"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample4.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Submitted,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
     //a submission with a succeeeded workflow
-    val submissionSuccessful1 = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
-      Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
+    val submissionSuccessful1 = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowSuccessful1"),
+          status = WorkflowStatuses.Succeeded,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Done,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
     //a submission with a succeeeded workflow
-    val submissionSuccessful2 = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
-      Seq(Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
+    val submissionSuccessful2 = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowSuccessful2"),
+          status = WorkflowStatuses.Succeeded,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Done,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
     //a submission with a failed workflow
-    val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
-      Seq(Workflow(Option("worklowFailed"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
+    val submissionFailed = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("worklowFailed"),
+          status = WorkflowStatuses.Failed,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Done,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
     //a submission with a submitted workflow
-    val submissionSubmitted = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
-      Seq(Workflow(Option("workflowSubmitted"), WorkflowStatuses.Submitted, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Submitted, false)
+    val submissionSubmitted = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowSubmitted"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Submitted,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
     //a submission with an aborted workflow
-    val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
-      Seq(Workflow(Option("workflowAborted1"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Aborted, false)
+    val submissionAborted1 = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowAborted1"),
+          status = WorkflowStatuses.Failed,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Aborted,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
     //a submission with an aborted workflow
-    val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
-      Seq(Workflow(Option("workflowAborted2"), WorkflowStatuses.Failed, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Aborted, false)
+    val submissionAborted2 = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowAborted2"),
+          status = WorkflowStatuses.Failed,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Aborted,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
     //a submission with multiple failed and succeeded workflows
-    val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
-      Seq(Workflow(Option("workflowSuccessful3"), WorkflowStatuses.Succeeded, testDate, Some(sample1.toReference), inputResolutions),
-        Workflow(Option("workflowSuccessful4"), WorkflowStatuses.Succeeded, testDate, Some(sample2.toReference), inputResolutions),
-        Workflow(Option("worklowFailed1"), WorkflowStatuses.Failed, testDate, Some(sample3.toReference), inputResolutions),
-        Workflow(Option("workflowFailed2"), WorkflowStatuses.Failed, testDate, Some(sample4.toReference), inputResolutions),
-        Workflow(Option("workflowSubmitted1"), WorkflowStatuses.Submitted, testDate, Some(sample5.toReference), inputResolutions),
-        Workflow(Option("workflowSubmitted2"), WorkflowStatuses.Submitted, testDate, Some(sample6.toReference), inputResolutions)
-      ), SubmissionStatuses.Submitted, false)
+    val submissionMixed = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name,
+      submissionEntity = Option(indiv1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowSuccessful3"),
+          status = WorkflowStatuses.Succeeded,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        ),
+        Workflow(
+          workflowId = Option("workflowSuccessful4"),
+          status = WorkflowStatuses.Succeeded,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample2.toReference),
+          inputResolutions = inputResolutions
+        ),
+        Workflow(
+          workflowId = Option("worklowFailed1"),
+          status = WorkflowStatuses.Failed,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample3.toReference),
+          inputResolutions = inputResolutions
+        ),
+        Workflow(
+          workflowId = Option("workflowFailed2"),
+          status = WorkflowStatuses.Failed,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample4.toReference),
+          inputResolutions = inputResolutions
+        ),
+        Workflow(
+          workflowId = Option("workflowSubmitted1"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample5.toReference),
+          inputResolutions = inputResolutions
+        ),
+        Workflow(
+          workflowId = Option("workflowSubmitted2"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample6.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Submitted,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
     //two submissions interleaved in time
     val t1 = new DateTime(2017, 1, 1, 5, 10)
     val t2 = new DateTime(2017, 1, 1, 5, 15)
     val t3 = new DateTime(2017, 1, 1, 5, 20)
     val t4 = new DateTime(2017, 1, 1, 5, 30)
-    val outerSubmission = Submission(UUID.randomUUID().toString(), t1, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
-      Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, t4, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
-    val innerSubmission = Submission(UUID.randomUUID().toString(), t2, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
-      Seq(Workflow(Option("workflowFailed1"), WorkflowStatuses.Failed, t3, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Done, false)
+    val outerSubmission = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = t1,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowSuccessful1"),
+          status = WorkflowStatuses.Succeeded,
+          statusLastChangedDate = t4,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Done,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+    val innerSubmission = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = t2,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowFailed1"),
+          status = WorkflowStatuses.Failed,
+          statusLastChangedDate = t3,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Done,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
 
     // a submission with a submitted workflow and a custom workflow failure mode
-    val submissionWorkflowFailureMode = Submission(UUID.randomUUID().toString(), testDate, WorkbenchEmail(userOwner.userEmail.value), agoraMethodConfig.namespace, agoraMethodConfig.name, Some(indiv1.toReference),
-      Seq(Workflow(Option("workflowFailureMode"), WorkflowStatuses.Submitted, testDate, Some(sample1.toReference), inputResolutions)), SubmissionStatuses.Submitted, false,
-      Some(WorkflowFailureModes.ContinueWhilePossible))
+    val submissionWorkflowFailureMode = Submission(
+      submissionId = UUID.randomUUID().toString,
+      submissionDate = testDate,
+      submitter = WorkbenchEmail(userOwner.userEmail.value),
+      methodConfigurationNamespace = agoraMethodConfig.namespace,
+      methodConfigurationName = agoraMethodConfig.name,
+      submissionEntity = Option(indiv1.toReference),
+      workflows = Seq(
+        Workflow(
+          workflowId = Option("workflowFailureMode"),
+          status = WorkflowStatuses.Submitted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Submitted,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false,
+      workflowFailureMode = Option(WorkflowFailureModes.ContinueWhilePossible)
+    )
 
     val allWorkspaces = Seq(
       workspace,
@@ -871,7 +1146,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
 
   val threeStepWDL =
-    """
+    WdlSource("""
       |task ps {
       |  command {
       |    ps
@@ -911,7 +1186,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       |    input: in_file=ps.procs
       |  }
       |}
-    """.stripMargin
+    """.stripMargin)
 
   val threeStepWDLName = "three_step"
 
@@ -922,23 +1197,18 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val threeStepWDLWorkflowDescription = makeWorkflowDescription(threeStepWDLName, List(patternInput), List(cgrepcountOutput, wccountOutput, psprocsOutput))
   mockCromwellSwaggerClient.workflowDescriptions += (threeStepWDL -> threeStepWDLWorkflowDescription)
 
-  val threeStepMethod = AgoraEntity(Some("dsde"),Some(threeStepWDLName),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
+  val threeStepMethod = AgoraEntity(Some("dsde"),Some(threeStepWDLName),Some(1),None,None,None,None,Option(threeStepWDL.source),None,Some(AgoraEntityType.Workflow))
 
   val threeStepDockstoreWDLName = threeStepWDLName + "_dockstore"
-  // Match the Dockstore GA4GH path and simulate responses - only need GET on ga4ghDescriptorUrl
-  val threeStepDockstoreWDL = threeStepWDL.replace(threeStepWDLName, threeStepDockstoreWDLName)
-  val dockstoreResponse =
-    s"""{"type":"WDL","descriptor":"${threeStepDockstoreWDL.replace("\n","\\n")}","url":"bogus"}"""
-
   val patternInputDockstore = makeToolInputParameter("cgrep.pattern", false, makeValueType("String"), "String")
   val cgrepcountOutputDockstore = makeToolOutputParameter("cgrep.count", makeValueType("Int"), "Int")
   val wccountOutputDockstore = makeToolOutputParameter("wc.count", makeValueType("Int"), "Int")
   val psprocsOutputDockstore = makeToolOutputParameter("ps.procs", makeValueType("File"), "File")
   val threeStepDockStoreWDLWorkflowDescription = makeWorkflowDescription(threeStepDockstoreWDLName, List(patternInputDockstore), List(cgrepcountOutputDockstore, wccountOutputDockstore, psprocsOutputDockstore))
-  mockCromwellSwaggerClient.workflowDescriptions += (threeStepDockstoreWDL -> threeStepDockStoreWDLWorkflowDescription )
+  mockCromwellSwaggerClient.workflowDescriptions += WdlUrl("/url-to-github/from/ga4gh-url-field/three-step-dockstore") -> threeStepDockStoreWDLWorkflowDescription
 
   val noInputWdl =
-    """
+    WdlSource("""
       |task t1 {
       |  command {
       |    echo "Hello"
@@ -948,22 +1218,24 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       |workflow w1 {
       |  call t1
       |}
-    """.stripMargin
+    """.stripMargin)
 
   val noInputWdlWorkflowDescription = makeWorkflowDescription("w1", List(), List())
   mockCromwellSwaggerClient.workflowDescriptions += (noInputWdl -> noInputWdlWorkflowDescription)
 
+  val noInputMethodDockstoreWDLSource =
+    noInputWdl.source.replace("t1", "t1_dockstore")
   val noInputMethodDockstoreResponse =
-    s"""{"type":"WDL","descriptor":"${noInputWdl.replace("t1", "t1_dockstore").replace("\"", "\\\"").replace("\n","\\n")}","url":"bogus"}"""
+    s"""{"type":"WDL","descriptor":"${noInputMethodDockstoreWDLSource.replace("\"", "\\\"").replace("\n","\\n")}","url":"/url-to-github/from/ga4gh-url-field/no-input-dockstore"}"""
   val noInputMethodDockstoreWorkflowDescription = makeWorkflowDescription("w1", List(), List())
-  mockCromwellSwaggerClient.workflowDescriptions += (noInputWdl.replace("t1", "t1_dockstore") -> noInputWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += WdlUrl("/url-to-github/from/ga4gh-url-field/no-input-dockstore") -> noInputWdlWorkflowDescription
 
 
-  val noInputMethod = AgoraEntity(Some("dsde"), Some("no_input"), Some(1), None, None, None, None, Some(noInputWdl), None, Some(AgoraEntityType.Workflow))
+  val noInputMethod = AgoraEntity(Some("dsde"), Some("no_input"), Some(1), None, None, None, None, Option(noInputWdl.source), None, Some(AgoraEntityType.Workflow))
 
 
   val goodAndBadInputsWDL =
-    """
+    WdlSource("""
       |workflow goodAndBad {
       |  call goodAndBadTask
       |}
@@ -980,7 +1252,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       |    String empty_out = "everything is empty"
       |  }
       |}
-    """.stripMargin
+    """.stripMargin)
 
   val goodAndBadWDLName = "goodAndBad"
   val badIn = makeToolInputParameter("goodAndBadTask.bad_in", false, makeValueType("String"), "String")
@@ -992,7 +1264,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   mockCromwellSwaggerClient.workflowDescriptions += (goodAndBadInputsWDL -> goodAndBadWDLWorkflowDescription)
 
   val meth1WDL =
-    """
+    WdlSource("""
       |workflow meth1 {
       |  call method1
       |}
@@ -1006,16 +1278,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       |    String o1 = "output one"
       |  }
       |}
-    """.stripMargin
+    """.stripMargin)
 
   val meth1WDLName = "meth1"
   val i1Input = makeToolInputParameter("method1.i1", false, makeValueType("String"), "String")
   val o1Output = makeToolOutputParameter("method1.o1", makeValueType("String"), "String")
   val meth1WDLWorkflowDescription = makeWorkflowDescription(meth1WDLName, List(i1Input), List(o1Output))
   mockCromwellSwaggerClient.workflowDescriptions += (meth1WDL -> meth1WDLWorkflowDescription)
-  val testComponentThing = "Uhhh...can we get stuff from this class???"
-
-
 
 }
 

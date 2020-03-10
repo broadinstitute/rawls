@@ -4,14 +4,14 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import cats.effect.IO
+import cats.effect.Blocker
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
-import org.broadinstitute.dsde.workbench.fixture.{MethodData, SimpleMethodConfig, _}
-import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, StorageRole}
+import org.broadinstitute.dsde.workbench.fixture._
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GoogleProject, ServiceAccount}
 import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry}
@@ -25,10 +25,11 @@ import org.scalatest.{FreeSpecLike, Matchers}
 import spray.json._
 
 import scala.collection.JavaConverters._
-import scala.concurrent.Await
+import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+//noinspection ScalaUnnecessaryParentheses,JavaAccessorEmptyParenCall,ScalaUnusedSymbol
 class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
   with CleanUp with RandomUtil with Retry
   with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures with RawlsTestSuite {
@@ -124,9 +125,16 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
 
             val submissionId = Rawls.submissions.launchWorkflow(
-              projectName, workspaceName,
-              topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
-              "participant", SingleParticipant.entityId, "this", useCallCache = false)
+              projectName,
+              workspaceName,
+              topLevelMethodConfiguration.configNamespace,
+              topLevelMethodConfiguration.configName,
+              "participant",
+              SingleParticipant.entityId,
+              "this",
+              useCallCache = false,
+              deleteIntermediateOutputFiles = false
+            )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
@@ -432,9 +440,16 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
             Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
 
             val submissionId = Rawls.submissions.launchWorkflow(
-              projectName, workspaceName,
-              SimpleMethodConfig.configNamespace, SimpleMethodConfig.configName,
-              "participant", SingleParticipant.entityId, "this", useCallCache = false)
+              projectName,
+              workspaceName,
+              SimpleMethodConfig.configNamespace,
+              SimpleMethodConfig.configName,
+              "participant",
+              SingleParticipant.entityId,
+              "this",
+              useCallCache = false,
+              deleteIntermediateOutputFiles = false
+            )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
@@ -475,11 +490,12 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with
     samPolicies
   }
 
-  private val serviceAccountEmailDomain = ".gserviceaccount.com"
-
   // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
   private def getBucketRolesWithEmails(bucketName: GcsBucketName)(implicit patienceConfig: PatienceConfig): List[(String, Set[String])] = {
-    GoogleStorageService.resource(RawlsConfig.pathToQAJson).use {
+    GoogleStorageService.resource(
+      RawlsConfig.pathToQAJson,
+      Blocker.liftExecutionContext(scala.concurrent.ExecutionContext.global)
+    ).use {
       storage =>
         for {
          policy <- storage.getIamPolicy(bucketName, None).compile.lastOrError

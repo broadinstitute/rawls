@@ -13,17 +13,26 @@ import scala.concurrent.duration._
 import akka.http.scaladsl.testkit.RouteTestTimeout
 import akka.http.scaladsl.model.headers.Location
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.makeBadWorkflowDescription
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 
 /**
  * Created by dvoet on 4/24/15.
  */
-class MethodConfigApiServiceSpec extends ApiServiceSpec {
+class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   override implicit val routeTestTimeout = RouteTestTimeout(500.seconds)
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+
+  val badWdlFromMockServer = WdlSource("Bad syntax workflow returned from Agora mock server")
+  val badWdlFromMockServerDescription =
+    makeBadWorkflowDescription(
+      "Agora-bad-wdl", List("ERROR: Finished parsing without consuming all tokens.\n\nBad syntax workflow returned from Agora mock server\n^\n     ")
+    )
+  mockCromwellSwaggerClient.workflowDescriptions += (badWdlFromMockServer -> badWdlFromMockServerDescription)
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
@@ -960,6 +969,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
+        assert(response.entity.toString.contains(
+          "ERROR: Finished parsing without consuming all tokens."
+        ))
+        assert(response.entity.toString.contains(
+          "Bad syntax workflow returned from Agora mock server"
+        ))
       }
   }
 
@@ -968,6 +983,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
+        assert(response.entity.toString.contains(
+          "ERROR: Finished parsing without consuming all tokens."
+        ))
+        assert(response.entity.toString.contains(
+          "Bad syntax workflow returned from Agora mock server"
+        ))
       }
   }
 

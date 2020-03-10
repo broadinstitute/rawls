@@ -3,10 +3,11 @@ import sbt._
 object Dependencies {
   val akkaV = "2.5.19"
   val akkaHttpV = "10.1.7"
-  val slickV = "3.3.0"
+  val slickV = "3.3.2"
 
   val googleV = "1.22.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
+  val workbenchGoogle2V = "0.6-4df42ca"
 
   val cromwellVersion = "40-2754783"
 
@@ -59,7 +60,7 @@ object Dependencies {
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.4"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.3.0"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.27"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
   val swaggerUI: ModuleID =       "org.webjars"                   % "swagger-ui"            % "2.2.5"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.3"  // upgrading a transitive dependency to avoid security warnings
@@ -81,7 +82,10 @@ object Dependencies {
   val workbenchGoogleV = "0.21-890a74f"
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
   val workbenchGoogleMocks: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
-  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % "0.6-4df42ca" excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
+  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V excludeAll(excludeWorkbenchModel, excludeWorkbenchUtil)
+  val workbenchGoogle2Tests: ModuleID =    "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests" excludeAll(excludeWorkbenchUtil, excludeWorkbenchModel)
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.111.0-alpha" % "test"
+
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % "0.5-d4b4838" excludeAll(excludeWorkbenchModel)
   val log4cats = "io.chrisdavenport" %% "log4cats-slf4j"   % "0.3.0"
 
@@ -190,6 +194,8 @@ object Dependencies {
     workbenchModel,
     workbenchGoogle,
     workbenchGoogle2,
+    workbenchGoogle2Tests,
+    googleStorageLocal,
     workbenchGoogleMocks,
     workbenchUtil,
     ficus,

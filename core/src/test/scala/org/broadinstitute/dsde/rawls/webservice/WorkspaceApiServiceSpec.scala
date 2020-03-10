@@ -28,6 +28,7 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
  * Created by dvoet on 4/24/15.
  */
+//noinspection TypeAnnotation,TypeAnnotation,NameBooleanParameters,RedundantNewCaseClass,NameBooleanParameters
 class WorkspaceApiServiceSpec extends ApiServiceSpec {
   import driver.api._
 
@@ -1336,7 +1337,16 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionRequestFormat
 
-    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, Some(submissionEntity.entityType), Some(submissionEntity.name), submissionExpression, false, None)
+    val submissionRq = SubmissionRequest(
+      methodConfigurationNamespace = methodConf.namespace,
+      methodConfigurationName = methodConf.name,
+      entityType = Option(submissionEntity.entityType),
+      entityName = Option(submissionEntity.name),
+      expression = submissionExpression,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false,
+      workflowFailureMode = None
+    )
     Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
       sealRoute(services.submissionRoutes) ~>
       check {

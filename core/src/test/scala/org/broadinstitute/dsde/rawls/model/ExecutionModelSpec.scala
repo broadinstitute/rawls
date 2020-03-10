@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.scalatest.{FlatSpec, Matchers}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import spray.json._
@@ -8,7 +7,60 @@ import spray.json._
 /**
   * Created by rtitle on 5/7/17.
   */
-class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
+class ExecutionModelSpec extends FlatSpec with Matchers {
+
+  "SubmissionRequest deserialization" should "translate null to None" in {
+    import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionRequestFormat
+
+    // We know `null` is possible for `entityType` and `entityName` because this JSON is derived
+    // from what the FC UI actually generated and came through in the user report [WA-135]
+    val inputJSON = """{
+       |"methodConfigurationNamespace": "asdf",
+       |"methodConfigurationName": "echo",
+       |"entityType": null,
+       |"entityName": null,
+       |"useCallCache": true,
+       |"expression": null,
+       |"workflowFailureMode": null,
+       |"deleteIntermediateOutputFiles": false
+       |}""".stripMargin.parseJson.asJsObject
+
+    SubmissionRequestFormat.read(inputJSON) shouldEqual {
+      SubmissionRequest(
+        methodConfigurationNamespace = "asdf",
+        methodConfigurationName = "echo",
+        useCallCache = true,
+        entityType = None,
+        entityName = None,
+        expression = None,
+        workflowFailureMode = None,
+        deleteIntermediateOutputFiles = false
+      )
+    }
+  }
+
+  "SubmissionRequest deserialization" should "translate missing fields to None" in {
+    import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionRequestFormat
+
+    val inputJSON = """{
+                      |"methodConfigurationNamespace": "asdf",
+                      |"methodConfigurationName": "echo",
+                      |"useCallCache": true
+                      |}""".stripMargin.parseJson.asJsObject
+
+    SubmissionRequestFormat.read(inputJSON) shouldEqual {
+      SubmissionRequest(
+        methodConfigurationNamespace = "asdf",
+        methodConfigurationName = "echo",
+        useCallCache = true,
+        entityType = None,
+        entityName = None,
+        expression = None,
+        workflowFailureMode = None,
+        deleteIntermediateOutputFiles = false
+      )
+    }
+  }
 
   "WorkflowQueueStatusByUserResponse" should "serialize/deserialize to/from JSON" in {
     val testResponse = WorkflowQueueStatusByUserResponse(
@@ -68,28 +120,30 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
 
   "ExecutionServiceWorkflowOptions" should "serialize/deserialize to/from JSON" in {
     val test = ExecutionServiceWorkflowOptions(
-      "jes_gcs_root",
-      "google_project",
-      "account_name",
-      "account@foo.com",
-      """{
-        |  "type": "service_account",
-        |  "project_id": "broad-dsde-dev",
-        |  "proovate_key_id": "120924d141277cef7a976320d3dc3e4e298ac447",
-        |  "proovate_key": "-----BEGIN proovate KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCJbNtO6w2ExfGg\n-----END proovate KEY-----\n",
-        |  "client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com",
-        |  "client_id": "110086970853956779852",
-        |  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        |  "token_uri": "https://accounts.google.com/o/oauth2/token",
-        |  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        |  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com"
-        |}""".stripMargin,
-      "auth_bucket",
-      "final_workflow_log_dir",
-      None,
-      true,
-      CromwellBackend("PAPIv2"),
-      Some(WorkflowFailureModes.ContinueWhilePossible)
+      jes_gcs_root = "jes_gcs_root",
+      google_project = "google_project",
+      account_name = "account_name",
+      google_compute_service_account = "account@foo.com",
+      user_service_account_json =
+        """{
+          |  "type": "service_account",
+          |  "project_id": "broad-dsde-dev",
+          |  "proovate_key_id": "120924d141277cef7a976320d3dc3e4e298ac447",
+          |  "proovate_key": "-----BEGIN proovate KEY-----\naloha\n-----END proovate KEY-----\n",
+          |  "client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com",
+          |  "client_id": "110086970853956779852",
+          |  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+          |  "token_uri": "https://accounts.google.com/o/oauth2/token",
+          |  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+          |  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com"
+          |}""".stripMargin,
+      auth_bucket = "auth_bucket",
+      final_workflow_log_dir = "final_workflow_log_dir",
+      default_runtime_attributes = None,
+      read_from_cache = true,
+      delete_intermediate_output_files = true,
+      backend = CromwellBackend("PAPIv2"),
+      workflow_failure_mode = Some(WorkflowFailureModes.ContinueWhilePossible)
     )
 
     val expectedJson =
@@ -100,10 +154,11 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
         |  "account_name": "account_name",
         |  "google_compute_service_account": "account@foo.com",
         |  "google_labels": {},
-        |  "user_service_account_json": "{\n  \"type\": \"service_account\",\n  \"project_id\": \"broad-dsde-dev\",\n  \"proovate_key_id\": \"120924d141277cef7a976320d3dc3e4e298ac447\",\n  \"proovate_key\": \"-----BEGIN proovate KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCJbNtO6w2ExfGg\\n-----END proovate KEY-----\\n\",\n  \"client_email\": \"pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com\",\n  \"client_id\": \"110086970853956779852\",\n  \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n  \"token_uri\": \"https://accounts.google.com/o/oauth2/token\",\n  \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n  \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com\"\n}",
+        |  "user_service_account_json": "{\n  \"type\": \"service_account\",\n  \"project_id\": \"broad-dsde-dev\",\n  \"proovate_key_id\": \"120924d141277cef7a976320d3dc3e4e298ac447\",\n  \"proovate_key\": \"-----BEGIN proovate KEY-----\\naloha\\n-----END proovate KEY-----\\n\",\n  \"client_email\": \"pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com\",\n  \"client_id\": \"110086970853956779852\",\n  \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n  \"token_uri\": \"https://accounts.google.com/o/oauth2/token\",\n  \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n  \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com\"\n}",
         |  "auth_bucket": "auth_bucket",
         |  "final_workflow_log_dir": "final_workflow_log_dir",
         |  "read_from_cache": true,
+        |  "delete_intermediate_output_files": true,
         |  "backend": "PAPIv2",
         |  "workflow_failure_mode": "ContinueWhilePossible"
         |}
@@ -124,10 +179,11 @@ class ExecutionModelSpec extends FlatSpec with Matchers with RawlsTestUtils {
         |  "account_name": "account_name",
         |  "google_compute_service_account": "account@foo.com",
         |  "google_labels": {},
-        |  "user_service_account_json": "{\n  \"type\": \"service_account\",\n  \"project_id\": \"broad-dsde-dev\",\n  \"proovate_key_id\": \"120924d141277cef7a976320d3dc3e4e298ac447\",\n  \"proovate_key\": \"-----BEGIN proovate KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCJbNtO6w2ExfGg\\n-----END proovate KEY-----\\n\",\n  \"client_email\": \"pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com\",\n  \"client_id\": \"110086970853956779852\",\n  \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n  \"token_uri\": \"https://accounts.google.com/o/oauth2/token\",\n  \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n  \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com\"\n}",
+        |  "user_service_account_json": "{\n  \"type\": \"service_account\",\n  \"project_id\": \"broad-dsde-dev\",\n  \"proovate_key_id\": \"120924d141277cef7a976320d3dc3e4e298ac447\",\n  \"proovate_key\": \"-----BEGIN proovate KEY-----\\naloha\\n-----END proovate KEY-----\\n\",\n  \"client_email\": \"pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com\",\n  \"client_id\": \"110086970853956779852\",\n  \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\",\n  \"token_uri\": \"https://accounts.google.com/o/oauth2/token\",\n  \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\",\n  \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/pet-110347448408766049948%40broad-dsde-dev.iam.gserviceaccount.com\"\n}",
         |  "auth_bucket": "auth_bucket",
         |  "final_workflow_log_dir": "final_workflow_log_dir",
         |  "read_from_cache": true,
+        |  "delete_intermediate_output_files": true,
         |  "backend": "PAPIv2"
         |}
       """.stripMargin.parseJson

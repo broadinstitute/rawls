@@ -27,6 +27,7 @@ case class SubmissionRecord(id: UUID,
                             submissionEntityId: Option[Long],
                             status: String,
                             useCallCache: Boolean,
+                            deleteIntermediateOutputFiles: Boolean,
                             workflowFailureMode: Option[String]
                            )
 
@@ -38,6 +39,7 @@ case class SubmissionValidationRecord(id: Long,
 
 case class SubmissionAuditStatusRecord(id: Long, submissionId: UUID, status: String, timestamp: Timestamp)
 
+//noinspection MutatorLikeMethodIsParameterless,TypeAnnotation,ScalaUnusedSymbol,ScalaUnnecessaryParentheses,TypeAnnotation,SqlDialectInspection,SqlNoDataSourceInspection,RedundantBlock,RedundantCollectionConversion,DuplicatedCode
 trait SubmissionComponent {
   this: DriverComponent
     with MethodConfigurationComponent
@@ -57,9 +59,21 @@ trait SubmissionComponent {
     def submissionEntityId = column[Option[Long]]("ENTITY_ID")
     def status = column[String]("STATUS", O.Length(32))
     def useCallCache = column[Boolean]("USE_CALL_CACHE")
+    def deleteIntermediateOutputFiles = column[Boolean]("DELETE_INTERMEDIATE_OUTPUT_FILES")
     def workflowFailureMode = column[Option[String]]("WORKFLOW_FAILURE_MODE", O.Length(32))
 
-    def * = (id, workspaceId, submissionDate, submitterId, methodConfigurationId, submissionEntityId, status, useCallCache, workflowFailureMode) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
+    def * = (
+      id,
+      workspaceId,
+      submissionDate,
+      submitterId,
+      methodConfigurationId,
+      submissionEntityId,
+      status,
+      useCallCache,
+      deleteIntermediateOutputFiles,
+      workflowFailureMode
+    ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def methodConfiguration = foreignKey("FK_SUB_METHOD_CONFIG", methodConfigurationId, methodConfigurationQuery)(_.id)
@@ -129,7 +143,7 @@ trait SubmissionComponent {
           val statusCounts = states.getOrElse(submissionRec.id, Seq.empty).map(x => Map(x.workflowStatus -> x.count)).foldLeft(Map.empty[String, Int])(_|+|_)
           val maybeWorkflowIds = states.getOrElse(submissionRec.id, Seq.empty).flatMap(_.workflowId).sorted
           val workflowIds = if (maybeWorkflowIds.nonEmpty) Some(maybeWorkflowIds) else None
-          SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), workflowIds, statusCounts)
+          SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.map(_.toReference), Seq.empty), workflowIds, statusCounts, config.deleted)
         }
       }
     }
@@ -376,6 +390,7 @@ trait SubmissionComponent {
         entityId,
         submission.status.toString,
         submission.useCallCache,
+        submission.deleteIntermediateOutputFiles,
         submission.workflowFailureMode.map(_.toString))
     }
 
@@ -390,6 +405,7 @@ trait SubmissionComponent {
         workflows.toList.sortBy(wf => wf.workflowEntity.map(_.entityName).getOrElse("")),
         SubmissionStatuses.withName(submissionRec.status),
         submissionRec.useCallCache,
+        submissionRec.deleteIntermediateOutputFiles,
         WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode))
     }
 

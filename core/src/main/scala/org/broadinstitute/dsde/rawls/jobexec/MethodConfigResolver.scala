@@ -56,11 +56,11 @@ class MethodConfigResolver(wdlParser: WDLParser) {
   }
 
 
-  def parseWDL(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
+  def parseWDL(userInfo: UserInfo, wdl: WDL)(implicit executionContext: ExecutionContext): Try[WorkflowDescription] = {
     wdlParser.parse(userInfo, wdl)
   }
 
-  def gatherInputs(userInfo: UserInfo, methodConfig: MethodConfiguration, wdl: String)(implicit executionContext: ExecutionContext): Try[GatherInputsResult] = parseWDL(userInfo, wdl) map { parsedWdlWorkflow =>
+  def gatherInputs(userInfo: UserInfo, methodConfig: MethodConfiguration, wdl: WDL)(implicit executionContext: ExecutionContext): Try[GatherInputsResult] = parseWDL(userInfo, wdl) map { parsedWdlWorkflow =>
     def isAttributeEmpty(fqn: String): Boolean = {
       methodConfig.inputs.get(fqn) match {
         case Some(AttributeString(value)) => value.isEmpty
@@ -139,7 +139,7 @@ class MethodConfigResolver(wdlParser: WDLParser) {
     }
   ) toString
 
-  def getMethodInputsOutputs(userInfo: UserInfo, wdl: String)(implicit executionContext: ExecutionContext): Try[MethodInputsOutputs] = parseWDL(userInfo, wdl) map { workflowDescription =>
+  def getMethodInputsOutputs(userInfo: UserInfo, wdl: WDL)(implicit executionContext: ExecutionContext): Try[MethodInputsOutputs] = parseWDL(userInfo, wdl) map { workflowDescription =>
     if (workflowDescription.getValid) {
       val inputs = workflowDescription.getInputs.asScala.toList map { input =>
         model.MethodInput(input.getName, input.getTypeDisplayName.replaceAll("\\n", ""), input.getOptional)
@@ -151,7 +151,7 @@ class MethodConfigResolver(wdlParser: WDLParser) {
   } else throw new RawlsException(workflowDescription.getErrors.asScala.mkString("\n"))
   }
 
-  def toMethodConfiguration(userInfo: UserInfo, wdl: String, methodRepoMethod: MethodRepoMethod)(implicit executionContext: ExecutionContext): Try[MethodConfiguration] = {
+  def toMethodConfiguration(userInfo: UserInfo, wdl: WDL, methodRepoMethod: MethodRepoMethod)(implicit executionContext: ExecutionContext): Try[MethodConfiguration] = {
     val empty = AttributeString("")
     getMethodInputsOutputs(userInfo, wdl) map { io =>
       val inputs = io.inputs map { _.name -> empty }

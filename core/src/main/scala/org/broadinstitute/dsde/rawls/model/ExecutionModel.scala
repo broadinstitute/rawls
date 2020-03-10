@@ -27,6 +27,7 @@ case class SubmissionRequest(
   entityName: Option[String],
   expression: Option[String],
   useCallCache: Boolean,
+  deleteIntermediateOutputFiles: Boolean,
   workflowFailureMode: Option[String] = None
 )
 
@@ -75,6 +76,7 @@ case class ExecutionServiceWorkflowOptions(
   final_workflow_log_dir: String,
   default_runtime_attributes: Option[JsValue],
   read_from_cache: Boolean,
+  delete_intermediate_output_files: Boolean,
   backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None,
   google_labels: Map[String, String] = Map.empty
@@ -125,6 +127,7 @@ case class Submission(
   workflows: Seq[Workflow],
   status: SubmissionStatus,
   useCallCache: Boolean,
+  deleteIntermediateOutputFiles: Boolean,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   cost: Option[Float] = None
 )
@@ -139,6 +142,7 @@ case class SubmissionStatusResponse(
   workflows: Seq[Workflow],
   status: SubmissionStatus,
   useCallCache: Boolean,
+  deleteIntermediateOutputFiles: Boolean,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   cost: Option[Float] = None
 )
@@ -154,6 +158,7 @@ object SubmissionStatusResponse {
       workflows = submission.workflows,
       status = submission.status,
       useCallCache = submission.useCallCache,
+      deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
       workflowFailureMode = submission.workflowFailureMode,
       cost = submission.cost
     )
@@ -165,26 +170,30 @@ case class SubmissionListResponse(
   submitter: String,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
+  methodConfigurationDeleted: Boolean,
   submissionEntity: Option[AttributeEntityReference],
   status: SubmissionStatus,
   workflowStatuses: StatusCounts,
   useCallCache: Boolean,
+  deleteIntermediateOutputFiles: Boolean,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   workflowIds: Option[Seq[String]],
   cost: Option[Float] = None
 )
 object SubmissionListResponse {
-  def apply(submission: Submission, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts): SubmissionListResponse =
+  def apply(submission: Submission, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts, methodConfigurationDeleted: Boolean): SubmissionListResponse =
     SubmissionListResponse(
       submissionId = submission.submissionId,
       submissionDate = submission.submissionDate,
       submitter = submission.submitter.value,
       methodConfigurationNamespace = submission.methodConfigurationNamespace,
       methodConfigurationName = submission.methodConfigurationName,
+      methodConfigurationDeleted = methodConfigurationDeleted,
       submissionEntity = submission.submissionEntity,
       status = submission.status,
       workflowStatuses = workflowStatuses,
       useCallCache = submission.useCallCache,
+      deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
       workflowFailureMode = submission.workflowFailureMode,
       workflowIds = workflowIds
     )
@@ -291,6 +300,7 @@ case class SubmissionWorkflowStatusResponse(
                                              workflowStatus: String,
                                              count: Int)
 
+//noinspection TypeAnnotation,ScalaUnusedSymbol
 class ExecutionJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 
@@ -325,7 +335,58 @@ class ExecutionJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val SubmissionRequestFormat = jsonFormat7(SubmissionRequest)
+  /*
+  Copied from:
+  - https://www.codersbistro.com/blog/default-values-with-spray-json-marshalling/
+  - https://gist.github.com/agemooij/f2e4075a193d166355f8
+  If you find a better way of implementing this (*cough* circe?) please add a link
+
+  NOTE:
+  - Until REST API endpoint versioning across the many repositories / consumers is figured out, DO NOT DELETE ANY FIELDS
+      IN THE REQUEST, only deprecate and/or default!
+  - We are operating under an assumption for clients: even if the API version doesn't change, clients will hopefully
+      consume-and-discard any additional fields that appear in the returned json. Therefore response classes do not
+      require this custom spray-json treatment, at the moment.
+   */
+  implicit object SubmissionRequestFormat extends RootJsonFormat[SubmissionRequest] {
+
+    override def write(obj: SubmissionRequest): JsValue = {
+      JsObject(
+        List(
+          Option("methodConfigurationNamespace" -> obj.methodConfigurationNamespace.toJson),
+          Option("methodConfigurationName" -> obj.methodConfigurationName.toJson),
+          obj.entityType.map("entityType" -> _.toJson),
+          obj.entityName.map("entityName" -> _.toJson),
+          obj.expression.map("expression" -> _.toJson),
+          Option("useCallCache" -> obj.useCallCache.toJson),
+          Option("deleteIntermediateOutputFiles" -> obj.deleteIntermediateOutputFiles.toJson),
+          obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson)
+        ).flatten: _*
+      )
+    }
+
+    override def read(json: JsValue): SubmissionRequest = {
+      val fields = json.asJsObject.fields
+
+      SubmissionRequest(
+        // All new fields below this line MUST have defaults or be wrapped in Option[]!
+        // https://broadworkbench.atlassian.net/browse/QA-1031
+        // NOTE: All fields are optional in firecloud-orchestration's copy of this class,
+        // so in that project one can just adjust the function call to jsonFormat*N*.
+        methodConfigurationNamespace = fields("methodConfigurationNamespace").convertTo[String],
+        methodConfigurationName = fields("methodConfigurationName").convertTo[String],
+        // We are flatMapping these because `null` is a valid input provided by the UI
+        entityType = fields.get("entityType").flatMap(_.convertTo[Option[String]]),
+        entityName = fields.get("entityName").flatMap(_.convertTo[Option[String]]),
+        expression = fields.get("expression").flatMap(_.convertTo[Option[String]]),
+        useCallCache = fields("useCallCache").convertTo[Boolean],
+        deleteIntermediateOutputFiles = fields.get("deleteIntermediateOutputFiles").fold(false)(_.convertTo[Boolean]),
+        workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]])
+        // All new fields above this line MUST have defaults or be wrapped in Option[]!
+      )
+    }
+  }
+
 
   implicit val ExecutionEventFormat = jsonFormat3(ExecutionEvent)
 
@@ -343,7 +404,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat12(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat13(ExecutionServiceWorkflowOptions)
 
   implicit val ExecutionServiceLabelResponseFormat = jsonFormat2(ExecutionServiceLabelResponse)
 
@@ -365,13 +426,13 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowFormat = jsonFormat7(Workflow)
 
-  implicit val SubmissionFormat = jsonFormat11(Submission)
+  implicit val SubmissionFormat = jsonFormat12(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val SubmissionStatusResponseFormat = jsonFormat11(SubmissionStatusResponse.apply)
+  implicit val SubmissionStatusResponseFormat = jsonFormat12(SubmissionStatusResponse.apply)
 
-  implicit val SubmissionListResponseFormat = jsonFormat12(SubmissionListResponse.apply)
+  implicit val SubmissionListResponseFormat = jsonFormat14(SubmissionListResponse.apply)
 
   implicit val MetadataParamsFormat = jsonFormat3(MetadataParams)
 
@@ -410,6 +471,7 @@ class ExecutionJsonSupport extends JsonSupport {
   }
 }
 
+//noinspection TypeAnnotation,RedundantBlock
 object WorkflowStatuses {
   val allStatuses: Seq[WorkflowStatus] = Seq(Queued, Launching, Submitted, Running, Aborting, Failed, Succeeded, Aborted, Unknown)
   val queuedStatuses: Seq[WorkflowStatus] = Seq(Queued, Launching)
@@ -452,6 +514,7 @@ object WorkflowStatuses {
 }
 
 
+//noinspection TypeAnnotation,RedundantBlock
 object SubmissionStatuses {
   val activeStatuses: Seq[SubmissionStatus] = Seq(Accepted, Evaluating, Submitting, Submitted, Aborting)
   val terminalStatuses: Seq[SubmissionStatus] = Seq(Aborted, Done)
@@ -487,6 +550,7 @@ object SubmissionStatuses {
   case object Done extends SubmissionStatus
 }
 
+//noinspection TypeAnnotation,RedundantBlock
 object WorkflowFailureModes {
   val allWorkflowFailureModes = List(ContinueWhilePossible, NoNewCalls)
 

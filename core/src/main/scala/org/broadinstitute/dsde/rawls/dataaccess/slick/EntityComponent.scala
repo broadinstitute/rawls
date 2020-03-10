@@ -457,7 +457,13 @@ trait EntityComponent {
       //yank the attribute list for this entity to determine what to do with upserts
       entityAttributeQuery.findByOwnerQuery(Seq(entityRecord.id)).map(attr => (attr.namespace, attr.name, attr.id)).result flatMap { attrCols =>
 
-        val existingAttrsToRecordIds: Map[AttributeName, Long] = attrCols.map(a => AttributeName(a._1, a._2) -> a._3).toMap
+        val existingAttrsToRecordIds: Map[AttributeName, Set[Long]] =
+          attrCols.groupBy { case (namespace, name, _) =>
+            (namespace, name)
+          }.map { case ((namespace, name), ids) =>
+            AttributeName(namespace, name) -> ids.map(_._3).toSet //maintain the full list of attribute ids since list members are stored as individual attributes
+          }
+
         val entityRefsToLookup = upserts.valuesIterator.collect { case e: AttributeEntityReference => e }.toSet
 
         lookupNotYetLoadedReferences(workspaceContext, entityRefsToLookup, Seq(entityRecord.toReference)) flatMap { entityRefRecs =>
@@ -482,7 +488,7 @@ trait EntityComponent {
             attributeName <- deletes
           } yield existingAttrsToRecordIds.get(attributeName)).flatten
 
-          entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, deleteIds, entityAttributeScratchQuery.insertScratchAttributes)
+          entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, deleteIds.flatten, entityAttributeScratchQuery.insertScratchAttributes)
         }
       }
     }

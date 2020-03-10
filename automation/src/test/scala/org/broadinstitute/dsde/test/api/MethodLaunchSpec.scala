@@ -16,6 +16,7 @@ import org.scalatest.time.{Minutes, Seconds, Span}
 import org.scalatest.concurrent.Eventually
 
 
+//noinspection TypeAnnotation
 class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike with Matchers with Eventually
   with BillingFixtures with WorkspaceFixtures with MethodFixtures {
 
@@ -42,8 +43,19 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
           Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName, method,
             method.methodNamespace, methodConfigName, 1, Map.empty, SimpleMethodConfig.outputs, method.rootEntityType)
 
-          val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
-          "participant1", "this", false))
+          val exception = intercept[RestException](
+            Rawls.submissions.launchWorkflow(
+              billingProject = billingProject,
+              workspaceName = workspaceName,
+              methodConfigurationNamespace = method.methodNamespace,
+              methodConfigurationName = methodConfigName,
+              entityType = "participant",
+              entityName = "participant1",
+              expression = "this",
+              useCallCache = false,
+              deleteIntermediateOutputFiles = false
+            )
+          )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
         }
       }
@@ -66,7 +78,17 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             method, method.methodNamespace, method.methodName, 1,
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
 
-          val submissionId = Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)
+          val submissionId = Rawls.submissions.launchWorkflow(
+            billingProject = billingProject,
+            workspaceName = workspaceName,
+            methodConfigurationNamespace = method.methodNamespace,
+            methodConfigurationName = method.methodName,
+            entityType = method.rootEntityType,
+            entityName = "participant1",
+            expression = "this",
+            useCallCache = false,
+            deleteIntermediateOutputFiles = false
+          )
 
           // make sure the submission has not errored out
           val submissionStatus = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)._1
@@ -107,12 +129,22 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             billingProject, workspaceName, method, method.methodNamespace, method.methodName, 1,
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
 
-          val submissionId = Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, method.methodName, method.rootEntityType, "participant1", "this", false)(ownerAuthToken)
+          val submissionId = Rawls.submissions.launchWorkflow(
+            billingProject = billingProject,
+            workspaceName = workspaceName,
+            methodConfigurationNamespace = method.methodNamespace,
+            methodConfigurationName = method.methodName,
+            entityType = method.rootEntityType,
+            entityName = "participant1",
+            expression = "this",
+            useCallCache = false,
+            deleteIntermediateOutputFiles = false
+          )(ownerAuthToken)
 
           val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
 
           withClue("When the reader views the owner's submission, the submission status: ") {
-            inFlightSubmissionStatuses should contain (status._1)
+            inFlightSubmissionStatuses should contain(status._1)
           }
 
           val exception = intercept[RestException](Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)(readerAuthToken))
@@ -140,8 +172,19 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             billingProject, workspaceName, method, method.methodNamespace, methodConfigName, 1,
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, "sample")
 
-          val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant",
-            "participant1", "this", false))
+          val exception = intercept[RestException](
+            Rawls.submissions.launchWorkflow(
+              billingProject = billingProject,
+              workspaceName = workspaceName,
+              methodConfigurationNamespace = method.methodNamespace,
+              methodConfigurationName = methodConfigName,
+              entityType = "participant",
+              entityName = "participant1",
+              expression = "this",
+              useCallCache = false,
+              deleteIntermediateOutputFiles = false
+            )
+          )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample.)") shouldBe true
         }
       }
@@ -168,8 +211,19 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with FreeSpecLike 
             billingProject, workspaceName, method, method.methodNamespace, methodConfigName, 1,
             SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
 
-          val exception = intercept[RestException](Rawls.submissions.launchWorkflow(billingProject, workspaceName, method.methodNamespace, methodConfigName, "participant_set",
-            "participantSet1", "this", false))
+          val exception = intercept[RestException](
+            Rawls.submissions.launchWorkflow(
+              billingProject = billingProject,
+              workspaceName = workspaceName,
+              methodConfigurationNamespace = method.methodNamespace,
+              methodConfigurationName = methodConfigName,
+              entityType = "participant_set",
+              entityName = "participantSet1",
+              expression = "this",
+              useCallCache = false,
+              deleteIntermediateOutputFiles = false
+            )
+          )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type") shouldBe true
         }
       }
