@@ -38,19 +38,16 @@ trait WorkspaceRequesterPaysComponent {
     }
 
     def userExistsInWorkspaceNamespace(namespace: String, userEmail: RawlsUserEmail): ReadAction[Boolean] = {
-      val query = for {
-        workspace <- workspaceQuery if workspace.namespace === namespace
-        requesterPays <- workspaceRequesterPaysQuery if requesterPays.workspaceId === workspace.id && requesterPays.userEmail === userEmail.value
-      } yield requesterPays
+      val query = (workspaceQuery join workspaceRequesterPaysQuery on (_.id === _.workspaceId)).filter { case (ws, rp) =>
+          ws.namespace === namespace && rp.userEmail === userEmail.value
+      }
 
       query.exists.result
     }
   }
 
   private def existingRecordsForUserQuery(workspaceName: WorkspaceName, userEmail: RawlsUserEmail): Query[WorkspaceRequesterPaysTable, WorkspaceRequesterPaysRecord, Seq] = {
-    for {
-      requesterPays <- workspaceRequesterPaysQuery if requesterPays.userEmail === userEmail.value &&
-        requesterPays.workspaceId.in(workspaceQuery.filter(ws => ws.namespace === workspaceName.namespace && ws.name === workspaceName.name).map(_.id))
-    } yield requesterPays
+    val workspaceSubquery = workspaceQuery.filter(ws => ws.namespace === workspaceName.namespace && ws.name === workspaceName.name).map(_.id)
+    workspaceRequesterPaysQuery.filter(_.workspaceId in workspaceSubquery).filter(_.userEmail === userEmail.value)
   }
 }

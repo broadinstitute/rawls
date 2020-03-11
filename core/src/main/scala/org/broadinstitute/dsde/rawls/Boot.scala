@@ -355,7 +355,7 @@ object Boot extends IOApp with LazyLogging {
 
       val bondConfig = conf.getConfig("bond")
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
-      val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(gcsDAO, bondApiDAO, requesterPaysRole)
+      val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,

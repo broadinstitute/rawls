@@ -126,7 +126,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     )
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
-    val requesterPaysSetupService = new RequesterPaysSetupService(gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+    val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,

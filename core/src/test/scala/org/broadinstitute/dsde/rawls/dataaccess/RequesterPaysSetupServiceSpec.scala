@@ -1,88 +1,94 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.scalatest.mockito.MockitoSugar
 import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{FlatSpec, Matchers}
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-class RequesterPaysSetupServiceSpec extends FlatSpec with Matchers with MockitoSugar with ScalaFutures {
+class RequesterPaysSetupServiceSpec extends FlatSpec with Matchers with MockitoSugar with ScalaFutures with TestDriverComponent {
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Seconds)))
 
-  private val userInfo = UserInfo(RawlsUserEmail("user@foo.com"), OAuth2BearerToken("mytoken"), 0, RawlsUserSubjectId("asdfasdfasdf"))
-
-  private def setupServices = {
+  private def setupServices(dataSource: SlickDataSource) = {
     val mockBondApiDAO = mock[BondApiDAO]
     val gcsDAO = new MockGoogleServicesDAO("foo")
-    val service = new RequesterPaysSetupService(gcsDAO, mockBondApiDAO, "rp/role")
-    (mockBondApiDAO, service)
+    new RequesterPaysSetupService(dataSource, gcsDAO, mockBondApiDAO, "rp/role")
   }
 
-  "getBondProviderServiceAccountEmails" should "get emails" in {
-    val expectedEmail = BondServiceAccountEmail("bondSA")
-    val (mockBondApiDAO: BondApiDAO, service: RequesterPaysSetupService) = setupServices
+  private def withMinimalTestDatabaseAndServices[T](testCode: RequesterPaysSetupService => T): T = {
+    withMinimalTestDatabase { dataSource =>
+      testCode(setupServices(dataSource))
+    }
+  }
 
-    when(mockBondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
-    when(mockBondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
-    when(mockBondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
+  "getBondProviderServiceAccountEmails" should "get emails" in withMinimalTestDatabaseAndServices { service =>
+    val expectedEmail = BondServiceAccountEmail("bondSA")
+
+    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
+    when(service.bondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
+    when(service.bondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
 
     service.getBondProviderServiceAccountEmails(userInfo).futureValue shouldBe List(expectedEmail)
   }
 
-  it should "get empty list when no providers" in {
-    val (mockBondApiDAO: BondApiDAO, service: RequesterPaysSetupService) = setupServices
+  it should "get empty list when no providers" in withMinimalTestDatabaseAndServices { service =>
 
-    when(mockBondApiDAO.getBondProviders()).thenReturn(Future.successful(List.empty))
-
-    service.getBondProviderServiceAccountEmails(userInfo).futureValue shouldBe List.empty
-  }
-
-  it should "get empty list when no linked accounts" in {
-    val (mockBondApiDAO: BondApiDAO, service: RequesterPaysSetupService) = setupServices
-
-    when(mockBondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
-    when(mockBondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
-    when(mockBondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(None))
+    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List.empty))
 
     service.getBondProviderServiceAccountEmails(userInfo).futureValue shouldBe List.empty
   }
 
-  "grantRequesterPaysToLinkedSAs" should "link" in {
-    val expectedEmail = BondServiceAccountEmail("bondSA")
-    val mockBondApiDAO = mock[BondApiDAO]
-    val gcsDAO = new MockGoogleServicesDAO("foo")
-    val rpRole = "rp/role"
-    val service = new RequesterPaysSetupService(gcsDAO, mockBondApiDAO, rpRole)
+  it should "get empty list when no linked accounts" in withMinimalTestDatabaseAndServices { service =>
+    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
+    when(service.bondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
+    when(service.bondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(None))
 
-    when(mockBondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
-    when(mockBondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
-    when(mockBondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
-
-    val workspaceName = WorkspaceName("testprojectname", "foo")
-    service.grantRequesterPaysToLinkedSAs(userInfo, workspaceName).futureValue shouldBe List(expectedEmail)
-    gcsDAO.policies.get(RawlsBillingProjectName(workspaceName.namespace)) shouldBe Some(Map(rpRole -> Set("serviceAccount:" + expectedEmail.client_email)))
+    service.getBondProviderServiceAccountEmails(userInfo).futureValue shouldBe List.empty
   }
 
-  "revokeRequesterPaysToLinkedSAs" should "unlink" in {
+  "grantRequesterPaysToLinkedSAs" should "link" in withMinimalTestDatabaseAndServices { service =>
     val expectedEmail = BondServiceAccountEmail("bondSA")
-    val mockBondApiDAO = mock[BondApiDAO]
-    val gcsDAO = new MockGoogleServicesDAO("foo")
-    val rpRole = "rp/role"
-    val service = new RequesterPaysSetupService(gcsDAO, mockBondApiDAO, rpRole)
 
-    when(mockBondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
-    when(mockBondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
-    when(mockBondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
+    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
+    when(service.bondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
+    when(service.bondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
 
-    val workspaceName = WorkspaceName("testprojectname", "foo")
-    val projectName = RawlsBillingProjectName(workspaceName.namespace)
-    gcsDAO.policies.put(projectName, Map(rpRole -> Set("serviceAccount:" + expectedEmail.client_email)))
-    service.revokeRequesterPaysToLinkedSAs(userInfo, workspaceName).futureValue shouldBe List(expectedEmail)
-    gcsDAO.policies.get(projectName) shouldBe Some(Map(rpRole -> Set.empty))
+    runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe false
+    service.grantRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace.toWorkspaceName).futureValue shouldBe List(expectedEmail)
+    runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe true
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.billingProject.projectName) shouldBe Some(Map(service.requesterPaysRole -> Set("serviceAccount:" + expectedEmail.client_email)))
+
+    // second call should not fail
+    service.grantRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace.toWorkspaceName).futureValue shouldBe List(expectedEmail)
+  }
+
+  "revokeRequesterPaysToLinkedSAs" should "unlink" in withMinimalTestDatabaseAndServices { service =>
+    val expectedEmail = BondServiceAccountEmail("bondSA")
+
+    when(service.bondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
+    when(service.bondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
+    when(service.bondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
+
+    // add user to 2 workspaces in same namespace
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(minimalTestData.workspace.toWorkspaceName, userInfo.userEmail, Set(expectedEmail)))
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(minimalTestData.workspace2.toWorkspaceName, userInfo.userEmail, Set(expectedEmail)))
+    runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe true
+
+    // add user to mock google bindings
+    val initialBindings = Map(service.requesterPaysRole -> Set("serviceAccount:" + expectedEmail.client_email))
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.put(minimalTestData.billingProject.projectName, initialBindings)
+
+    // remove use from 1 workspace and check that it did not get removed from google bindings
+    service.revokeRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace.toWorkspaceName).futureValue shouldBe List(expectedEmail)
+    runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe true
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.billingProject.projectName) shouldBe Some(initialBindings)
+
+    // remove use from other workspace and check that it did get removed from google bindings
+    service.revokeRequesterPaysToLinkedSAs(userInfo, minimalTestData.workspace2.toWorkspaceName).futureValue shouldBe List(expectedEmail)
+    runAndWait(workspaceRequesterPaysQuery.userExistsInWorkspaceNamespace(minimalTestData.billingProject.projectName.value, userInfo.userEmail)) shouldBe false
+    service.googleServicesDAO.asInstanceOf[MockGoogleServicesDAO].policies.get(minimalTestData.billingProject.projectName) shouldBe Some(Map(service.requesterPaysRole -> Set.empty))
   }
 }
