@@ -1965,7 +1965,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case Some(workspace) => Future.successful(workspace)
       }
       _ <- accessCheck(workspace, SamWorkspaceActions.compute)
-      _ <- requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, RawlsBillingProjectName(workspaceName.namespace))
+      _ <- requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, workspaceName)
     } yield {
       RequestComplete(StatusCodes.NoContent)
     }
@@ -1979,7 +1979,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case Some(workspace) => Future.successful(workspace)
       }
       _ <- accessCheck(workspace, SamWorkspaceActions.compute)
-      _ <- requesterPaysSetupService.revokeRequesterPaysToLinkedSAs(userInfo, RawlsBillingProjectName(workspaceName.namespace))
+      _ <- requesterPaysSetupService.revokeRequesterPaysToLinkedSAs(userInfo, workspaceName)
     } yield {
       RequestComplete(StatusCodes.NoContent)
     }

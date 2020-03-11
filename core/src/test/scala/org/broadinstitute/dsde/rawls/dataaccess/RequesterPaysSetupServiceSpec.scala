@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
+import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.mockito.MockitoSugar
 import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
@@ -63,9 +63,9 @@ class RequesterPaysSetupServiceSpec extends FlatSpec with Matchers with MockitoS
     when(mockBondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
     when(mockBondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
 
-    val projectName = RawlsBillingProjectName("testprojectname")
-    service.grantRequesterPaysToLinkedSAs(userInfo, projectName).futureValue shouldBe List(expectedEmail)
-    gcsDAO.policies.get(projectName) shouldBe Some(Map(rpRole -> Set("serviceAccount:" + expectedEmail.client_email)))
+    val workspaceName = WorkspaceName("testprojectname", "foo")
+    service.grantRequesterPaysToLinkedSAs(userInfo, workspaceName).futureValue shouldBe List(expectedEmail)
+    gcsDAO.policies.get(RawlsBillingProjectName(workspaceName.namespace)) shouldBe Some(Map(rpRole -> Set("serviceAccount:" + expectedEmail.client_email)))
   }
 
   "revokeRequesterPaysToLinkedSAs" should "unlink" in {
@@ -79,9 +79,10 @@ class RequesterPaysSetupServiceSpec extends FlatSpec with Matchers with MockitoS
     when(mockBondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
     when(mockBondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
 
-    val projectName = RawlsBillingProjectName("testprojectname")
+    val workspaceName = WorkspaceName("testprojectname", "foo")
+    val projectName = RawlsBillingProjectName(workspaceName.namespace)
     gcsDAO.policies.put(projectName, Map(rpRole -> Set("serviceAccount:" + expectedEmail.client_email)))
-    service.revokeRequesterPaysToLinkedSAs(userInfo, projectName).futureValue shouldBe List(expectedEmail)
+    service.revokeRequesterPaysToLinkedSAs(userInfo, workspaceName).futureValue shouldBe List(expectedEmail)
     gcsDAO.policies.get(projectName) shouldBe Some(Map(rpRole -> Set.empty))
   }
 }

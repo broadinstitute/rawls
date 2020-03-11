@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, UserInfo, WorkspaceName}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -19,19 +19,19 @@ class RequesterPaysSetupService(googleServicesDAO: GoogleServicesDAO, bondApiDAO
     }
   }
 
-  def grantRequesterPaysToLinkedSAs(userInfo: UserInfo, rawlsBillingProjectName: RawlsBillingProjectName): Future[List[BondServiceAccountEmail]] = {
+  def grantRequesterPaysToLinkedSAs(userInfo: UserInfo, workspaceName: WorkspaceName): Future[List[BondServiceAccountEmail]] = {
     for {
       emails <- getBondProviderServiceAccountEmails(userInfo)
-      _ <- googleServicesDAO.addPolicyBindings(rawlsBillingProjectName, Map(requesterPaysRole -> emails.toSet.map{mail:BondServiceAccountEmail => "serviceAccount:" + mail.client_email}))
+      _ <- googleServicesDAO.addPolicyBindings(RawlsBillingProjectName(workspaceName.namespace), Map(requesterPaysRole -> emails.toSet.map{mail:BondServiceAccountEmail => "serviceAccount:" + mail.client_email}))
     } yield {
       emails
     }
   }
 
-  def revokeRequesterPaysToLinkedSAs(userInfo: UserInfo, rawlsBillingProjectName: RawlsBillingProjectName): Future[List[BondServiceAccountEmail]] = {
+  def revokeRequesterPaysToLinkedSAs(userInfo: UserInfo, workspaceName: WorkspaceName): Future[List[BondServiceAccountEmail]] = {
     for {
       emails <- getBondProviderServiceAccountEmails(userInfo)
-      _ <- googleServicesDAO.removePolicyBindings(rawlsBillingProjectName, Map(requesterPaysRole -> emails.toSet.map{mail:BondServiceAccountEmail => "serviceAccount:" + mail.client_email}))
+      _ <- googleServicesDAO.removePolicyBindings(RawlsBillingProjectName(workspaceName.namespace), Map(requesterPaysRole -> emails.toSet.map{mail:BondServiceAccountEmail => "serviceAccount:" + mail.client_email}))
     } yield {
       emails
     }
