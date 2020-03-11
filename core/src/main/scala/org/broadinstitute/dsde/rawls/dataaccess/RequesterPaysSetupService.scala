@@ -27,4 +27,13 @@ class RequesterPaysSetupService(googleServicesDAO: GoogleServicesDAO, bondApiDAO
       emails
     }
   }
+
+  def revokeRequesterPaysToLinkedSAs(userInfo: UserInfo, rawlsBillingProjectName: RawlsBillingProjectName): Future[List[BondServiceAccountEmail]] = {
+    for {
+      emails <- getBondProviderServiceAccountEmails(userInfo)
+      _ <- googleServicesDAO.removePolicyBindings(rawlsBillingProjectName, Map(requesterPaysRole -> emails.toSet.map{mail:BondServiceAccountEmail => "serviceAccount:" + mail.client_email}))
+    } yield {
+      emails
+    }
+  }
 }

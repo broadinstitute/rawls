@@ -67,4 +67,21 @@ class RequesterPaysSetupServiceSpec extends FlatSpec with Matchers with MockitoS
     service.grantRequesterPaysToLinkedSAs(userInfo, projectName).futureValue shouldBe List(expectedEmail)
     gcsDAO.policies.get(projectName) shouldBe Some(Map(rpRole -> Set("serviceAccount:" + expectedEmail.client_email)))
   }
+
+  "revokeRequesterPaysToLinkedSAs" should "unlink" in {
+    val expectedEmail = BondServiceAccountEmail("bondSA")
+    val mockBondApiDAO = mock[BondApiDAO]
+    val gcsDAO = new MockGoogleServicesDAO("foo")
+    val rpRole = "rp/role"
+    val service = new RequesterPaysSetupService(gcsDAO, mockBondApiDAO, rpRole)
+
+    when(mockBondApiDAO.getBondProviders()).thenReturn(Future.successful(List("p1", "p2")))
+    when(mockBondApiDAO.getServiceAccountKey("p1", userInfo)).thenReturn(Future.successful(None))
+    when(mockBondApiDAO.getServiceAccountKey("p2", userInfo)).thenReturn(Future.successful(Some(BondResponseData(expectedEmail))))
+
+    val projectName = RawlsBillingProjectName("testprojectname")
+    gcsDAO.policies.put(projectName, Map(rpRole -> Set("serviceAccount:" + expectedEmail.client_email)))
+    service.revokeRequesterPaysToLinkedSAs(userInfo, projectName).futureValue shouldBe List(expectedEmail)
+    gcsDAO.policies.get(projectName) shouldBe Some(Map(rpRole -> Set.empty))
+  }
 }

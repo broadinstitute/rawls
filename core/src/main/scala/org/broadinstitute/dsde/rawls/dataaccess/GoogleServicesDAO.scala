@@ -171,10 +171,38 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   /**
+    * Removes the IAM policies to the project's existing policies
+    * @return true if the policy was actually changed
+    */
+  def removePolicyBindings(projectName: RawlsBillingProjectName, policiesToRemove: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(projectName) { existingPolicies =>
+    val updatedKeysWithRemovedPolicies: Map[String, Set[String]] = policiesToRemove.keys.map { k =>
+      val existingForKey = existingPolicies.get(k).getOrElse(Set.empty)
+      val updatedForKey = existingForKey diff policiesToRemove(k)
+      k -> updatedForKey
+    }.toMap
+
+    // Use standard Map ++ instead of semigroup because we want to replace the original values
+    existingPolicies ++ updatedKeysWithRemovedPolicies
+  }
+
+  /**
     * Adds the IAM policies to the project's existing policies
     * @return true if the policy was actually changed
     */
-  def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, Set[String]]): Future[Boolean]
+  def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(projectName) { existingPolicies =>
+    // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
+    import cats.implicits._
+    existingPolicies |+| policiesToAdd
+  }
+
+  /**
+    * Internal function to update project IAM bindings.
+    * @param projectName google project name
+    * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
+    *                       which will be handled appropriately when sent to google.
+    * @return true if google was called to update policies, false otherwise
+    */
+  protected def updatePolicyBindings(projectName: RawlsBillingProjectName)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean]
 
   /**
     *

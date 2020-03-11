@@ -1241,4 +1241,48 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  it should "204 on remove linked service accounts to workspace" in withTestDataServices { services =>
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      assertResult(RequestComplete(StatusCodes.NoContent)) {
+        rqComplete
+      }
+    }
+  }
+
+  it should "404 on remove linked service accounts to workspace which does not exist" in withTestDataServices { services =>
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName.copy(name = "DNE")), Duration.Inf)
+      }
+      assertResult(Some(StatusCodes.NotFound)) {
+        error.errorReport.statusCode
+      }
+    }
+  }
+
+  it should "404 on remove linked service accounts to workspace with no access" in withTestDataServicesCustomSamAndUser(RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))) { services =>
+    populateWorkspacePolicies(services)
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      }
+      assertResult(Some(StatusCodes.NotFound)) {
+        error.errorReport.statusCode
+      }
+    }
+  }
+
+  it should "403 on remove linked service accounts to workspace with read access" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      }
+      assertResult(Some(StatusCodes.Forbidden)) {
+        error.errorReport.statusCode
+      }
+    }
+  }
+
 }

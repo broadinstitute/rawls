@@ -160,6 +160,11 @@ trait WorkspaceApiService extends UserInfoDirectives {
         put {
           complete { workspaceServiceConstructor(userInfo).EnableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)) }
         }
+      } ~
+      path("workspaces" / Segment / Segment / "disableRequesterPaysForLinkedServiceAccounts") { (workspaceNamespace, workspaceName) =>
+        put {
+          complete { workspaceServiceConstructor(userInfo).DisableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)) }
+        }
       }
   }
 }
