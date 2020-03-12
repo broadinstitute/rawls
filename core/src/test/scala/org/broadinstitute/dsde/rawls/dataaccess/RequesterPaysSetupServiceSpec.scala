@@ -67,7 +67,7 @@ class RequesterPaysSetupServiceSpec extends FlatSpec with Matchers with MockitoS
 
   "revokeUserFromWorkspace" should "unlink" in withMinimalTestDatabaseAndServices { service =>
     val expectedEmail = BondServiceAccountEmail("bondSA")
-    
+
     // add user to 2 workspaces in same namespace
     runAndWait(workspaceRequesterPaysQuery.insertAllForUser(minimalTestData.workspace.toWorkspaceName, userInfo.userEmail, Set(expectedEmail)))
     runAndWait(workspaceRequesterPaysQuery.insertAllForUser(minimalTestData.workspace2.toWorkspaceName, userInfo.userEmail, Set(expectedEmail)))

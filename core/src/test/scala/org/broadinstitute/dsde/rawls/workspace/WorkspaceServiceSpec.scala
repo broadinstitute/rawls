@@ -521,6 +521,44 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     services.samDAO.callsToAddToPolicy should contain theSameElementsAs Seq.empty
   }
 
+  it should "remove requester pays appropriately when removing ACLs" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
+
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail, Set(BondServiceAccountEmail("foo@bar.com"))))
+
+    val aclRemove = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.NoAccess, None))
+    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclRemove, false), Duration.Inf)
+
+    runAndWait(workspaceRequesterPaysQuery.listAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail)) shouldBe empty
+  }
+
+  it should "keep requester pays appropriately when changing ACLs" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
+
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail, Set(BondServiceAccountEmail("foo@bar.com"))))
+
+    val aclUpdate = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Owner, None))
+    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdate, false), Duration.Inf)
+
+    runAndWait(workspaceRequesterPaysQuery.listAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail)) should contain theSameElementsAs(Set("foo@bar.com"))
+
+    val aclUpdate2 = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, canCompute = Some(true)))
+    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdate2, false), Duration.Inf)
+
+    runAndWait(workspaceRequesterPaysQuery.listAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail)) should contain theSameElementsAs(Set("foo@bar.com"))
+  }
+
+  it should "remove requester pays appropriately when changing ACLs" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
+
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail, Set(BondServiceAccountEmail("foo@bar.com"))))
+
+    val aclUpdate = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None))
+    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdate, false), Duration.Inf)
+
+    runAndWait(workspaceRequesterPaysQuery.listAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail)) shouldBe empty
+  }
+
   it should "return non-existent users during patch ACLs" in withTestDataServicesCustomSam { services =>
     populateWorkspacePolicies(services)
 
