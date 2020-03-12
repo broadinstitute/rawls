@@ -541,11 +541,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdate, false), Duration.Inf)
 
     runAndWait(workspaceRequesterPaysQuery.listAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail)) should contain theSameElementsAs(Set("foo@bar.com"))
-
-    val aclUpdate2 = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, canCompute = Some(true)))
-    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdate2, false), Duration.Inf)
-
-    runAndWait(workspaceRequesterPaysQuery.listAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail)) should contain theSameElementsAs(Set("foo@bar.com"))
   }
 
   it should "remove requester pays appropriately when changing ACLs" in withTestDataServicesCustomSam { services =>

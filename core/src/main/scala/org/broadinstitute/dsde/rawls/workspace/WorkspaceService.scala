@@ -892,7 +892,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   /**
     * Revoke any linked SAs for users removed from workspace. This happens during the acl update process. This process
     * can remove a user from one policy and add to another or simply remove a user altogether. Only removals/additions
-    * to policies that can spend money count (owner, writer, compute). Removal from applicable policy with a corresponding
+    * to policies that can spend money count (owner, writer). Removal from applicable policy with a corresponding
     * addition to a different applicable policy should not result in revocation. This is done by first finding all the
     * removals from applicable policies then removing all the additions to applicable policies. Revoke linked SAs for
     * all resulting users.
@@ -903,7 +903,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     * @return
     */
   private def revokeRequesterPaysForLinkedSAs(workspaceName: WorkspaceName, policyRemovals: Set[(SamResourcePolicyName, String)], policyAdditions: Set[(SamResourcePolicyName, String)]): Future[Unit] = {
-    val applicablePolicies = Set(SamWorkspacePolicyNames.canCompute, SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer)
+    val applicablePolicies = Set(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer)
     val applicableRemovals = policyRemovals.collect {
       case (policy, email) if applicablePolicies.contains(policy) => RawlsUserEmail(email)
     }
