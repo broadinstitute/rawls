@@ -480,7 +480,11 @@ trait EntityComponent {
 
           if (updateAttrSize > existingAttrSize) {
             // since the size of the list has increased, move these new records to insertRecs
-            val (newInsertRecs, newUpdateRecs) = attrRecords.partition {x => x.listIndex.get > (existingAttrSize - 1)}
+            val (newInsertRecs, newUpdateRecs) = attrRecords.partition {_.listIndex match {
+              case None => false
+              case Some(index) => index > (existingAttrSize - 1)
+            }}
+
             (newInsertRecs, newUpdateRecs, Seq.empty[Long])
           } else if (updateAttrSize < existingAttrSize) {
             // since the size of the list has decreased, delete the extra rows from table
@@ -515,8 +519,8 @@ trait EntityComponent {
               if (existingAttributes.contains(name)) recordsForUpdateAttribute(name, attribute, attrRecords)
               else (attrRecords, Seq.empty[EntityAttributeRecord], Seq.empty[Long])
           }.foldLeft((Seq.empty[EntityAttributeRecord], Seq.empty[EntityAttributeRecord], Seq.empty[Long])) {
-            (t1, t2) => (t1, t2) match {
-              case ((i1, u1, d1), (i2, u2, d2)) => (i1 ++ i2, u1 ++ u2, d1 ++ d2)
+            (tuple1, tuple2) => (tuple1, tuple2) match {
+              case ((insert1, update1, delete1), (insert2, update2, delete2)) => (insert1 ++ insert2, update1 ++ update2, delete1 ++ delete2)
             }
           }
 
