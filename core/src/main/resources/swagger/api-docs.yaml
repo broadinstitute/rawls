@@ -3145,6 +3145,44 @@ paths:
               - openid
               - email
               - profile
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/disableRequesterPaysForLinkedServiceAccounts':
+    put:
+      responses:
+        '204':
+          description: Successful Request
+        '403':
+          description: Insufficient permissions to enable Requester Pays for workspace.
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Workspace Not Found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        description: Disable Requester Pays for the user's linked service accounts in a workspace
+        tags:
+          - workspaces
+        summary: Disable Requester Pays for linked service accounts
+        operationId: disableRequesterPaysForLinkedServiceAccounts
+        parameters:
+          - in: path
+            description: Workspace Namespace
+            name: workspaceNamespace
+            required: true
+            type: string
+          - in: path
+            description: Workspace Name
+            name: workspaceName
+            required: true
+            type: string
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
   '/api/workflows/{workflowId}/genomics/{operationId}':
     get:
       responses:

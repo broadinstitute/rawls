@@ -872,6 +872,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
               samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, email, userInfo)
             }
+
+            _ <- revokeRequesterPaysForLinkedSAs(workspaceName, policyRemovals, policyAdditions)
+
             _ <- maybeShareProjectComputePolicy(policyAdditions, workspaceName)
 
           } yield {
@@ -884,6 +887,30 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
       else Future.successful(RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set.empty, Set.empty, aclUpdates.filter(au => userToInvite.contains(au.email)))))
     }
+  }
+
+  /**
+    * Revoke any linked SAs for users removed from workspace. This happens during the acl update process. This process
+    * can remove a user from one policy and add to another or simply remove a user altogether. Only removals/additions
+    * to policies that can spend money count (owner, writer, compute). Removal from applicable policy with a corresponding
+    * addition to a different applicable policy should not result in revocation. This is done by first finding all the
+    * removals from applicable policies then removing all the additions to applicable policies. Revoke linked SAs for
+    * all resulting users.
+    *
+    * @param workspaceName
+    * @param policyRemovals
+    * @param policyAdditions
+    * @return
+    */
+  private def revokeRequesterPaysForLinkedSAs(workspaceName: WorkspaceName, policyRemovals: Set[(SamResourcePolicyName, String)], policyAdditions: Set[(SamResourcePolicyName, String)]): Future[Unit] = {
+    val applicablePolicies = Set(SamWorkspacePolicyNames.canCompute, SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer)
+    val applicableRemovals = policyRemovals.collect {
+      case (policy, email) if applicablePolicies.contains(policy) => RawlsUserEmail(email)
+    }
+    val applicableAdditions = policyAdditions.collect {
+      case (policy, email) if applicablePolicies.contains(policy) => RawlsUserEmail(email)
+    }
+    Future.traverse(applicableRemovals -- applicableAdditions) { emailToRevoke => requesterPaysSetupService.revokeUserFromWorkspace(emailToRevoke, workspaceName) }.void
   }
 
   private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate], existingAcls: Set[WorkspaceACLUpdate]) = {
@@ -1979,7 +2006,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case Some(workspace) => Future.successful(workspace)
       }
       _ <- accessCheck(workspace, SamWorkspaceActions.compute)
-      _ <- requesterPaysSetupService.revokeRequesterPaysToLinkedSAs(userInfo, workspaceName)
+      _ <- requesterPaysSetupService.revokeUserFromWorkspace(userInfo.userEmail, workspaceName)
     } yield {
       RequestComplete(StatusCodes.NoContent)
     }

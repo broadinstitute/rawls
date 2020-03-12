@@ -44,6 +44,10 @@ trait WorkspaceRequesterPaysComponent {
 
       query.exists.result
     }
+
+    def listAllForUser(workspaceName: WorkspaceName, userEmail: RawlsUserEmail): ReadAction[Seq[String]] = {
+      existingRecordsForUserQuery(workspaceName, userEmail).map(_.serviceAccountEmail).result
+    }
   }
 
   private def existingRecordsForUserQuery(workspaceName: WorkspaceName, userEmail: RawlsUserEmail): Query[WorkspaceRequesterPaysTable, WorkspaceRequesterPaysRecord, Seq] = {
