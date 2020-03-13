@@ -519,9 +519,7 @@ trait EntityComponent {
               if (existingAttributes.contains(name)) recordsForUpdateAttribute(name, attribute, attrRecords)
               else (attrRecords, Seq.empty[EntityAttributeRecord], Seq.empty[Long])
           }.foldLeft((Seq.empty[EntityAttributeRecord], Seq.empty[EntityAttributeRecord], Seq.empty[Long])) {
-            (tuple1, tuple2) => (tuple1, tuple2) match {
               case ((insert1, update1, delete1), (insert2, update2, delete2)) => (insert1 ++ insert2, update1 ++ update2, delete1 ++ delete2)
-            }
           }
 
           val totalDeleteIds = deleteIds ++ extraDeleteIds
