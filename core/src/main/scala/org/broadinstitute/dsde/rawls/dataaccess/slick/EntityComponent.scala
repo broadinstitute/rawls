@@ -465,29 +465,66 @@ trait EntityComponent {
 
         val entityRefsToLookup = upserts.valuesIterator.collect { case e: AttributeEntityReference => e }.toSet
 
+        /*
+          Additional check for entities whose Attribute value type is AttributeList[_] in response to bug mentioned in WA-32
+          (https://broadworkbench.atlassian.net/browse/WA-32). Currently the update query is such that it matches the
+          listIndex of each attribute value and updates it. Hence if the size of the list changes, those changes are
+          not reflected in the table resulting in the behavior mentioned in the ticket.
+          Hence, for any attribute in the update list with value type as AttributeList[_], check if the size of the
+          list has changed. If yes, based on increase or decrease of the list size, add those extra records into insertRecs
+          or delete extra records from the entity table respectively.
+        */
+        def checkAndUpdateRecsForListAttr(name: AttributeName, attribute: AttributeList[_], attrRecords: Seq[EntityAttributeRecord]) = {
+          val updateAttrSize = attribute.list.size
+          val existingAttrSize = existingAttrsToRecordIds(name).size
+
+          if (updateAttrSize > existingAttrSize) {
+            // since the size of the list has increased, move these new records to insertRecs
+            val (newInsertRecs, newUpdateRecs) = attrRecords.partition {_.listIndex match {
+              case None => false
+              case Some(index) => index > (existingAttrSize - 1)
+            }}
+
+            (newInsertRecs, newUpdateRecs, Seq.empty[Long])
+          } else if (updateAttrSize < existingAttrSize) {
+            // since the size of the list has decreased, delete the extra rows from table
+            val deleteIds = existingAttrsToRecordIds(name).toSeq.takeRight(existingAttrSize - updateAttrSize)
+            (Seq.empty[EntityAttributeRecord], attrRecords, deleteIds)
+          }
+          else (Seq.empty[EntityAttributeRecord], attrRecords, Seq.empty[Long]) // the list size hasn't changed
+        }
+
+        def recordsForUpdateAttribute(name: AttributeName, attribute: Attribute, attrRecords: Seq[EntityAttributeRecord]) = {
+          attribute match {
+            case list: AttributeList[_] => checkAndUpdateRecsForListAttr(name, list, attrRecords)
+            case _ => (Seq.empty[EntityAttributeRecord], attrRecords, Seq.empty[Long])
+          }
+        }
+
         lookupNotYetLoadedReferences(workspaceContext, entityRefsToLookup, Seq(entityRecord.toReference)) flatMap { entityRefRecs =>
           val allTheEntityRefs = entityRefRecs ++ Seq(entityRecord) //re-add the current entity
           val refsToIds = allTheEntityRefs.map(e => e.toReference -> e.id).toMap
           val existingAttributes = existingAttrsToRecordIds.keys.toSeq
 
-          val (updateAttrs, insertAttrs) = upserts.partition( attr => existingAttributes.contains(attr._1) )
-
-          //function that marshals attribute maps to list of attribute records for saving
-          def attributeMapToRecs(attrMap: AttributeMap): Iterable[EntityAttributeRecord] = {
-            for {
-              (attributeName, attribute) <- attrMap
-              attributeRec <- entityAttributeQuery.marshalAttribute(refsToIds(entityRecord.toReference), attributeName, attribute, refsToIds)
-            } yield attributeRec
-          }
-
-          //actually build the records we're going to send to the db
-          val insertRecs = attributeMapToRecs(insertAttrs)
-          val updateRecs = attributeMapToRecs(updateAttrs)
+          //get ids that need to be deleted from db
           val deleteIds = (for {
             attributeName <- deletes
-          } yield existingAttrsToRecordIds.get(attributeName)).flatten
+          } yield existingAttrsToRecordIds.get(attributeName)).flatten.flatten
 
-          entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, deleteIds.flatten, entityAttributeScratchQuery.insertScratchAttributes)
+          val (insertRecs: Seq[EntityAttributeRecord], updateRecs: Seq[EntityAttributeRecord], extraDeleteIds: Seq[Long]) = upserts.map {
+            case (name, attribute) =>
+              val attrRecords = entityAttributeQuery.marshalAttribute(refsToIds(entityRecord.toReference), name, attribute, refsToIds)
+
+              // if the attribute already exists it is an update, else an insert
+              if (existingAttributes.contains(name)) recordsForUpdateAttribute(name, attribute, attrRecords)
+              else (attrRecords, Seq.empty[EntityAttributeRecord], Seq.empty[Long])
+          }.foldLeft((Seq.empty[EntityAttributeRecord], Seq.empty[EntityAttributeRecord], Seq.empty[Long])) {
+              case ((insert1, update1, delete1), (insert2, update2, delete2)) => (insert1 ++ insert2, update1 ++ update2, delete1 ++ delete2)
+          }
+
+          val totalDeleteIds = deleteIds ++ extraDeleteIds
+
+          entityAttributeQuery.patchAttributesAction(insertRecs, updateRecs, totalDeleteIds, entityAttributeScratchQuery.insertScratchAttributes)
         }
       }
     }

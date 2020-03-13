@@ -189,6 +189,94 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  it should "update attribute list values" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      // insert new attribute 'myNewList' which is a list with 3 elements
+      val inserts = Map(AttributeName.withDefaultNS("myNewList") -> AttributeValueList(Seq(
+        AttributeString("abc"),
+        AttributeString("def"),
+        AttributeString("xyz")
+      )))
+
+      val expectedAfterInsertion = testData.sample1.attributes ++ inserts
+
+      runAndWait(entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "sample1"), inserts, Seq.empty[AttributeName]))
+
+      assertSameElements(expectedAfterInsertion, runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes)
+
+      // update values in the list
+      val updates = Map(
+        AttributeName.withDefaultNS("myNewList") -> AttributeValueList(Seq(
+          AttributeString("123"),
+          AttributeString("456"),
+          AttributeString("789")
+        )))
+
+      val expectedAfterUpdate = testData.sample1.attributes ++ updates
+
+      runAndWait(entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "sample1"), updates, Seq.empty[AttributeName]))
+
+      // check that the 'myNewList' attribute has updated values
+      assertSameElements(expectedAfterUpdate, runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes)
+    }
+  }
+
+  it should "reflect changes in attribute when attribute value list size increases" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      // insert new attribute 'newEntityList' which is a list with 1 element
+      val inserts = Map(AttributeName.withDefaultNS("newEntityList") -> AttributeValueList(Seq(AttributeString("abc1"))))
+
+      val expectedAfterInsertion = testData.sample1.attributes ++ inserts
+
+      runAndWait(entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "sample1"), inserts, Seq.empty[AttributeName]))
+
+      assertSameElements(expectedAfterInsertion, runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes)
+
+      // update 'newEntityList' to contain 4 elements
+      val updates = Map(
+        AttributeName.withDefaultNS("newEntityList") -> AttributeValueList(Seq(
+          AttributeString("abc2"),
+          AttributeString("def"),
+          AttributeString("abc12"),
+          AttributeString("xyz")
+        )))
+
+      val expectedAfterUpdate = testData.sample1.attributes ++ updates
+
+      runAndWait(entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "sample1"), updates, Seq.empty[AttributeName]))
+
+      // check that the 'newEntityList' attribute has 4 values now
+      assertSameElements(expectedAfterUpdate, runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes)
+    }
+  }
+
+  it should "reflect changes in attribute when attribute value list size decreases" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      // insert new attribute 'anotherList' which is a list with 3 elements
+      val inserts = Map(AttributeName.withDefaultNS("anotherList") -> AttributeValueList(Seq(
+        AttributeString("abc1"),
+        AttributeString("abc2"),
+        AttributeString("abc3")
+      )))
+
+      val expectedAfterInsertion = testData.sample1.attributes ++ inserts
+
+      runAndWait(entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "sample1"), inserts, Seq.empty[AttributeName]))
+
+      assertSameElements(expectedAfterInsertion, runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes)
+
+      // update 'anotherList' to contain 1 element
+      val updates = Map(AttributeName.withDefaultNS("anotherList") -> AttributeValueList(Seq(AttributeString("1234"))))
+
+      val expectedAfterUpdate = testData.sample1.attributes ++ updates
+
+      runAndWait(entityQuery.saveEntityPatch(context, AttributeEntityReference("Sample", "sample1"), updates, Seq.empty[AttributeName]))
+
+      // check that the 'anotherList' attribute has 1 value now
+      assertSameElements(expectedAfterUpdate, runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes)
+    }
+  }
+
   it should "list all entities of all entity types" in withConstantTestDatabase {
     withWorkspaceContext(constantData.workspace) { context =>
       assertSameElements(constantData.allEntities, runAndWait(entityQuery.listActiveEntities(context)))
