@@ -23,9 +23,7 @@ package object util {
     }
   }
 
-  /**
-    * Converts a [[java.util.Map.Entry]] to a [[scala.Tuple2]]
-    */
+  // Converts a [[java.util.Map.Entry]] to a [[scala.Tuple2]]
   implicit class JavaEntrySupport[A, B](entry: java.util.Map.Entry[A, B]) {
     def toTuple: (A, B) = (entry.getKey, entry.getValue)
   }
