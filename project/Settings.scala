@@ -26,7 +26,7 @@ object Settings {
     "-feature",
     "-encoding", "utf8",
     "-Xmax-classfile-name", "100",
-    "-Ywarn-unused:imports",
+    "-Ywarn-unused-import",
     "-deprecation:false", // This is tricky to enable as of 03/2020 [AEN]
     "-Xfatal-warnings"
   )
