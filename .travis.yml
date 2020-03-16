@@ -18,10 +18,26 @@ before_install:
   - docker pull mysql/mysql-server:5.6
   # port 3306 is not available because Travis runs its own MySQL after 2006-12-01
   - docker run -p 3307:3306 --name mysql -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb -d mysql/mysql-server:5.6
-  
+  - >-
+    git clone https://github.com/awslabs/git-secrets.git git-secrets &&
+    pushd git-secrets > /dev/null &&
+    git checkout ad82d68ee924906a0401dfd48de5057731a9bc84 &&
+    export PATH="${PATH}:${PWD}" &&
+    popd > /dev/null
+
 script:
-  - SBT_OPTS=-J-Xmx3g sbt clean coverage test -Denv.type=test -Dmysql.host=localhost -Dmysql.port=3307 -Ddirectory.url=ldap://localhost:3389 -Ddirectory.password=testtesttest it:compile
+  - >-
+    ./minnie-kenny.sh --force &&
+    git secrets --scan-history &&
+    SBT_OPTS=-J-Xmx3g
+    sbt clean coverage test coverageAggregate
+    -Denv.type=test
+    -Dmysql.host=localhost
+    -Dmysql.port=3307
+    -Ddirectory.url=ldap://localhost:3389
+    -Ddirectory.password=testtesttest
+    it:compile
 
 after_success:
-  - SBT_OPTS=-J-Xmx3g sbt coveralls
+  - bash <(curl -s https://codecov.io/bash)
   - docker rm -f mysql

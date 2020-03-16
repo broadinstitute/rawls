@@ -1,6 +1,7 @@
 FROM bigtruedata/sbt
 
 COPY src /app/src
+COPY minnie-kenny.sh /app
 COPY test.sh /app
 COPY project /app/project
 COPY build.sbt /app
