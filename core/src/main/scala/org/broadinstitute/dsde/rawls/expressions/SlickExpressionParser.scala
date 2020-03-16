@@ -5,7 +5,7 @@ import java.sql.Timestamp
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeString}
+import org.broadinstitute.dsde.rawls.model.{Attributable, Attribute, AttributeEntityReference, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeString}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 
 import scala.util.Try
@@ -127,7 +127,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   // matches some_attr_namespace:attr_name or attr_name
   private val attributeIdent: Parser[AttributeName] = opt(ident ~ ":") ~ ident ^^ {
     case Some(namespace ~ ":") ~ name => AttributeName(namespace, name)
-    case None ~ name => AttributeName.withDefaultNS(name)
+    case _ ~ name => AttributeName.withDefaultNS(name)
   }
 
   // workspace.attribute, note that this is a FinalFunc - because workspaces are not entities they can be piped the same way

@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.expressions
 
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString}
 import org.scalatest.{FlatSpec, Matchers}
 

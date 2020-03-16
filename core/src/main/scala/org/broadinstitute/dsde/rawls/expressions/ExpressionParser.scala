@@ -3,6 +3,8 @@ package org.broadinstitute.dsde.rawls.expressions
 import org.broadinstitute.dsde.rawls.model.{AttributeString, ParsedMCExpressions}
 
 import scala.util.{Failure, Success, Try}
+import scala.language.postfixOps
+
 import spray.json._
 
 import cats.syntax.functor._

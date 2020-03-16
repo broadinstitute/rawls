@@ -3,15 +3,14 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.user.UserService
+
+import scala.language.implicitConversions
 
 /**
  * Created by dvoet on 2/8/16.
  */
 class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with RawlsTestUtils {
-  import driver.api._
 
   "WorkspaceComponent" should "crud workspaces" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()

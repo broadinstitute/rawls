@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import spray.json._
-import spray.json.DefaultJsonProtocol._
 import org.joda.time.DateTime
 import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
 
@@ -142,7 +141,6 @@ trait AttributeFormat extends RootJsonFormat[Attribute] with AttributeListSerial
  * if you want e.g. the plain old JSON array attribute list serialization strategy
  */
 class JsonSupport {
-  import spray.json.DefaultJsonProtocol._
   import AttributeFormat._
 
   implicit val attributeFormat: AttributeFormat = new AttributeFormat with TypedAttributeListSerializer

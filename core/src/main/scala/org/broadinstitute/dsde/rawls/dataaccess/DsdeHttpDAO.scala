@@ -1,15 +1,15 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.{Http, HttpExt}
-import akka.http.scaladsl.model.{HttpHeader, HttpRequest, ResponseEntity, StatusCodes}
+import akka.http.scaladsl.HttpExt
+import akka.http.scaladsl.model.{HttpHeader, HttpRequest, ResponseEntity}
 import akka.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
-import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
+import akka.http.scaladsl.unmarshalling.Unmarshaller
 import akka.stream.Materializer
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, UserInfo}
-import org.broadinstitute.dsde.rawls.util.{HttpClientUtils, HttpClientUtilsStandard}
+import org.broadinstitute.dsde.rawls.model.UserInfo
+import org.broadinstitute.dsde.rawls.util.HttpClientUtils
 
 import scala.concurrent.{ExecutionContext, Future}
 

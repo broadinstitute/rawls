@@ -5,7 +5,6 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.model.{Workflow, WorkflowStatuses}
-import org.scalatest.Assertion
 import org.scalatest.concurrent.PatienceConfiguration.Interval
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Seconds, Span}
@@ -13,7 +12,6 @@ import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.meta.MTable
 
-import scala.collection.immutable
 import scala.concurrent.Future
 
 /**

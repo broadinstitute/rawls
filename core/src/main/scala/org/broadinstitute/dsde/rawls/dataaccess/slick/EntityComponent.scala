@@ -12,6 +12,7 @@ import slick.jdbc.{GetResult, JdbcProfile}
 import akka.http.scaladsl.model.StatusCodes
 
 import scala.annotation.tailrec
+import scala.language.postfixOps
 
 sealed trait EntityRecordBase {
   val id: Long

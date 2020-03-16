@@ -2,13 +2,13 @@ package org.broadinstitute.dsde.rawls.integrationtest
 
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO}
+import org.broadinstitute.dsde.rawls.google.HttpGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, ServicePerimeterName}
+import org.broadinstitute.dsde.rawls.model.ServicePerimeterName
 import org.broadinstitute.dsde.rawls.util.{MockitoTestUtils, Retry}
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.time.{Minutes, Seconds, Span}
+import org.scalatest.time.{Seconds, Span}
 
 class HttpGoogleAccessContextManagerDAOSpec extends FlatSpec with Matchers with BeforeAndAfterAll with Retry with LazyLogging with Eventually with MockitoTestUtils with StatsDTestUtils with ScalaFutures {
   implicit val system = ActorSystem("HttpGoogleAccessContextManagerDAOSpec")

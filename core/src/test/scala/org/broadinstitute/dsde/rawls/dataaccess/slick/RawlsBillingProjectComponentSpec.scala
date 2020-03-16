@@ -1,10 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model._
 
 class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
-  import driver.api._
 
   "RawlsBillingProjectComponent" should "save, load and delete" in withDefaultTestDatabase {
     // note that create is called in test data save

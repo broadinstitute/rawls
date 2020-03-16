@@ -33,9 +33,9 @@ import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
-import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 // common trait to be inherited by API service tests
 trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils with RawlsInstrumented

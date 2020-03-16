@@ -3,11 +3,9 @@ package org.broadinstitute.dsde.rawls.util
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.typesafe.scalalogging.{LazyLogging, Logger}
-import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.{Minutes, Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import org.slf4j.{Logger => SLF4JLogger}
@@ -15,7 +13,7 @@ import org.slf4j.{Logger => SLF4JLogger}
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.reflect._
+import scala.language.postfixOps
 
 /**
   * Created by rtitle on 5/16/17.

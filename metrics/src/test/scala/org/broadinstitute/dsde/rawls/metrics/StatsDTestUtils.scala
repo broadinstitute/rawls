@@ -10,6 +10,7 @@ import org.scalatest.concurrent.Eventually
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 /**
   * Created by rtitle on 6/29/17.

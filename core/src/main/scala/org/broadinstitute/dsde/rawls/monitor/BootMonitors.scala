@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorSystem
 import cats.effect.{ContextShift, IO}
 import com.typesafe.config.{Config, ConfigRenderOptions}
@@ -20,6 +18,7 @@ import spray.json._
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.util.Try
 
 // handles monitors which need to be started at boot time

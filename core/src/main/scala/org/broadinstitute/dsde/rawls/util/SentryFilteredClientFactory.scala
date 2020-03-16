@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.util
 import io.sentry.dsn.Dsn
 import io.sentry.event.Event
 import io.sentry.event.helper.ShouldSendEventCallback
-import io.sentry.{DefaultSentryClientFactory, Sentry, SentryClient}
+import io.sentry.{DefaultSentryClientFactory, SentryClient}
 
 import scala.util.{Failure, Success, Try}
 

@@ -5,6 +5,7 @@ import nl.grons.metrics.scala.Histogram
 import org.broadinstitute.dsde.rawls.util.Retry
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.implicitConversions
 import scala.util.Success
 
 /**

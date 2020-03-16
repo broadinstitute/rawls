@@ -24,6 +24,7 @@ import org.broadinstitute.dsde.workbench.google2.GcsBlobName
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 

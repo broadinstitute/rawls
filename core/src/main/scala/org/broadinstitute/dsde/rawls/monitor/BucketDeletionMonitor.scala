@@ -45,9 +45,9 @@ class BucketDeletionMonitor(datasource: SlickDataSource, gcsDAO: GoogleServicesD
       }.unsafeToFuture()
     } yield ()
 
-    checkFuture.onFailure {
+    checkFuture.failed.foreach {
       // there was a failure, log it and it will retry later
-      case t: Throwable => logger.error("Error checking buckets to delete", t)
+      t: Throwable => logger.error("Error checking buckets to delete", t)
     }
   }
 

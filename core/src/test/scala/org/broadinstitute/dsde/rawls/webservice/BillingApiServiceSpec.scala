@@ -2,28 +2,20 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, RawlsBillingProjectRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.user.UserService
-import org.scalatest.path
-import akka.http.scaladsl.model.{HttpMethods, StatusCodes, Uri}
+import akka.http.scaladsl.model.StatusCodes
 import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, model}
-import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
 
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import org.mockito.Mockito._
 import org.mockito.ArgumentMatchers._
 import org.scalatest.mockito.MockitoSugar
@@ -54,7 +46,6 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   }
 
   def createProject(project: RawlsBillingProject, owner: RawlsUser = testData.userOwner): Unit = {
-    import driver.api._
     val projectWithOwner = project.copy()
 
     runAndWait(rawlsBillingProjectQuery.create(projectWithOwner))

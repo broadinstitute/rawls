@@ -7,7 +7,7 @@ import akka.testkit.TestKit
 import cats.implicits._
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{MetadataParams, RawlsUserEmail, RawlsUserSubjectId, Subsystems, UserInfo, WDL, WdlSource}
+import org.broadinstitute.dsde.rawls.model.{MetadataParams, RawlsUserEmail, RawlsUserSubjectId, Subsystems, UserInfo, WdlSource}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.time.{Seconds, Span}

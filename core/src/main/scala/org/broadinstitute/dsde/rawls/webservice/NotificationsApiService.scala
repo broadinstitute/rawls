@@ -1,18 +1,16 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.model.{Notifications, WorkspaceName}
-import org.broadinstitute.dsde.rawls.model.Notifications.{NotificationType, WorkspaceNotification, WorkspaceNotificationType}
+import org.broadinstitute.dsde.rawls.model.Notifications.{NotificationType, WorkspaceNotificationType}
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
-import akka.http.scaladsl.model.StatusCodes
 
 /**
  * Created by dvoet on 3/28/17.
  */
 trait NotificationsApiService {
-  import PerRequest.requestCompleteMarshaller
 
   val notificationsRoutes: server.Route = pathPrefix("notifications") {
     path("workspace" / Segment / Segment) { (namespace, name) =>

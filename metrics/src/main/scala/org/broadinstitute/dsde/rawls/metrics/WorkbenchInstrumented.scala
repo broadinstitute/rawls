@@ -9,7 +9,7 @@ import akka.http.scaladsl.model._
 
 /**
   * Mixin trait for instrumentation.
-  * Extends metrics-scala [[DefaultInstrumented]] and provides additional utilities for generating
+  * Extends metrics-scala `DefaultInstrumented` and provides additional utilities for generating
   * metric names for Workbench.
   */
 trait WorkbenchInstrumented extends DefaultInstrumented {

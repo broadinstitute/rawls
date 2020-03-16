@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.{OAuth2BearerToken, _}
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}

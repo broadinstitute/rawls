@@ -10,7 +10,6 @@ import spray.json._
 class AttributeSpec extends FreeSpec with Assertions {
 
   "AttributeName model" - {
-    import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.attributeFormat
 
     "when unmarshalling from json" - {
       "should handle namespaces" in {

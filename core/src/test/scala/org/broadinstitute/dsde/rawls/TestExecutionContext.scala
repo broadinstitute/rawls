@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import akka.dispatch.{ExecutorServiceFactory, ExecutorServiceConfigurator, DispatcherPrerequisites}
 import com.typesafe.config.Config
 
-import scala.concurrent.{ExecutionContextExecutor, ExecutionContext}
+import scala.concurrent.ExecutionContextExecutor
 
 /**
  * Created by dvoet on 10/9/15.

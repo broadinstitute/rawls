@@ -16,10 +16,11 @@ import akka.http.scaladsl.model.headers.{Location, OAuth2BearerToken}
 import spray.json.DefaultJsonProtocol._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
-import spray.json.{JsObject, JsValue}
+import spray.json.JsObject
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 import scala.util.Random
 
 /**

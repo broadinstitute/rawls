@@ -5,14 +5,11 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WorkflowStatuses._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats._
 import cats.implicits._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
 
 /**
  * Created by mbemis on 2/22/16.
