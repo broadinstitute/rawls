@@ -2000,12 +2000,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def disableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     for {
-      maybeWorkspace <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.findByName(workspaceName) }
-      workspace <- maybeWorkspace match {
-        case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-        case Some(workspace) => Future.successful(workspace)
-      }
-      _ <- accessCheck(workspace, SamWorkspaceActions.compute)
       _ <- requesterPaysSetupService.revokeUserFromWorkspace(userInfo.userEmail, workspaceName)
     } yield {
       RequestComplete(StatusCodes.NoContent)

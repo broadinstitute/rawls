@@ -3113,7 +3113,7 @@ paths:
         '204':
           description: Successful Request
         '403':
-          description: Insufficient permissions to enable Requester Pays for workspace.
+          description: Insufficient permissions to enable Requester Pays for workspace. Writer and higher permissions required on workspace.
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
@@ -3124,7 +3124,10 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-        description: Enable Requester Pays for the user's linked service accounts in a workspace
+        description: >
+          Enable Requester Pays for the user's linked service accounts in a workspace. Grants the
+          serviceusage.services.use permission in the project associated to the workspace to each service account
+          linked in the account linking service (Bond).
         tags:
           - workspaces
         summary: Enable Requester Pays for linked service accounts
@@ -3149,15 +3152,9 @@ paths:
     put:
       responses:
         '204':
-          description: Successful Request
-        '403':
-          description: Insufficient permissions to disable Requester Pays for workspace.
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '404':
-          description: Workspace Not Found
-          schema:
-            $ref: '#/definitions/ErrorReport'
+          description: >
+            In all cases whether or not the workspace exists or user has access. If there were linked service accounts
+            they were removed from the workspace but this api does not indicate that anything was done (for security reasons).
         '500':
           description: Rawls Internal Error
           schema:
