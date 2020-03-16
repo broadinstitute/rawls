@@ -4,7 +4,7 @@ import sbt._
 object Testing {
   lazy val validMySqlHost = taskKey[Unit]("Determine if mysql.host is provided.")
 
-  lazy val validMySqlHostSetting = validMySqlHost := (Def.taskDyn {
+  lazy val validMySqlHostSetting = validMySqlHost := Def.taskDyn {
     val hostName = sys.props.get("mysql.host")
     val log = streams.value.log
 
@@ -14,9 +14,9 @@ object Testing {
         sys.exit(1)
       }
     }
-  }.value)
+  }.value
 
-  def isIntegrationTest(name: String) = name contains "integrationtest"
+  def isIntegrationTest(name: String): Boolean = name contains "integrationtest"
 
   lazy val IntegrationTest = config("it") extend Test
 
@@ -55,7 +55,7 @@ object Testing {
     (testOnly in Test) := ((testOnly in Test) dependsOn validMySqlHost).evaluated,
 
     parallelExecution in Test := false
-  )
+  ) ++ MinnieKenny.testSettings
 
   implicit class ProjectTestSettings(val project: Project) extends AnyVal {
     def withTestSettings: Project = project
