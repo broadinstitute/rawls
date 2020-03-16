@@ -171,7 +171,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def cleanupDMProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   /**
-    * Removes the IAM policies to the project's existing policies
+    * Removes the IAM policies from the project's existing policies
     * @return true if the policy was actually changed
     */
   def removePolicyBindings(projectName: RawlsBillingProjectName, policiesToRemove: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(projectName) { existingPolicies =>
