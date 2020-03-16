@@ -219,7 +219,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean]
-  def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit]
+  def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean]
 
   def getAccessTokenUsingJson(saKey: String) : Future[String]
   def getUserInfoUsingJson(saKey: String): Future[UserInfo]

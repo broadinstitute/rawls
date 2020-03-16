@@ -68,7 +68,6 @@ object SamWorkspaceActions {
 object SamBillingProjectActions {
   val createWorkspace = SamResourceAction("create_workspace")
   val launchBatchCompute = SamResourceAction("launch_batch_compute")
-  val launchNotebookCluster = SamResourceAction("launch_notebook_cluster")
   val alterPolicies = SamResourceAction("alter_policies")
   val readPolicies = SamResourceAction("read_policies")
   val alterGoogleRole = SamResourceAction("alter_google_role")

@@ -961,8 +961,8 @@ class HttpGoogleServicesDAO(
     addPolicyBindings(projectName, Map(s"roles/$role" -> Set(s"group:${groupEmail.value}")))
   }
 
-  override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = {
-    removePolicyBindings(projectName, Map(s"roles/$role" -> Set(s"group:${groupEmail.value}"))).void
+  override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = {
+    removePolicyBindings(projectName, Map(s"roles/$role" -> Set(s"group:${groupEmail.value}")))
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {

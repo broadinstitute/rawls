@@ -230,7 +230,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = Future.successful(false)
 
-  override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = Future.successful(())
+  override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = Future.successful(false)
 
   override def addProjectToFolder(projectName: RawlsBillingProjectName, folderName: String): Future[Unit] = Future.successful(())
 
