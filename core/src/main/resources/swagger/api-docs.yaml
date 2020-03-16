@@ -3151,7 +3151,7 @@ paths:
         '204':
           description: Successful Request
         '403':
-          description: Insufficient permissions to enable Requester Pays for workspace.
+          description: Insufficient permissions to disable Requester Pays for workspace.
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
