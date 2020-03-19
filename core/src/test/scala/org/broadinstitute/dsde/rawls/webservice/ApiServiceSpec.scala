@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
-import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
@@ -173,6 +173,10 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       true,
       "fc-"
     )
+
+    val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
+    val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       methodRepoDAO,
@@ -189,7 +193,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       submissionCostService,
-      workspaceServiceConfig
+      workspaceServiceConfig,
+      requesterPaysSetupService
     )_
 
     def cleanupSupervisor = {

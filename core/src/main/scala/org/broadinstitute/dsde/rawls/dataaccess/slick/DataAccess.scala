@@ -17,6 +17,7 @@ trait DataAccess
   with SubmissionComponent
   with WorkflowComponent
   with ExprEvalComponent
+  with WorkspaceRequesterPaysComponent
   with SlickExpressionParser {
 
 
@@ -42,6 +43,7 @@ trait DataAccess
       TableQuery[SubmissionTable].delete andThen                  // FK to workspace, user, MC, entity
       TableQuery[MethodConfigurationTable].delete andThen         // FK to workspace
       TableQuery[EntityTable].delete andThen                      // FK to workspace
+      TableQuery[WorkspaceRequesterPaysTable].delete andThen      // FK to workspace
       TableQuery[WorkspaceTable].delete andThen
       TableQuery[RawlsBillingProjectTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen

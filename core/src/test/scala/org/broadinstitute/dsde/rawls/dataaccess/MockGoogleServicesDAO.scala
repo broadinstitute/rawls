@@ -206,14 +206,14 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def getBucketDetails(bucket: String, project: RawlsBillingProjectName): Future[WorkspaceBucketOptions] = {
     Future.successful(WorkspaceBucketOptions(false))
   }
-  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, Set[String]]): Future[Boolean] = Future.successful {
-    import cats.implicits._
+
+  protected def updatePolicyBindings(projectName: RawlsBillingProjectName)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = Future.successful {
     val existingPolicies = policies.getOrElse(projectName, Map.empty)
-    val newPolicies = existingPolicies |+| policiesToAdd
-    if (newPolicies.equals(existingPolicies)) {
+    val updatedPolicies = updatePolicies(existingPolicies)
+    if (updatedPolicies.equals(existingPolicies)) {
       false
     } else {
-      policies.put(projectName, newPolicies)
+      policies.put(projectName, updatedPolicies)
       true
     }
   }
@@ -230,7 +230,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def addRoleToGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = Future.successful(false)
 
-  override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = Future.successful(())
+  override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = Future.successful(false)
 
   override def addProjectToFolder(projectName: RawlsBillingProjectName, folderName: String): Future[Unit] = Future.successful(())
 

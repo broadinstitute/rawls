@@ -911,8 +911,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   }
 
   class MinimalTestData() extends TestData {
-    val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val wsName2 = WorkspaceName("myNamespace2", "myWorkspace2")
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespace"), "testBucketUrl", CreationStatuses.Ready, None, None)
+    val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
+    val wsName2 = WorkspaceName(billingProject.projectName.value, "myWorkspace2")
     val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set.empty)
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set.empty)
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set.empty)
@@ -920,7 +921,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val writerGroup2 = makeRawlsGroup(s"${wsName2.namespace}-${wsName2.name}-WRITER", Set.empty)
     val readerGroup2 = makeRawlsGroup(s"${wsName2.namespace}-${wsName2.name}-READER", Set.empty)
     val userReader = RawlsUser(UserInfo(RawlsUserEmail("reader-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212347")))
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), "testBucketUrl", CreationStatuses.Ready, None, None)
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
     val workspace2 = Workspace(wsName2.namespace, wsName2.name, UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 

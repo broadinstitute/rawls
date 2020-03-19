@@ -914,40 +914,19 @@ class HttpGoogleServicesDAO(
     s"${Option(message).getOrElse("")} - code ${code}"
   }
 
-  private def removePolicyBindings(projectName: RawlsBillingProjectName, policiesToRemove: Map[String, Seq[String]]): Future[Unit] = {
-    val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
-    implicit val service = GoogleInstrumentedService.CloudResourceManager
-
-    for {
-      existingPolicy <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
-      })
-
-      _ <- retryWhen500orGoogleError(() => {
-        val existingPolicies: Map[String, Seq[String]] = existingPolicy.getBindings.asScala.map { policy => policy.getRole -> policy.getMembers.asScala.toSeq }.toMap
-
-        // this may result in keys with empty-seq values.  That's ok, we will ignore those later
-        val updatedKeysWithRemovedPolicies: Map[String, Seq[String]] = policiesToRemove.keys.map { k =>
-          val existingForKey = existingPolicies(k)
-          val updatedForKey = existingForKey.toSet diff policiesToRemove(k).toSet
-          k -> updatedForKey.toSeq
-        }.toMap
-
-        // Use standard Map ++ instead of semigroup because we want to replace the original values
-        val newPolicies = existingPolicies ++ updatedKeysWithRemovedPolicies
-
-        val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
-          new Binding().setRole(role).setMembers(members.distinct.asJava)
-        }.toSeq
-
-        // when setting IAM policies, always reuse the existing policy so the etag is preserved.
-        val policyRequest = new SetIamPolicyRequest().setPolicy(existingPolicy.setBindings(updatedBindings.asJava))
-        executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, policyRequest))
-      })
-    } yield ()
-  }
-
-  override def addPolicyBindings(projectName: RawlsBillingProjectName, policiesToAdd: Map[String, Set[String]]): Future[Boolean] = {
+  /**
+    * Updates policy bindings on a google project.
+    * 1) get existing policies
+    * 2) call updatePolicies
+    * 3) if updated policies are the same as existing policies return false, don't call google
+    * 4) if updated policies are different than existing policies update google and return true
+    *
+    * @param projectName google project name
+    * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
+    *                       which will be handled appropriately when sent to google.
+    * @return true if google was called to update policies, false otherwise
+    */
+  override protected def updatePolicyBindings(projectName: RawlsBillingProjectName)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = {
     val cloudResManager = getCloudResourceManager(getBillingServiceAccountCredential)
     implicit val service = GoogleInstrumentedService.CloudResourceManager
 
@@ -959,15 +938,12 @@ class HttpGoogleServicesDAO(
         val existingPolicy = executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null))
         val existingPolicies: Map[String, Set[String]] = existingPolicy.getBindings.asScala.map { policy => policy.getRole -> policy.getMembers.asScala.toSet }.toMap
 
-        // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
-        import cats.implicits._
-        val newPolicies = existingPolicies |+| policiesToAdd.filter(_._2.nonEmpty) // ignore empty lists
+        val updatedPolicies = updatePolicies(existingPolicies)
 
-        if (newPolicies.equals(existingPolicies)) {
+        if (updatedPolicies.equals(existingPolicies)) {
           false
         } else {
-
-          val updatedBindings = newPolicies.collect { case (role, members) if members.nonEmpty =>
+          val updatedBindings = updatedPolicies.collect { case (role, members) if members.nonEmpty => // exclude policies with empty members
             new Binding().setRole(role).setMembers(members.toList.asJava)
           }.toSeq
 
@@ -985,8 +961,8 @@ class HttpGoogleServicesDAO(
     addPolicyBindings(projectName, Map(s"roles/$role" -> Set(s"group:${groupEmail.value}")))
   }
 
-  override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Unit] = {
-    removePolicyBindings(projectName, Map(s"roles/$role" -> Seq(s"group:${groupEmail.value}")))
+  override def removeRoleFromGroup(projectName: RawlsBillingProjectName, groupEmail: WorkbenchEmail, role: String): Future[Boolean] = {
+    removePolicyBindings(projectName, Map(s"roles/$role" -> Set(s"group:${groupEmail.value}")))
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {

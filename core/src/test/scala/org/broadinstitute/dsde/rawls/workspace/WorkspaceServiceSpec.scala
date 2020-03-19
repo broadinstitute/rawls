@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockBondApiDAO, MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
@@ -124,6 +124,10 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       true,
       "fc-"
     )
+
+    val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
+    val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
@@ -143,7 +147,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       maxActiveWorkflowsPerUser,
       workbenchMetricBaseName,
       submissionCostService,
-      workspaceServiceConfig
+      workspaceServiceConfig,
+      requesterPaysSetupService
     )_
 
     def cleanupSupervisor = {
@@ -514,6 +519,39 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       (SamResourceTypeNames.workspace, testData.workspace.workspaceId, SamWorkspacePolicyNames.writer, testData.userWriter.userEmail.value)
     )
     services.samDAO.callsToAddToPolicy should contain theSameElementsAs Seq.empty
+  }
+
+  it should "remove requester pays appropriately when removing ACLs" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
+
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail, Set(BondServiceAccountEmail("foo@bar.com"))))
+
+    val aclRemove = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.NoAccess, None))
+    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclRemove, false), Duration.Inf)
+
+    runAndWait(workspaceRequesterPaysQuery.listAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail)) shouldBe empty
+  }
+
+  it should "keep requester pays appropriately when changing ACLs" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
+
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail, Set(BondServiceAccountEmail("foo@bar.com"))))
+
+    val aclUpdate = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Owner, None))
+    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdate, false), Duration.Inf)
+
+    runAndWait(workspaceRequesterPaysQuery.listAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail)) should contain theSameElementsAs(Set("foo@bar.com"))
+  }
+
+  it should "remove requester pays appropriately when changing ACLs" in withTestDataServicesCustomSam { services =>
+    populateWorkspacePolicies(services)
+
+    runAndWait(workspaceRequesterPaysQuery.insertAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail, Set(BondServiceAccountEmail("foo@bar.com"))))
+
+    val aclUpdate = Set(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None))
+    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdate, false), Duration.Inf)
+
+    runAndWait(workspaceRequesterPaysQuery.listAllForUser(testData.workspace.toWorkspaceName, testData.userWriter.userEmail)) shouldBe empty
   }
 
   it should "return non-existent users during patch ACLs" in withTestDataServicesCustomSam { services =>
@@ -1191,4 +1229,87 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       "operations/EKCsiP2kLRiu0qj_qdLFq8wBIMPErM6tHSoPcHJvZHVjdGlvblF1ZXVl"
     )
   }
+
+  it should "204 on add linked service accounts to workspace" in withTestDataServices { services =>
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val rqComplete = Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      assertResult(RequestComplete(StatusCodes.NoContent)) {
+        rqComplete
+      }
+    }
+  }
+
+  it should "404 on add linked service accounts to workspace which does not exist" in withTestDataServices { services =>
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName.copy(name = "DNE")), Duration.Inf)
+      }
+      assertResult(Some(StatusCodes.NotFound)) {
+        error.errorReport.statusCode
+      }
+    }
+  }
+
+  it should "404 on add linked service accounts to workspace with no access" in withTestDataServicesCustomSamAndUser(RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))) { services =>
+    populateWorkspacePolicies(services)
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      }
+      assertResult(Some(StatusCodes.NotFound)) {
+        error.errorReport.statusCode
+      }
+    }
+  }
+
+  it should "403 on add linked service accounts to workspace with read access" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.enableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      }
+      assertResult(Some(StatusCodes.Forbidden)) {
+        error.errorReport.statusCode
+      }
+    }
+  }
+
+  it should "204 on remove linked service accounts to workspace" in withTestDataServices { services =>
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      assertResult(RequestComplete(StatusCodes.NoContent)) {
+        rqComplete
+      }
+    }
+  }
+
+  it should "204 on remove linked service accounts to workspace which does not exist" in withTestDataServices { services =>
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName.copy(name = "DNE")), Duration.Inf)
+      assertResult(RequestComplete(StatusCodes.NoContent)) {
+        rqComplete
+      }
+    }
+  }
+
+  it should "204 on remove linked service accounts to workspace with no access" in withTestDataServicesCustomSamAndUser(RawlsUser(RawlsUserSubjectId("no-access"), RawlsUserEmail("no-access"))) { services =>
+    populateWorkspacePolicies(services)
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      assertResult(RequestComplete(StatusCodes.NoContent)) {
+        rqComplete
+      }
+    }
+  }
+
+  it should "204 on remove linked service accounts to workspace with read access" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val rqComplete = Await.result(services.workspaceService.disableRequesterPaysForLinkedSAs(testData.workspace.toWorkspaceName), Duration.Inf)
+      assertResult(RequestComplete(StatusCodes.NoContent)) {
+        rqComplete
+      }
+    }
+  }
+
 }

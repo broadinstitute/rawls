@@ -1356,5 +1356,19 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "enable and disable RequesterPaysForLinkedServiceAccounts" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
+    Put(s"${testData.workspace.path}/enableRequesterPaysForLinkedServiceAccounts") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+
+    Put(s"${testData.workspace.path}/disableRequesterPaysForLinkedServiceAccounts") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+  }
+
 }
 

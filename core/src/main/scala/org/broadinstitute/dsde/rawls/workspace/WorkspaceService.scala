@@ -57,7 +57,7 @@ object WorkspaceService {
                   notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService,
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
-                  config: WorkspaceServiceConfig)
+                  config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService)
                  (userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext) = {
 
@@ -74,7 +74,7 @@ object WorkspaceService {
       notificationDAO, userServiceConstructor,
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
-      config, entityManager)
+      config, entityManager, requesterPaysSetupService)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -99,7 +99,7 @@ object WorkspaceService {
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean, workspaceBucketNamePrefix: String)
 
 //noinspection TypeAnnotation,MatchToPartialFunction,SimplifyBooleanMatch,RedundantBlock,NameBooleanParameters,MapGetGet,ScalaDocMissingParameterDescription,AccessorLikeMethodIsEmptyParen,ScalaUnnecessaryParentheses,EmptyParenMethodAccessedAsParameterless,ScalaUnusedSymbol,EmptyCheck,ScalaUnusedSymbol,RedundantDefaultArgument
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, entityManager: EntityManager)(implicit protected val executionContext: ExecutionContext)
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, val methodConfigResolver: MethodConfigResolver, protected val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService, genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int, maxActiveWorkflowsPerUser: Int, override val workbenchMetricBaseName: String, submissionCostService: SubmissionCostService, config: WorkspaceServiceConfig, entityManager: EntityManager, requesterPaysSetupService: RequesterPaysSetupService)(implicit protected val executionContext: ExecutionContext)
   extends RoleSupport with LibraryPermissionsSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging with RawlsInstrumented with JsonFilterUtils {
 
   import dataSource.dataAccess.driver.api._
@@ -127,6 +127,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def GetBucketOptions(workspaceName: WorkspaceName) = getBucketOptions(workspaceName)
   //def UpdateBucketOptions(workspaceName: WorkspaceName, bucketOptions: WorkspaceBucketOptions) = updateBucketOptions(workspaceName, bucketOptions)
   def GetAccessInstructions(workspaceName: WorkspaceName) = getAccessInstructions(workspaceName)
+  def EnableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName) = enableRequesterPaysForLinkedSAs(workspaceName)
+  def DisableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName) = disableRequesterPaysForLinkedSAs(workspaceName)
 
   def CreateEntity(workspaceName: WorkspaceName, entity: Entity) = createEntity(workspaceName, entity)
   def GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) = getEntity(workspaceName, entityType, entityName)
@@ -870,6 +872,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
               samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, email, userInfo)
             }
+
+            _ <- revokeRequesterPaysForLinkedSAs(workspaceName, policyRemovals, policyAdditions)
+
             _ <- maybeShareProjectComputePolicy(policyAdditions, workspaceName)
 
           } yield {
@@ -882,6 +887,30 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
       else Future.successful(RequestComplete(StatusCodes.OK, WorkspaceACLUpdateResponseList(Set.empty, Set.empty, aclUpdates.filter(au => userToInvite.contains(au.email)))))
     }
+  }
+
+  /**
+    * Revoke any linked SAs for users removed from workspace. This happens during the acl update process. This process
+    * can remove a user from one policy and add to another or simply remove a user altogether. Only removals/additions
+    * to policies that can spend money count (owner, writer). Removal from applicable policy with a corresponding
+    * addition to a different applicable policy should not result in revocation. This is done by first finding all the
+    * removals from applicable policies then removing all the additions to applicable policies. Revoke linked SAs for
+    * all resulting users.
+    *
+    * @param workspaceName
+    * @param policyRemovals
+    * @param policyAdditions
+    * @return
+    */
+  private def revokeRequesterPaysForLinkedSAs(workspaceName: WorkspaceName, policyRemovals: Set[(SamResourcePolicyName, String)], policyAdditions: Set[(SamResourcePolicyName, String)]): Future[Unit] = {
+    val applicablePolicies = Set(SamWorkspacePolicyNames.owner, SamWorkspacePolicyNames.writer)
+    val applicableRemovals = policyRemovals.collect {
+      case (policy, email) if applicablePolicies.contains(policy) => RawlsUserEmail(email)
+    }
+    val applicableAdditions = policyAdditions.collect {
+      case (policy, email) if applicablePolicies.contains(policy) => RawlsUserEmail(email)
+    }
+    Future.traverse(applicableRemovals -- applicableAdditions) { emailToRevoke => requesterPaysSetupService.revokeUserFromWorkspace(emailToRevoke, workspaceName) }.void
   }
 
   private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate], existingAcls: Set[WorkspaceACLUpdate]) = {
@@ -1952,6 +1981,28 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       } else {
         Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"operation id ${operationIdString} not found in workflow $workflowId")))
       }
+    }
+  }
+
+  def enableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    for {
+      maybeWorkspace <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.findByName(workspaceName) }
+      workspace <- maybeWorkspace match {
+        case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+        case Some(workspace) => Future.successful(workspace)
+      }
+      _ <- accessCheck(workspace, SamWorkspaceActions.compute)
+      _ <- requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, workspaceName)
+    } yield {
+      RequestComplete(StatusCodes.NoContent)
+    }
+  }
+
+  def disableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    for {
+      _ <- requesterPaysSetupService.revokeUserFromWorkspace(userInfo.userEmail, workspaceName)
+    } yield {
+      RequestComplete(StatusCodes.NoContent)
     }
   }
 

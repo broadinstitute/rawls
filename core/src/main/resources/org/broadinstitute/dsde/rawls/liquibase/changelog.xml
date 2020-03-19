@@ -70,4 +70,6 @@
     <include file="changesets/20190503_drop_prereqs.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20190530_serviceperimeter_on_billingproject.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20200128_add_delete_intermediate_output_files.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20200311_workspace_requester_pays.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog>
