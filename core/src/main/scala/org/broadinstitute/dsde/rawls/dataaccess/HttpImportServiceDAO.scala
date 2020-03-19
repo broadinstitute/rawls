@@ -46,6 +46,6 @@ class HttpImportServiceDAO(url: String)(implicit val system: ActorSystem, val ma
 }
 
 
-case class ImportServiceResponse(id: String, status: String)
+case class ImportServiceResponse(jobId: String, status: String)
 
 
