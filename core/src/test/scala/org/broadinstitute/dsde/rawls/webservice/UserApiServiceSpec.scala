@@ -120,39 +120,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "create a billing project" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
-
-      // first add the project and user to the DB
-
-      val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
-
-      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
-
-      import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
-
-      Post(s"/billing", httpJson(createRequest)) ~>
-        sealRoute(services.billingRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
-          }
-        }
-
-      Get("/user/billing") ~>
-        sealRoute(services.userRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
-            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[List[RawlsBillingProjectMembership]]
-          }
-        }
-
-      assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
-      }
+      val project1 = setupBillingProject(services)
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
@@ -184,6 +152,39 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  private def setupBillingProject(services: TestApiService): RawlsBillingProject = {
+    val project = RawlsBillingProject(RawlsBillingProjectName("project"), "mockBucketUrl", CreationStatuses.Ready, None, None)
+
+    val createRequest = CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None, None)
+
+    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+    Post(s"/billing", httpJson(createRequest)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Get("/user/billing") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(List(RawlsBillingProjectMembership(project.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
+          import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+          responseAs[List[RawlsBillingProjectMembership]]
+        }
+      }
+
+    assertResult(1) {
+      runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
+    }
+
+    project
+  }
 
   it should "handle operation errors creating a billing project" in {
     testWithPollingError { _ =>
@@ -202,36 +203,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       // first add the project and user to the DB
 
-      val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
-
-      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
-
-      import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
-
-      Post(s"/billing", httpJson(createRequest)) ~>
-        sealRoute(services.billingRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
-          }
-        }
-
-      Get("/user/billing") ~>
-        sealRoute(services.userRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
-            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[List[RawlsBillingProjectMembership]]
-          }
-        }
-
-      assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
-      }
+      val project1 = setupBillingProject(services)
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
@@ -273,36 +245,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       // first add the project and user to the DB
 
-      val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
-
-      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
-
-      import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
-
-      Post(s"/billing", httpJson(createRequest)) ~>
-        sealRoute(services.billingRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
-          }
-        }
-
-      Get("/user/billing") ~>
-        sealRoute(services.userRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(List(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
-            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-            responseAs[List[RawlsBillingProjectMembership]]
-          }
-        }
-
-      assertResult(1) {
-        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName), GoogleOperationNames.DeploymentManagerCreateProject)).size
-      }
+      val project1 = setupBillingProject(services)
 
       val billingProjectMonitor = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
@@ -349,7 +292,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when adding a user to a billing project that the caller owns" in withTestDataApiServices { services =>
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
-    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
+    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None, None)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 
@@ -377,7 +320,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when removing a user from a billing project that the caller owns" in withTestDataApiServices { services =>
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), "mockBucketUrl", CreationStatuses.Ready, None, None)
-    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)
+    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None, None)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
 

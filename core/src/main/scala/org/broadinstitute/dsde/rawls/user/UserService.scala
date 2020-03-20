@@ -376,9 +376,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   private def validateCreateProjectRequest(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
-    if (createProjectRequest.enableFlowLogs.getOrElse(false) && !createProjectRequest.highSecurityNetwork.getOrElse(false)) {
-      //flow logs require HSN, so error if someone asks for the former without the latter
-      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "enableFlowLogs requires highSecurityNetwork = true")))
+    if ((createProjectRequest.enableFlowLogs.getOrElse(false) || createProjectRequest.privateIpGoogleAccess.getOrElse(false)) && !createProjectRequest.highSecurityNetwork.getOrElse(false)) {
+      //flow logs and private google access both require HSN, so error if someone asks for either of the former without the latter
+      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "enableFlowLogs or privateIpGoogleAccess both require highSecurityNetwork = true")))
     } else {
       Future.successful(())
     }
@@ -430,7 +430,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
       parentFolderId <- createProjectRequest.servicePerimeter.traverse(lookupFolderIdFromServicePerimeterName)
 
-      createProjectOperation <- gcsDAO.createProject(createProjectRequest.projectName, billingAccount, dmConfig.templatePath, createProjectRequest.highSecurityNetwork.getOrElse(false), createProjectRequest.enableFlowLogs.getOrElse(false), requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate, parentFolderId).recoverWith {
+      createProjectOperation <- gcsDAO.createProject(createProjectRequest.projectName, billingAccount, dmConfig.templatePath, createProjectRequest.highSecurityNetwork.getOrElse(false), createProjectRequest.enableFlowLogs.getOrElse(false), createProjectRequest.privateIpGoogleAccess.getOrElse(false), requesterPaysRole, ownerGroupEmail, computeUserGroupEmail, projectTemplate, parentFolderId).recoverWith {
         case t: Throwable =>
           // failed to create project in google land, rollback inserts above
           dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(createProjectRequest.projectName) } map(_ => throw t)

@@ -182,7 +182,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     when(services.samDAO.syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))).thenReturn(Future.successful(Map(WorkbenchEmail("owner-policy@google.group") -> Seq())))
     when(services.samDAO.syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(projectName.value), ArgumentMatchers.eq(SamBillingProjectPolicyNames.canComputeUser))).thenReturn(Future.successful(Map(WorkbenchEmail("can-compute-policy@google.group") -> Seq())))
 
-    Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)) ~>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -205,13 +205,13 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
 
   it should "rollback billing project inserts when there is a google error" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource, new MockGoogleServicesDAO("test") {
-      override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
+      override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
         Future.failed(new Exception("test exception"))
       }
     }) { services =>
       val projectName = RawlsBillingProjectName("test_good2")
 
-      Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None)) ~>
+      Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName, None, None, None, None)) ~>
         sealRoute(services.billingRoutes) ~>
         check {
           assertResult(StatusCodes.InternalServerError) {
@@ -223,7 +223,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with inaccessible to firecloud billing account" in withTestDataApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName, None, None, None)) ~>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName, None, None, None, None)) ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -233,7 +233,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 403 when creating a project with inaccessible to user billing account" in withTestDataApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), RawlsBillingAccountName("this does not exist"), None, None, None)) ~>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), RawlsBillingAccountName("this does not exist"), None, None, None, None)) ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -243,7 +243,17 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with enableFlowLogs but not highSecurityNetwork" in withTestDataApiServices { services =>
-    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), enableFlowLogs = Some(true), None)) ~>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), enableFlowLogs = Some(true), None, None)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 when creating a project with privateIpGoogleAccess but not highSecurityNetwork" in withTestDataApiServices { services =>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_good"), services.gcsDAO.accessibleBillingAccountName, highSecurityNetwork = Some(false), None, privateIpGoogleAccess = Some(true), None)) ~>
       sealRoute(services.billingRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
