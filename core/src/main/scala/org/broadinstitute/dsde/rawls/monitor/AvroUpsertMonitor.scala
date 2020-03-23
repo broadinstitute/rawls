@@ -189,6 +189,20 @@ class AvroUpsertMonitorActor(
 
   var pullArrow = true
 
+  /* Note there is a (rare) possibility for data overwrite as follows:
+   * 1. Pub/Sub double-delivers an import request to Rawls. Rawls processes the first request and sends a message to
+   *    import service to update the import job status.
+   * 2. Import service has been asleep and a VM cold boots, taking a few extra seconds.
+   * 3. While this is happening, a user modifies data through the API.
+   * 4. Rawls processes the second import request. Import service has not updated its status, so Rawls proceeds.
+   * 5. Rawls just wiped out the user's changes from #3.
+   *
+   * It is conceivable (with a large change in technology - think serializing all imports and guaranteeing in-order,
+   * only-once delivery) that we could eliminate the kind of data overwrites that Pub/Sub makes us liable to see.
+   * However, it is worth noting that we already accept the possibility that Terra users will overwrite each other's
+   * data. We also acknowledge that the the risk of data overwrite is small, requiring two imports to the same workspace
+   * on the same entities at the same time.
+   */
   override def receive = {
     case StartMonitorPass =>
       pullArrow = !pullArrow
