@@ -200,9 +200,8 @@ class AvroUpsertMonitorActor(
    * It is conceivable (with a large change in technology - think serializing all imports and guaranteeing in-order,
    * only-once delivery) that we could eliminate the kind of data overwrites that Pub/Sub makes us liable to see.
    * However, it is worth noting that we already accept the possibility that Terra users will overwrite each other's
-   * data. We also acknowledge that the the risk of data overwrite is small, requiring two imports to the same workspace
-   * on the same entities at the same time.
-   */
+   * data. We also acknowledge that the the risk of data overwrite is small, requiring pubsub to double-deliver a
+   * message at the same time as Rawls receives another user request modifying the same entities. */
   override def receive = {
     case StartMonitorPass =>
       pullArrow = !pullArrow
