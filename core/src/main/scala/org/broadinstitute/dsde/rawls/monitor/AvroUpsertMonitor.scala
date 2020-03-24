@@ -254,27 +254,18 @@ class AvroUpsertMonitorActor(
         case Some(status) if status == ImportStatuses.ReadyForUpsert => {
           publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
           toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, attributes.workspace, petUserInfo)) map {
-            case Success(_) => markImportAsDone(attributes.importId, attributes.workspace, petUserInfo)
+            case Success(_) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, None)
             case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
           }
         }
-        case Some(status) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(s"Import status was $status, not ${ImportStatuses.ReadyForUpsert}. "))
+        case Some(status) => {
+          logger.warn(s"Received a double message delivery for import ID [${attributes.importId}]")
+          Future.unit
+        }
         case None => publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option("Import status not found"))
       }
     } yield ()
     importFuture.map(_ => ImportComplete) pipeTo self
-  }
-
-
-  private def markImportAsDone(importId: UUID, workspaceName: WorkspaceName, userInfo: UserInfo) = {
-    for {
-      importStatus <- importServiceDAO.getImportStatus(importId, workspaceName, userInfo)
-      _ <- importStatus match {
-        case Some(status) if status == ImportStatuses.Upserting => publishMessageToUpdateImportStatus(importId, Option(status), ImportStatuses.Done, None)
-        case Some(status) => publishMessageToUpdateImportStatus(importId, Option(status), ImportStatuses.Error, Option(s"Upsert finished, but import status was $status and not ${ImportStatuses.Upserting}."))
-        case None => publishMessageToUpdateImportStatus(importId, None, ImportStatuses.Error, Option("Import status not found"))
-      }
-    } yield ()
   }
 
   private def publishMessageToUpdateImportStatus(importId: UUID, currentImportStatus: Option[ImportStatus], newImportStatus: ImportStatus, errorMessage: Option[String]) = {
