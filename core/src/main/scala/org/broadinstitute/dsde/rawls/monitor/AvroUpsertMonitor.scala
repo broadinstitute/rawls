@@ -258,7 +258,7 @@ class AvroUpsertMonitorActor(
             case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
           }
         }
-        case Some(status) => {
+        case Some(_) => {
           logger.warn(s"Received a double message delivery for import ID [${attributes.importId}]")
           Future.unit
         }
