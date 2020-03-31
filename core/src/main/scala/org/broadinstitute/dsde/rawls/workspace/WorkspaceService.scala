@@ -371,7 +371,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getWorkspaceContextAndPermissions(workspaceName: WorkspaceName, requiredAction: SamResourceAction, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[SlickWorkspaceContext] = {
     for {
       workspaceContext <- getWorkspaceContext(workspaceName, attributeSpecs)
-      _ <- accessCheck(workspaceContext.workspace, requiredAction, false) // throws if user does not have permission
+      _ <- accessCheck(workspaceContext.workspace, requiredAction, ignoreLock = false) // throws if user does not have permission
     } yield workspaceContext
   }
 
@@ -2023,7 +2023,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
         case Some(workspace) => Future.successful(workspace)
       }
-      _ <- accessCheck(workspace, SamWorkspaceActions.compute, false)
+      _ <- accessCheck(workspace, SamWorkspaceActions.compute, ignoreLock = false)
       _ <- requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, workspaceName)
     } yield {
       RequestComplete(StatusCodes.NoContent)
@@ -2259,11 +2259,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def requireAccessF[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => Future[T]): Future[T] = {
-    accessCheck(workspace, requiredAction, false) flatMap { _ => codeBlock }
+    accessCheck(workspace, requiredAction, ignoreLock = false) flatMap { _ => codeBlock }
   }
 
   private def requireAccessIgnoreLockF[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => Future[T]): Future[T] = {
-    accessCheck(workspace, requiredAction, true) flatMap { _ => codeBlock }
+    accessCheck(workspace, requiredAction, ignoreLock = true) flatMap { _ => codeBlock }
   }
 
   private def requireComputePermission(workspaceName: WorkspaceName): Future[Boolean] = {
