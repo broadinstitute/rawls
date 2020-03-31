@@ -2266,7 +2266,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     accessCheck(workspace, requiredAction, ignoreLock = true) flatMap { _ => codeBlock }
   }
 
-  private def requireComputePermission(workspaceName: WorkspaceName): Future[Boolean] = {
+  private def requireComputePermission(workspaceName: WorkspaceName): Future[Unit] = {
     for {
       workspaceContext <- getWorkspaceContext(workspaceName)
       hasCompute <- {
@@ -2274,7 +2274,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           if (!projectCanCompute) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspaceName))))
           else {
             samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, SamWorkspaceActions.compute, userInfo).flatMap { launchBatchCompute =>
-              if (launchBatchCompute) Future.successful(true)
+              if (launchBatchCompute) Future.successful(())
               else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, SamWorkspaceActions.read, userInfo).flatMap { workspaceRead =>
                 if (workspaceRead) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspaceName))))
                 else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
