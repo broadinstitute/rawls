@@ -972,15 +972,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-
-    val wsCtxFuture = dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all = false))) { workspaceContext =>
-        DBIO.successful(workspaceContext)
-      }
-    }
-
     //don't do the sam REST call inside the db transaction.
-    wsCtxFuture flatMap { workspaceContext =>
+    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext.workspace, SamWorkspaceActions.own) {
         //if we get here, we passed all the hoops
 
@@ -998,16 +991,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def unlockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-
-    val wsCtxFuture = dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all = false))) { workspaceContext =>
-        DBIO.successful(workspaceContext)
-      }
-    }
-
-
     //don't do the sam REST call inside the db transaction.
-    wsCtxFuture flatMap { workspaceContext =>
+    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext.workspace, SamWorkspaceActions.own) {
         //if we get here, we passed all the hoops
 
@@ -1969,15 +1954,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getBucketUsage(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-
-    val wsCtxFuture = dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all = false))) { workspaceContext =>
-        DBIO.successful(workspaceContext)
-      }
-    }
-
     //don't do the sam REST call inside the db transaction.
-    wsCtxFuture flatMap { workspaceContext =>
+    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext.workspace, SamWorkspaceActions.write) {
         //if we get here, we passed all the hoops, otherwise an exception would have been thrown
 
@@ -2238,11 +2216,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def accessCheck(workspace: Workspace, requiredAction: SamResourceAction, ignoreLock: Boolean): Future[Unit] = {
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo) flatMap { hasRequiredLevel =>
       if (hasRequiredLevel) {
-        if (Set(SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(requiredAction) && workspace.isLocked) {
-          if(!ignoreLock)
-            Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
-          else Future.successful(())
-        }
+        if (Set(SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(requiredAction) && workspace.isLocked && !ignoreLock)
+          Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
         else
           Future.successful(())
       } else {
