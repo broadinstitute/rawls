@@ -371,7 +371,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getWorkspaceContextAndPermissions(workspaceName: WorkspaceName, requiredAction: SamResourceAction, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): Future[SlickWorkspaceContext] = {
     for {
       workspaceContext <- getWorkspaceContext(workspaceName, attributeSpecs)
-      _ <- accessCheck(workspaceContext.workspace, requiredAction) // throws if user does not have permission
+      _ <- accessCheck(workspaceContext.workspace, requiredAction, ignoreLock = false) // throws if user does not have permission
     } yield workspaceContext
   }
 
@@ -971,10 +971,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccessIgnoreLock(workspaceContext.workspace, SamWorkspaceActions.own) {
+  def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    //don't do the sam REST call inside the db transaction.
+    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
+      requireAccessIgnoreLockF(workspaceContext.workspace, SamWorkspaceActions.own) {
+        //if we get here, we passed all the hoops
+
+        dataSource.inTransaction { dataAccess =>
           dataAccess.submissionQuery.list(workspaceContext).flatMap { submissions =>
             if (!submissions.forall(_.status.isTerminated)) {
               DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace $workspaceName, so it cannot be locked.")))
@@ -985,15 +988,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
+  }
 
-  def unlockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccessIgnoreLock(workspaceContext.workspace, SamWorkspaceActions.own) {
+  def unlockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    //don't do the sam REST call inside the db transaction.
+    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
+      requireAccessIgnoreLockF(workspaceContext.workspace, SamWorkspaceActions.own) {
+        //if we get here, we passed all the hoops
+
+        dataSource.inTransaction { dataAccess =>
           dataAccess.workspaceQuery.unlock(workspaceContext.workspace.toWorkspaceName).map(_ => RequestComplete(StatusCodes.NoContent))
         }
       }
     }
+  }
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean): Future[PerRequestMessage] =
 
@@ -1607,11 +1615,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] = {
-    withSubmissionParameters(workspaceName, submissionRequest) {
-      (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode]) =>
-        requireComputePermission(workspaceContext.workspace) {
+    requireComputePermission(workspaceName).flatMap { _ =>
+      withSubmissionParameters(workspaceName, submissionRequest) {
+        (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode]) =>
           val submissionId: UUID = UUID.randomUUID()
-          val submissionEntityOpt = if(header.entityType.isEmpty) { None } else { Some(AttributeEntityReference(entityType = submissionRequest.entityType.get, entityName = submissionRequest.entityName.get)) }
+          val submissionEntityOpt = if (header.entityType.isEmpty) {
+            None
+          } else {
+            Some(AttributeEntityReference(entityType = submissionRequest.entityType.get, entityName = submissionRequest.entityName.get))
+          }
 
           val workflows = successes map { entityInputs =>
             val workflowEntityOpt = header.entityType.map(_ => AttributeEntityReference(entityType = header.entityType.get, entityName = entityInputs.entityName))
@@ -1656,7 +1668,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
             RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, successes))
           }
-        }
+      }
     }
   }
 
@@ -1942,17 +1954,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getBucketUsage(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    for {
-      bucketName <- dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          requireAccessIgnoreLock(workspaceContext.workspace, SamWorkspaceActions.write) {
-            DBIO.successful(workspaceContext.workspace.bucketName)
-          }
+    //don't do the sam REST call inside the db transaction.
+    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
+      requireAccessIgnoreLockF(workspaceContext.workspace, SamWorkspaceActions.write) {
+        //if we get here, we passed all the hoops, otherwise an exception would have been thrown
+
+        gcsDAO.getBucketUsage(RawlsBillingProjectName(workspaceName.namespace), workspaceContext.workspace.bucketName).map { usage =>
+          RequestComplete(BucketUsageResponse(usage))
         }
       }
-      usage <- gcsDAO.getBucketUsage(RawlsBillingProjectName(workspaceName.namespace), bucketName)
-    } yield {
-      RequestComplete(BucketUsageResponse(usage))
     }
   }
 
@@ -1991,7 +2001,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
         case Some(workspace) => Future.successful(workspace)
       }
-      _ <- accessCheck(workspace, SamWorkspaceActions.compute)
+      _ <- accessCheck(workspace, SamWorkspaceActions.compute, ignoreLock = false)
       _ <- requesterPaysSetupService.grantRequesterPaysToLinkedSAs(userInfo, workspaceName)
     } yield {
       RequestComplete(StatusCodes.NoContent)
@@ -2203,10 +2213,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def accessCheck(workspace: Workspace, requiredAction: SamResourceAction): Future[Unit] = {
+  private def accessCheck(workspace: Workspace, requiredAction: SamResourceAction, ignoreLock: Boolean): Future[Unit] = {
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo) flatMap { hasRequiredLevel =>
       if (hasRequiredLevel) {
-        if (Set(SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(requiredAction) && workspace.isLocked)
+        if (Set(SamWorkspaceActions.write, SamWorkspaceActions.compute).contains(requiredAction) && workspace.isLocked && !ignoreLock)
           Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
         else
           Future.successful(())
@@ -2223,33 +2233,33 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
-  private def requireAccess[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    DBIO.from(accessCheck(workspace, requiredAction)) flatMap { _ => codeBlock }
-  }
-
   private def requireAccessF[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => Future[T]): Future[T] = {
-    accessCheck(workspace, requiredAction) flatMap { _ => codeBlock }
+    accessCheck(workspace, requiredAction, ignoreLock = false) flatMap { _ => codeBlock }
   }
 
-  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
-  private def requireAccessIgnoreLock[T](workspace: Workspace, requiredAction: SamResourceAction)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    requireAccess(workspace.copy(isLocked = false), requiredAction)(op)
+  private def requireAccessIgnoreLockF[T](workspace: Workspace, requiredAction: SamResourceAction)(codeBlock: => Future[T]): Future[T] = {
+    accessCheck(workspace, requiredAction, ignoreLock = true) flatMap { _ => codeBlock }
   }
 
-  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
-  private def requireComputePermission[T](workspace: Workspace)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, workspace.namespace, SamBillingProjectActions.launchBatchCompute, userInfo)) flatMap { projectCanCompute =>
-      if (!projectCanCompute) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
-      else {
-        DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.compute, userInfo)) flatMap { launchBatchCompute =>
-          if (launchBatchCompute) codeBlock
-          else DBIO.from(samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, userInfo)) flatMap { workspaceRead =>
-            if (workspaceRead) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
-            else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+  private def requireComputePermission(workspaceName: WorkspaceName): Future[Unit] = {
+    for {
+      workspaceContext <- getWorkspaceContext(workspaceName)
+      hasCompute <- {
+        samDAO.userHasAction(SamResourceTypeNames.billingProject, workspaceName.namespace, SamBillingProjectActions.launchBatchCompute, userInfo).flatMap { projectCanCompute =>
+          if (!projectCanCompute) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspaceName))))
+          else {
+            samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, SamWorkspaceActions.compute, userInfo).flatMap { launchBatchCompute =>
+              if (launchBatchCompute) Future.successful(())
+              else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspace.workspaceId, SamWorkspaceActions.read, userInfo).flatMap { workspaceRead =>
+                if (workspaceRead) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspaceName))))
+                else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+              }
+            }
           }
         }
       }
+    } yield {
+      hasCompute
     }
   }
 
