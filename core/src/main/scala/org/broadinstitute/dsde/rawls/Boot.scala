@@ -299,9 +299,8 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
-      val maxActiveWorkflowsTotal = conf.getInt(
-        "executionservice.maxActiveWorkflowsPerServer"
-      ) * executionServiceServers.size
+      val maxActiveWorkflowsTotal =
+        conf.getInt("executionservice.maxActiveWorkflowsPerServer")
       val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt(
         "executionservice.activeWorkflowHogFactor"
       )
