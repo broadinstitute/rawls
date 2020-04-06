@@ -826,7 +826,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord] = {
     implicit val service = GoogleInstrumentedService.DeploymentManager
     val credential = getDeploymentManagerAccountCredential
     val deploymentManager = getDeploymentManager(credential)
@@ -848,6 +848,7 @@ class HttpGoogleServicesDAO(
       "requesterPaysRole" -> requesterPaysRole.toJson,
       "highSecurityNetwork" -> highSecurityNetwork.toJson,
       "enableFlowLogs" -> enableFlowLogs.toJson,
+      "privateIpGoogleAccess" -> privateIpGoogleAccess.toJson,
       "fcProjectOwners" -> projectTemplate.owners.toJson,
       "fcProjectEditors" -> projectTemplate.editors.toJson,
       "labels" -> templateLabels
