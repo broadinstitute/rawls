@@ -4,8 +4,10 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
+import spray.json.{JsObject, JsString}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -13,6 +15,7 @@ import scala.concurrent.duration.Duration
 /**
  * Created by dvoet on 2/9/16.
  */
+//noinspection EmptyParenMethodAccessedAsParameterless,RedundantDefaultArgument,NameBooleanParameters,MutatorLikeMethodIsParameterless,ScalaUnnecessaryParentheses,ScalaUnusedSymbol,TypeAnnotation
 class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with AttributeComponent with RawlsTestUtils {
   import driver.api._
 
@@ -490,6 +493,175 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
     assertResult(Vector(("cant", 1))) {
       runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withDefaultNS("testString"), Some("can")).result)
+    }
+  }
+
+  private def runWorkspaceSaveNewTest(insertAttribute: Attribute, updateAttribute: Attribute): Unit = {
+    withDefaultTestDatabase {
+      withWorkspaceContext(testData.workspace) { context =>
+        // Try to insert new attribute
+        val inserts = Map(AttributeName.withDefaultNS("newWorkspaceAttribute") -> insertAttribute)
+
+        val expectedAfterInsertion = testData.workspace.attributes ++ inserts
+
+        runAndWait(workspaceQuery.save(
+          testData.workspace.copy(attributes = expectedAfterInsertion)
+        ))
+
+        val resultAfterInsert = runAndWait(workspaceQuery.findById(testData.workspace.workspaceId)).head.attributes
+
+        assertSameElements(expectedAfterInsertion, resultAfterInsert)
+
+        // Try to update the new attribute
+        val updates: AttributeMap = Map(AttributeName.withDefaultNS("newWorkspaceAttribute") -> updateAttribute)
+
+        val expectedAfterUpdate = testData.workspace.attributes ++ updates
+
+        runAndWait(workspaceQuery.save(
+          testData.workspace.copy(attributes = expectedAfterUpdate)
+        ))
+
+        val resultAfterUpdate = runAndWait(workspaceQuery.findById(testData.workspace.workspaceId)).head.attributes
+
+        // check that the new attribute has been updated
+        assertSameElements(expectedAfterUpdate, resultAfterUpdate)
+      }
+    }
+  }
+
+  private def runEntitySaveNewTest(insertAttribute: Attribute, updateAttribute: Attribute): Unit = {
+    withDefaultTestDatabase {
+      withWorkspaceContext(testData.workspace) { context =>
+        // Try to insert new attribute
+        val inserts = Map(AttributeName.withDefaultNS("newEntityAttribute") -> insertAttribute)
+
+        val expectedAfterInsertion = testData.sample1.attributes ++ inserts
+
+        runAndWait(entityQuery.save(
+          context,
+          //testData.sample1.copy(attributes = expectedAfterInsertion),
+          // We could just use the above... but why not instead use the wonderful constructor that uses
+          // (name: String, type: String) instead of (type: String, name:String) like the lookup methods.
+          // No. I did not spend a long time debugging after copy/paste/swapping the name and type by accident.
+          // Why do you ask?
+          Entity("sample1", "Sample", expectedAfterInsertion),
+        ))
+
+        val resultAfterInsert = runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
+
+        // check that the new attribute has been updated
+        assertSameElements(expectedAfterInsertion, resultAfterInsert)
+
+        // Try to update the new attribute
+        val updates: AttributeMap = Map(AttributeName.withDefaultNS("newEntityAttribute") -> updateAttribute)
+
+        val expectedAfterUpdate = testData.sample1.attributes ++ updates
+
+        runAndWait(entityQuery.save(
+          context,
+          testData.sample1.copy(attributes = expectedAfterUpdate),
+        ))
+
+        val resultAfterUpdate = runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
+
+        // check that the new attribute has been updated
+        assertSameElements(expectedAfterUpdate, resultAfterUpdate)
+      }
+    }
+  }
+
+  private def runEntityPatchNewTest(insertAttribute: Attribute, updateAttribute: Attribute): Unit = {
+    withDefaultTestDatabase {
+      withWorkspaceContext(testData.workspace) { context =>
+        // insert new attribute
+        val inserts = Map(AttributeName.withDefaultNS("newEntityAttribute") -> insertAttribute)
+
+        val expectedAfterInsertion = testData.sample1.attributes ++ inserts
+
+        runAndWait(entityQuery.saveEntityPatch(
+          context,
+          testData.sample1.toReference,
+          inserts,
+          Seq.empty[AttributeName]
+        ))
+
+        val resultAfterInsert = runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
+
+        assertSameElements(expectedAfterInsertion, resultAfterInsert)
+
+        // update the new attribute
+        val updates: AttributeMap = Map(AttributeName.withDefaultNS("newEntityAttribute") -> updateAttribute)
+
+        val expectedAfterUpdate = testData.sample1.attributes ++ updates
+
+        runAndWait(entityQuery.saveEntityPatch(
+          context,
+          testData.sample1.toReference,
+          updates,
+          Seq.empty[AttributeName])
+        )
+
+        val resultAfterUpdate = runAndWait(entityQuery.get(context, "Sample", "sample1")).head.attributes
+
+        // check that the new attribute has been updated
+        assertSameElements(expectedAfterUpdate, resultAfterUpdate)
+      }
+    }
+  }
+
+  private case class AttributeTestFunction(description: String, run: (Attribute, Attribute) => Unit)
+
+  private val attributeTestFunctions = List(
+    AttributeTestFunction("workspaceQuery.save()", runWorkspaceSaveNewTest),
+    AttributeTestFunction("entityQuery.save()", runEntitySaveNewTest),
+    AttributeTestFunction("entityQuery.saveEntityPatch()", runEntityPatchNewTest),
+  )
+
+  private case class AttributeTestData(description: String, attribute: Attribute)
+
+  private val attributeTestData = List(
+    AttributeTestData(
+      "a null attribute value",
+      AttributeNull
+    ),
+    AttributeTestData(
+      "an attribute single value",
+      AttributeString("abc1"),
+    ),
+    AttributeTestData(
+      "an attribute list with a single value",
+      AttributeValueList(List(
+        AttributeString("abc2"),
+      )),
+    ),
+    AttributeTestData(
+      "an attribute list of strings",
+      AttributeValueList(List(
+        AttributeString("abc3"),
+        AttributeString("def"),
+        AttributeString("abc12"),
+        AttributeString("xyz"),
+      )),
+    ),
+    AttributeTestData(
+      "an attribute list of json",
+      AttributeValueList(List(
+        AttributeValueRawJson(JsObject("key1" -> JsString("valueA"))),
+        AttributeValueRawJson(JsObject("key2" -> JsString("valueB"))),
+        AttributeValueRawJson(JsObject("key3" -> JsString("valueC"))),
+        AttributeValueRawJson(JsObject("key4" -> JsString("valueD"))),
+      )),
+    ),
+  )
+
+  attributeTestFunctions.foreach { attributeTestFunction =>
+    // Test all combinations, including a->b AND the reverse b->a
+    attributeTestData.combinations(2).flatMap(x => List(x, x.reverse)).foreach {
+      case List(AttributeTestData(description1, attribute1), AttributeTestData(description2, attribute2)) =>
+        it should s"reflect ${attributeTestFunction.description} changes in " +
+          s"a new attribute when $description1 changes to $description2" in {
+          attributeTestFunction.run(attribute1, attribute2)
+        }
     }
   }
 
