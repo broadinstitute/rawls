@@ -14,6 +14,7 @@ import akka.http.scaladsl.model.StatusCodes
 import scala.annotation.tailrec
 import scala.language.postfixOps
 
+//noinspection TypeAnnotation
 sealed trait EntityRecordBase {
   val id: Long
   val name: String
@@ -50,6 +51,7 @@ object EntityComponent {
   val allAttributeValuesColumnSize = 65534
 }
 
+//noinspection TypeAnnotation
 trait EntityComponent {
   this: DriverComponent
     with WorkspaceComponent
@@ -152,6 +154,7 @@ trait EntityComponent {
 
     // Raw queries - used when querying for multiple AttributeEntityReferences
 
+    //noinspection SqlDialectInspection,DuplicatedCode
     private object EntityRecordRawSqlQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
       implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<) }
@@ -167,6 +170,7 @@ trait EntityComponent {
       }
     }
 
+    //noinspection ScalaDocMissingParameterDescription,SqlDialectInspection,RedundantBlock,DuplicatedCode
     private object EntityAndAttributesRawSqlQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
 
@@ -183,7 +187,7 @@ trait EntityComponent {
 
         val refEntityRecOption = for {
           attributeRec <- attributeRecOption
-          refId <- attributeRec.valueEntityRef
+          _ <- attributeRec.valueEntityRef
         } yield {
           EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         }
@@ -310,6 +314,7 @@ trait EntityComponent {
 
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
 
+    //noinspection SqlDialectInspection
     private object EntityDependenciesDeletionQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
 
@@ -317,7 +322,7 @@ trait EntityComponent {
         sqlu"""delete ea from ENTITY_ATTRIBUTE ea
                inner join ENTITY e
                on ea.owner_id = e.id
-               where e.workspace_id=${workspaceId}
+               where e.workspace_id=$workspaceId
           """
     }
 
@@ -345,10 +350,6 @@ trait EntityComponent {
 
     def findEntityById(id: Long): EntityQuery = {
       filter(_.id === id)
-    }
-
-    private def findEntityByIdAndVersion(id: Long, version: Long): EntityQuery = {
-      filter(rec => rec.id === id && rec.version === version)
     }
 
     // Actions
@@ -467,24 +468,33 @@ trait EntityComponent {
         val entityRefsToLookup = upserts.valuesIterator.collect { case e: AttributeEntityReference => e }.toSet
 
         /*
-          Additional check for entities whose Attribute value type is AttributeList[_] in response to bug mentioned in WA-32
-          (https://broadworkbench.atlassian.net/browse/WA-32). Currently the update query is such that it matches the
-          listIndex of each attribute value and updates it. Hence if the size of the list changes, those changes are
-          not reflected in the table resulting in the behavior mentioned in the ticket.
+          Additional check for resizing entities whose Attribute value type is AttributeList[_] in response to bugs
+          mentioned in WA-32 and WA-153. Currently the update query is such that it matches the listIndex of each
+          attribute value and updates the list index and list size. Previously if the size of the list changes, those
+          changes were not reflected in the table resulting in the behavior mentioned in the WA-32.
+
           Hence, for any attribute in the update list with value type as AttributeList[_], check if the size of the
           list has changed. If yes, based on increase or decrease of the list size, add those extra records into insertRecs
           or delete extra records from the entity table respectively.
-        */
-        def checkAndUpdateRecsForListAttr(name: AttributeName, attribute: AttributeList[_], attrRecords: Seq[EntityAttributeRecord]) = {
-          val updateAttrSize = attribute.list.size
-          val existingAttrSize = existingAttrsToRecordIds(name).size
 
+          NOTE: Attributes that are not lists are treated as a list of size one.
+        */
+
+        // Tuple of
+        // insertRecs: Seq[EntityAttributeRecord]
+        // updateRecs: Seq[EntityAttributeRecord]
+        // extraDeleteIds: Seq[Long]
+        type AttributeModifications = (Seq[EntityAttributeRecord], Seq[EntityAttributeRecord], Seq[Long])
+
+        def checkAndUpdateRecSize(name: AttributeName,
+                               existingAttrSize: Int,
+                               updateAttrSize: Int,
+                               attrRecords: Seq[EntityAttributeRecord]): AttributeModifications = {
           if (updateAttrSize > existingAttrSize) {
-            // since the size of the list has increased, move these new records to insertRecs
-            val (newInsertRecs, newUpdateRecs) = attrRecords.partition {_.listIndex match {
-              case None => false
-              case Some(index) => index > (existingAttrSize - 1)
-            }}
+            // since the size of the "list" has increased, move these new records to insertRecs
+            val (newInsertRecs, newUpdateRecs) = attrRecords.partition {
+              _.listIndex.getOrElse(0) > (existingAttrSize - 1)
+            }
 
             (newInsertRecs, newUpdateRecs, Seq.empty[Long])
           } else if (updateAttrSize < existingAttrSize) {
@@ -495,17 +505,19 @@ trait EntityComponent {
           else (Seq.empty[EntityAttributeRecord], attrRecords, Seq.empty[Long]) // the list size hasn't changed
         }
 
-        def recordsForUpdateAttribute(name: AttributeName, attribute: Attribute, attrRecords: Seq[EntityAttributeRecord]) = {
+        def recordsForUpdateAttribute(name: AttributeName,
+                                      attribute: Attribute,
+                                      attrRecords: Seq[EntityAttributeRecord]): AttributeModifications = {
+          val existingAttrSize = existingAttrsToRecordIds.get(name).map(_.size).getOrElse(0)
           attribute match {
-            case list: AttributeList[_] => checkAndUpdateRecsForListAttr(name, list, attrRecords)
-            case _ => (Seq.empty[EntityAttributeRecord], attrRecords, Seq.empty[Long])
+            case list: AttributeList[_] => checkAndUpdateRecSize(name, existingAttrSize, list.list.size, attrRecords)
+            case _ => checkAndUpdateRecSize(name, existingAttrSize, 1, attrRecords)
           }
         }
 
         lookupNotYetLoadedReferences(workspaceContext, entityRefsToLookup, Seq(entityRecord.toReference)) flatMap { entityRefRecs =>
           val allTheEntityRefs = entityRefRecs ++ Seq(entityRecord) //re-add the current entity
           val refsToIds = allTheEntityRefs.map(e => e.toReference -> e.id).toMap
-          val existingAttributes = existingAttrsToRecordIds.keys.toSeq
 
           //get ids that need to be deleted from db
           val deleteIds = (for {
@@ -516,9 +528,7 @@ trait EntityComponent {
             case (name, attribute) =>
               val attrRecords = entityAttributeQuery.marshalAttribute(refsToIds(entityRecord.toReference), name, attribute, refsToIds)
 
-              // if the attribute already exists it is an update, else an insert
-              if (existingAttributes.contains(name)) recordsForUpdateAttribute(name, attribute, attrRecords)
-              else (attrRecords, Seq.empty[EntityAttributeRecord], Seq.empty[Long])
+              recordsForUpdateAttribute(name, attribute, attrRecords)
           }.foldLeft((Seq.empty[EntityAttributeRecord], Seq.empty[EntityAttributeRecord], Seq.empty[Long])) {
               case ((insert1, update1, delete1), (insert2, update2, delete2)) => (insert1 ++ insert2, update1 ++ update2, delete1 ++ delete2)
           }
@@ -673,7 +683,7 @@ trait EntityComponent {
       val entitiesToCopyRefs = entityNames.map(name => AttributeEntityReference(entityType, name))
 
       getHardConflicts(destWorkspaceContext.workspaceId, entitiesToCopyRefs).flatMap {
-        case Seq() => {
+        case Seq() =>
           val pathsAndConflicts = for {
             entityPaths <- getEntitySubtrees(sourceWorkspaceContext, entityType, entityNames.toSet)
             softConflicts <- getSoftConflicts(entityPaths)
@@ -696,7 +706,6 @@ trait EntityComponent {
               DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, unmergedSoftConflicts))
             }
           }
-        }
         case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.entityName)), Seq.empty))
       }
     }
@@ -783,7 +792,7 @@ trait EntityComponent {
 
       DBIO.sequence(batchActions).map(_.flatten.toSet).flatMap { priorIdWithCurrentRec =>
         val currentPaths = priorIdWithCurrentRec.flatMap { case (priorId, currentRec) =>
-          val pathsThatEndWithPrior = accumulatedPathsWithLastId.filter { case (path, id) => id == priorId }
+          val pathsThatEndWithPrior = accumulatedPathsWithLastId.filter { case (_, id) => id == priorId }
           pathsThatEndWithPrior.keys.map(_.path).map { path => (EntityPath(path :+ currentRec.toReference), currentRec.id)}
         }.toMap
 
@@ -819,7 +828,7 @@ trait EntityComponent {
     }
 
     private def unmarshalEntities(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]): Seq[Entity] = {
-      unmarshalEntitiesWithIds(entityAttributeRecords).map { case (id, entity) => entity }
+      unmarshalEntitiesWithIds(entityAttributeRecords).map { case (_, entity) => entity }
     }
 
     private def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]): Seq[(Long, Entity)] = {
@@ -837,6 +846,7 @@ trait EntityComponent {
       }
     }
 
+    //noinspection SqlDialectInspection
     object EntityStatisticsQueries extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
       def countEntitiesofTypeInNamespace(workspaceNamespace: Option[String], workspaceName: Option[String]): ReadAction[Seq[NamedStatistic]] = {

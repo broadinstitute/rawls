@@ -182,15 +182,16 @@ trait AttributeComponent {
   protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
+  //noinspection TypeAnnotation
   protected abstract class AttributeScratchQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], TEMP_RECORD <: AttributeScratchRecord[OWNER_ID], T <: AttributeScratchTable[OWNER_ID, TEMP_RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[String], Option[Long], Option[Int], Option[Int], Boolean, Option[Timestamp], String) => TEMP_RECORD) extends TableQuery[T](cons) {
     def insertScratchAttributes(attributeRecs: Seq[RECORD])(transactionId: String): WriteAction[Int] = {
       batchInsertAttributes(attributeRecs, transactionId)
     }
 
     def batchInsertAttributes(attributes: Seq[RECORD], transactionId: String) = {
-      insertInBatches(this, attributes.map { case rec =>
+      insertInBatches(this, attributes.map(rec =>
         createRecord(rec.id, rec.ownerId, rec.namespace, rec.name, rec.valueString, rec.valueNumber, rec.valueBoolean, rec.valueJson, rec.valueEntityRef, rec.listIndex, rec.listLength, rec.deleted, rec.deletedDate, transactionId)
-      })
+      ))
     }
   }
 
@@ -202,6 +203,7 @@ trait AttributeComponent {
    * @tparam OWNER_ID the type of the ownerId field
    * @tparam RECORD the record class
    */
+  //noinspection TypeAnnotation,EmptyCheck,ScalaUnusedSymbol
   protected abstract class AttributeQuery[OWNER_ID: TypeTag: BaseTypedType, RECORD <: AttributeRecord[OWNER_ID], T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[String], Option[Long], Option[Int], Option[Int], Boolean, Option[Timestamp]) => RECORD) extends TableQuery[T](cons)  {
 
     def marshalAttribute(ownerId: OWNER_ID, attributeName: AttributeName, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
@@ -296,7 +298,7 @@ trait AttributeComponent {
           rec.valueString.isDefined)
 
       val res = (queryString match {
-        case Some(query) => basicFilter.filter(_.valueString.like(s"%${query}%"))
+        case Some(query) => basicFilter.filter(_.valueString.like(s"%$query%"))
         case None => basicFilter
       }).groupBy(_.valueString).map(queryThing =>
         (queryThing._1, queryThing._2.length))
@@ -346,19 +348,34 @@ trait AttributeComponent {
         AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(attrsToUpdateMap.values.toSeq))
     }
 
+    //noinspection SqlDialectInspection
     object AlterAttributesUsingScratchTableQueries extends RawSqlQuery {
       val driver: JdbcProfile = AttributeComponent.this.driver
 
       //MySQL seems to handle null safe operators inefficiently. the solution to this
-      //is to use ifnull and default to -2 if the list_index is null. list_index of -2
-      //is never used otherwise
+      //is to use ifnull and default to 0 if the list_index is null.
+
+      // Converting null to the 0 list_index enables converting single attributes to lists, and lists back to single
+      // attributes.
 
       // updateInMasterAction: updates any row in *_ATTRIBUTE that also exists in *_ATTRIBUTE_SCRATCH
-      def updateInMasterAction(transactionId: String) =
-        sql"""update #${baseTableRow.tableName} a
-                join #${baseTableRow.tableName}_SCRATCH ta
-                on (a.namespace,a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.namespace,ta.name,ta.owner_id,ifnull(ta.list_index,-2)) and ta.transaction_id = $transactionId
-                set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_json=ta.value_json, a.value_entity_ref=ta.value_entity_ref, a.list_length=ta.list_length, a.deleted=ta.deleted """.as[Int]
+      def updateInMasterAction(transactionId: String) = {
+          sql"""
+          update #${baseTableRow.tableName} a
+              join #${baseTableRow.tableName}_SCRATCH ta
+              on (a.namespace, a.name, a.owner_id, ifnull(a.list_index, 0)) =
+                 (ta.namespace, ta.name, ta.owner_id, ifnull(ta.list_index, 0))
+                  and ta.transaction_id = $transactionId
+          set a.value_string=ta.value_string,
+              a.value_number=ta.value_number,
+              a.value_boolean=ta.value_boolean,
+              a.value_json=ta.value_json,
+              a.value_entity_ref=ta.value_entity_ref,
+              a.list_index=ta.list_index,
+              a.list_length=ta.list_length,
+              a.deleted=ta.deleted
+             """.as[Int]
+      }
 
       def clearAttributeScratchTableAction(transactionId: String) = {
         sqlu"""delete from #${baseTableRow.tableName}_SCRATCH where transaction_id = $transactionId"""
@@ -407,7 +424,7 @@ trait AttributeComponent {
         }
       } else if (sortedRecs.head._2.isDefined) {
         AttributeEntityReferenceList(sortedRecs.map { case (attributeRec, entityRecOption) =>
-          entityRecOption.getOrElse(throw new RawlsException(s"missing entity reference for attribute ${attributeRec}"))
+          entityRecOption.getOrElse(throw new RawlsException(s"missing entity reference for attribute $attributeRec"))
         }.map(unmarshalReference))
       } else {
         AttributeValueList(sortedRecs.map(_._1).map(unmarshalValue))
