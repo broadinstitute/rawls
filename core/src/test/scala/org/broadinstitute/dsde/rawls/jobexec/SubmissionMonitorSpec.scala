@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, Work
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{ExecutionServiceStatusResponse, StatusCheckComplete}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.coordination.{DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
@@ -30,6 +31,7 @@ import scala.util.{Success, Try}
 /**
  * Created by dvoet on 7/1/15.
  */
+//noinspection NameBooleanParameters,ScalaUnnecessaryParentheses,TypeAnnotation,ScalaUnusedSymbol
 class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with RawlsTestUtils with MockitoTestUtils with RawlsStatsDTestUtils {
   import driver.api._
 
@@ -753,6 +755,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
+  //noinspection RedundantCollectionConversion,TypeAnnotation
   class ManySubmissionsTestData extends EmptyWorkspace() {
     val numSubmissions = 50
 
@@ -784,7 +787,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     TestActorRef[SubmissionMonitorActor](SubmissionMonitorActor.props(
       wsName,
       UUID.fromString(submission.submissionId),
-      dataSource,
+      new UncoordinatedDataSourceAccess(dataSource),
       mockSamDAO,
       mockGoogleServicesDAO,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
@@ -799,7 +802,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),
-      dataSource,
+      new UncoordinatedDataSourceAccess(dataSource),
       samDAO,
       googleServicesDAO,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
@@ -817,6 +820,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 }
 
+//noinspection TypeAnnotation,EmptyParenMethodOverriddenAsParameterless
 class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends ExecutionServiceDAO {
   val abortedMap: scala.collection.concurrent.TrieMap[String, String] = new scala.collection.concurrent.TrieMap[String, String]()
   var labels: Map[String, String] = Map.empty   // could make this more sophisticated: map of workflow to map[s,s]
@@ -855,7 +859,7 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
 
 class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val submissionId: UUID,
-                            val datasource: SlickDataSource,
+                            val datasource: DataSourceAccess,
                             val samDAO: SamDAO,
                             val googleServicesDAO: GoogleServicesDAO,
                             val executionServiceCluster: ExecutionServiceCluster,

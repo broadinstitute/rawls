@@ -23,6 +23,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig}
+import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import spray.json._
 
@@ -272,7 +273,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val gpsDAO = new MockGooglePubSubDAO
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         execServiceCluster,
-        slickDataSource,
+        new UncoordinatedDataSourceAccess(slickDataSource),
         samDAO,
         gcsDAO,
         gcsDAO.getBucketServiceAccountCredential,

@@ -8,6 +8,7 @@ import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
+import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.MonitoredSubmissionException
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor._
@@ -43,7 +44,7 @@ object SubmissionSupervisor {
   case class SaveGlobalJobExecCounts(submissionStatuses: Map[SubmissionStatus, Int], workflowStatuses: Map[WorkflowStatus, Int])
 
   def props(executionServiceCluster: ExecutionServiceCluster,
-            datasource: SlickDataSource,
+            datasource: DataSourceAccess,
             samDAO: SamDAO,
             googleServicesDAO: GoogleServicesDAO,
             bucketCredential: Credential,
@@ -59,10 +60,10 @@ object SubmissionSupervisor {
  *
  * @param executionServiceCluster
  * @param datasource
- * @param submissionPollInterval
  */
+//noinspection ScalaDocMissingParameterDescription,ActorMutableStateInspection,TypeAnnotation
 class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
-                           datasource: SlickDataSource,
+                           datasource: DataSourceAccess,
                            samDAO: SamDAO,
                            googleServicesDAO: GoogleServicesDAO,
                            bucketCredential: Credential,

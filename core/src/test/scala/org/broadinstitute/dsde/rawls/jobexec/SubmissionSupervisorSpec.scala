@@ -6,6 +6,7 @@ import akka.actor.{ActorRef, ActorSystem, PoisonPill}
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.{HttpSamDAO, MockExecutionServiceDAO, MockGoogleServicesDAO, MockShardedExecutionServiceCluster}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{RefreshGlobalJobExecGauges, SaveCurrentWorkflowStatusCounts, SubmissionStarted}
@@ -19,6 +20,7 @@ import org.scalatest.concurrent.Eventually
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+//noinspection NameBooleanParameters,TypeAnnotation
 class SubmissionSupervisorSpec extends TestKit(ActorSystem("SubmissionSupervisorSpec")) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with RawlsTestUtils with MockitoTestUtils with RawlsStatsDTestUtils {
 
   implicit val materializer = ActorMaterializer()
@@ -47,7 +49,7 @@ class SubmissionSupervisorSpec extends TestKit(ActorSystem("SubmissionSupervisor
     val config = SubmissionMonitorConfig(20 minutes, trackDetailedMetrics)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       execCluster,
-      slickDataSource,
+      new UncoordinatedDataSourceAccess(slickDataSource),
       mockSamDAO,
       gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
