@@ -3214,6 +3214,41 @@ paths:
             - openid
             - email
             - profile
+  '/api/workspaces/{namespace}/{name}/snapshots':
+    post:
+      responses:
+        '201':
+          description: Created
+        '404':
+          description: Workspace or snapshot not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: "Add a reference to a snapshot in the Terra Data Repo"
+      tags:
+        - snapshots
+      summary: Create a snapshot
+      operationId: createDataRepoSnapshot
+      parameters:
+        - in: path
+          description: The workspace namespace
+          name: namespace
+          required: true
+          type: string
+        - in: path
+          description: The workspace name
+          name: name
+          required: true
+          type: string
+        - in: body
+          description: Reference to the Data Repo snapshot
+          name: dataRepoSnapshot
+          required: true
+          schema:
+            $ref: '#/definitions/DataRepoSnapshot'
   '/api/user/refreshToken':
     put:
       responses:
@@ -4821,6 +4856,12 @@ definitions:
       - READER
       - NO ACCESS
 
+  DataRepoSnapshot:
+    description: A Data Repo snapshot
+    properties:
+      snapshotId:
+        type: string
+        description: The ID of the snapshot in Terra Data Repo
   CallMetadata:
     description: Stuff you need to know about calls
     properties:
