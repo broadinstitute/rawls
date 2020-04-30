@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, UserInfo, WorkspaceName}
-import org.broadinstitute.dsde.rawls.model.workspacemanager.{DataRepoSnapshot, WMCreateDataReferenceRequest}
+import org.broadinstitute.dsde.rawls.model.workspacemanager.{CloningInstructions, DataReferenceType, DataRepoSnapshot, WMCreateDataReferenceRequest}
 import spray.json.{JsObject, JsString}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -34,7 +34,7 @@ class SnapshotService(protected val userInfo: UserInfo, dataSource: SlickDataSou
       _ <- if(!stubExists) { workspaceManagerDAO.createWorkspace(workspaceId, userInfo) } else Future.successful()
     } yield {
       val dataRepoReference = JsObject.apply(("instance", JsString(terraDataRepoUrl)), ("snapshot", JsString(snapshot.snapshotId)))
-      val dataReference = WMCreateDataReferenceRequest("name", None, Option("DataRepoSnapshot"), Option(dataRepoReference), "COPY_NOTHING", None)
+      val dataReference = WMCreateDataReferenceRequest(snapshot.name, None, Option(DataReferenceType.DataRepoSnapshot.toString), Option(dataRepoReference), CloningInstructions.COPY_NOTHING.toString, None)
 
       workspaceManagerDAO.createDataReference(workspaceId, dataReference, userInfo)
     }
@@ -44,16 +44,8 @@ class SnapshotService(protected val userInfo: UserInfo, dataSource: SlickDataSou
     Try {
       workspaceManagerDAO.getWorkspace(workspaceId, userInfo)
     } match {
-      case Success(x) => {
-        x.map { y =>
-          println(y)
-        }
-        Future.successful(true)
-      }
-      case Failure(_) => {
-        println("Doesn't exist, need to create")
-        Future.successful(false)
-      }
+      case Success(_) => Future.successful(true)
+      case Failure(_) => Future.successful(false)
     }
   }
 

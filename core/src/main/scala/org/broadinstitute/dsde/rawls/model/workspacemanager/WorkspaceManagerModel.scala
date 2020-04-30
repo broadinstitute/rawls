@@ -11,7 +11,7 @@ case class WMGetWorkspaceResponse(id: String)
 case class WMResourceDescription(resource_id: String, workspace_id: String, application_id: String, is_visible: String, owner: String, attributes: String)
 case class WMCreateDataReferenceResponse(referenceId: String, name: String, resourceDescription: Option[WMResourceDescription], referenceType: Option[String], reference: Option[JsObject], credentialId: Option[String], cloningInstructions: String)
 
-case class DataRepoSnapshot(snapshotId: String)
+case class DataRepoSnapshot(name: String, snapshotId: String)
 
 object WorkspaceManagerJsonSupport extends JsonSupport {
 
@@ -24,6 +24,14 @@ object WorkspaceManagerJsonSupport extends JsonSupport {
   implicit val WMResourceDescriptionFormat = jsonFormat6(WMResourceDescription)
   implicit val WMCreateDataReferenceResponseFormat = jsonFormat7(WMCreateDataReferenceResponse)
 
-  implicit val DataRepoSnapshotFormat = jsonFormat1(DataRepoSnapshot)
+  implicit val DataRepoSnapshotFormat = jsonFormat2(DataRepoSnapshot)
 
+}
+
+object DataReferenceType extends Enumeration {
+  val DataRepoSnapshot = Value
+}
+
+object CloningInstructions extends Enumeration {
+  val COPY_NOTHING, COPY_DEFINITION, COPY_RESOURCE, COPY_REFERENCE = Value
 }
