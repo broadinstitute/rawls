@@ -4,7 +4,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.UserInfo
-import org.broadinstitute.dsde.rawls.model.workspacemanager.{WMCreateDataReferenceRequest, WMDataReferenceResponse, WMCreateWorkspaceResponse, WMDataReferenceResponse, WMGetWorkspaceResponse}
+import org.broadinstitute.dsde.rawls.model.workspacemanager.{WMCreateDataReferenceRequest, WMDataReferenceResponse, WMCreateWorkspaceResponse, WMGetWorkspaceResponse}
 
 import scala.concurrent.Future
 
