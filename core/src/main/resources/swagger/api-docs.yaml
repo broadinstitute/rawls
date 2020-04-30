@@ -4902,6 +4902,9 @@ definitions:
       snapshotId:
         type: string
         description: The ID of the snapshot in Terra Data Repo
+      name:
+        type: string
+        description: The name of the snapshot
 
   WMDataReferenceResponse:
     description: A Data Reference definition from Workspace Manager
