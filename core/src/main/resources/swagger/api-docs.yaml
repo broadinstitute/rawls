@@ -3249,6 +3249,42 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/DataRepoSnapshot'
+  '/api/workspaces/{namespace}/{name}/snapshots/{snapshotId}':
+    get:
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/WMDataReferenceResponse'
+        '404':
+          description: Workspace or snapshot not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: "Get a reference to a snapshot in the Terra Data Repo"
+      tags:
+        - snapshots
+      summary: Get a snapshot
+      operationId: getDataRepoSnapshot
+      parameters:
+        - in: path
+          description: The workspace namespace
+          name: namespace
+          required: true
+          type: string
+        - in: path
+          description: The workspace name
+          name: name
+          required: true
+          type: string
+        - in: path
+          description: The snapshot ID
+          name: snapshotId
+          required: true
+          type: string
   '/api/user/refreshToken':
     put:
       responses:
@@ -4864,6 +4900,41 @@ definitions:
       snapshotId:
         type: string
         description: The ID of the snapshot in Terra Data Repo
+
+  WMDataReferenceResponse:
+    description: A Data Reference definition from Workspace Manager
+    properties:
+      referenceId:
+        type: string
+      name:
+        type: string
+      resourceDescription:
+        $ref: '#/definitions/ResourceDescription'
+      referenceType:
+        type: string
+      reference:
+        type: object
+      credentialId:
+        type: string
+      cloningInstructions:
+        type: string
+
+  ResourceDescription:
+    description: A description of a resource from Workspace Manager
+    properties:
+      resource_id:
+        type: string
+      workspace_id:
+        type: string
+      application_id:
+        type: string
+      is_visible:
+        type: string
+      owner:
+        type: string
+      attributes:
+        type: string
+
   CallMetadata:
     description: Stuff you need to know about calls
     properties:
