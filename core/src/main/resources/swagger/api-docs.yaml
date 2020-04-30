@@ -3588,6 +3588,8 @@ tags:
     description: Group manipulation API
   - name: notifications
     description: Notifications API
+  - name: snapshots
+    description: Data Repo snapshot API
 
 securityDefinitions:
   authorization:

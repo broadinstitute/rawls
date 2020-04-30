@@ -9,7 +9,7 @@ case class WMCreateDataReferenceRequest(name: String, resourceId: Option[String]
 case class WMCreateWorkspaceResponse(id: String)
 case class WMGetWorkspaceResponse(id: String)
 case class WMResourceDescription(resource_id: String, workspace_id: String, application_id: String, is_visible: String, owner: String, attributes: String)
-case class WMCreateDataReferenceResponse(referenceId: String, name: String, resourceDescription: Option[WMResourceDescription], referenceType: Option[String], reference: Option[JsObject], credentialId: Option[String], cloningInstructions: String)
+case class WMDataReferenceResponse(referenceId: String, name: String, resourceDescription: Option[WMResourceDescription], referenceType: Option[String], reference: Option[JsObject], credentialId: Option[String], cloningInstructions: String)
 
 case class DataRepoSnapshot(name: String, snapshotId: String)
 
@@ -22,7 +22,7 @@ object WorkspaceManagerJsonSupport extends JsonSupport {
 
   implicit val WMCreateDataReferenceRequestFormat = jsonFormat6(WMCreateDataReferenceRequest)
   implicit val WMResourceDescriptionFormat = jsonFormat6(WMResourceDescription)
-  implicit val WMCreateDataReferenceResponseFormat = jsonFormat7(WMCreateDataReferenceResponse)
+  implicit val WMDataReferenceResponseFormat = jsonFormat7(WMDataReferenceResponse)
 
   implicit val DataRepoSnapshotFormat = jsonFormat2(DataRepoSnapshot)
 

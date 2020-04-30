@@ -27,7 +27,11 @@ trait SnapshotApiService extends UserInfoDirectives {
           }
         }
       }
+    } ~
+    path("workspaces" / Segment / Segment / "snapshots" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
+      complete {
+        snapshotServiceConstructor(userInfo).GetSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
+      }
     }
   }
-
 }
