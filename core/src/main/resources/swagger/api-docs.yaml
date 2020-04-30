@@ -3219,6 +3219,8 @@ paths:
       responses:
         '201':
           description: Created
+          schema:
+            $ref: '#/definitions/WMDataReferenceResponse'
         '404':
           description: Workspace or snapshot not found
           schema:
