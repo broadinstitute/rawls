@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented}
-import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockSamDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.{MockBondApiDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsUser}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
@@ -33,6 +33,8 @@ import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -96,7 +98,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
   }
 
   trait ApiServices extends AdminApiService with BillingApiService with EntityApiService with MethodConfigApiService
-    with NotificationsApiService with RawlsApiService with StatusApiService with SubmissionApiService with UserApiService with WorkspaceApiService {
+    with NotificationsApiService with RawlsApiService with SnapshotApiService with StatusApiService with SubmissionApiService with UserApiService with WorkspaceApiService {
 
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
@@ -110,6 +112,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
     val samDAO: SamDAO = new MockSamDAO(dataSource)
+
+    val workspaceManagerDAO: WorkspaceManagerDAO = new MockWorkspaceManagerDAO()
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
@@ -144,6 +148,11 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate"))
     )_
 
+    override val snapshotServiceConstructor = SnapshotService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mockServer.mockServerBaseUrl
+    )
 
     override val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
