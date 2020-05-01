@@ -117,6 +117,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       services.samDAO,
       googleStorage,
       services.gpsDAO,
+      services.gpsDAO,
       services.gpsDAO, // remove when cutting over to import service
       mockImportServiceDAO,
       config
