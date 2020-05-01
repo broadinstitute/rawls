@@ -191,6 +191,15 @@ object Boot extends IOApp with LazyLogging {
         conf.getString("avroUpsertMonitor.arrowPubSubProject"),
         workbenchMetricBaseName = metricsPrefix
       )
+      // Import service uses a different project for its pubsub topic
+      val importServicePubSubDAO = new HttpGooglePubSubDAO(
+        clientEmail,
+        pathToPem,
+        appName,
+        conf.getString("avroUpsertMonitor.updateImportStatusPubSubProject"),
+        workbenchMetricBaseName = metricsPrefix
+      )
+
       val importServiceDAO = new HttpImportServiceDAO(conf.getString("avroUpsertMonitor.server"))
 
       val bigQueryDAO = new HttpGoogleBigQueryDAO(
@@ -405,6 +414,7 @@ object Boot extends IOApp with LazyLogging {
           gcsDAO,
           samDAO,
           pubSubDAO,
+          importServicePubSubDAO,
           arrowPubSubDAO, // remove when cutting over to import service
           importServiceDAO,
           appDependencies.googleStorageService,
