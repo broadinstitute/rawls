@@ -1,9 +1,11 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.UUID
+
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.workspacemanager.DataRepoSnapshot
+import org.broadinstitute.dsde.rawls.model.workspacemanager.{DataRepoSnapshot, WMDataReferenceResponse}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.workspacemanager.WorkspaceManagerJsonSupport._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
@@ -73,13 +75,25 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when getting a reference to a snapshot" in withTestDataApiServices { services =>
-    Get(s"${testData.wsName.path}/snapshots/realsnapshot") ~>
+    Post(s"${testData.wsName.path}/snapshots", httpJson(
+      DataRepoSnapshot(
+        name = "foo",
+        snapshotId = "realsnapshot"
+      )
+    )) ~>
       sealRoute(services.snapshotRoutes) ~>
-      check { assertResult(StatusCodes.OK) {status} }
+      check {
+        val response = responseAs[WMDataReferenceResponse]
+        assertResult(StatusCodes.Created) {status}
+
+        Get(s"${testData.wsName.path}/snapshots/${response.referenceId}") ~>
+          sealRoute(services.snapshotRoutes) ~>
+          check { assertResult(StatusCodes.OK) {status} }
+      }
   }
 
   it should "return 404 when getting a reference to a snapshot that doesn't exist" in withTestDataApiServices { services =>
-    Get(s"${testData.wsName.path}/snapshots/fakesnapshot") ~>
+    Get(s"${testData.wsName.path}/snapshots/${UUID.randomUUID().toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
