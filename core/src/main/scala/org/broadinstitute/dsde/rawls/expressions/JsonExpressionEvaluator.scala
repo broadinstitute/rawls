@@ -8,7 +8,7 @@ import scala.util.Try
 object JsonExpressionEvaluator {
   def evaluate(expression: String): Try[Iterable[AttributeValue]] = {
     val jsonExprT = Try(expression.parseJson)
-    jsonExprT map { jsonExpr =>
+    jsonExprT map { _ =>
       WDLJsonSupport.attributeFormat.read(expression.parseJson)
     } map {
       //handle the user typing in JSON that looks like our representation of references, which aren't legit WDL inputs.
