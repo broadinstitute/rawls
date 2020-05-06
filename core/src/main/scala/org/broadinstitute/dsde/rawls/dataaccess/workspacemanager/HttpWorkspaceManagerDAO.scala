@@ -3,51 +3,51 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 import java.util.UUID
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.client.RequestBuilding
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.stream.Materializer
-import org.broadinstitute.dsde.rawls.dataaccess.DsdeHttpDAO
+import bio.terra.workspace.api.WorkspaceApi
+import bio.terra.workspace.client.ApiClient
+import bio.terra.workspace.model.{CreateDataReferenceRequestBody, CreateWorkspaceRequestBody, CreatedWorkspace, DataReferenceDescription, WorkspaceDescription}
 import org.broadinstitute.dsde.rawls.model.UserInfo
-import org.broadinstitute.dsde.rawls.model.workspacemanager.WorkspaceManagerJsonSupport._
-import org.broadinstitute.dsde.rawls.model.workspacemanager._
-import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
+import spray.json.JsObject
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends WorkspaceManagerDAO with DsdeHttpDAO with Retry {
+class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends WorkspaceManagerDAO {
 
-  override val http = Http(system)
-  override val httpClientUtils = HttpClientUtilsStandard()
+  private def getApiClient(accessToken: String): ApiClient = {
+    val client: ApiClient = new ApiClient()
+    client.setBasePath(baseWorkspaceManagerUrl)
+    client.setBearerToken(accessToken)
 
-  private val workspaceManagerUrl = baseWorkspaceManagerUrl
-
-  override def getWorkspace(workspaceId: UUID, userInfo: UserInfo): Future[WMGetWorkspaceResponse] = {
-    def getWorkspaceUrl(workspaceId: UUID) = workspaceManagerUrl + s"/api/v1/workspaces/${workspaceId.toString}"
-    val httpRequest = RequestBuilding.Get(getWorkspaceUrl(workspaceId))
-
-    pipeline[WMGetWorkspaceResponse](userInfo) apply httpRequest
+    client
   }
 
-  override def createWorkspace(workspaceId: UUID, userInfo: UserInfo): Future[WMCreateWorkspaceResponse] = {
-    val createWorkspaceUrl = workspaceManagerUrl + "/api/v1/workspaces"
-    val httpRequest = RequestBuilding.Post(createWorkspaceUrl, WMCreateWorkspaceRequest(workspaceId.toString, userInfo.accessToken.token, None, None))
-
-    pipeline[WMCreateWorkspaceResponse](userInfo) apply httpRequest
+  private def getWorkspaceApi(userInfo: UserInfo): WorkspaceApi = {
+    new WorkspaceApi(getApiClient(userInfo.accessToken.token))
   }
 
-  override def createDataReference(workspaceId: UUID, createDataReferenceRequest: WMCreateDataReferenceRequest, userInfo: UserInfo): Future[WMDataReferenceResponse] = {
-    def createDataReferenceUrl(workspaceId: UUID) = workspaceManagerUrl + s"/api/v1/workspaces/${workspaceId.toString}/datareferences"
-    val httpRequest = RequestBuilding.Post(createDataReferenceUrl(workspaceId), createDataReferenceRequest)
-
-    pipeline[WMDataReferenceResponse](userInfo) apply httpRequest
+  override def getWorkspace(workspaceId: UUID, userInfo: UserInfo): Future[WorkspaceDescription] = {
+    Future {
+      getWorkspaceApi(userInfo).getWorkspace(workspaceId.toString)
+    }
   }
 
-  override def getDataReference(workspaceId: UUID, snapshotId: UUID, userInfo: UserInfo): Future[WMDataReferenceResponse] = {
-    def getDataReferenceUrl(workspaceId: UUID, snapshotId: UUID) = workspaceManagerUrl + s"/api/v1/workspaces/${workspaceId.toString}/datareferences/${snapshotId.toString}"
-    val httpRequest = RequestBuilding.Get(getDataReferenceUrl(workspaceId, snapshotId))
+  override def createWorkspace(workspaceId: UUID, userInfo: UserInfo): Future[CreatedWorkspace] = {
+    Future {
+      getWorkspaceApi(userInfo).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).authToken(userInfo.accessToken.token))
+    }
+  }
 
-    pipeline[WMDataReferenceResponse](userInfo) apply httpRequest
+  override def createDataReference(workspaceId: UUID, name: String, referenceType: String, reference: JsObject, cloningInstructions: String, userInfo: UserInfo): Future[DataReferenceDescription] = {
+    Future {
+      getWorkspaceApi(userInfo).createDataReference(workspaceId.toString, new CreateDataReferenceRequestBody().name(name).referenceType(referenceType).reference(reference).cloningInstructions(cloningInstructions))
+    }
+  }
+
+  override def getDataReference(workspaceId: UUID, snapshotId: UUID, userInfo: UserInfo): Future[DataReferenceDescription] = {
+    Future {
+      getWorkspaceApi(userInfo).getDataReference(workspaceId.toString, snapshotId.toString)
+    }
   }
 
 }

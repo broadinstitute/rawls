@@ -5,10 +5,10 @@ import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.workspacemanager.{DataRepoSnapshot, WMDataReferenceResponse}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.model.workspacemanager.WorkspaceManagerJsonSupport._
+import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotReference}
 
 import scala.concurrent.ExecutionContext
 
@@ -83,7 +83,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     )) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
-        val response = responseAs[WMDataReferenceResponse]
+        val response = responseAs[DataRepoSnapshotReference]
         assertResult(StatusCodes.Created) {status}
 
         Get(s"${testData.wsName.path}/snapshots/${response.referenceId}") ~>
