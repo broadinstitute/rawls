@@ -24,6 +24,8 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
   override def createWorkspace(workspaceId: UUID, userInfo: UserInfo): Future[CreatedWorkspace] = Future.successful(mockCreateWorkspaceResponse(workspaceId))
 
+  override def deleteWorkspace(workspaceId: UUID, userInfo: UserInfo): Future[Unit] = Future.unit
+
   override def createDataReference(workspaceId: UUID, name: String, referenceType: String, reference: JsObject, cloningInstructions: String, userInfo: UserInfo): Future[DataReferenceDescription] = {
     if(reference.getFields("snapshot").head.equals(JsString("fakesnapshot")))
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found"))

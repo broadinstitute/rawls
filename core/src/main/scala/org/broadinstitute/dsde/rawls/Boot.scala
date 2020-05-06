@@ -366,6 +366,7 @@ object Boot extends IOApp with LazyLogging {
         cromiamDAO,
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
+        workspaceManagerDAO,
         methodConfigResolver,
         gcsDAO,
         samDAO,

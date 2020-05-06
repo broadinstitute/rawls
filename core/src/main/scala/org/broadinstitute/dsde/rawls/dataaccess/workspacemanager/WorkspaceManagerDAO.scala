@@ -16,5 +16,6 @@ trait WorkspaceManagerDAO {
   def createWorkspace(workspaceId: UUID, userInfo: UserInfo): Future[CreatedWorkspace]
   def createDataReference(workspaceId: UUID, name: String, referenceType: String, reference: JsObject, cloningInstructions: String, userInfo: UserInfo): Future[DataReferenceDescription]
   def getDataReference(workspaceId: UUID, referenceId: UUID, userInfo: UserInfo): Future[DataReferenceDescription]
+  def deleteWorkspace(workspaceId: UUID, userInfo: UserInfo): Future[Unit]
 
 }

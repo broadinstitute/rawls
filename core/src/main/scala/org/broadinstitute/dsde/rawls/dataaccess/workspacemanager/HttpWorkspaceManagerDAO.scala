@@ -6,7 +6,7 @@ import akka.actor.ActorSystem
 import akka.stream.Materializer
 import bio.terra.workspace.api.WorkspaceApi
 import bio.terra.workspace.client.ApiClient
-import bio.terra.workspace.model.{CreateDataReferenceRequestBody, CreateWorkspaceRequestBody, CreatedWorkspace, DataReferenceDescription, WorkspaceDescription}
+import bio.terra.workspace.model.{CreateDataReferenceRequestBody, CreateWorkspaceRequestBody, CreatedWorkspace, DataReferenceDescription, DeleteWorkspaceRequestBody, WorkspaceDescription}
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import spray.json.JsObject
 
@@ -47,6 +47,12 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
   override def getDataReference(workspaceId: UUID, snapshotId: UUID, userInfo: UserInfo): Future[DataReferenceDescription] = {
     Future {
       getWorkspaceApi(userInfo).getDataReference(workspaceId.toString, snapshotId.toString)
+    }
+  }
+
+  override def deleteWorkspace(workspaceId: UUID, userInfo: UserInfo): Future[Unit] = {
+    Future {
+      getWorkspaceApi(userInfo).deleteWorkspace(workspaceId.toString, new DeleteWorkspaceRequestBody().authToken(userInfo.accessToken.token))
     }
   }
 
