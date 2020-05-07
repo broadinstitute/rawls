@@ -5,6 +5,7 @@ import Compiling._
 import Version._
 import Publishing._
 import Artifactory._
+import com.simplytyped.Antlr4Plugin.autoImport._
 import sbt.Keys._
 import sbt._
 import sbtassembly.AssemblyPlugin.autoImport._
@@ -95,6 +96,13 @@ object Settings {
     name := "rawls-core",
     version := "0.1",
     libraryDependencies ++= rawlsCoreDependencies
+  ) ++ List(
+    // TODO: Move this list to another utility object
+    antlr4PackageName in Antlr4 := Option("org.broadinstitute.dsde.rawls.expressions.parser.antlr"),
+    antlr4Version in Antlr4 := "4.8-1",
+    antlr4GenVisitor in Antlr4 := true,
+    antlr4GenListener in Antlr4 := false,
+    antlr4TreatWarningsAsErrors in Antlr4 := true
   ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings
   //NOTE: rawlsCoreCompileSettings above has to be last, because something in commonSettings or rawlsAssemblySettings
   //overwrites it if it's before them. I (hussein) don't know what that is and I don't care to poke the bear to find out.
