@@ -34,7 +34,6 @@ lazy val rawlsCore = project.in(file("core"))
   .dependsOn(workbenchGoogle)
   .dependsOn(workbenchMetrics % compileAndTest)
   .disablePlugins(RevolverPlugin)
-  .enablePlugins(Antlr4Plugin)
   .withTestSettings
 
 lazy val rawls = project.in(file("."))

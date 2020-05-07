@@ -3,6 +3,15 @@ package org.broadinstitute.dsde.rawls.expressions
 import cats.instances.try_._
 import cats.syntax.functor._
 import org.antlr.v4.runtime.{CharStreams, CodePointCharStream, CommonTokenStream}
+/*
+
+Are you here because you're using IntelliJ, and got an error:
+  object ExtendedJSONLexer is not a member of package org.broadinstitute.dsde.rawls.expressions.parser.antlr
+
+From your rawls directory, run:
+   sbt antlr4:antlr4Generate
+
+ */
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{ErrorThrowingListener, ExtendedJSONLexer, ExtendedJSONParser, ExtendedJSONVisitorImpl}
 import org.broadinstitute.dsde.rawls.model.{AttributeString, ParsedMCExpressions}
 //import spray.json._
