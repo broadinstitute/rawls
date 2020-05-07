@@ -176,8 +176,10 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
   private def parse(expression: String, parser: Parser[PipelineQuery] ) = {
     parseAll(parser, expression) match {
-      case Success(result, _) => scala.util.Success(result)
-      case NoSuccess(msg, next) => scala.util.Failure(new RuntimeException("Failed at line %s, column %s: %s".format(next.pos.line, next.pos.column, msg)))
+      case Success(result, _) =>
+        scala.util.Success(result)
+      case NoSuccess(msg, next) =>
+        scala.util.Failure(new RuntimeException("Failed at line %s, column %s: %s".format(next.pos.line, next.pos.column, msg)))
     }
   }
 

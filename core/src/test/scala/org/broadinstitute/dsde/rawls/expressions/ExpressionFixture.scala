@@ -5,7 +5,7 @@ package org.broadinstitute.dsde.rawls.expressions
 trait ExpressionFixture {
   // NOTE: empty strings are handled specially by the validator, so they don't need to be handled by the parser
 
-  val parseableInputExpressionsWithNoRoot = Seq(
+  val parseableInputExpressionsWithNoRoot: Seq[String] = Seq(
     "workspace.gvcf",
     "workspace.library:cohort",
     "workspace.arbitrary:whatever",
@@ -18,20 +18,26 @@ trait ExpressionFixture {
     """["foo","bar","horsefish"]""",
     "[1,2,3]",
     """{"key":"value"}""",
-    """["a",{"more":{"elaborate":"example"}}]"""
+    """["a",{"more":{"elaborate":"example"}}]""",
+    """{"more":{"elaborate":{"reference1": "val1", "reference2": "val2", "path":"gs://abc/123"}}}"""
   )
 
-  val parseableInputExpressionsWithRoot = Seq(
+  val parseableInputExpressionsWithRoot: Seq[String] = Seq(
     "this.gvcf",
     "this.library:cohort",
+    "this.library:cohort1",
     "this.arbitrary:whatever",
     "this.case_sample.foo:ref.bar:attribute",
-    "this.underscores_are_ok"
+    "this.underscores_are_ok",
+    "this._",
+    """["foo","bar", this.valid]""",
+    """["a",{"more":{"elaborate":this.example}}]""",
+//    """{"more":{"elaborate":{"reference1": this.val1, "path":"gs://abc/123"}}}""" --> should this.val123 be valid?
   )
 
-  val parseableInputExpressions = parseableInputExpressionsWithNoRoot ++ parseableInputExpressionsWithRoot
+  val parseableInputExpressions: Seq[String] = parseableInputExpressionsWithNoRoot ++ parseableInputExpressionsWithRoot
 
-  val unparseableInputExpressions = Seq(
+  val unparseableInputExpressions: Seq[String] = Seq(
     "this.",
     "this.bad|character",
     "this..wont.parse",
@@ -40,29 +46,31 @@ trait ExpressionFixture {
     "where_does_this_even_go",
     "gs://buckets-arent-expressions/nope",
     "*",
+    """["foo","bar", notValid]""",
 
     // oops, it isn't.  GAWB-2598
-    "this.hyphen-is-allowed"
+    "this.hyphen-is-not-allowed",
+    "this.-",
   )
 
-  val unparseableInputExpressionsWithNoRoot = unparseableInputExpressions ++ parseableInputExpressionsWithRoot
+  val unparseableInputExpressionsWithNoRoot: Seq[String] = unparseableInputExpressions ++ parseableInputExpressionsWithRoot
 
-  val parseableOutputExpressionsWithNoRoot = Seq(
+  val parseableOutputExpressionsWithNoRoot: Seq[String] = Seq(
     "workspace.gvcf",
     "workspace.library:cohort",
     "workspace.arbitrary:whatever"
   )
 
-  val parseableOutputExpressionsWithRoot = Seq(
+  val parseableOutputExpressionsWithRoot: Seq[String] = Seq(
     "this.gvcf",
     "this.library:cohort",
     "this.arbitrary:whatever",
     "this.underscores_are_ok"
   )
 
-  val parseableOutputExpressions = parseableOutputExpressionsWithNoRoot ++ parseableOutputExpressionsWithRoot
+  val parseableOutputExpressions: Seq[String] = parseableOutputExpressionsWithNoRoot ++ parseableOutputExpressionsWithRoot
 
-  val unparseableOutputExpressions = Seq(
+  val unparseableOutputExpressions: Seq[String] = Seq(
     "this.",
     "this.bad|character",
     "this..wont.parse",
@@ -73,7 +81,6 @@ trait ExpressionFixture {
     "where_does_this_even_go",
     "gs://buckets-arent-expressions/nope",
     "*",
-
     """"a string literal"""",
     "9000",
     "-3.77",
@@ -87,5 +94,5 @@ trait ExpressionFixture {
     "this.hyphen-is-allowed"
   )
 
-  val unparseableOutputExpressionsWithNoRoot = unparseableOutputExpressions ++ parseableOutputExpressionsWithRoot
+  val unparseableOutputExpressionsWithNoRoot: Seq[String] = unparseableOutputExpressions ++ parseableOutputExpressionsWithRoot
 }

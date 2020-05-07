@@ -1,13 +1,14 @@
 package org.broadinstitute.dsde.rawls.expressions
 
-import org.broadinstitute.dsde.rawls.model.{AttributeString, ParsedMCExpressions}
-
-import scala.util.{Failure, Success, Try}
-import scala.language.postfixOps
-import spray.json._
-import cats.syntax.functor._
 import cats.instances.try_._
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{ExtendedJSONLexer, ExtendedJSONParser}
+import cats.syntax.functor._
+import org.antlr.v4.runtime.{CharStreams, CodePointCharStream, CommonTokenStream}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{ErrorThrowingListener, ExtendedJSONLexer, ExtendedJSONParser, ExtendedJSONVisitorImpl}
+import org.broadinstitute.dsde.rawls.model.{AttributeString, ParsedMCExpressions}
+//import spray.json._
+
+import scala.language.postfixOps
+import scala.util.{Failure, Success, Try}
 
 // a thin abstraction layer over SlickExpressionParser
 
@@ -31,29 +32,39 @@ object ExpressionParser {
     ParsedMCExpressions(successInputs, failedInputs, successOutputs, failedOutputs)
   }
 
-  private def parseInputExpr(allowRootEntity: Boolean, parser: SlickExpressionParser)(expression: String): Try[Unit] = {
+  private def getExtendedJSONParser(expression: String): ExtendedJSONParser = {
+    val errorThrowingListener = new ErrorThrowingListener()
+    val inputStream: CodePointCharStream = CharStreams.fromString(expression)
+
+    val lexer: ExtendedJSONLexer = new ExtendedJSONLexer(inputStream)
+    lexer.removeErrorListeners()
+    lexer.addErrorListener(errorThrowingListener)
+
+    val tokenStream = new CommonTokenStream(lexer)
+    val parser: ExtendedJSONParser = new ExtendedJSONParser(tokenStream)
+    parser.removeErrorListeners()
+    parser.addErrorListener(errorThrowingListener)
+
+    parser
+  }
+
+  private def parseInputExpr(allowRootEntity: Boolean, slickParser: SlickExpressionParser)(expression: String): Try[Unit] = {
     // Extended JSON inputs need to parsed to find out attribute expressions
 
-    // call ANTLR parser here
+    val extendedJsonParser = getExtendedJSONParser(expression)
+    val visitor = new ExtendedJSONVisitorImpl(allowRootEntity, slickParser)
 
-//    antlrParser(expression)
+    /*
+      parse the expression using ANTLR parser for extended JSON expressions and walk the tree using `visit()` to examine
+      child nodes. During the walk, if any child node is a lookup expression, i.e. attribute expressions, it calls the
+      `slickParser.parseAttributeExpr()` for that expression and parses it
+     */
+    Try(extendedJsonParser.value()).flatMap(visitor.visit)
 
-    Try(expression.parseJson).recoverWith { case _ => parser.parseAttributeExpr(expression, allowRootEntity) }.void
+//    Try(expression.parseJson).recoverWith { case _ => slickParser.parseAttributeExpr(expression, allowRootEntity) }.void
   }
 
   private def parseOutputExpr(allowRootEntity: Boolean, parser: SlickExpressionParser)(expression: String): Try[Unit] = {
     parser.parseOutputAttributeExpr(expression, allowRootEntity).void
-  }
-
-  def antlrParser(expression: String): ExtendedJSONParser = {
-    import org.antlr.v4.runtime.CodePointCharStream
-    import org.antlr.v4.runtime.CharStreams
-    import org.antlr.v4.runtime.CommonTokenStream
-
-
-    val inputStream: CodePointCharStream = CharStreams.fromString(expression)
-    val lexer: ExtendedJSONLexer         = new ExtendedJSONLexer(inputStream)
-    val tokenStream                      = new CommonTokenStream(lexer)
-    new ExtendedJSONParser(tokenStream)
   }
 }

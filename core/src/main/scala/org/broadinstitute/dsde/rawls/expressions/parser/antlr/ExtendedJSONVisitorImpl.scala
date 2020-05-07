@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
-import org.broadinstitute.dsde.rawls.expressions.SlickExpressionParser
-import cats.syntax.functor._
 import cats.instances.try_._
+import cats.syntax.functor._
+import org.broadinstitute.dsde.rawls.expressions.SlickExpressionParser
 
 import scala.util.{Failure, Success, Try}
 
@@ -21,10 +21,8 @@ class ExtendedJSONVisitorImpl(allowRootEntity: Boolean, parser: SlickExpressionP
 
   override def aggregateResult(aggregate: Try[Unit], nextResult: Try[Unit]): Try[Unit] = {
     aggregate match {
-      case Failure(_) =>
-        aggregate
-      case Success(_) =>
-        nextResult
+      case Failure(_) => aggregate
+      case Success(_) => nextResult
     }
   }
 

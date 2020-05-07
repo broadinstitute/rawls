@@ -33,6 +33,17 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
     import slickEvaluator.parser.driver.api._
 
+    /*
+      - parse expression using ANTLR parser
+      - somehow find out the all the expressions in JSON that are attribute expression
+      - for each attribute expression call slickEvaluator.evalFinalAttribute() and gather the results by running the DBIO actions
+      - rebuild the JSON object (!) by replacing that value corresponding to expression in it
+
+      so for expression: {"reference": {"bamFile":this.attrRef}} we need to send {"reference": {"bamFile":"gs://abc/123"}} to Cromwell
+
+      or for expression: ["abc", "123", this.ref] -> ["abc", "123", "gs://abc/123"]
+     */
+
     JsonExpressionEvaluator.evaluate(expression) match {
       //if the expression evals as JSON, it evaluates to the same thing for every entity, so build that map here
       case Success(parsed) => DBIO.successful(rootEntities match {
@@ -42,7 +53,7 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
         case None => Map("" -> Success(parsed))
       })
 
-      case Failure(regret) => slickEvaluator.evalFinalAttribute(workspaceContext, expression)
+      case Failure(_) => slickEvaluator.evalFinalAttribute(workspaceContext, expression)
     }
   }
 

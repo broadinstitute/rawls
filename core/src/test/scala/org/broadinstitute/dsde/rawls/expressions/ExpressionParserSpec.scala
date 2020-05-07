@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{AttributeString}
+import org.broadinstitute.dsde.rawls.model.AttributeString
 import org.scalatest.FlatSpec
 
 class ExpressionParserSpec extends FlatSpec with TestDriverComponent with ExpressionFixture with RawlsTestUtils  {
@@ -12,6 +12,13 @@ class ExpressionParserSpec extends FlatSpec with TestDriverComponent with Expres
   it should "parse method config expressions" in {
     def toExpressionMap(expressions: Seq[String]): Map[String, AttributeString] =
       expressions.map { expr => expr.toString -> AttributeString(expr) }.toMap
+
+    val input1 = """{"more":{"elaborate":{"reference1": this.val1, "path":"gs://abc/123"}}}"""
+//    val input2 = "this.val1"
+
+    val result = ExpressionParser.parseMCExpressions(toExpressionMap(Seq(input1)), toExpressionMap(Seq.empty[String]), true, this)
+
+    println(result)
 
     val actualParseable = ExpressionParser.parseMCExpressions(toExpressionMap(parseableInputExpressions), toExpressionMap(parseableOutputExpressions), allowRootEntity = true, this)
     assertSameElements(parseableInputExpressions, actualParseable.validInputs)
