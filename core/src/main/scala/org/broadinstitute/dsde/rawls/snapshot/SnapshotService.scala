@@ -2,59 +2,66 @@ package org.broadinstitute.dsde.rawls.snapshot
 
 import java.util.UUID
 
-import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
+import com.google.api.client.auth.oauth2.Credential
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{CloningInstructions, DataReferenceType, DataRepoSnapshot, DataRepoSnapshotReference, ErrorReport, UserInfo, WorkspaceName}
-import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotReference, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import spray.json.{JsObject, JsString}
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
 
 object SnapshotService {
 
-  def constructor(dataSource: SlickDataSource, workspaceManagerDAO: WorkspaceManagerDAO, terraDataRepoUrl: String)(userInfo: UserInfo)
+  def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, serviceAccountCreds: Credential, terraDataRepoUrl: String)(userInfo: UserInfo)
                  (implicit executionContext: ExecutionContext): SnapshotService = {
-    new SnapshotService(userInfo, dataSource, workspaceManagerDAO, terraDataRepoUrl)
+    new SnapshotService(userInfo, dataSource, samDAO, workspaceManagerDAO, serviceAccountCreds, terraDataRepoUrl)
   }
 
 }
 
-class SnapshotService(protected val userInfo: UserInfo, dataSource: SlickDataSource, workspaceManagerDAO: WorkspaceManagerDAO, terraDataRepoUrl: String)(implicit protected val executionContext: ExecutionContext) extends FutureSupport {
+class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, workspaceManagerDAO: WorkspaceManagerDAO, serviceAccountCreds: Credential, terraDataRepoUrl: String)(implicit protected val executionContext: ExecutionContext) extends FutureSupport with WorkspaceSupport {
 
   def CreateSnapshot(workspaceName: WorkspaceName, dataRepoSnapshot: DataRepoSnapshot): Future[DataRepoSnapshotReference] = createSnapshot(workspaceName, dataRepoSnapshot)
   def GetSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataRepoSnapshotReference] = getSnapshot(workspaceName, snapshotId)
 
   def createSnapshot(workspaceName: WorkspaceName, snapshot: DataRepoSnapshot): Future[DataRepoSnapshotReference] = {
-    for {
-      workspaceIdOpt <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.getWorkspaceId(workspaceName) }
-      workspaceId = workspaceIdOpt.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Workspace $workspaceName not found")))
-      stubExists <- workspaceStubExists(workspaceId, userInfo)
-      _ <- if(!stubExists) { workspaceManagerDAO.createWorkspace(workspaceId, userInfo) } else Future.successful()
-      dataRepoReference = JsObject.apply(("instance", JsString(terraDataRepoUrl)), ("snapshot", JsString(snapshot.snapshotId)))
-      res <- workspaceManagerDAO.createDataReference(workspaceId, snapshot.name, DataReferenceType.DataRepoSnapshot.toString, dataRepoReference, CloningInstructions.COPY_NOTHING.toString, userInfo)
-    } yield {
-      DataRepoSnapshotReference(res.getReferenceId.toString, res.getName, res.getWorkspaceId.toString, Option(res.getReferenceType.toString), Option(res.getReference), res.getCloningInstructions.toString)
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
+      if(!workspaceStubExists(workspaceContext.workspaceId, userInfo)) {
+        workspaceManagerDAO.createWorkspace(workspaceContext.workspaceId, getServiceAccountAccessToken, userInfo.accessToken)
+      }
+
+      val dataRepoReference = JsObject.apply(("instance", JsString(terraDataRepoUrl)), ("snapshot", JsString(snapshot.snapshotId)))
+      val ref = workspaceManagerDAO.createDataReference(workspaceContext.workspaceId, snapshot.name, ReferenceTypeEnum.DATAREPOSNAPSHOT.getValue, dataRepoReference, CloningInstructionsEnum.NOTHING.getValue, userInfo.accessToken)
+
+      Future.successful(DataRepoSnapshotReference(ref.getReferenceId.toString, ref.getName, ref.getWorkspaceId.toString, Option(ref.getReferenceType.toString), Option(ref.getReference), ref.getCloningInstructions.toString))
     }
   }
 
   def getSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataRepoSnapshotReference] = {
-    for {
-      workspaceIdOpt <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.getWorkspaceId(workspaceName) }
-      workspaceId = workspaceIdOpt.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Workspace $workspaceName not found")))
-      res <- workspaceManagerDAO.getDataReference(workspaceId, UUID.fromString(snapshotId), userInfo)
-    } yield {
-      DataRepoSnapshotReference(res.getReferenceId.toString, res.getName, res.getWorkspaceId.toString, Option(res.getReferenceType.toString), Option(res.getReference), res.getCloningInstructions.toString)
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
+      val ref = workspaceManagerDAO.getDataReference(workspaceContext.workspaceId, UUID.fromString(snapshotId), userInfo.accessToken)
+      Future.successful(DataRepoSnapshotReference(ref.getReferenceId.toString, ref.getName, ref.getWorkspaceId.toString, Option(ref.getReferenceType.toString), Option(ref.getReference), ref.getCloningInstructions.toString))
     }
   }
 
-  private def workspaceStubExists(workspaceId: UUID, userInfo: UserInfo): Future[Boolean] = {
-    toFutureTry(workspaceManagerDAO.getWorkspace(workspaceId, userInfo)) map {
-      case Success(_) => true
-      case Failure(_) => false
+  private def workspaceStubExists(workspaceId: UUID, userInfo: UserInfo): Boolean = {
+    try {
+      workspaceManagerDAO.getWorkspace(workspaceId, userInfo.accessToken)
+      true
+    } catch {
+      case _: ApiException => false
     }
   }
 
+  private def getServiceAccountAccessToken: OAuth2BearerToken = {
+    val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
+    if (expiresInSeconds < 60*5) {
+      serviceAccountCreds.refreshToken()
+    }
+    OAuth2BearerToken(serviceAccountCreds.getAccessToken)
+  }
 }

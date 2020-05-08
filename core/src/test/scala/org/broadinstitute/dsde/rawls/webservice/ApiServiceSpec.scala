@@ -150,7 +150,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
       slickDataSource,
+      samDAO,
       workspaceManagerDAO,
+      gcsDAO.getBucketServiceAccountCredential,
       mockServer.mockServerBaseUrl
     )
 

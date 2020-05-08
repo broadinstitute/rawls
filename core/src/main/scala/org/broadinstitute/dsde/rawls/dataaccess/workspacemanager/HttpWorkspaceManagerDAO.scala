@@ -3,14 +3,14 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 import java.util.UUID
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.api.WorkspaceApi
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model.{CreateDataReferenceRequestBody, CreateWorkspaceRequestBody, CreatedWorkspace, DataReferenceDescription, WorkspaceDescription}
-import org.broadinstitute.dsde.rawls.model.UserInfo
 import spray.json.JsObject
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends WorkspaceManagerDAO {
 
@@ -22,32 +22,24 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     client
   }
 
-  private def getWorkspaceApi(userInfo: UserInfo): WorkspaceApi = {
-    new WorkspaceApi(getApiClient(userInfo.accessToken.token))
+  private def getWorkspaceApi(accessToken: OAuth2BearerToken): WorkspaceApi = {
+    new WorkspaceApi(getApiClient(accessToken.token))
   }
 
-  override def getWorkspace(workspaceId: UUID, userInfo: UserInfo): Future[WorkspaceDescription] = {
-    Future {
-      getWorkspaceApi(userInfo).getWorkspace(workspaceId.toString)
-    }
+  override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = {
+    getWorkspaceApi(accessToken).getWorkspace(workspaceId.toString)
   }
 
-  override def createWorkspace(workspaceId: UUID, userInfo: UserInfo): Future[CreatedWorkspace] = {
-    Future {
-      getWorkspaceApi(userInfo).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).authToken(userInfo.accessToken.token))
-    }
+  override def createWorkspace(workspaceId: UUID, folderManagerAccessToken: OAuth2BearerToken, bodyAccessToken: OAuth2BearerToken): CreatedWorkspace = {
+    getWorkspaceApi(folderManagerAccessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).authToken(bodyAccessToken.token))
   }
 
-  override def createDataReference(workspaceId: UUID, name: String, referenceType: String, reference: JsObject, cloningInstructions: String, userInfo: UserInfo): Future[DataReferenceDescription] = {
-    Future {
-      getWorkspaceApi(userInfo).createDataReference(workspaceId.toString, new CreateDataReferenceRequestBody().name(name).referenceType(referenceType).reference(reference).cloningInstructions(cloningInstructions))
-    }
+  override def createDataReference(workspaceId: UUID, name: String, referenceType: String, reference: JsObject, cloningInstructions: String, accessToken: OAuth2BearerToken): DataReferenceDescription = {
+    getWorkspaceApi(accessToken).createDataReference(workspaceId.toString, new CreateDataReferenceRequestBody().name(name).referenceType(referenceType).reference(reference).cloningInstructions(cloningInstructions))
   }
 
-  override def getDataReference(workspaceId: UUID, snapshotId: UUID, userInfo: UserInfo): Future[DataReferenceDescription] = {
-    Future {
-      getWorkspaceApi(userInfo).getDataReference(workspaceId.toString, snapshotId.toString)
-    }
+  override def getDataReference(workspaceId: UUID, snapshotId: UUID, accessToken: OAuth2BearerToken): DataReferenceDescription = {
+    getWorkspaceApi(accessToken).getDataReference(workspaceId.toString, snapshotId.toString)
   }
 
 }

@@ -9,11 +9,3 @@ object DataReferenceModelJsonSupport {
   implicit val DataRepoSnapshotFormat = jsonFormat2(DataRepoSnapshot)
   implicit val DataRepoSnapshotReferenceFormat = jsonFormat6(DataRepoSnapshotReference)
 }
-
-object DataReferenceType extends Enumeration {
-  val DataRepoSnapshot = Value
-}
-
-object CloningInstructions extends Enumeration {
-  val COPY_NOTHING, COPY_DEFINITION, COPY_RESOURCE, COPY_REFERENCE = Value
-}

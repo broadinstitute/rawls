@@ -382,7 +382,9 @@ object Boot extends IOApp with LazyLogging {
 
       val snapshotServiceConstructor: (UserInfo) => SnapshotService = SnapshotService.constructor(
         slickDataSource,
+        samDAO,
         workspaceManagerDAO,
+        gcsDAO.getBucketServiceAccountCredential,
         conf.getString("dataRepo.terraInstance")
       )
 
