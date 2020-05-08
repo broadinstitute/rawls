@@ -8,20 +8,41 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.DataReferenceModelJsonSupport._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotReference}
+import org.broadinstitute.dsde.rawls.mock.MockSamDAO
+import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotReference, SamResourceAction, SamResourceTypeName, SamWorkspaceActions, UserInfo}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 class SnapshotApiServiceSpec extends ApiServiceSpec {
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
+  def withApiServices[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
 
     val gcsDAO = new MockGoogleServicesDAO("test")
     gcsDAO.storeToken(userInfo, "test_token")
 
-    val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
+    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
+    }
+  }
+
+  def withApiServicesSecure[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
+    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO) {
+      override val samDAO: MockSamDAO = new MockSamDAO(dataSource) {
+        override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean] = {
+
+          val result = user match {
+            case testData.userReader.userEmail.value => Set(SamWorkspaceActions.read).contains(action)
+            case _ => false
+          }
+          Future.successful(result)
+        }
+      }
+    }
     try {
       testCode(apiService)
     } finally {
@@ -35,13 +56,15 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  def withEmptyTestDataApiServices[T](testCode: TestApiService => T): T = {
-    withEmptyTestDatabase { dataSource: SlickDataSource =>
-      withApiServices(dataSource)(testCode)
+  def withTestDataApiServicesAndUser[T](user: String)(testCode: TestApiService => T): T = {
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withApiServicesSecure(dataSource, user) { services =>
+        testCode(services)
+      }
     }
   }
 
-  it should "return 201 when creating a reference to a snapshot" in withTestDataApiServices { services =>
+  "SnapshotApiService" should "return 201 when creating a reference to a snapshot" in withTestDataApiServices { services =>
     Post(s"${testData.wsName.path}/snapshots", httpJson(
       DataRepoSnapshot(
         name = "foo",
@@ -104,4 +127,31 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
+  it should "return 403 when a user can only read a workspace and tries to add a snapshot" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
+    Post(s"${testData.wsName.path}/snapshots", httpJson(
+      DataRepoSnapshot(
+        name = "foo",
+        snapshotId = "realsnapshot"
+      )
+    )) ~>
+      sealRoute(services.snapshotRoutes) ~>
+      check { assertResult(StatusCodes.Forbidden) {status} }
+  }
+
+  it should "return 404 when a user tries to add a snapshot to a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
+    Post(s"${testData.wsName.path}/snapshots", httpJson(
+      DataRepoSnapshot(
+        name = "foo",
+        snapshotId = "realsnapshot"
+      )
+    )) ~>
+      sealRoute(services.snapshotRoutes) ~>
+      check { assertResult(StatusCodes.NotFound) {status} }
+  }
+
+  it should "return 404 when a user tries to get a snapshot from a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
+    Get(s"${testData.wsName.path}/snapshots/${UUID.randomUUID().toString}") ~>
+      sealRoute(services.snapshotRoutes) ~>
+      check { assertResult(StatusCodes.NotFound) {status} }
+  }
 }

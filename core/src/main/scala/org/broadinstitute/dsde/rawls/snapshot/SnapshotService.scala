@@ -29,7 +29,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   def GetSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataRepoSnapshotReference] = getSnapshot(workspaceName, snapshotId)
 
   def createSnapshot(workspaceName: WorkspaceName, snapshot: DataRepoSnapshot): Future[DataRepoSnapshotReference] = {
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
       if(!workspaceStubExists(workspaceContext.workspaceId, userInfo)) {
         workspaceManagerDAO.createWorkspace(workspaceContext.workspaceId, getServiceAccountAccessToken, userInfo.accessToken)
       }
