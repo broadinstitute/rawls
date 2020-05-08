@@ -11,7 +11,7 @@ import scala.util.Try
 class ExtendedJSONVisitorEvaluateImpl(expression: String,
                                       slickEvaluator: SlickExpressionEvaluator,
                                       workspaceContext: SlickWorkspaceContext) extends
-  ExtendedJSONBaseVisitor[ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]]] {
+  ExtendedJSONBaseVisitor[Seq[ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]]]] {
 //  import slickEvaluator.parser.driver.api._
 
   /**
@@ -20,18 +20,12 @@ class ExtendedJSONVisitorEvaluateImpl(expression: String,
     * <p>The default implementation returns the result of calling
     * {@link #visitChildren} on {@code ctx}.</p>
     */
-  override def visitLookup(ctx: LookupContext): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
+  override def visitLookup(ctx: LookupContext): Seq[ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]]] = {
     val expression = ctx.getText
 
-    slickEvaluator.evalFinalAttribute(workspaceContext, expression)
+    Seq(slickEvaluator.evalFinalAttribute(workspaceContext, expression))
   }
 
-//  override def aggregateResult(aggregate: ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]],
-//                               nextResult: ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]]):
-//  ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
-//    ???
-//  }
-//
 //  override def defaultResult(): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
 //    DBIO.successful("" -> Success(AttributeNull))
 //  }
