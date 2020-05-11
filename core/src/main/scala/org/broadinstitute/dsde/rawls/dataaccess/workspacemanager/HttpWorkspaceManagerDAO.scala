@@ -42,4 +42,8 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
     getWorkspaceApi(accessToken).getDataReference(workspaceId.toString, snapshotId.toString)
   }
 
+  override def enumerateDataReferences(workspaceId: UUID, limit: int, offset: int, accessToken: OAuth2BearerToken): DataReferenceList = {
+    getWorkspaceApi(accessToken).enumerateDataReference(workspaceId.toString, offset, limit)
+  }
+
 }
