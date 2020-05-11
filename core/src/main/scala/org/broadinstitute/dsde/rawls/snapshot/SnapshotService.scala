@@ -3,12 +3,11 @@ package org.broadinstitute.dsde.rawls.snapshot
 import java.util.UUID
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotReference, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotReference, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import spray.json.{JsObject, JsString}
 
@@ -28,6 +27,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
 
   def CreateSnapshot(workspaceName: WorkspaceName, dataRepoSnapshot: DataRepoSnapshot): Future[DataRepoSnapshotReference] = createSnapshot(workspaceName, dataRepoSnapshot)
   def GetSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataRepoSnapshotReference] = getSnapshot(workspaceName, snapshotId)
+  def ListSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[DataRepoSnapshotList] = listSnapshots(workspaceName, offset, limit)
 
   def createSnapshot(workspaceName: WorkspaceName, snapshot: DataRepoSnapshot): Future[DataRepoSnapshotReference] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
@@ -46,6 +46,13 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
       val ref = workspaceManagerDAO.getDataReference(workspaceContext.workspaceId, UUID.fromString(snapshotId), userInfo.accessToken)
       Future.successful(DataRepoSnapshotReference(ref))
+    }
+  }
+
+  def listSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[DataRepoSnapshotList] = {
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
+      val ref = workspaceManagerDAO.enumerateDataReferences(workspaceContext.workspaceId, offset, limit, userInfo.accessToken)
+      Future.successful(DataRepoSnapshotList(ref))
     }
   }
 
