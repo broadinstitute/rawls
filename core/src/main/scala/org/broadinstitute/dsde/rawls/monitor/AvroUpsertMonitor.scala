@@ -56,6 +56,7 @@ object AvroUpsertMonitorSupervisor {
             samDAO: SamDAO,
             googleStorage: GoogleStorageService[IO],
             pubSubDAO: GooglePubSubDAO,
+            importServicePubSubDAO: GooglePubSubDAO,
             arrowPubSubDAO: GooglePubSubDAO, // remove when cutting over to import service
             importServiceDAO: ImportServiceDAO,
             avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
@@ -66,6 +67,7 @@ object AvroUpsertMonitorSupervisor {
         samDAO,
         googleStorage,
         pubSubDAO,
+        importServicePubSubDAO,
         arrowPubSubDAO, // remove when cutting over to import service
         importServiceDAO,
         avroUpsertMonitorConfig))
@@ -87,6 +89,7 @@ class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService
                                   samDAO: SamDAO,
                                   googleStorage: GoogleStorageService[IO],
                                   pubSubDAO: GooglePubSubDAO,
+                                  importServicePubSubDAO: GooglePubSubDAO,
                                   arrowPubSubDAO: GooglePubSubDAO, // remove when cutting over to import service
                                   importServiceDAO: ImportServiceDAO,
                                   avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO])
@@ -113,7 +116,7 @@ class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDAO, arrowPubSubDAO, avroUpsertMonitorConfig.arrowPubSubSubscription, avroUpsertMonitorConfig.arrowBucketName, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize))
+    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO, arrowPubSubDAO, avroUpsertMonitorConfig.arrowPubSubSubscription, avroUpsertMonitorConfig.arrowBucketName, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize))
   }
 
   override val supervisorStrategy =
@@ -141,6 +144,7 @@ object AvroUpsertMonitor {
              samDAO: SamDAO,
              googleStorage: GoogleStorageService[IO],
              pubSubDao: GooglePubSubDAO,
+             importServicePubSubDAO: GooglePubSubDAO,
              arrowPubSubDAO: GooglePubSubDAO,     // remove when cutting over to import service
              arrowPubSubSubscriptionName: String, // remove when cutting over to import service
              arrowUpsertBucketName: String,       // remove when cutting over to import service
@@ -148,7 +152,7 @@ object AvroUpsertMonitor {
              importStatusPubSubTopic: String,
              importServiceDAO: ImportServiceDAO,
              batchSize: Int)(implicit cs: ContextShift[IO]): Props =
-    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, arrowPubSubDAO, arrowPubSubSubscriptionName, arrowUpsertBucketName,
+    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, importServicePubSubDAO, arrowPubSubDAO, arrowPubSubSubscriptionName, arrowUpsertBucketName,
       pubSubSubscriptionName, importStatusPubSubTopic, importServiceDAO, batchSize))
 }
 
@@ -160,6 +164,7 @@ class AvroUpsertMonitorActor(
                               val samDAO: SamDAO,
                               googleStorage: GoogleStorageService[IO],
                               pubSubDao: GooglePubSubDAO,
+                              importServicePubSubDAO: GooglePubSubDAO,
                               arrowPubSubDAO: GooglePubSubDAO,     // remove when cutting over to import service
                               arrowPubSubSubscriptionName: String, // remove when cutting over to import service
                               arrowUpsertBucketName: String,       // remove when cutting over to import service
@@ -274,7 +279,7 @@ class AvroUpsertMonitorActor(
     val attributes: Map[String, String] = updateImportStatus.toJson.asJsObject.fields.collect {
      case (attName:String, attValue:JsString) => (attName, attValue.value)
    }
-    pubSubDao.publishMessages(importStatusPubSubTopic, Seq(GooglePubSubDAO.MessageRequest("", attributes)))
+    importServicePubSubDAO.publishMessages(importStatusPubSubTopic, Seq(GooglePubSubDAO.MessageRequest("", attributes)))
   }
 
 

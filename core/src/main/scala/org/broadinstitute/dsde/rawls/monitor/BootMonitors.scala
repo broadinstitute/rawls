@@ -4,7 +4,8 @@ import akka.actor.ActorSystem
 import cats.effect.{ContextShift, IO}
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource, _}
+import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, UserInfo, WorkflowStatuses}
@@ -21,6 +22,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Try
 
+//noinspection ScalaUnnecessaryParentheses,ScalaUnusedSymbol,TypeAnnotation
 // handles monitors which need to be started at boot time
 object BootMonitors extends LazyLogging {
 
@@ -30,6 +32,7 @@ object BootMonitors extends LazyLogging {
                    gcsDAO: GoogleServicesDAO,
                    samDAO: SamDAO,
                    pubSubDAO: GooglePubSubDAO,
+                   importServicePubSubDAO: GooglePubSubDAO,
                    arrowPubSubDAO: GooglePubSubDAO,  // remove when cutting over to import service
                    importServiceDAO: HttpImportServiceDAO,
                    googleStorage: GoogleStorageService[IO],
@@ -53,10 +56,21 @@ object BootMonitors extends LazyLogging {
     //Boot billing project creation monitor
     startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
 
+    //Boot data source access
+    val dataSourceAccess = startDataSourceAccess(system, conf, slickDataSource)
+
     //Boot submission monitor supervisor
     val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
     val submissionMonitorConfig = SubmissionMonitorConfig(util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")), submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"))
-    startSubmissionMonitorSupervisor(system, submissionMonitorConfig, slickDataSource, samDAO, gcsDAO, shardedExecutionServiceCluster, metricsPrefix)
+    startSubmissionMonitorSupervisor(
+      system,
+      submissionMonitorConfig,
+      dataSourceAccess,
+      samDAO,
+      gcsDAO,
+      shardedExecutionServiceCluster,
+      metricsPrefix
+    )
 
     //Boot workflow submission actors
     startWorkflowSubmissionActors(system, conf, slickDataSource, gcsDAO, samDAO, methodRepoDAO, dosResolver, shardedExecutionServiceCluster, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, metricsPrefix, requesterPaysRole, useWorkflowCollectionField, useWorkflowCollectionLabel, defaultBackend, methodConfigResolver)
@@ -79,7 +93,7 @@ object BootMonitors extends LazyLogging {
     )
 
     //Boot the avro upsert monitor to read and process messages in the specified PubSub topic
-    startAvroUpsertMonitor(system, workspaceService, gcsDAO, samDAO, googleStorage, pubSubDAO,
+    startAvroUpsertMonitor(system, workspaceService, gcsDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO,
       arrowPubSubDAO, importServiceDAO, avroUpsertMonitorConfig)
   }
 
@@ -87,10 +101,43 @@ object BootMonitors extends LazyLogging {
     system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole))
   }
 
-  private def startSubmissionMonitorSupervisor(system: ActorSystem, submissionMonitorConfig: SubmissionMonitorConfig, slickDataSource: SlickDataSource, samDAO: SamDAO, gcsDAO: GoogleServicesDAO, shardedExecutionServiceCluster: ExecutionServiceCluster, metricsPrefix: String) = {
+  private def startDataSourceAccess(system: ActorSystem,
+                                    conf: Config,
+                                    slickDataSource: SlickDataSource,
+                                   ): DataSourceAccess = {
+    val coordinatedAccessConfigRoot = conf.getConfig("data-source.coordinated-access")
+    if (coordinatedAccessConfigRoot.getBoolean("enabled")) {
+      val startTimeout = util.toScalaDuration(coordinatedAccessConfigRoot.getDuration("start-timeout"))
+      val waitTimeout = util.toScalaDuration(coordinatedAccessConfigRoot.getDuration("wait-timeout"))
+      val askTimeout = util.toScalaDuration(coordinatedAccessConfigRoot.getDuration("ask-timeout"))
+      val dataSourceActor = system.actorOf(CoordinatedDataSourceActor.props(), "rawls-coordinated-store-access")
+      val dataSourceAccess = new CoordinatedDataSourceAccess(
+        slickDataSource = slickDataSource,
+        dataSourceActor = dataSourceActor,
+        starTimeout = startTimeout,
+        waitTimeout = waitTimeout,
+        askTimeout = askTimeout,
+      )
+      logger.info("Started coordinated data source access " +
+        s"with timeouts (start / wait / ask) = ($startTimeout / $waitTimeout / $askTimeout)")
+      dataSourceAccess
+    } else {
+      val dataSourceAccess = new UncoordinatedDataSourceAccess(slickDataSource)
+      logger.info("Running with uncoordinated data source access")
+      dataSourceAccess
+    }
+  }
+
+  private def startSubmissionMonitorSupervisor(system: ActorSystem,
+                                               submissionMonitorConfig: SubmissionMonitorConfig,
+                                               storeAccess: DataSourceAccess,
+                                               samDAO: SamDAO,
+                                               gcsDAO: GoogleServicesDAO,
+                                               shardedExecutionServiceCluster: ExecutionServiceCluster,
+                                               metricsPrefix: String) = {
     system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
-      slickDataSource,
+      storeAccess,
       samDAO,
       gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,
@@ -145,7 +192,7 @@ object BootMonitors extends LazyLogging {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
-  private def startAvroUpsertMonitor(system: ActorSystem, workspaceService: UserInfo => WorkspaceService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, arrowPubSubDao: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO]) = {
+  private def startAvroUpsertMonitor(system: ActorSystem, workspaceService: UserInfo => WorkspaceService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, arrowPubSubDao: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit cs: ContextShift[IO]) = {
     system.actorOf(
       AvroUpsertMonitorSupervisor.props(
         workspaceService,
@@ -153,6 +200,7 @@ object BootMonitors extends LazyLogging {
         samDAO,
         googleStorage,
         googlePubSubDAO,
+        importServicePubSubDAO,
         arrowPubSubDao,
         importServiceDAO,
         avroUpsertMonitorConfig

@@ -33,12 +33,14 @@ import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
+import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+//noinspection TypeAnnotation
 // common trait to be inherited by API service tests
 trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils with RawlsInstrumented
   with RawlsStatsDTestUtils with InstrumentationDirectives with ScalatestRouteTest with TestKitBase
@@ -97,6 +99,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       }
   }
 
+  //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   trait ApiServices extends AdminApiService with BillingApiService with EntityApiService with MethodConfigApiService
     with NotificationsApiService with RawlsApiService with SnapshotApiService with StatusApiService with SubmissionApiService with UserApiService with WorkspaceApiService {
 
@@ -120,7 +123,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val config = SubmissionMonitorConfig(5 seconds, true)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
-      slickDataSource,
+      new UncoordinatedDataSourceAccess(slickDataSource),
       samDAO,
       gcsDAO,
       gcsDAO.getBucketServiceAccountCredential,

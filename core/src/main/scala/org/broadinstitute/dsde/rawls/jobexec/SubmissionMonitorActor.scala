@@ -9,6 +9,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics.scala.Counter
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression, ThisEntityTarget, WorkspaceTarget}
@@ -34,7 +35,7 @@ import scala.util.{Failure, Success, Try}
 object SubmissionMonitorActor {
   def props(workspaceName: WorkspaceName,
             submissionId: UUID,
-            datasource: SlickDataSource,
+            datasource: DataSourceAccess,
             samDAO: SamDAO,
             googleServicesDAO: GoogleServicesDAO,
             executionServiceCluster: ExecutionServiceCluster,
@@ -69,12 +70,11 @@ object SubmissionMonitorActor {
  * and terminate the actor.
  *
  * @param submissionId id of submission to monitor
- * @param datasource
- * @param submissionPollInterval time between polls of db for all workflow statuses within submission
  */
+//noinspection ScalaDocMissingParameterDescription,TypeAnnotation,NameBooleanParameters
 class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val submissionId: UUID,
-                             val datasource: SlickDataSource,
+                             val datasource: DataSourceAccess,
                              val samDAO: SamDAO,
                              val googleServicesDAO: GoogleServicesDAO,
                              val executionServiceCluster: ExecutionServiceCluster,
@@ -131,10 +131,11 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
 //A map of writebacks to apply to the given entity reference
 case class WorkflowEntityUpdate(entityRef: AttributeEntityReference, upserts: AttributeMap)
 
+//noinspection ScalaDocMissingParameterDescription,RedundantBlock,TypeAnnotation,ReplaceWithFlatten,ScalaUnnecessaryParentheses,ScalaUnusedSymbol,DuplicatedCode
 trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrumented {
   val workspaceName: WorkspaceName
   val submissionId: UUID
-  val datasource: SlickDataSource
+  val datasource: DataSourceAccess
   val samDAO: SamDAO
   val googleServicesDAO: GoogleServicesDAO
   val executionServiceCluster: ExecutionServiceCluster
@@ -156,7 +157,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   private implicit val subStatusCounter: SubmissionStatus => Counter =
     submissionStatusCounter(workspaceMetricBuilder)
 
-  import datasource.dataAccess.driver.api._
+  import datasource.slickDataSource.dataAccess.driver.api._
 
   /**
    * This function starts a monitoring pass
