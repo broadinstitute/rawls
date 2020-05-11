@@ -2162,30 +2162,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     })
   }
 
-  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
-  private def requireCreateWorkspaceAccess[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
-    for {
-      userHasAction <- traceDBIOWithParent("userHasAction", parentSpan)(_ => DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.createWorkspace, userInfo)))
-      response <- userHasAction match {
-        case true =>
-          traceDBIOWithParent("loadBillingProject", parentSpan)( _ => dataAccess.rawlsBillingProjectQuery.load(projectName)).flatMap {
-            case Some(RawlsBillingProject(_, _, CreationStatuses.Ready, _, _, _, _, _)) => op //Sam will check to make sure the Auth Domain selection is valid
-            case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Creating, _, _, _, _, _)) =>
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"${name} is still being created")))
-
-            case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Error, _, messageOp, _, _, _)) =>
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Error creating ${name}: ${messageOp.getOrElse("no message")}")))
-            case Some(_) | None =>
-              // this can't happen with the current code but a 404 would be the correct response
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${workspaceRequest.toWorkspaceName.namespace} does not exist")))
-          }
-        case false =>
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
-      }
-    } yield response
-  }
-
   private def withEntity[T](workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[T]): ReadWriteAction[T] = {
     dataAccess.entityQuery.get(workspaceContext, entityType, entityName) flatMap {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext.workspace.toWorkspaceName}")))

@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.util
 
 import akka.http.scaladsl.model.StatusCodes
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource, SlickWorkspaceContext}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, SamBillingProjectActions, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -15,6 +17,8 @@ trait WorkspaceSupport {
   protected val dataSource: SlickDataSource
 
   import dataSource.dataAccess.driver.api._
+
+  //Access/permission helpers
 
   def accessCheck(workspace: Workspace, requiredAction: SamResourceAction, ignoreLock: Boolean): Future[Unit] = {
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo) flatMap { hasRequiredLevel =>
@@ -66,8 +70,31 @@ trait WorkspaceSupport {
     }
   }
 
-  def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
-  def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
+  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
+  def requireCreateWorkspaceAccess[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
+    val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
+    for {
+      userHasAction <- traceDBIOWithParent("userHasAction", parentSpan)(_ => DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.createWorkspace, userInfo)))
+      response <- userHasAction match {
+        case true =>
+          traceDBIOWithParent("loadBillingProject", parentSpan)( _ => dataAccess.rawlsBillingProjectQuery.load(projectName)).flatMap {
+            case Some(RawlsBillingProject(_, _, CreationStatuses.Ready, _, _, _, _, _)) => op //Sam will check to make sure the Auth Domain selection is valid
+            case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Creating, _, _, _, _, _)) =>
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"${name} is still being created")))
+
+            case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, CreationStatuses.Error, _, messageOp, _, _, _)) =>
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Error creating ${name}: ${messageOp.getOrElse("no message")}")))
+            case Some(_) | None =>
+              // this can't happen with the current code but a 404 would be the correct response
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${workspaceRequest.toWorkspaceName.namespace} does not exist")))
+          }
+        case false =>
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
+      }
+    } yield response
+  }
+
+  //WorkspaceContext helpers
 
   // function name may be misleading. This returns the workspace context and checks the user's permission,
   // but does not return the permissions.
@@ -92,5 +119,8 @@ trait WorkspaceSupport {
       case Some(workspace) => op(SlickWorkspaceContext(workspace))
     }
   }
+
+  def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
+  def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 
 }
