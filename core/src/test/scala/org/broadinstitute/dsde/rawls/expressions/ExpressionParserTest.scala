@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import java.util.UUID
 
+import org.antlr.v4.runtime.misc.ParseCancellationException
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ExprEvalRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
@@ -282,15 +283,16 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """"\"str""""))
       }
 
-      intercept[RawlsException] {
+      intercept[ParseCancellationException] {
         //the string ""str" is not valid JSON as internal strings should be quoted.
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """""str""""))
       }
 
-      intercept[RawlsException] {
+      intercept[ParseCancellationException] {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """this."foo""""))
       }
-      intercept[RawlsException] {
+
+      intercept[ParseCancellationException] {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """that."foo""""))
       }
 
@@ -298,10 +300,11 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """"42""""))
       }
 
-      intercept[RawlsException] {
+      intercept[ParseCancellationException] {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """unquoted"""))
       }
-      intercept[RawlsException] {
+
+      intercept[ParseCancellationException] {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """foo"bar""""))
       }
     }

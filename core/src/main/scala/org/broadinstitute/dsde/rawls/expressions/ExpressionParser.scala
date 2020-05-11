@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import cats.instances.try_._
 import cats.syntax.functor._
-import org.antlr.v4.runtime.{CharStreams, CodePointCharStream, CommonTokenStream}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.AntlrExtendedJSONParser
 /*
 
 Are you here because you're using IntelliJ, and got an error:
@@ -12,7 +12,7 @@ From your rawls directory, run:
    sbt antlr4:antlr4Generate
 
  */
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{ErrorThrowingListener, ExtendedJSONLexer, ExtendedJSONParser, ExtendedJSONVisitorImpl}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONVisitorImpl
 import org.broadinstitute.dsde.rawls.model.{AttributeString, ParsedMCExpressions}
 //import spray.json._
 
@@ -41,26 +41,10 @@ object ExpressionParser {
     ParsedMCExpressions(successInputs, failedInputs, successOutputs, failedOutputs)
   }
 
-  private def getExtendedJSONParser(expression: String): ExtendedJSONParser = {
-    val errorThrowingListener = new ErrorThrowingListener()
-    val inputStream: CodePointCharStream = CharStreams.fromString(expression)
-
-    val lexer: ExtendedJSONLexer = new ExtendedJSONLexer(inputStream)
-    lexer.removeErrorListeners()
-    lexer.addErrorListener(errorThrowingListener)
-
-    val tokenStream = new CommonTokenStream(lexer)
-    val parser: ExtendedJSONParser = new ExtendedJSONParser(tokenStream)
-    parser.removeErrorListeners()
-    parser.addErrorListener(errorThrowingListener)
-
-    parser
-  }
-
   private def parseInputExpr(allowRootEntity: Boolean, slickParser: SlickExpressionParser)(expression: String): Try[Unit] = {
     // Extended JSON inputs need to parsed to find out attribute expressions
 
-    val extendedJsonParser = getExtendedJSONParser(expression)
+    val extendedJsonParser = AntlrExtendedJSONParser.getParser(expression)
     val visitor = new ExtendedJSONVisitorImpl(allowRootEntity, slickParser)
 
     /*
