@@ -15,5 +15,5 @@ object DataRepoSnapshotReference {
 
 object DataReferenceModelJsonSupport {
   implicit val DataRepoSnapshotFormat = jsonFormat2(DataRepoSnapshot)
-  implicit val DataRepoSnapshotReferenceFormat = jsonFormat6(DataRepoSnapshotReference)
+  implicit val DataRepoSnapshotReferenceFormat = jsonFormat6(DataRepoSnapshotReference.apply)
 }

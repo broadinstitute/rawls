@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.snapshot
 import java.util.UUID
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEnum, ReferenceTypeEnum}
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
