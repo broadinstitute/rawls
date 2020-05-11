@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import spray.json.{JsObject, JsString}
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 object SnapshotService {
 
@@ -44,17 +45,12 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   def getSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataRepoSnapshotReference] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
       val ref = workspaceManagerDAO.getDataReference(workspaceContext.workspaceId, UUID.fromString(snapshotId), userInfo.accessToken)
-      Future.successful(DataRepoSnapshotReference(ref.getReferenceId.toString, ref.getName, ref.getWorkspaceId.toString, Option(ref.getReferenceType.toString), Option(ref.getReference), ref.getCloningInstructions.toString))
+      Future.successful(DataRepoSnapshotReference(ref))
     }
   }
 
   private def workspaceStubExists(workspaceId: UUID, userInfo: UserInfo): Boolean = {
-    try {
-      workspaceManagerDAO.getWorkspace(workspaceId, userInfo.accessToken)
-      true
-    } catch {
-      case _: ApiException => false
-    }
+    Try(workspaceManagerDAO.getWorkspace(workspaceId, userInfo.accessToken)).isSuccess
   }
 
   private def getServiceAccountAccessToken: OAuth2BearerToken = {
