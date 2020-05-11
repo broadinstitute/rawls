@@ -3251,6 +3251,44 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/DataRepoSnapshot'
+    get:
+      requestBody:
+        description: |
+          Parameters for enumerating snapshots.
+        content:
+          application/json:
+            schema:
+              $ref: '#/definitions/EnumerateSnapshotRequestBody'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/WMDataReferenceListResponse'
+        '404':
+          description: Workspace or snapshot not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: "Enumerate references to snapshots in the Terra Data Repo"
+      tags:
+      - snapshots
+      summary: List snapshots
+      operationId: enumerateDataRepoSnapshot
+      parameters:
+      - in: path
+        description: The workspace namespace
+        name: namespace
+        required: true
+        type: string
+      - in: path
+        description: The workspace name
+        name: name
+        required: true
+        type: string
+
   '/api/workspaces/{namespace}/{name}/snapshots/{snapshotId}':
     get:
       responses:
@@ -4906,6 +4944,17 @@ definitions:
         type: string
         description: The name of the snapshot
 
+  EnumerateSnapshotRequestBody:
+    description: Parameters for enumerating snapshots from Workspace Manager
+    properties:
+      offset:
+        type: int
+        description: The number of items to skip before starting to collect the result set.
+        default: 0
+      limit:
+        type: int
+        description: The numbers of items to return. Default 10
+        default: 10
   WMDataReferenceResponse:
     description: A Data Reference definition from Workspace Manager
     properties:
@@ -4923,6 +4972,15 @@ definitions:
         type: string
       cloningInstructions:
         type: string
+  WMDataReferenceListResponse:
+    description: A list of WMDataReferences
+    properties:
+      resources:
+        description: A list of Data Reference definitions from Workspace Manager
+        type: array
+        items:
+          $ref: '#/definitions/WMDataReferenceResponse'
+
 
   ResourceDescription:
     description: A description of a resource from Workspace Manager
