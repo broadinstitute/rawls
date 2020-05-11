@@ -8,21 +8,30 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONParser
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeNull, AttributeNumber, AttributeString, AttributeValue}
 import spray.json._
 
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 
 class ExtendedJSONVisitorEvaluateImpl(expression: String,
                                       slickEvaluator: SlickExpressionEvaluator,
-                                      workspaceContext: SlickWorkspaceContext) extends
-  ExtendedJSONBaseVisitor[Seq[ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]]]] {
+                                      workspaceContext: SlickWorkspaceContext)
+                                     (implicit executionContext: ExecutionContext) extends
+  ExtendedJSONBaseVisitor[ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]]] {
   import slickEvaluator.parser.driver.api._
 
-  override def visitLookup(ctx: LookupContext): Seq[ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]]] = {
+  /*
+  {"example": {"abc": this.ref, "def": this.another}}
+   */
+
+  override def visitLookup(ctx: LookupContext): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
     val expression = ctx.getText
 
-    Seq(slickEvaluator.evalFinalAttribute(workspaceContext, expression))
+    slickEvaluator.evalFinalAttribute(workspaceContext, expression)
+
+    // [10019 -> Seq("gs://abc/")]
+    // [10019 -> Seq("gs://def/")]
   }
 
-  override def visitLiteral(ctx: ExtendedJSONParser.LiteralContext): Seq[ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]]] = {
+  override def visitLiteral(ctx: ExtendedJSONParser.LiteralContext): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
     val expression = ctx.getText
 
     val attributeValTry: Try[Iterable[AttributeValue]] = Try(expression.parseJson) map {
@@ -36,17 +45,33 @@ class ExtendedJSONVisitorEvaluateImpl(expression: String,
     }
 
     attributeValTry match {
-      case Success(attributeVal) => Seq(DBIO.successful(slickEvaluator.rootEntities match {
+      case Success(attributeVal) => DBIO.successful(slickEvaluator.rootEntities match {
         case Some(entities) => (entities map { entityRec: EntityRecord =>
           entityRec.name -> Success(attributeVal)
         }).toMap
         case None => Map("" -> Success(attributeVal))
-      }))
+      })
       case Failure(e) => throw new ParseCancellationException(s"Something went wrong! $e")
     }
   }
 
-  override def defaultResult(): Seq[ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]]] = {
-    Seq(DBIO.successful(Map("" -> Success(Seq(AttributeNull)))))
+  /*
+    [1, 2, "abc"]
+    10019 -> [AttributeNumber(1), ]
+   */
+
+
+  override def aggregateResult(aggregate: ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]],
+                               nextResult: ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]]): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
+
+    // TODO: replace with Cats Semi-group for maps or implement something smarter. `toMap` will replace the value if there 2 tuples with same keys
+    //  where only the latter will be saved
+    DBIO.sequence(Seq(aggregate, nextResult)).map { seqOfMaps =>
+      seqOfMaps.flatten.toMap
+    }
+  }
+
+  override def defaultResult(): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
+    DBIO.successful(Map("" -> Success(Seq(AttributeNull))))
   }
 }

@@ -33,7 +33,7 @@ object ExpressionEvaluator {
 class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEntities: Option[Seq[EntityRecord]]) {
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String)
                         (implicit executionContext: ExecutionContext) : ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
-    import slickEvaluator.parser.driver.api._
+//    import slickEvaluator.parser.driver.api._
 
     /*
       - parse expression using ANTLR parser
@@ -52,10 +52,10 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
 
     val abc = extendedJsonParser.value()
 
-    val duff: Seq[ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]]] = visitor.visit(abc)
+    val duff: ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = visitor.visit(abc)
 
 
-    duff.head.asTry.map {
+    duff.asTry.map {
       case Success(value) =>
         println(value)
       case Failure(e) =>
@@ -63,20 +63,20 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
     }
 
 
-    val xa1: ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = JsonExpressionEvaluator.evaluate(expression) match {
-      //if the expression evals as JSON, it evaluates to the same thing for every entity, so build that map here
-      case Success(parsed) => val xa2: ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = DBIO.successful(rootEntities match {
-        case Some(entities) => (entities map { entityRec: EntityRecord =>
-          entityRec.name -> Success(parsed)
-        }).toMap
-        case None => Map("" -> Success(parsed))
-      })
-        xa2
+//    val xa1: ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = JsonExpressionEvaluator.evaluate(expression) match {
+//      //if the expression evals as JSON, it evaluates to the same thing for every entity, so build that map here
+//      case Success(parsed) => val xa2: ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = DBIO.successful(rootEntities match {
+//        case Some(entities) => (entities map { entityRec: EntityRecord =>
+//          entityRec.name -> Success(parsed)
+//        }).toMap
+//        case None => Map("" -> Success(parsed))
+//      })
+//        xa2
+//
+//      case Failure(_) => slickEvaluator.evalFinalAttribute(workspaceContext, expression)
+//    }
 
-      case Failure(_) => slickEvaluator.evalFinalAttribute(workspaceContext, expression)
-    }
-
-    duff.head
+    duff
   }
 
   def evalFinalEntity(workspaceContext: SlickWorkspaceContext, expression:String): ReadWriteAction[Iterable[EntityRecord]] = {
