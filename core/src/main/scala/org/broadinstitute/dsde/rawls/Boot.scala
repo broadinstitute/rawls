@@ -49,8 +49,10 @@ import scala.concurrent.duration._
 import scala.language.higherKinds
 import scala.language.postfixOps
 import net.ceedubs.ficus.Ficus._
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
+import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 object Boot extends IOApp with LazyLogging {
@@ -308,6 +310,8 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
+      val workspaceManagerDAO = new HttpWorkspaceManagerDAO(conf.getString("workspaceManager.server"))
+
       val maxActiveWorkflowsTotal =
         conf.getInt("executionservice.maxActiveWorkflowsPerServer")
       val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt(
@@ -385,11 +389,20 @@ object Boot extends IOApp with LazyLogging {
         requesterPaysSetupService
       )
 
+      val snapshotServiceConstructor: (UserInfo) => SnapshotService = SnapshotService.constructor(
+        slickDataSource,
+        samDAO,
+        workspaceManagerDAO,
+        gcsDAO.getBucketServiceAccountCredential,
+        conf.getString("dataRepo.terraInstance")
+      )
+
       val service = new RawlsApiServiceImpl(
         workspaceServiceConstructor,
         userServiceConstructor,
         genomicsServiceConstructor,
         statisticsServiceConstructor,
+        snapshotServiceConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,
         ApplicationVersion(
