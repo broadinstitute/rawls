@@ -409,7 +409,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- workspaceContext.workspace.workflowCollectionName.map( cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, userInfo) ).getOrElse(Future.successful(()))
       _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, userInfo)
       // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
-      _ = workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceId, OAuth2BearerToken(gcsDAO.getBucketServiceAccountCredential.getAccessToken), userInfo.accessToken)
+      _ = Try(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceId, OAuth2BearerToken(gcsDAO.getBucketServiceAccountCredential.getAccessToken), userInfo.accessToken)).recoverWith {
+        case _ => Success(()) //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
+      }
     } yield {
       aborts.onComplete {
         case Failure(t) => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
