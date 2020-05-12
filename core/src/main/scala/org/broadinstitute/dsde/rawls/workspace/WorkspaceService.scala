@@ -28,6 +28,7 @@ import org.joda.time.DateTime
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCodes, Uri}
+import bio.terra.workspace.client.ApiException
 import com.google.api.services.storage.model.StorageObject
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
@@ -410,7 +411,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       _ <- samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceId.toString, userInfo)
       // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
       _ = Try(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceId, OAuth2BearerToken(gcsDAO.getBucketServiceAccountCredential.getAccessToken), userInfo.accessToken)).recoverWith {
-        case _ => Success(()) //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
+        //this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
+        case e: ApiException => {
+          if(e.getCode != StatusCodes.NotFound.intValue) {
+            logger.warn(s"Unexpected failure deleting workspace in Workspace Manager. Received ${e.getCode}: [${e.getResponseBody}]")
+          }
+          Success(())
+        }
       }
     } yield {
       aborts.onComplete {
