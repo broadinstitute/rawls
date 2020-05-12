@@ -29,6 +29,9 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito
+import org.mockito.Mockito.verify
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
@@ -738,8 +741,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(workspaceQuery.findByName(testData.wsName3))
     }
 
+    val workspaceManagerDAO = mock[MockWorkspaceManagerDAO]
+
     //delete the workspace
     Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    verify(workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken], any[OAuth2BearerToken])
 
     //check that the workspace has been deleted
     assertResult(None) {
