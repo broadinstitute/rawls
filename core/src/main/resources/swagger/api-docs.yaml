@@ -4970,14 +4970,14 @@ definitions:
         type: object
       cloningInstructions:
         type: string
-  WMDataReferenceListResponse:
-    description: A list of WMDataReferences
+  DataRepoSnapshotReferenceList:
+    description: A list of DataRepoSnapshotReferences
     properties:
       resources:
         description: A list of Data Reference definitions from Workspace Manager
         type: array
         items:
-          $ref: '#/definitions/WMDataReferenceResponse'
+          $ref: '#/definitions/DataRepoSnapshotReferences'
 
 
   CallMetadata:
