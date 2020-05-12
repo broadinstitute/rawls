@@ -49,6 +49,7 @@ import scala.concurrent.duration._
 import scala.language.higherKinds
 import scala.language.postfixOps
 import net.ceedubs.ficus.Ficus._
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
@@ -385,8 +386,15 @@ object Boot extends IOApp with LazyLogging {
         requesterPaysSetupService
       )
 
+      val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
+        slickDataSource,
+        samDAO,
+        workbenchMetricBaseName = metricsPrefix
+      )
+
       val service = new RawlsApiServiceImpl(
         workspaceServiceConstructor,
+        entityServiceConstructor,
         userServiceConstructor,
         genomicsServiceConstructor,
         statisticsServiceConstructor,
@@ -420,7 +428,7 @@ object Boot extends IOApp with LazyLogging {
           appDependencies.googleStorageService,
           methodRepoDAO,
           dosResolver,
-          workspaceServiceConstructor,
+          entityServiceConstructor,
           shardedExecutionServiceCluster,
           maxActiveWorkflowsTotal,
           maxActiveWorkflowsPerUser,

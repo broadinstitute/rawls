@@ -34,6 +34,7 @@ import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.{DeploymentManagerConfig, MethodRepoConfig, SwaggerConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
+import org.broadinstitute.dsde.rawls.entities.EntityService
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -198,6 +199,12 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       submissionCostService,
       workspaceServiceConfig,
       requesterPaysSetupService
+    )_
+
+    override val entityServiceConstructor = EntityService.constructor(
+      slickDataSource,
+      samDAO,
+      workbenchMetricBaseName
     )_
 
     def cleanupSupervisor = {
