@@ -25,7 +25,7 @@ trait SnapshotApiService extends UserInfoDirectives {
             snapshotServiceConstructor(userInfo).CreateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), dataRepoSnapshot).map(StatusCodes.Created -> _)
           }
         }
-      }
+      } ~
       get {
         entity(as[EnumerateSnapshotRequestBody]) { body =>
           complete {
