@@ -3220,7 +3220,7 @@ paths:
         '201':
           description: Created
           schema:
-            $ref: '#/definitions/WMDataReferenceResponse'
+            $ref: '#/definitions/DataRepoSnapshotReference'
         '404':
           description: Workspace or snapshot not found
           schema:
@@ -3295,7 +3295,7 @@ paths:
         '200':
           description: OK
           schema:
-            $ref: '#/definitions/WMDataReferenceResponse'
+            $ref: '#/definitions/DataRepoSnapshotReference'
         '404':
           description: Workspace or snapshot not found
           schema:
@@ -4955,21 +4955,19 @@ definitions:
         type: int
         description: The numbers of items to return. Default 10
         default: 10
-  WMDataReferenceResponse:
+  DataRepoSnapshotReference:
     description: A Data Reference definition from Workspace Manager
     properties:
       referenceId:
         type: string
       name:
         type: string
-      resourceDescription:
-        $ref: '#/definitions/ResourceDescription'
+      workspaceId:
+        type: string
       referenceType:
         type: string
       reference:
         type: object
-      credentialId:
-        type: string
       cloningInstructions:
         type: string
   WMDataReferenceListResponse:
@@ -4981,22 +4979,6 @@ definitions:
         items:
           $ref: '#/definitions/WMDataReferenceResponse'
 
-
-  ResourceDescription:
-    description: A description of a resource from Workspace Manager
-    properties:
-      resourceId:
-        type: string
-      workspaceId:
-        type: string
-      applicationId:
-        type: string
-      isVisible:
-        type: string
-      owner:
-        type: string
-      attributes:
-        type: string
 
   CallMetadata:
     description: Stuff you need to know about calls
