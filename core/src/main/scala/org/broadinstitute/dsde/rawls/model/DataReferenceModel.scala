@@ -18,7 +18,7 @@ object DataRepoSnapshotReference {
   }
 }
 
-object DataRepoSnapshotList {
+object DataRepoSnapshotListFromDataReferenceList {
   def apply(ref: DataReferenceList): DataRepoSnapshotList = {
     val buffer = for (r <- ref.getResources.asScala) yield DataRepoSnapshotReference(r)
     DataRepoSnapshotList(buffer.toList)
@@ -28,5 +28,6 @@ object DataRepoSnapshotList {
 object DataReferenceModelJsonSupport {
   implicit val DataRepoSnapshotFormat = jsonFormat2(DataRepoSnapshot)
   implicit val DataRepoSnapshotReferenceFormat = jsonFormat6(DataRepoSnapshotReference.apply)
+  implicit val DataRepoSnapshotListFormat = jsonFormat1(DataRepoSnapshotList.apply)
   implicit val EnumerateSnapshotRequestBodyFormat = jsonFormat2(EnumerateSnapshotRequestBody)
 }

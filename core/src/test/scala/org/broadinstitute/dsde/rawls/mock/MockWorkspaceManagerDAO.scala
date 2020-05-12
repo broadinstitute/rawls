@@ -7,8 +7,9 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.ErrorReport
-import bio.terra.workspace.model.{CreatedWorkspace, DataReferenceDescription, WorkspaceDescription}
+import bio.terra.workspace.model.{CreatedWorkspace, DataReferenceDescription, DataReferenceList, WorkspaceDescription}
 import spray.json.{JsObject, JsString}
+import scala.collection.JavaConverters._
 
 import scala.collection.concurrent.TrieMap
 
@@ -19,6 +20,7 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
   def mockGetWorkspaceResponse(workspaceId: UUID) = new WorkspaceDescription().id(workspaceId)
   def mockCreateWorkspaceResponse(workspaceId: UUID) = new CreatedWorkspace().id(workspaceId.toString)
   def mockReferenceResponse(referenceId: UUID) = references.get(referenceId).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
+  def mockEnumerateReferenceResponse() = new DataReferenceList().resources(references.values.toList.asJava)
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = mockGetWorkspaceResponse(workspaceId)
 
@@ -37,5 +39,9 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
   override def getDataReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): DataReferenceDescription = {
     mockReferenceResponse(referenceId)
+  }
+
+  override def enumerateDataReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): DataReferenceList = {
+    mockEnumerateReferenceResponse()
   }
 }

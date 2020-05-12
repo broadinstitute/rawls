@@ -7,7 +7,7 @@ import bio.terra.workspace.model.DataReferenceDescription.{CloningInstructionsEn
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotReference, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, DataRepoSnapshotList, DataRepoSnapshotListFromDataReferenceList, DataRepoSnapshotReference, SamWorkspaceActions, UserInfo, WorkspaceAttributeSpecs, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 import spray.json.{JsObject, JsString}
 
@@ -52,7 +52,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   def listSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[DataRepoSnapshotList] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
       val ref = workspaceManagerDAO.enumerateDataReferences(workspaceContext.workspaceId, offset, limit, userInfo.accessToken)
-      Future.successful(DataRepoSnapshotList(ref))
+      Future.successful(DataRepoSnapshotListFromDataReferenceList(ref))
     }
   }
 
