@@ -205,7 +205,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       slickDataSource,
       samDAO,
       workbenchMetricBaseName
-    )_
+    )
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
