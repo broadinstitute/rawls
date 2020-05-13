@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.entities
+package org.broadinstitute.dsde.rawls.entities.base
 
 import org.broadinstitute.dsde.rawls.model.Workspace
 

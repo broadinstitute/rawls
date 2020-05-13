@@ -40,6 +40,16 @@ import spray.json._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
+<<<<<<< HEAD
+=======
+import cats.implicits._
+import io.opencensus.scala.Tracing._
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
+import io.opencensus.trace.{Span, Status}
+import org.broadinstitute.dsde.rawls.entities.EntityManager
+import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProviderBuilder
+>>>>>>> move/rename entity provider classes
 
 
 
