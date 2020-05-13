@@ -12,13 +12,13 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{ImportStatuses, RawlsUserEmail, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, updateImportStatusFormat}
 import org.broadinstitute.dsde.rawls.util.AuthUtil
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
@@ -51,7 +51,7 @@ object AvroUpsertMonitorSupervisor {
                                            batchSize: Int,
                                            workerCount: Int)
 
-  def props(workspaceService: UserInfo => WorkspaceService,
+  def props(entityService: UserInfo => EntityService,
             googleServicesDAO: GoogleServicesDAO,
             samDAO: SamDAO,
             googleStorage: GoogleStorageService[IO],
@@ -62,7 +62,7 @@ object AvroUpsertMonitorSupervisor {
             avroUpsertMonitorConfig: AvroUpsertMonitorConfig)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
     Props(
       new AvroUpsertMonitorSupervisor(
-        workspaceService,
+        entityService,
         googleServicesDAO,
         samDAO,
         googleStorage,
@@ -84,7 +84,7 @@ case class UpdateImportStatus(importId: String,
                               action: String = "status")
 
 
-class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService,
+class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
                                   googleServicesDAO: GoogleServicesDAO,
                                   samDAO: SamDAO,
                                   googleStorage: GoogleStorageService[IO],
@@ -116,7 +116,7 @@ class AvroUpsertMonitorSupervisor(workspaceService: UserInfo => WorkspaceService
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO, arrowPubSubDAO, avroUpsertMonitorConfig.arrowPubSubSubscription, avroUpsertMonitorConfig.arrowBucketName, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize))
+    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO, arrowPubSubDAO, avroUpsertMonitorConfig.arrowPubSubSubscription, avroUpsertMonitorConfig.arrowBucketName, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize))
   }
 
   override val supervisorStrategy =
@@ -139,7 +139,7 @@ object AvroUpsertMonitor {
   def props(
              pollInterval: FiniteDuration,
              pollIntervalJitter: FiniteDuration,
-             workspaceService: UserInfo => WorkspaceService,
+             entityService: UserInfo => EntityService,
              googleServicesDAO: GoogleServicesDAO,
              samDAO: SamDAO,
              googleStorage: GoogleStorageService[IO],
@@ -152,14 +152,14 @@ object AvroUpsertMonitor {
              importStatusPubSubTopic: String,
              importServiceDAO: ImportServiceDAO,
              batchSize: Int)(implicit cs: ContextShift[IO]): Props =
-    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, workspaceService, googleServicesDAO, samDAO, googleStorage, pubSubDao, importServicePubSubDAO, arrowPubSubDAO, arrowPubSubSubscriptionName, arrowUpsertBucketName,
+    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDao, importServicePubSubDAO, arrowPubSubDAO, arrowPubSubSubscriptionName, arrowUpsertBucketName,
       pubSubSubscriptionName, importStatusPubSubTopic, importServiceDAO, batchSize))
 }
 
 class AvroUpsertMonitorActor(
                               val pollInterval: FiniteDuration,
                               pollIntervalJitter: FiniteDuration,
-                              workspaceService: UserInfo => WorkspaceService,
+                              entityService: UserInfo => EntityService,
                               val googleServicesDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
                               googleStorage: GoogleStorageService[IO],
@@ -294,7 +294,7 @@ class AvroUpsertMonitorActor(
         batches.traverse {
           case (upsertBatch, idx) =>
             logger.info(s"starting upsert $idx of $batchSize for $jobId with ${upsertBatch.size} entities ...")
-            IO.fromFuture(IO(workspaceService.apply(userInfo).batchUpdateEntities(workspaceName, upsertBatch, true)))
+            IO.fromFuture(IO(entityService.apply(userInfo).batchUpdateEntities(workspaceName, upsertBatch, true)))
         }.unsafeToFuture
       }
     } yield {
@@ -424,7 +424,7 @@ class AvroUpsertMonitorActor(
       upsertResults <-
         avroUpsertJson.grouped(batchSize).toList.traverse { upsertBatch =>
           logger.info(s"starting upsert for $jobId with ${upsertBatch.size} entities ...")
-          IO.fromFuture(IO(workspaceService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), upsertBatch, true)))
+          IO.fromFuture(IO(entityService.apply(petUserInfo).batchUpdateEntities(WorkspaceName(avroMetadataJson.namespace, avroMetadataJson.name), upsertBatch, true)))
         }.unsafeToFuture
     } yield {
       logger.info(s"completed Avro upsert job ${avroMetadataJson.jobId} for user: ${avroMetadataJson.userEmail} with ${avroUpsertJson.size} entities")
