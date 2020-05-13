@@ -7,7 +7,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.api.WorkspaceApi
 import bio.terra.workspace.client.ApiClient
-import bio.terra.workspace.model.{CreateDataReferenceRequestBody, CreateWorkspaceRequestBody, CreatedWorkspace, DataReferenceDescription, DataReferenceList, WorkspaceDescription}
+import bio.terra.workspace.model.{CreateDataReferenceRequestBody, CreateWorkspaceRequestBody, CreatedWorkspace, DataReferenceDescription, DataReferenceList, DeleteWorkspaceRequestBody, WorkspaceDescription}
 import spray.json.JsObject
 
 import scala.concurrent.ExecutionContext
@@ -32,6 +32,10 @@ class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val syst
 
   override def createWorkspace(workspaceId: UUID, folderManagerAccessToken: OAuth2BearerToken, bodyAccessToken: OAuth2BearerToken): CreatedWorkspace = {
     getWorkspaceApi(folderManagerAccessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId).authToken(bodyAccessToken.token))
+  }
+
+  override def deleteWorkspace(workspaceId: UUID, folderManagerAccessToken: OAuth2BearerToken, bodyAccessToken: OAuth2BearerToken): Unit = {
+    getWorkspaceApi(folderManagerAccessToken).deleteWorkspace(workspaceId.toString, new DeleteWorkspaceRequestBody().authToken(bodyAccessToken.token))
   }
 
   override def createDataReference(workspaceId: UUID, name: String, referenceType: String, reference: JsObject, cloningInstructions: String, accessToken: OAuth2BearerToken): DataReferenceDescription = {
