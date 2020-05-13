@@ -3263,7 +3263,7 @@ paths:
         '200':
           description: OK
           schema:
-            $ref: '#/definitions/WMDataReferenceListResponse'
+            $ref: '#/definitions/DataRepoSnapshotList'
         '404':
           description: Workspace or snapshot not found
           schema:
