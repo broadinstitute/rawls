@@ -27,7 +27,7 @@ object EntityService {
 
     // create the EntityManager along with its associated provider-builders. Since entities are only accessed
     // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
-    // and execution context for the rawls entity provider that the workspace service uses.
+    // and execution context for the rawls entity provider that the entity service uses.
     val defaultEntityProviderBuilder = new RawlsEntityProviderBuilder(dataSource) // implicit executionContext
     // soon: create a provider-builder for data repo and add it to the entity manager
     val entityManager = new EntityManager(Set(defaultEntityProviderBuilder))
