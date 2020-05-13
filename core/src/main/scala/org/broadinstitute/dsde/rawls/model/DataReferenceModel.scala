@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.model
 import bio.terra.workspace.model.DataReferenceDescription
 import bio.terra.workspace.model.DataReferenceList
 import spray.json.DefaultJsonProtocol._
+import scala.collection.JavaConverters._
 
 case class DataRepoSnapshot(name: String, snapshotId: String)
 case class DataRepoSnapshotReference(referenceId: String, name: String, workspaceId: String, referenceType: Option[String], reference: Option[String], cloningInstructions: String)
