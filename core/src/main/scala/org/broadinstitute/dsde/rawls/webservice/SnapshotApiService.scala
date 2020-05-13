@@ -29,7 +29,7 @@ trait SnapshotApiService extends UserInfoDirectives {
       get {
         entity(as[EnumerateSnapshotRequestBody]) { body =>
           complete {
-            snapshotServiceConstructor(userInfo).ListSnapshots(WorkspaceName(workspaceNamespace, workspaceName), body.offset, body.limit).map(StatusCodes.OK -> _)
+            snapshotServiceConstructor(userInfo).EnumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), body.offset, body.limit).map(StatusCodes.OK -> _)
           }
         }
       }
