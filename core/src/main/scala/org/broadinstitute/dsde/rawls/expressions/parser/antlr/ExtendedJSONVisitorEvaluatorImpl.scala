@@ -57,21 +57,23 @@ class ExtendedJSONVisitorEvaluatorImpl(expression: String,
   override def aggregateResult(aggregate: Map[String, Try[Iterable[AttributeValue]]],
                                nextResult: Map[String, Try[Iterable[AttributeValue]]]): Map[String, Try[Iterable[AttributeValue]]] = {
 
-    def combineMap[A, B](maps: List[Map[A, B]])(func: (B, B) => B): Map[A, B] = {
-      ???
-    }
+//    def combineMap[A, B](maps: List[Map[A, B]])(func: (B, B) => B): Map[A, B] = {
+//      ???
+//    }
+//
+//    aggregate.map {
+//      case (key, aggregateAttrListTry) => {
+//        nextResult.get(key) match {
+//          case Some(nextResultAttrListTry) => (aggregateAttrListTry, nextResultAttrListTry) match {
+//            case (Success(aggregateAttrList), Success(nextResultAttrList)) => (key, Success(aggregateAttrList ++ nextResultAttrList))
+//            case (Success(_), Failure(_)) || (Failure(e), Success(_)) => (key, Failure(e))
+//            case (Failure(e1), Failure(_)) => (key, Failure(e1))
+//          }
+//          case None => (key, aggregateAttrListTry)
+//        }
+//      }
+//    }
 
-    aggregate.map {
-      case (key, aggregateAttrListTry) => {
-        nextResult.get(key) match {
-          case Some(nextResultAttrListTry) => (aggregateAttrListTry, nextResultAttrListTry) match {
-            case (Success(aggregateAttrList), Success(nextResultAttrList)) => (key, Success(aggregateAttrList ++ nextResultAttrList))
-            case (Success(_), Failure(_)) || (Failure(e), Success(_)) => (key, Failure(e))
-            case (Failure(e1), Failure(_)) => (key, Failure(e1))
-          }
-          case None => (key, aggregateAttrListTry)
-        }
-      }
-    }
+    ???
   }
 }

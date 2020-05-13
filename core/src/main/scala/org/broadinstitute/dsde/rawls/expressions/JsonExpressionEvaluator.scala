@@ -6,10 +6,9 @@ import spray.json._
 import scala.util.Try
 
 object JsonExpressionEvaluator {
-  def evaluate(expression: String): Try[Iterable[AttributeValue]] = {
-    val jsonExprT = Try(expression.parseJson)
-    jsonExprT map { _ =>
-      WDLJsonSupport.attributeFormat.read(expression.parseJson)
+  def evaluate(jsonExprT: Try[JsValue]): Try[Iterable[AttributeValue]] = {
+    jsonExprT map { value =>
+      WDLJsonSupport.attributeFormat.read(value)
     } map {
       //handle the user typing in JSON that looks like our representation of references, which aren't legit WDL inputs.
       //turn it back into raw JSON.
@@ -28,5 +27,10 @@ object JsonExpressionEvaluator {
       //Attribute types, but is still legit JSON. In this case we treat it as raw JSON, because it is.
       case _: DeserializationException => Seq(AttributeValueRawJson(jsonExprT.get))
     }
+  }
+
+  def evaluate(expression: String): Try[Iterable[AttributeValue]] = {
+    val jsonExprT: Try[JsValue] = Try(expression.parseJson)
+    evaluate(jsonExprT)
   }
 }

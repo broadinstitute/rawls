@@ -281,7 +281,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
           if gatherInputsResult.extraInputs.nonEmpty || gatherInputsResult.missingInputs.nonEmpty =>
           DBIO.failed(new RawlsException(s"gatherInputsResult has missing or extra inputs: $gatherInputsResult"))
         case scala.util.Success(gatherInputsResult: GatherInputsResult) =>
-          methodConfigResolver.evaluateInputExpressions(workspaceContext, gatherInputsResult.processableInputs, Some(entityRecs), dataAccess)
+          methodConfigResolver.evaluateInputExpressions(workspaceContext, gatherInputsResult.processableInputs, Some(entityRecs), dataAccess, slickDataSource)
       }
     }
   }
