@@ -33,25 +33,24 @@ import scala.reflect.runtime.universe._
  */
 class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvider]]) {
 
-  // should we combine any of these arguments into a "EntityRequestArguments" case class,
-  // for encapsulation/abstraction?
-  def resolveProvider(workspace: Workspace,
-                      userInfo: UserInfo,
-                      dataReference: Option[String] = None,
-                      billingProject: Option[RawlsBillingProject] = None): EntityProvider = {
+  def resolveProvider(requestArguments: EntityRequestArguments): EntityProvider = {
 
     // soon: look up the reference name to ensure it exists.
     // for now, this simplistic logic illustrates the approach: choose the right builder for the job.
-    val targetTag = if (dataReference.isDefined) {
+    val targetTag = if (requestArguments.dataReference.isDefined) {
       typeTag[DataRepoEntityProvider]
     } else {
       typeTag[LocalEntityProvider]
     }
 
     providerBuilders.find(_.builds == targetTag) match {
-      case None => throw new DataEntityException(s"no entity provider available for ${workspace.toWorkspaceName}")
-      case Some(builder) => builder.build(workspace, userInfo, dataReference, billingProject)
+      case None => throw new DataEntityException(s"no entity provider available for ${requestArguments.workspace.toWorkspaceName}")
+      case Some(builder) => builder.build(requestArguments)
     }
   }
+
+  // convenience for a likely-common pattern
+  def resolveProvider(workspace: Workspace, userInfo: UserInfo) =
+    resolveProvider(EntityRequestArguments(workspace, userInfo))
 
 }

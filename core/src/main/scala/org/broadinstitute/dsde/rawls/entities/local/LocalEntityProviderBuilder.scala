@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.EntityProviderBuilder
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProject, UserInfo, Workspace}
 
@@ -16,11 +17,8 @@ class LocalEntityProviderBuilder(dataSource: SlickDataSource)
 
   override def builds: TypeTag[LocalEntityProvider] = typeTag[LocalEntityProvider]
 
-  override def build(workspace: Workspace,
-                     userInfo: UserInfo,
-                     dataReference: Option[String] = None,
-                     billingProject: Option[RawlsBillingProject] = None): LocalEntityProvider = {
-    new LocalEntityProvider(workspace, dataSource)
+  override def build(requestArguments: EntityRequestArguments): LocalEntityProvider = {
+    new LocalEntityProvider(requestArguments.workspace, dataSource)
   }
 
 }
