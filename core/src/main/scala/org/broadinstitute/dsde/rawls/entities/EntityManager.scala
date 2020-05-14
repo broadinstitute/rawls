@@ -4,7 +4,7 @@ import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProvid
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProvider
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProject, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{UserInfo, Workspace}
 
 import scala.reflect.runtime.universe._
 
@@ -50,7 +50,7 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
   }
 
   // convenience for a likely-common pattern
-  def resolveProvider(workspace: Workspace, userInfo: UserInfo) =
+  def resolveProvider(workspace: Workspace, userInfo: UserInfo): EntityProvider =
     resolveProvider(EntityRequestArguments(workspace, userInfo))
 
 }

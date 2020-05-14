@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.EntityProviderBuilder
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProject, UserInfo, Workspace}
 
 import scala.reflect.runtime.universe._
 
