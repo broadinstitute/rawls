@@ -5,9 +5,11 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.stream.scaladsl.Flow
 import akka.util.ByteString
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.SwaggerConfig
 
 import scala.language.postfixOps
+import scala.util.Try
 
 /**
   * Created by dvoet on 7/18/17.
@@ -16,6 +18,11 @@ trait SwaggerRoutes {
   private val swaggerUiPath = "META-INF/resources/webjars/swagger-ui/2.2.5"
 
   val swaggerConfig: SwaggerConfig
+
+  // enable/disable snapshot routes based on a config flag
+  val useDataRepoSwagger = Try(ConfigFactory.load().getBoolean("dataRepo.enabled")).toOption.getOrElse(false)
+
+  val swaggerDef: String = if (useDataRepoSwagger) "swagger/data-repo-enabled-api-docs.yaml" else "swagger/api-docs.yaml"
 
   val swaggerRoutes: server.Route = {
     path("") {
@@ -30,7 +37,7 @@ trait SwaggerRoutes {
     } ~
       path("api-docs.yaml") {
         get {
-          getFromResource("swagger/api-docs.yaml")
+          getFromResource(swaggerDef)
         }
       } ~
       // We have to be explicit about the paths here since we're matching at the root URL and we don't

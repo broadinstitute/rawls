@@ -3124,30 +3124,30 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: >
-        Enable Requester Pays for the user's linked service accounts in a workspace. Grants the
-        serviceusage.services.use permission in the project associated to the workspace to each service account
-        linked in the account linking service (Bond).
-      tags:
-        - workspaces
-      summary: Enable Requester Pays for linked service accounts
-      operationId: enableRequesterPaysForLinkedServiceAccounts
-      parameters:
-        - in: path
-          description: Workspace Namespace
-          name: workspaceNamespace
-          required: true
-          type: string
-        - in: path
-          description: Workspace Name
-          name: workspaceName
-          required: true
-          type: string
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
+        description: >
+          Enable Requester Pays for the user's linked service accounts in a workspace. Grants the
+          serviceusage.services.use permission in the project associated to the workspace to each service account
+          linked in the account linking service (Bond).
+        tags:
+          - workspaces
+        summary: Enable Requester Pays for linked service accounts
+        operationId: enableRequesterPaysForLinkedServiceAccounts
+        parameters:
+          - in: path
+            description: Workspace Namespace
+            name: workspaceNamespace
+            required: true
+            type: string
+          - in: path
+            description: Workspace Name
+            name: workspaceName
+            required: true
+            type: string
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/disableRequesterPaysForLinkedServiceAccounts':
     put:
       responses:
@@ -3159,27 +3159,27 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: Disable Requester Pays for the user's linked service accounts in a workspace
-      tags:
-        - workspaces
-      summary: Disable Requester Pays for linked service accounts
-      operationId: disableRequesterPaysForLinkedServiceAccounts
-      parameters:
-        - in: path
-          description: Workspace Namespace
-          name: workspaceNamespace
-          required: true
-          type: string
-        - in: path
-          description: Workspace Name
-          name: workspaceName
-          required: true
-          type: string
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
+        description: Disable Requester Pays for the user's linked service accounts in a workspace
+        tags:
+          - workspaces
+        summary: Disable Requester Pays for linked service accounts
+        operationId: disableRequesterPaysForLinkedServiceAccounts
+        parameters:
+          - in: path
+            description: Workspace Namespace
+            name: workspaceNamespace
+            required: true
+            type: string
+          - in: path
+            description: Workspace Name
+            name: workspaceName
+            required: true
+            type: string
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
   '/api/workflows/{workflowId}/genomics/{operationId}':
     get:
       responses:
@@ -3214,6 +3214,79 @@ paths:
             - openid
             - email
             - profile
+  '/api/workspaces/{namespace}/{name}/snapshots':
+    post:
+      responses:
+        '201':
+          description: Created
+          schema:
+            $ref: '#/definitions/DataRepoSnapshotReference'
+        '404':
+          description: Workspace or snapshot not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: "Add a reference to a snapshot in the Terra Data Repo"
+      tags:
+        - snapshots
+      summary: Create a snapshot
+      operationId: createDataRepoSnapshot
+      parameters:
+        - in: path
+          description: The workspace namespace
+          name: namespace
+          required: true
+          type: string
+        - in: path
+          description: The workspace name
+          name: name
+          required: true
+          type: string
+        - in: body
+          description: Reference to the Data Repo snapshot
+          name: dataRepoSnapshot
+          required: true
+          schema:
+            $ref: '#/definitions/DataRepoSnapshot'
+  '/api/workspaces/{namespace}/{name}/snapshots/{snapshotId}':
+    get:
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/DataRepoSnapshotReference'
+        '404':
+          description: Workspace or snapshot not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: "Get a reference to a snapshot in the Terra Data Repo"
+      tags:
+        - snapshots
+      summary: Get a snapshot
+      operationId: getDataRepoSnapshot
+      parameters:
+        - in: path
+          description: The workspace namespace
+          name: namespace
+          required: true
+          type: string
+        - in: path
+          description: The workspace name
+          name: name
+          required: true
+          type: string
+        - in: path
+          description: The snapshot ID
+          name: snapshotId
+          required: true
+          type: string
   '/api/user/refreshToken':
     put:
       responses:
