@@ -3,6 +3,8 @@ import sbtassembly.{MergeStrategy, PathList}
 object Merging {
   def customMergeStrategy(oldStrategy: (String) => MergeStrategy):(String => MergeStrategy) = {
     case x if x.endsWith("io.netty.versions.properties") => MergeStrategy.discard
+    case x if x.endsWith("Resource$AuthenticationType.class") => MergeStrategy.discard
+    case x if x.endsWith("module-info.class") => MergeStrategy.discard
     case PathList("org", "apache", xs @ _*) => MergeStrategy.last
     case PathList("com", "typesafe", xs @ _*) => MergeStrategy.last
     case PathList("com", "google", "auto", "value", xs @ _*) => MergeStrategy.last
