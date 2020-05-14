@@ -1,20 +1,25 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.stream.scaladsl.Flow
 import akka.util.ByteString
 import com.typesafe.config.ConfigFactory
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.SwaggerConfig
+import io.circe._
+import io.circe.yaml
+import io.circe.yaml.syntax._
+import org.broadinstitute.dsde.rawls.RawlsException
 
 import scala.language.postfixOps
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /**
   * Created by dvoet on 7/18/17.
   */
-trait SwaggerRoutes {
+trait SwaggerRoutes extends LazyLogging {
   private val swaggerUiPath = "META-INF/resources/webjars/swagger-ui/2.2.5"
 
   val swaggerConfig: SwaggerConfig
@@ -22,7 +27,16 @@ trait SwaggerRoutes {
   // enable/disable snapshot routes based on a config flag
   val useDataRepoSwagger = Try(ConfigFactory.load().getBoolean("dataRepo.enabled")).toOption.getOrElse(false)
 
-  val swaggerDef: String = if (useDataRepoSwagger) "swagger/data-repo-enabled-api-docs.yaml" else "swagger/api-docs.yaml"
+  val swaggerContents: String = if (useDataRepoSwagger) {
+    Try(mergeYamls("/swagger/api-docs.yaml", "/swagger/data-repo-enabled-api-docs.yaml")) match {
+      case Success(merged) => merged
+      case Failure(ex) =>
+        logger.warn(s"Could not merge swagger yamls; defaulting to api-docs.yaml: ${ex.getMessage}", ex)
+        loadResource("/swagger/api-docs.yaml")
+    }
+  } else {
+    loadResource("/swagger/api-docs.yaml")
+  }
 
   val swaggerRoutes: server.Route = {
     path("") {
@@ -37,7 +51,7 @@ trait SwaggerRoutes {
     } ~
       path("api-docs.yaml") {
         get {
-          getFromResource(swaggerDef)
+          complete(HttpEntity(ContentTypes.`application/octet-stream`, swaggerContents.getBytes))
         }
       } ~
       // We have to be explicit about the paths here since we're matching at the root URL and we don't
@@ -73,6 +87,36 @@ trait SwaggerRoutes {
     } {
       getFromResource(swaggerUiPath + "/index.html")
     }
+  }
+
+  private def loadResource(filename: String) = {
+    val source = scala.io.Source.fromInputStream(getClass.getResourceAsStream(filename))
+    try source.mkString finally source.close()
+  }
+
+  /**
+   * read the contents of multiple yaml files and return the merged value as a String
+   * @param filenames
+   * @return
+   */
+  private def mergeYamls(filenames: String*): String = {
+
+    // for each file, read it from disk, parse as yaml and return as a JsonObject
+    val swaggerJsons = filenames.map { filename =>
+      val contents: String = loadResource(filename)
+      yaml.parser.parse(contents) match {
+        case Right(json) => json.asObject.getOrElse(JsonObject.empty)
+        case Left(parsingFailure) => throw new RawlsException(parsingFailure.message, parsingFailure.underlying)
+      }
+    }
+
+    // merge all jsons, preferring rightmost
+    val mergedJson: JsonObject = swaggerJsons.foldRight(JsonObject.empty) { (x, y) =>
+      x.deepMerge(y)
+    }
+
+    // translate back to yaml and print as string
+    Json.fromJsonObject(mergedJson).asYaml.spaces2
   }
 
 }
