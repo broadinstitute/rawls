@@ -41,8 +41,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
-
-
 /**
  * Created by dvoet on 4/27/15.
  */

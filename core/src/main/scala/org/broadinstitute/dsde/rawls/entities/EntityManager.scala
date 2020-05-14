@@ -1,5 +1,8 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProviderBuilder}
+import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
+import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, Workspace}
 
 import scala.concurrent.Future
@@ -26,7 +29,7 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
     // soon: inspect the workspace's registered snapshots plus request parameters,
     // and route to the appropriate entity provider. This will likely require a method signature change
     // to accept request details. For now, just find the builder for DefaultEntityProvider.
-    val defaultEntityProviderBuilder = providerBuilders.find(_.builds == typeTag[RawlsEntityProvider])
+    val defaultEntityProviderBuilder = providerBuilders.find(_.builds == typeTag[LocalEntityProvider])
 
     defaultEntityProviderBuilder match {
       case None => throw new DataEntityException(s"no entity provider available for ${workspace.toWorkspaceName}")

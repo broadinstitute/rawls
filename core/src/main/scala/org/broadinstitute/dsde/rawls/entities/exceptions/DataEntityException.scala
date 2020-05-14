@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.entities
+package org.broadinstitute.dsde.rawls.entities.exceptions
 
 import org.broadinstitute.dsde.rawls.RawlsException
 
