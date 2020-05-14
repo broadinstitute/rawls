@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
-import org.broadinstitute.dsde.rawls.model.Entity
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity}
 
 import scala.concurrent.Future
 
@@ -10,5 +10,7 @@ import scala.concurrent.Future
 trait EntityProvider {
 
   def createEntity(entity: Entity): Future[Entity]
+
+  def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
 
 }
