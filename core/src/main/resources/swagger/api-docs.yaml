@@ -3252,13 +3252,6 @@ paths:
           schema:
             $ref: '#/definitions/DataRepoSnapshot'
     get:
-      requestBody:
-        description: |
-          Parameters for enumerating snapshots.
-        content:
-          application/json:
-            schema:
-              $ref: '#/definitions/EnumerateSnapshotRequestBody'
       responses:
         '200':
           description: OK
