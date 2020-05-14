@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, UserInfo, WorkspaceName, EnumerateSnapshotRequestBody}
+import org.broadinstitute.dsde.rawls.model.{DataRepoSnapshot, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
@@ -27,9 +27,9 @@ trait SnapshotApiService extends UserInfoDirectives {
         }
       } ~
       get {
-        entity(as[EnumerateSnapshotRequestBody]) { body =>
+        parameters("offset".as[Int], "limit".as[Int]) { (offset, limit) =>
           complete {
-            snapshotServiceConstructor(userInfo).EnumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), body.offset, body.limit).map(StatusCodes.OK -> _)
+            snapshotServiceConstructor(userInfo).EnumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit).map(StatusCodes.OK -> _)
           }
         }
       }
