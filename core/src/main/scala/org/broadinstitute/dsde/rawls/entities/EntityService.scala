@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderBuilder
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProviderBuilder
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
@@ -30,8 +31,9 @@ object EntityService {
     // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
     // and execution context for the rawls entity provider that the entity service uses.
     val defaultEntityProviderBuilder = new LocalEntityProviderBuilder(dataSource) // implicit executionContext
-    // soon: create a provider-builder for data repo and add it to the entity manager
-    val entityManager = new EntityManager(Set(defaultEntityProviderBuilder))
+    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder
+
+    val entityManager = new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder))
 
     new EntityService(userInfo, dataSource, samDAO, entityManager, workbenchMetricBaseName)
   }
