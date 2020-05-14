@@ -28,7 +28,7 @@ trait SwaggerRoutes extends LazyLogging {
   val useDataRepoSwagger = Try(ConfigFactory.load().getBoolean("dataRepo.enabled")).toOption.getOrElse(false)
 
   val swaggerContents: String = if (useDataRepoSwagger) {
-    Try(mergeYamls("/swagger/api-docs.yaml", "/swagger/data-repo-enabled-api-docs.yaml")) match {
+    Try(mergeYamls("/swagger/api-docs.yaml", "/swagger/data-repo-only.yaml")) match {
       case Success(merged) => merged
       case Failure(ex) =>
         logger.warn(s"Could not merge swagger yamls; defaulting to api-docs.yaml: ${ex.getMessage}", ex)
