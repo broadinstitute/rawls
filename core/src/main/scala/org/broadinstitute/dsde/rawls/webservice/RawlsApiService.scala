@@ -22,6 +22,7 @@ import akka.http.scaladsl.server.RouteResult.Complete
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LogEntry, LoggingMagnet}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.SwaggerConfig
 import org.broadinstitute.dsde.rawls.entities.EntityService
@@ -29,6 +30,7 @@ import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Try
 
 object RawlsApiService {
   val exceptionHandler = {
@@ -75,10 +77,20 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
+  // enable/disable snapshot routes based on a config flag
+  val dataRepoEnabled = Try(ConfigFactory.load().getBoolean("dataRepo.enabled")).toOption.getOrElse(false)
+  val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes
+
+  val concatenatedRoutes = if (dataRepoEnabled) {
+    baseApiRoutes ~ snapshotRoutes
+  } else {
+    baseApiRoutes
+  }
+
   def apiRoutes =
     options { complete(OK) } ~
     withExecutionContext(ExecutionContext.global) { //Serve real work off the global EC to free up the dispatcher to run more routes, including status
-      workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
+      concatenatedRoutes
     }
 
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
