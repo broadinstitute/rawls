@@ -4823,32 +4823,6 @@ definitions:
       - READER
       - NO ACCESS
 
-  DataRepoSnapshot:
-    description: A Data Repo snapshot
-    properties:
-      snapshotId:
-        type: string
-        description: The ID of the snapshot in Terra Data Repo
-      name:
-        type: string
-        description: The name of the snapshot
-
-  DataRepoSnapshotReference:
-    description: A Data Reference definition from Workspace Manager
-    properties:
-      referenceId:
-        type: string
-      name:
-        type: string
-      workspaceId:
-        type: string
-      referenceType:
-        type: string
-      reference:
-        type: object
-      cloningInstructions:
-        type: string
-
   CallMetadata:
     description: Stuff you need to know about calls
     properties:
