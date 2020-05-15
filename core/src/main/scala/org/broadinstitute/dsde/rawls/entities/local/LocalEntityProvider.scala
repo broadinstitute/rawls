@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, SlickWorkspaceContext}
 import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
-import org.broadinstitute.dsde.rawls.model.{Entity, ErrorReport, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, Workspace}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -29,4 +29,5 @@ class LocalEntityProvider(workspace: Workspace, dataSource: SlickDataSource)
     }
   }
 
+  override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = ???
 }
