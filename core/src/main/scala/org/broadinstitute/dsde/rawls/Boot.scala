@@ -311,7 +311,7 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
-      val workspaceManagerDAO = new HttpWorkspaceManagerDAO(conf.getString("workspaceManager.server"))
+      val workspaceManagerDAO = new HttpWorkspaceManagerDAO(conf.getString("workspaceManager.baseUrl"))
 
       val maxActiveWorkflowsTotal =
         conf.getInt("executionservice.maxActiveWorkflowsPerServer")
