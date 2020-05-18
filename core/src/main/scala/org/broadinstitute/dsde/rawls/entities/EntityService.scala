@@ -60,7 +60,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
     withAttributeNamespaceCheck(entity) {
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
         entityManager.resolveProvider(workspaceContext.workspace, userInfo).createEntity(entity)
       }
     }
@@ -149,7 +149,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
 
   def entityTypeMetadata(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       entityManager.resolveProvider(workspaceContext.workspace, userInfo).entityTypeMetadata()
         .map(r => RequestComplete(StatusCodes.OK, r))
     }
