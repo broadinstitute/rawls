@@ -5,16 +5,16 @@ import org.broadinstitute.dsde.rawls.model._
 import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{EntityUpdateDefinition, AttributeUpdateOperation, AttributeUpdateOperationFormat}
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, AttributeUpdateOperationFormat, EntityUpdateDefinition}
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import CustomDirectives._
+import org.broadinstitute.dsde.rawls.entities.EntityService
 
 import scala.concurrent.ExecutionContext
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
  * Created by dvoet on 6/4/15.
@@ -24,7 +24,7 @@ trait EntityApiService extends UserInfoDirectives {
   import PerRequest.requestCompleteMarshaller
   implicit val executionContext: ExecutionContext
 
-  val workspaceServiceConstructor: UserInfo => WorkspaceService
+  val entityServiceConstructor: UserInfo => EntityService
 
   val entityRoutes: server.Route = requireUserInfo() { userInfo =>
       path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
@@ -40,7 +40,7 @@ trait EntityApiService extends UserInfoDirectives {
 
             if (errors.isEmpty) {
               val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
-              complete { workspaceServiceConstructor(userInfo).QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityQuery) }
+              complete { entityServiceConstructor(userInfo).QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityQuery) }
             } else {
               complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
             }
@@ -49,7 +49,7 @@ trait EntityApiService extends UserInfoDirectives {
       } ~
         path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
           get {
-            complete { workspaceServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName)) }
+            complete { entityServiceConstructor(userInfo).GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName)) }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
@@ -57,7 +57,7 @@ trait EntityApiService extends UserInfoDirectives {
             entity(as[Entity]) { entity =>
               addLocationHeader(entity.path(WorkspaceName(workspaceNamespace, workspaceName))) {
                 complete {
-                  workspaceServiceConstructor(userInfo).CreateEntity(WorkspaceName(workspaceNamespace, workspaceName), entity).map(StatusCodes.Created -> _)
+                  entityServiceConstructor(userInfo).CreateEntity(WorkspaceName(workspaceNamespace, workspaceName), entity).map(StatusCodes.Created -> _)
                 }
               }
             }
@@ -65,54 +65,54 @@ trait EntityApiService extends UserInfoDirectives {
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
           get {
-            complete { workspaceServiceConstructor(userInfo).GetEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName) }
+            complete { entityServiceConstructor(userInfo).GetEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName) }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
           patch {
             entity(as[Array[AttributeUpdateOperation]]) { operations =>
-              complete { workspaceServiceConstructor(userInfo).UpdateEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, operations) }
+              complete { entityServiceConstructor(userInfo).UpdateEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, operations) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / "delete") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[AttributeEntityReference]]) { entities =>
-              complete { workspaceServiceConstructor(userInfo).DeleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities) }
+              complete { entityServiceConstructor(userInfo).DeleteEntities(WorkspaceName(workspaceNamespace, workspaceName), entities) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / "batchUpsert") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[EntityUpdateDefinition]]) { operations =>
-              complete { workspaceServiceConstructor(userInfo).BatchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations) }
+              complete { entityServiceConstructor(userInfo).BatchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[Array[EntityUpdateDefinition]]) { operations =>
-              complete { workspaceServiceConstructor(userInfo).BatchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations) }
+              complete { entityServiceConstructor(userInfo).BatchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, entityType, entityName) =>
           post {
             entity(as[EntityName]) { newEntityName =>
-              complete { workspaceServiceConstructor(userInfo).RenameEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, newEntityName.name) }
+              complete { entityServiceConstructor(userInfo).RenameEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, newEntityName.name) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "evaluate") { (workspaceNamespace, workspaceName, entityType, entityName) =>
           post {
             entity(as[String]) { expression =>
-              complete { workspaceServiceConstructor(userInfo).EvaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression) }
+              complete { entityServiceConstructor(userInfo).EvaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression) }
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
           get {
-            complete { workspaceServiceConstructor(userInfo).ListEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType) }
+            complete { entityServiceConstructor(userInfo).ListEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType) }
           }
         } ~
         path("workspaces" / "entities" / "copy") {
@@ -122,7 +122,7 @@ trait EntityApiService extends UserInfoDirectives {
                 val linkExistingEntitiesBool = Try(linkExistingEntities.getOrElse("false").toBoolean).getOrElse(false)
                 entity(as[EntityCopyDefinition]) { copyDefinition =>
                   complete {
-                    workspaceServiceConstructor(userInfo).CopyEntities(copyDefinition, request.uri, linkExistingEntitiesBool)
+                    entityServiceConstructor(userInfo).CopyEntities(copyDefinition, request.uri, linkExistingEntitiesBool)
                   }
                 }
               }

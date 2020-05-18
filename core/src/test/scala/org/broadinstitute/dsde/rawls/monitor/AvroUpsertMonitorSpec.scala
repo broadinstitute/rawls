@@ -112,7 +112,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // Start the monitor
     system.actorOf(AvroUpsertMonitorSupervisor.props(
-      services.workspaceServiceConstructor,
+      services.entityServiceConstructor,
       services.gcsDAO,
       services.samDAO,
       googleStorage,

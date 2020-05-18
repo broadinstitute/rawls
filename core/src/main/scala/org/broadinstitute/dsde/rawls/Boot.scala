@@ -49,6 +49,7 @@ import scala.concurrent.duration._
 import scala.language.higherKinds
 import scala.language.postfixOps
 import net.ceedubs.ficus.Ficus._
+import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
@@ -309,8 +310,7 @@ object Boot extends IOApp with LazyLogging {
         MethodRepoConfig.apply[Dockstore.type](conf.getConfig("dockstore")),
         metricsPrefix
       )
-
-      val workspaceManagerDAO = new HttpWorkspaceManagerDAO(conf.getString("workspaceManager.server"))
+      val workspaceManagerDAO = new HttpWorkspaceManagerDAO(conf.getString("workspaceManager.baseUrl"))
 
       val maxActiveWorkflowsTotal =
         conf.getInt("executionservice.maxActiveWorkflowsPerServer")
@@ -390,6 +390,12 @@ object Boot extends IOApp with LazyLogging {
         requesterPaysSetupService
       )
 
+      val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
+        slickDataSource,
+        samDAO,
+        workbenchMetricBaseName = metricsPrefix
+      )
+
       val snapshotServiceConstructor: (UserInfo) => SnapshotService = SnapshotService.constructor(
         slickDataSource,
         samDAO,
@@ -400,6 +406,7 @@ object Boot extends IOApp with LazyLogging {
 
       val service = new RawlsApiServiceImpl(
         workspaceServiceConstructor,
+        entityServiceConstructor,
         userServiceConstructor,
         genomicsServiceConstructor,
         statisticsServiceConstructor,
@@ -434,7 +441,7 @@ object Boot extends IOApp with LazyLogging {
           appDependencies.googleStorageService,
           methodRepoDAO,
           dosResolver,
-          workspaceServiceConstructor,
+          entityServiceConstructor,
           shardedExecutionServiceCluster,
           maxActiveWorkflowsTotal,
           maxActiveWorkflowsPerUser,
