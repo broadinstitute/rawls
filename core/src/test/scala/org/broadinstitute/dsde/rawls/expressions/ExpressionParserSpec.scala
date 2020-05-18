@@ -13,13 +13,6 @@ class ExpressionParserSpec extends FlatSpec with TestDriverComponent with Expres
     def toExpressionMap(expressions: Seq[String]): Map[String, AttributeString] =
       expressions.map { expr => expr.toString -> AttributeString(expr) }.toMap
 
-    val input1 = """{"more":{"elaborate":{"reference1": this.val1, "path":"gs://abc/123"}}}"""
-//    val input2 = "this.val1"
-
-    val result = ExpressionParser.parseMCExpressions(toExpressionMap(Seq(input1)), toExpressionMap(Seq.empty[String]), true, this)
-
-    println(result)
-
     val actualParseable = ExpressionParser.parseMCExpressions(toExpressionMap(parseableInputExpressions), toExpressionMap(parseableOutputExpressions), allowRootEntity = true, this)
     assertSameElements(parseableInputExpressions, actualParseable.validInputs)
     assertSameElements(parseableOutputExpressions, actualParseable.validOutputs)

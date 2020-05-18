@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import org.antlr.v4.runtime.misc.ParseCancellationException
 import org.antlr.v4.runtime.{BaseErrorListener, RecognitionException, Recognizer}
+import org.broadinstitute.dsde.rawls.RawlsException
 
 /*
   According to the documentation, when we use `DefaultErrorStrategy` or `BailErrorStrategy`, the
@@ -27,7 +28,8 @@ class ErrorThrowingListener extends BaseErrorListener {
                            charPositionInLine: Int,
                            msg: String,
                            e: RecognitionException): Unit = {
-    throw new ParseCancellationException(s"line $line: $charPositionInLine $msg")
+    val errorMsg = s"Error while parsing the expression. Offending symbol is on line $line at position $charPositionInLine. Error: $msg"
+    throw new RawlsException(errorMsg, new ParseCancellationException(errorMsg, e))
   }
   /*_*/
 }

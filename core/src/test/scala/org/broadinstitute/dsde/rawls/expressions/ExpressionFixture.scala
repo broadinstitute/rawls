@@ -32,7 +32,10 @@ trait ExpressionFixture {
     "this._",
     """["foo","bar", this.valid]""",
     """["a",{"more":{"elaborate":this.example}}]""",
-//    """{"more":{"elaborate":{"reference1": this.val1, "path":"gs://abc/123"}}}""" --> should this.val123 be valid?
+    """{"more":{"elaborate":{"reference1": this.val1, "path":"gs://abc/123"}}}""",
+    """{"level1": "easy", "other-levels": {"level2": this.library, "level3": [this.library:cohort, "extremely difficult", this.library:cohort.entity]}}""",
+    """["foo", "bar", 123, ["array", this.values, this.library:cohort], false]""",
+    """["foo", "bar", 123, ["array", this.values, [this.library:cohort]], false, ["abc", this.foo]]"""
   )
 
   val parseableInputExpressions: Seq[String] = parseableInputExpressionsWithNoRoot ++ parseableInputExpressionsWithRoot
@@ -47,6 +50,7 @@ trait ExpressionFixture {
     "gs://buckets-arent-expressions/nope",
     "*",
     """["foo","bar", notValid]""",
+    """{"city": Boston}""",
 
     // oops, it isn't.  GAWB-2598
     "this.hyphen-is-not-allowed",

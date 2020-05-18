@@ -12,7 +12,7 @@ From your rawls directory, run:
    sbt antlr4:antlr4Generate
 
  */
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONVisitorImpl
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ExtendedJSONValidationVisitor
 import org.broadinstitute.dsde.rawls.model.{AttributeString, ParsedMCExpressions}
 //import spray.json._
 
@@ -45,14 +45,14 @@ object ExpressionParser {
     // Extended JSON inputs need to parsed to find out attribute expressions
 
     val extendedJsonParser = AntlrExtendedJSONParser.getParser(expression)
-    val visitor = new ExtendedJSONVisitorImpl(allowRootEntity, slickParser)
+    val visitor = new ExtendedJSONValidationVisitor(allowRootEntity, slickParser)
 
     /*
       parse the expression using ANTLR parser for extended JSON expressions and walk the tree using `visit()` to examine
       child nodes. During the walk, if any child node is a lookup expression, i.e. attribute expressions, it calls the
       `slickParser.parseAttributeExpr()` for that expression and parses it
      */
-    Try(extendedJsonParser.value()).flatMap(visitor.visit)
+    Try(extendedJsonParser.root()).flatMap(visitor.visit)
 
 //    Try(expression.parseJson).recoverWith { case _ => slickParser.parseAttributeExpr(expression, allowRootEntity) }.void
   }
