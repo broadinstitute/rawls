@@ -130,7 +130,7 @@ trait WorkspaceSupport {
       case Some(workspace) => op(SlickWorkspaceContext(workspace))
     }
   }
-  
+
   def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
   def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 }

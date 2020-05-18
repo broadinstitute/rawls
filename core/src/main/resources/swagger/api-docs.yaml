@@ -3214,7 +3214,6 @@ paths:
             - openid
             - email
             - profile
-
   '/api/user/refreshToken':
     put:
       responses:
