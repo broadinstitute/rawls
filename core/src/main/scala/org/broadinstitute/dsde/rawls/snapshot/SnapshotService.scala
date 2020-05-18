@@ -50,9 +50,9 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   }
 
   def enumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[DataRepoSnapshotList] = {
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       val ref = workspaceManagerDAO.enumerateDataReferences(workspaceContext.workspaceId, offset, limit, userInfo.accessToken)
-      Future.successful(DataRepoSnapshotList.from(ref))
+      DataRepoSnapshotList.from(ref)
     }
   }
 

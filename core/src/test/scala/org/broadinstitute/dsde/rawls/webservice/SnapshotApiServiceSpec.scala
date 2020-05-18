@@ -156,7 +156,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when a user lists all snapshots in a workspace" in withTestDataApiServices { services =>
-    // First, create two workspaces
+    // First, create two data references
     Post(s"${testData.wsName.path}/snapshots", httpJson(
       DataRepoSnapshot(
         name = "foo",
@@ -184,6 +184,10 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
                 val response = responseAs[DataRepoSnapshotList]
                 assertResult(StatusCodes.OK) {status}
                 assert(response.snapshots.size == 2)
+                // Our mock doesn't guarantee order, so we just check that there are two
+                // elements, that one is named "foo", and that one is named "bar"
+                assert(response.snapshots(0).name == "bar" || response.snapshots(1).name == "bar")
+                assert(response.snapshots(0).name == "foo" || response.snapshots(1).name == "foo")
               }
           }
       }

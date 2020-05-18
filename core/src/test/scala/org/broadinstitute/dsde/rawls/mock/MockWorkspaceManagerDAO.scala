@@ -15,12 +15,12 @@ import scala.collection.concurrent.TrieMap
 
 class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
-  val references: TrieMap[UUID, DataReferenceDescription] = TrieMap()
+  val references: TrieMap[(UUID, UUID), DataReferenceDescription] = TrieMap()
 
   def mockGetWorkspaceResponse(workspaceId: UUID) = new WorkspaceDescription().id(workspaceId)
   def mockCreateWorkspaceResponse(workspaceId: UUID) = new CreatedWorkspace().id(workspaceId.toString)
-  def mockReferenceResponse(referenceId: UUID) = references.get(referenceId).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
-  def mockEnumerateReferenceResponse() = new DataReferenceList().resources(references.values.toList.asJava)
+  def mockReferenceResponse(workspaceId: UUID, referenceId: UUID) = references.get((workspaceId, referenceId)).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
+  def mockEnumerateReferenceResponse(workspaceId: UUID) = new DataReferenceList().resources(references.filterKeys(_._1 == workspaceId).values.toList.asJava)
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = mockGetWorkspaceResponse(workspaceId)
 
@@ -33,17 +33,17 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found"))
     else {
       val newId = UUID.randomUUID()
-      val ref = new DataReferenceDescription().referenceId(newId).name("name").workspaceId(workspaceId).referenceType(DataReferenceDescription.ReferenceTypeEnum.fromValue(referenceType)).reference(reference.toString()).cloningInstructions(DataReferenceDescription.CloningInstructionsEnum.NOTHING)
-      references.put(newId, ref)
-      mockReferenceResponse(newId)
+      val ref = new DataReferenceDescription().referenceId(newId).name(name).workspaceId(workspaceId).referenceType(DataReferenceDescription.ReferenceTypeEnum.fromValue(referenceType)).reference(reference.toString()).cloningInstructions(DataReferenceDescription.CloningInstructionsEnum.NOTHING)
+      references.put((workspaceId, newId), ref)
+      mockReferenceResponse(workspaceId, newId)
     }
   }
 
   override def getDataReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): DataReferenceDescription = {
-    mockReferenceResponse(referenceId)
+    mockReferenceResponse(workspaceId, referenceId)
   }
 
   override def enumerateDataReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): DataReferenceList = {
-    mockEnumerateReferenceResponse()
+    mockEnumerateReferenceResponse(workspaceId)
   }
 }
