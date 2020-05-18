@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.jobexec
 import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model.{ToolInputParameter, WorkflowDescription}
-import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, SlickWorkspaceContext}
+import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
@@ -89,11 +89,7 @@ class MethodConfigResolver(wdlParser: WDLParser) {
       extraInputs.keys.toSet)
   }
 
-  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext,
-                               inputs: Set[MethodInput],
-                               entities: Option[Seq[EntityRecord]],
-                               dataAccess: DataAccess,
-                               dataSource: SlickDataSource)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
+  def evaluateInputExpressions(workspaceContext: SlickWorkspaceContext, inputs: Set[MethodInput], entities: Option[Seq[EntityRecord]], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
     val entityNames = entities match {

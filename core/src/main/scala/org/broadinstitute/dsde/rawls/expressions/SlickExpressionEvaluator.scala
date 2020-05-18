@@ -117,10 +117,8 @@ private[expressions] class SlickExpressionEvaluator protected (val parser: DataA
     Try {
       pipe.finalStep( expressionContext, builtPipe )
     } match {
-      case Success(finalResult) =>
-        finalResult
-      case Failure(regret) =>
-        dbio.DBIO.failed(regret)
+      case Success(finalResult) => finalResult
+      case Failure(regret) => dbio.DBIO.failed(regret)
     }
   }
 

@@ -53,8 +53,6 @@ object ExpressionParser {
       `slickParser.parseAttributeExpr()` for that expression and parses it
      */
     Try(extendedJsonParser.root()).flatMap(visitor.visit)
-
-//    Try(expression.parseJson).recoverWith { case _ => slickParser.parseAttributeExpr(expression, allowRootEntity) }.void
   }
 
   private def parseOutputExpr(allowRootEntity: Boolean, parser: SlickExpressionParser)(expression: String): Try[Unit] = {

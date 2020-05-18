@@ -75,7 +75,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val methodConfigResolver = new MethodConfigResolver(wdlParser)
 
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
-    Await.result(slickDataSource.inTransaction { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
+    Await.result(DbResource.dataSource.inTransaction { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
   }
 
   protected def runMultipleAndWait[R](count: Int, duration: Duration = 1 minutes)(actionGenerator: Int => DBIOAction[R, _ <: NoStream, _ <: Effect]): R = {

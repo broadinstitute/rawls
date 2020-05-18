@@ -72,7 +72,7 @@ trait TypedAttributeListSerializer extends AttributeListSerializer {
     JsObject( Map(LIST_ITEMS_TYPE_KEY -> JsString(listType), LIST_ITEMS_KEY -> JsArray(list.map( writeAttribute ).toSeq:_*)) )
   }
 
-  def readAttributeList(jsMap: Map[String, JsValue]): AttributeList[_ >: AttributeValue with AttributeEntityReference <: AttributeListElementable] = {
+  def readAttributeList(jsMap: Map[String, JsValue]) = {
     val attrList: Seq[Attribute] = jsMap(LIST_ITEMS_KEY) match {
       case JsArray(elems) => elems.map(readAttribute)
       case _ => throw new DeserializationException(s"the value of %s should be an array".format(LIST_ITEMS_KEY))
