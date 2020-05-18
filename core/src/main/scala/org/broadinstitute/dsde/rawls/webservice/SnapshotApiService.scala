@@ -39,6 +39,11 @@ trait SnapshotApiService extends UserInfoDirectives {
         complete {
           snapshotServiceConstructor(userInfo).GetSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(StatusCodes.OK -> _)
         }
+      } ~
+      delete {
+        complete {
+          snapshotServiceConstructor(userInfo).DeleteSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(_ => StatusCodes.NoContent)
+        }
       }
     }
   }

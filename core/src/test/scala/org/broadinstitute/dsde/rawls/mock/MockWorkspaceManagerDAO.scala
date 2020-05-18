@@ -16,6 +16,10 @@ import scala.collection.concurrent.TrieMap
 class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
   val references: TrieMap[(UUID, UUID), DataReferenceDescription] = TrieMap()
+//  val persistentReferenceId = "74aa895d-a1a0-45ef-93ca-d7f0a3d56724"
+//  val persistentReference = new DataReferenceDescription().referenceId(UUID.fromString(persistentReferenceId)).name("name").workspaceId(UUID.randomUUID()).referenceType(DataReferenceDescription.ReferenceTypeEnum.fromValue("DataRepoSnapshot")).reference("").cloningInstructions(DataReferenceDescription.CloningInstructionsEnum.NOTHING)
+
+//  references.put(UUID.fromString(persistentReferenceId), persistentReference)
 
   def mockGetWorkspaceResponse(workspaceId: UUID) = new WorkspaceDescription().id(workspaceId)
   def mockCreateWorkspaceResponse(workspaceId: UUID) = new CreatedWorkspace().id(workspaceId.toString)
@@ -47,5 +51,10 @@ class MockWorkspaceManagerDAO extends WorkspaceManagerDAO {
 
   override def enumerateDataReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): DataReferenceList = {
     mockEnumerateReferenceResponse(workspaceId)
+  }
+
+  override def deleteDataReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit = {
+    references.get((workspaceId, referenceId)).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "Not found")))
+    references -= (workspaceId, referenceId)
   }
 }

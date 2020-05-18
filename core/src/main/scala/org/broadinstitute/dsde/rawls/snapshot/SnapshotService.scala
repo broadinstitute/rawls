@@ -28,6 +28,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
   def CreateSnapshot(workspaceName: WorkspaceName, dataRepoSnapshot: DataRepoSnapshot): Future[DataRepoSnapshotReference] = createSnapshot(workspaceName, dataRepoSnapshot)
   def GetSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[DataRepoSnapshotReference] = getSnapshot(workspaceName, snapshotId)
   def EnumerateSnapshots(workspaceName: WorkspaceName, offset: Int, limit: Int): Future[DataRepoSnapshotList] = enumerateSnapshots(workspaceName, offset, limit)
+  def DeleteSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[Unit] = deleteSnapshot(workspaceName, snapshotId)
 
   def createSnapshot(workspaceName: WorkspaceName, snapshot: DataRepoSnapshot): Future[DataRepoSnapshotReference] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).flatMap { workspaceContext =>
@@ -53,6 +54,12 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
       val ref = workspaceManagerDAO.enumerateDataReferences(workspaceContext.workspaceId, offset, limit, userInfo.accessToken)
       DataRepoSnapshotList.from(ref)
+    }
+  }
+
+  def deleteSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[Unit] = {
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))).map { workspaceContext =>
+      workspaceManagerDAO.deleteDataReference(workspaceContext.workspaceId, UUID.fromString(snapshotId), userInfo.accessToken)
     }
   }
 
