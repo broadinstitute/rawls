@@ -149,7 +149,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec with TestDriverComponent
       AgoraMethod("dsde", "good_and_bad", 1))
 
     val expectedSuccessInputs = Seq("goodAndBad.goodAndBadTask.good_in")
-    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Failed at line 1, column 1: 'workspace.' expected but 'b' found")
+    val expectedFailureInputs = Map("goodAndBad.goodAndBadTask.bad_in" -> "Error while parsing the expression. Offending symbol is on line 1 at position 4. Error: mismatched input '<EOF>' expecting {':', '.'}")
     val expectedSuccessOutputs = Seq("goodAndBad.goodAndBadTask.good_out", "empty_out")
     val expectedFailureOutputs = Map("goodAndBad.goodAndBadTask.bad_out" -> "Expressions beginning with \"this.\" are only allowed when running with workspace data model. However, workspace attributes can be used.")
 
