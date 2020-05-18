@@ -120,11 +120,48 @@ paths:
           name: snapshotId
           required: true
           type: string
+    delete:
+      responses:
+        '204':
+          description: Successful Request
+        '404':
+          description: Workspace or snapshot not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: "Delete a workspace's reference to a snapshot in the Terra Data Repo"
+      tags:
+        - snapshots
+      summary: Delete a snapshot
+      operationId: deleteDataRepoSnapshot
+      parameters:
+        - in: path
+          description: The workspace namespace
+          name: namespace
+          required: true
+          type: string
+        - in: path
+          description: The workspace name
+          name: name
+          required: true
+          type: string
+        - in: path
+          description: The snapshot ID
+          name: snapshotId
+          required: true
+          type: string
       security:
         - authorization:
             - openid
             - email
             - profile
+
+tags:
+  - name: snapshots
+    description: Data Repo snapshot API
 
 definitions:
   DataRepoSnapshot:
