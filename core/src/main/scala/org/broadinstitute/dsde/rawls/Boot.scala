@@ -310,6 +310,7 @@ object Boot extends IOApp with LazyLogging {
         MethodRepoConfig.apply[Dockstore.type](conf.getConfig("dockstore")),
         metricsPrefix
       )
+
       val workspaceManagerDAO = new HttpWorkspaceManagerDAO(conf.getString("workspaceManager.baseUrl"))
 
       val maxActiveWorkflowsTotal =
