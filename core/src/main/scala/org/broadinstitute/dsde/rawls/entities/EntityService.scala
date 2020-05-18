@@ -150,9 +150,8 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def entityTypeMetadata(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r))
-      }
+      entityManager.resolveProvider(workspaceContext.workspace, userInfo).entityTypeMetadata()
+        .map(r => RequestComplete(StatusCodes.OK, r))
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String): Future[PerRequestMessage] =
