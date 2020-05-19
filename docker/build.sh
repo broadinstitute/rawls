@@ -21,6 +21,8 @@ EOF
 # Enable strict evaluation semantics
 set -e
 
+echo "rawls docker/build.sh starting ..."
+
 # Set default variables
 DOCKER_CMD=
 BRANCH=${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}  # default to current branch
@@ -94,6 +96,7 @@ function make_jar()
 {
     echo "building jar..."
     if [ "$SKIP_TESTS" != "skip-tests" ]; then
+        echo "starting mysql..."
         bash ./docker/run-mysql.sh start
     fi
 
@@ -105,12 +108,13 @@ function make_jar()
     if [ "$SKIP_TESTS" != "skip-tests" ]; then
         DOCKER_RUN="$DOCKER_RUN --link mysql:mysql"
     fi
-    DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e GIT_MODEL_HASH=$GIT_MODEL_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 broadinstitute/scala-baseimage /working/docker/install.sh /working"
-    JAR_CMD=$($DOCKER_RUN)
+    DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e GIT_MODEL_HASH=$GIT_MODEL_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier broadinstitute/scala-baseimage /working/docker/install.sh /working"
+    JAR_CMD=$($DOCKER_RUN 1>&2)
     EXIT_CODE=$?
 
     if [ "$SKIP_TESTS" != "skip-tests" ]; then
         # stop mysql
+        echo "stopping mysql..."
         bash ./docker/run-mysql.sh stop
     fi
 
@@ -126,7 +130,7 @@ function artifactory_push()
     ARTIFACTORY_USERNAME=dsdejenkins
     ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox vault read -field=password secret/dsp/accts/artifactory/dsdejenkins)
     echo "Publishing to artifactory..."
-    docker run --rm -v $PWD:/$PROJECT -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD broadinstitute/scala-baseimage:scala-2.11.8 /$PROJECT/core/src/bin/publishSnapshot.sh
+    docker run --rm -v $PWD:/$PROJECT -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD broadinstitute/scala-baseimage:scala-2.11.8 /$PROJECT/core/src/bin/publishSnapshot.sh
 }
 
 function docker_cmd()
@@ -187,3 +191,5 @@ if $RUN_DOCKER; then
 fi
 
 cleanup
+
+echo "rawls docker/build.sh done"
