@@ -394,7 +394,9 @@ object Boot extends IOApp with LazyLogging {
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
         slickDataSource,
         samDAO,
-        workbenchMetricBaseName = metricsPrefix
+        workbenchMetricBaseName = metricsPrefix,
+        workspaceManagerDAO,
+        conf.getString("dataRepo.terraInstance")
       )
 
       val snapshotServiceConstructor: (UserInfo) => SnapshotService = SnapshotService.constructor(
