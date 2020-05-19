@@ -38,6 +38,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/DataRepoSnapshot'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{namespace}/{name}/snapshots/{snapshotId}':
     get:
       responses:
@@ -74,10 +79,11 @@ paths:
           name: snapshotId
           required: true
           type: string
-
-tags:
-  - name: snapshots
-    description: Data Repo snapshot API
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
 
 definitions:
   DataRepoSnapshot:
