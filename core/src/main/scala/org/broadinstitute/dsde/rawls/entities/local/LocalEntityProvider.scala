@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, SlickWorkspaceContext}
 import org.broadinstitute.dsde.rawls.entities.base.EntityProvider
-import org.broadinstitute.dsde.rawls.model.{Entity, ErrorReport, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityTypeMetadata, ErrorReport, Workspace}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -18,9 +18,15 @@ class LocalEntityProvider(workspace: Workspace, dataSource: SlickDataSource)
 
   import dataSource.dataAccess.driver.api._
 
-  override def createEntity(entity: Entity): Future[Entity] = {
-    val workspaceContext = SlickWorkspaceContext(workspace)
+  private val workspaceContext = SlickWorkspaceContext(workspace)
 
+  override def entityTypeMetadata(): Future[Map[String, EntityTypeMetadata]] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext)
+    }
+  }
+
+  override def createEntity(entity: Entity): Future[Entity] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspace.toWorkspaceName}")))
@@ -29,4 +35,5 @@ class LocalEntityProvider(workspace: Workspace, dataSource: SlickDataSource)
     }
   }
 
+  override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = ???
 }

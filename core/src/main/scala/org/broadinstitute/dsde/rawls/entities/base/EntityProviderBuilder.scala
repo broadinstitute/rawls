@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities.base
 
-import org.broadinstitute.dsde.rawls.model.Workspace
+import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 
 import scala.reflect.runtime.universe._
 
@@ -14,5 +14,5 @@ trait EntityProviderBuilder[T <: EntityProvider] {
 
   /** create the EntityProvider this builder knows how to create.
     */
-  def build(workspace: Workspace): T
+  def build(requestArguments: EntityRequestArguments): T
 }
