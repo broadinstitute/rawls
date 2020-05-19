@@ -1,6 +1,9 @@
 #!/bin/bash
 
 set -eux
+
+echo "rawls jenkins/jenkins_build.sh starting ..."
+
 SVCACCT_FILE="dspci-wb-gcr-service-account.json"
 GCR_SVCACCT_VAULT="secret/dsde/dsp-techops/common/$SVCACCT_FILE"
 VAULT_TOKEN=${VAULT_TOKEN:-$(cat /etc/vault-token-dsde)}
@@ -13,3 +16,5 @@ docker run --rm  -e VAULT_TOKEN=$VAULT_TOKEN \
 
 # clean up
 rm -f ${SVCACCT_FILE}
+
+echo "rawls jenkins/jenkins_build.sh done"

@@ -21,6 +21,8 @@ EOF
 # Enable strict evaluation semantics
 set -e
 
+echo "rawls docker/build.sh starting ..."
+
 # Set default variables
 DOCKER_CMD=
 BRANCH=${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}  # default to current branch
@@ -187,3 +189,5 @@ if $RUN_DOCKER; then
 fi
 
 cleanup
+
+echo "rawls docker/build.sh done"
